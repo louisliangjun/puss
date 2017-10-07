@@ -1,0 +1,122 @@
+#!./tools/vlua
+
+dofile('tools/vmake_base.lua')
+
+local CC  = 'gcc'
+local CXX = 'g++'
+local AR  = 'ar -rc'
+local DLL_SUFFIX = '.so'
+local EXE_SUFFIX = vlua.OS=='windows' and '.exe' or ''
+local CFLAGS  = {}
+local OBJPATH = path_concat('objs', 'release')
+
+local PUSS_INCLUDE_PATH = path_concat('bin', 'include')
+local PUSS_MODULE_SUFFIX = ''
+local INCLUDES = { '3rd', PUSS_INCLUDE_PATH }
+
+-- debug && asan
+do
+	if vlua.match_arg('^%-debug$') then
+		array_push(CFLAGS, '-g', '-O0', '-D_DEBUG')
+		OBJPATH = path_concat('objs', 'debug')
+		PUSS_MODULE_SUFFIX = PUSS_MODULE_SUFFIX .. '_debug'
+	else
+		array_push(CFLAGS, '-g', '-O2', '-DNDEBUG')	-- release, use -g for deubg symbol
+	end
+
+	if vlua.match_arg('^%-asan$') then
+		array_push(CFLAGS, '-fsanitize=address', '-fno-omit-frame-pointer')
+		OBJPATH = OBJPATH .. '_asan'
+		PUSS_MODULE_SUFFIX = PUSS_MODULE_SUFFIX .. '_asan'
+	end
+end
+
+array_push('-Wall')
+
+local function make_c2objs(srcs, include_paths, ...)	-- ... is cflags
+	if type(srcs)=='string' then srcs = scan_files(srcs, function(f) return f:match('^.+%.c$') end) end
+	local cflags = args_concat(...)
+	local incs = array_convert(include_paths, function(v) return '-I'..v end)
+	return make_objs(srcs, include_paths
+		, function(f) return path_concat(OBJPATH, f) end
+		, function(t) return CC, CFLAGS, cflags, incs, '-o', t.obj, '-c', t.src end)
+end
+
+local function make_cpp2objs(srcs, include_paths, ...)	-- ... is cflags
+	if type(srcs)=='string' then srcs = scan_files(srcs, function(f) return f:match('^.+%.cpp$') end) end
+	local cflags = args_concat(...)
+	local incs = array_convert(include_paths, function(v) return '-I'..v end)
+	return make_objs(srcs, include_paths
+		, function(f) return path_concat(OBJPATH, f) end
+		, function(t) return CXX, CFLAGS, CXX_CFLAGS, cflags, incs, '-o', t.obj, '-c', t.src end)
+end
+
+vmake_target_add('', function(target)
+	local targets = vmake_target_all()
+	targets['clean'] = nil	-- ignore clean
+	targets[target] = nil   -- ignore this
+	for target in pairs(targets) do vmake(target) end
+end)
+
+vmake_target_add('clean', function(target)
+	local rm = vlua.OS=='windows' and 'rd /S /Q ' or 'rm -rf '
+	os.execute(rm .. 'objs')
+end)
+
+vmake_target_add('luaproxy', function(target)
+	local luapath = path_concat('3rd', 'lua-5.3.4', 'src')
+	make_copy('luaconf.h', PUSS_INCLUDE_PATH, luapath)
+	make_copy('lua.h', PUSS_INCLUDE_PATH, luapath)
+	make_copy('lua.hpp', PUSS_INCLUDE_PATH, luapath)
+	make_copy('lualib.h', PUSS_INCLUDE_PATH, luapath)
+	make_copy('lauxlib.h', PUSS_INCLUDE_PATH, luapath)
+
+	local luaproxy_lua = path_concat('tools', 'luaproxy.lua')
+	local deps =
+		{ luaproxy_lua
+		, path_concat(PUSS_INCLUDE_PATH, 'lua.h')
+		, path_concat(PUSS_INCLUDE_PATH, 'lualib.h')
+		, path_concat(PUSS_INCLUDE_PATH, 'lauxlib.h')
+		}
+	if not( check_deps(path_concat(PUSS_INCLUDE_PATH, 'luaproxy.h'), deps)
+		and check_deps(path_concat(PUSS_INCLUDE_PATH, 'luaproxy_export.inl'), deps)
+		and check_deps(path_concat(PUSS_INCLUDE_PATH, 'luaproxy_import.inl'), deps)
+		)
+	then
+		shell_execute(vlua.self, luaproxy_lua, '-path="'..PUSS_INCLUDE_PATH..'"')
+	end
+end)
+
+vmake_target_add('lua53', function(target)
+	local cflags = vlua.OS=='windows' and '' or '-DLUA_USE_LINUX'
+	local luapath = path_concat('3rd', 'lua-5.3.4', 'src')
+	local srcs = scan_files(luapath, function(f)
+		if f=='lua.c' then return end
+		if f=='luac.c' then return end
+		return f:match('^.+%.c$')
+	end)
+	local objs = make_c2objs(srcs, nil, cflags)
+	local output = path_concat(OBJPATH, 'lib'..target..'.a')
+	return make_target(output, objs, AR, output, objs)
+end)
+
+vmake_target_add('puss_core', function(target)
+	local srcpath = path_concat('modules', target)
+	vmake('luaproxy')
+	make_copy('puss_macros.h', PUSS_INCLUDE_PATH, srcpath)
+	make_copy('puss_module.h', PUSS_INCLUDE_PATH, srcpath)
+
+	local objs = make_c2objs(srcpath, INCLUDES)
+	local lib = path_concat(OBJPATH, 'lib'..target..'.a')
+	return make_target(lib, objs, AR, lib, objs)
+end)
+
+vmake_target_add('puss', function(target)
+	local slibs = vmake('puss_core', 'lua53')
+	local cflags = { '-D_PUSS_MODULE_SUFFIX='..PUSS_MODULE_SUFFIX }
+	local libs = vlua.OS=='windows' and '' or '-lm -ldl'
+	local objs = make_c2objs(target, INCLUDES)
+	local output = path_concat('bin', target..PUSS_MODULE_SUFFIX..EXE_SUFFIX)
+	return make_target(output, {objs, slibs}, CC, CFLAGS, '-o', output, objs, slibs, libs)
+end)
+
