@@ -13,9 +13,16 @@ project file struct
   |
   +-- <bin>
   |     |
-  |     +-- <modules>         # moudles
-  |           |
-  |           +-- <some_module>    # some module for dev & plugin
+  |     +-- <include>         # puss module headers
+  |     +-- <modules>         # plugin moudles
+  |
+  +-- <modules>    # puss modules source
+  |     |
+  |     +-- <puss_core>       # puss core module headers
+  |     |
+  |     +-- <...module...>    # plugin moudles
+  |
+  +-- <puss>       # puss exe project source
   |
   +-- <tools>
   |     |
@@ -23,6 +30,8 @@ project file struct
   |     +-- vlua.c            # vlua source code
   |     +-- vmake_base.lua    # vmake used lua utils
   |
+  +-- vmake        # puss solution makefile
+  +-- vmake.cmd    # for windows
   +-- README.md	   # this file
 ```
 

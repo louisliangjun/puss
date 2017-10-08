@@ -120,3 +120,19 @@ vmake_target_add('puss', function(target)
 	return make_target(output, {objs, slibs}, CC, CFLAGS, '-o', output, objs, slibs, libs)
 end)
 
+vmake_target_add('puss_gobject', function(target)
+	vmake('puss_core')
+
+	local srcpath = path_concat('modules', target)
+	make_copy('puss_gobject_ffi_reg.h', PUSS_INCLUDE_PATH, srcpath)
+	make_copy('puss_gobject_module.h', PUSS_INCLUDE_PATH, srcpath)
+
+	local ffi_cflags = shell('pkg-config --cflags libffi')
+	local ffi_libs = shell('pkg-config --libs libffi')
+	local gtk_cflags = shell('pkg-config --cflags gio-2.0')
+	local gtk_libs = shell('pkg-config --libs gio-2.0')
+	local objs = make_c2objs(srcpath, INCLUDES, '-fPIC', '-fvisibility=hidden', gtk_cflags, ffi_cflags)
+	local output = path_concat('bin', 'modules', target, target..PUSS_MODULE_SUFFIX..'.so')
+	return make_target(output, objs, CC, '-shared', '-o', output, objs, gtk_libs, ffi_libs)
+end)
+

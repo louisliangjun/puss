@@ -206,6 +206,8 @@ static PussInterface puss_iface =
 	{ __lua_proxy_export__
 	, puss_module_require
 	, puss_module_app_path
+	, puss_rawget_ex
+	, puss_pcall_stacktrace
 	};
 
 void puss_module_setup(lua_State* L, const char* app_path, const char* app_name, const char* module_suffix) {
