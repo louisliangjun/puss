@@ -8,6 +8,8 @@
 
 #include "luaproxy_export.inl"
 
+static void* module_require(lua_State* L, const char* m, void* ud);
+
 int puss_ns_newmetatable(lua_State* L, int metatable_namespace, const char* metatable_name) {
 	if( puss_namespace_rawget(L, metatable_namespace)==LUA_TTABLE )
 		return 0;
@@ -196,16 +198,22 @@ static const char* puss_ns_rawget_string(lua_State* L, int ns, const char* def) 
 	return str;
 }
 
-static const char* puss_module_app_path(lua_State* L) {
+static const char* module_app_path(lua_State* L) {
 	return puss_ns_rawget_string(L, PUSS_NAMESPACE_APP_PATH, ".");
 }
 
-static void* puss_module_require(lua_State* L, const char* m, void* ud);
+static int puss_module_require(lua_State* L) {
+	const char* m = luaL_checkstring(L, 1);
+	void* ud = lua_touserdata(L, 2);
+	int top = lua_gettop(L);
+	module_require(L, m, ud);
+	return lua_gettop(L) - top;
+}
 
 static PussInterface puss_iface =
 	{ __lua_proxy_export__
-	, puss_module_require
-	, puss_module_app_path
+	, module_require
+	, module_app_path
 	, puss_rawget_ex
 	, puss_pcall_stacktrace
 	};
@@ -230,7 +238,7 @@ void puss_module_setup(lua_State* L, const char* app_path, const char* app_name,
 	lua_setfield(L, -2, "_module_suffix");	// puss._module_suffix
 }
 
-static void* puss_module_require(lua_State* L, const char* m, void* ud) {
+static void* module_require(lua_State* L, const char* m, void* ud) {
 	PussModuleInit f;
 	const char* app_path = puss_ns_rawget_string(L, PUSS_NAMESPACE_APP_PATH, ".");
 	const char* module_suffix = puss_ns_rawget_string(L, PUSS_NAMESPACE_MODULE_SUFFIX, ".so");
@@ -315,6 +323,10 @@ void puss_lua_open(lua_State* L, int namespace_max_num) {
 	lua_setfield(L, -2, "function_except_wrap");
 	lua_pushcfunction(L, puss_function_wrap);
 	lua_setfield(L, -2, "function_wrap");
+
+	// module
+	lua_pushcfunction(L, puss_module_require);
+	lua_setfield(L, -2, "require");
 
 	lua_pop(L, 1);
 }

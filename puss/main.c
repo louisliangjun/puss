@@ -22,7 +22,7 @@
 	#define PUSS_MODULE_SUFFIX ".so"
 #endif
 
-#define PUSS_DEFAULT_SCRIPT_FILE "modules" FILE_PATH_SEP "puss" FILE_PATH_SEP "default.lua"
+#define PUSS_DEFAULT_SCRIPT_FILE "default.lua"
 
 static void puss_setup_path_and_self(lua_State* L, const char* arg0) {
 	char pth[4096];
