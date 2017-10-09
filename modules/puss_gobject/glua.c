@@ -957,16 +957,43 @@ static int lua_gnew_boxed(lua_State* L) {
 static int g_object_new_lua(lua_State* L, GType tp, int args) {
 	int argc = (int)(lua_gettop(L) - args) / 2;
 	gpointer klass = g_type_class_ref(tp);
-	GParameter* params = (argc > 0) ? alloca(sizeof(GParameter) * argc) : NULL;
 	GObject* obj = NULL;
+	GParamSpec* spec;
 	int i = 0;
-	if( !klass )
+#if GLIB_CHECK_VERSION(2,54,0)
+	const char** names = (argc > 0) ? alloca(sizeof(const char*) * argc) : NULL;
+	GValue* values = (argc > 0) ? alloca(sizeof(GValue) * argc) : NULL;
+	GParameter param;
+	memset(names, 0, sizeof(const char*) * argc);
+	memset(values, 0, sizeof(GValue) * argc);
+	if( !klass ) {
 		luaL_error(L, "find class error!");
-	if( params )
-		memset(params, 0, sizeof(GParameter) * argc);
+	}
+	for( i=0; i<argc; ++i ) {
+		names[i] = lua_tostring(L, i*2 + args + 1);
+		spec = g_object_class_find_property(klass, names[i]);
+		if( !spec ) {
+			g_type_class_unref(klass);
+			return luaL_error(L, "gobject prop(%s) not found!", names[i]);
+		}
+		g_value_init(values+i, spec->value_type);
+		glua_value_from_lua(L, i*2 + args + 2, values+i);
+	}
+	obj = g_object_new_with_properties(tp, argc, names, values);
+	g_type_class_unref(klass);
+	for( i=0; i<argc; ++i ) {
+		g_value_unset(values+i);
+	}
+#else
+	GParameter* params = (argc > 0) ? alloca(sizeof(GParameter) * argc) : NULL;
+	memset(params, 0, sizeof(GParameter) * argc);
+	if( !klass ) {
+		luaL_error(L, "find class error!");
+	}
+
 	for( i=0; i<argc; ++i ) {
 		params[i].name = lua_tostring(L, i*2 + args + 1);
-		GParamSpec* spec = g_object_class_find_property(klass, params[i].name);
+		spec = g_object_class_find_property(klass, params[i].name);
 		if( !spec ) {
 			g_type_class_unref(klass);
 			return luaL_error(L, "gobject prop(%s) not found!", params[i].name);
@@ -979,6 +1006,7 @@ static int g_object_new_lua(lua_State* L, GType tp, int args) {
 	for( i=0; i<argc; ++i ) {
 		g_value_unset(&(params[i].value));
 	}
+#endif
 	glua_object_push(L, obj);
 	return 1;
 }

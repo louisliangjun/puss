@@ -332,6 +332,8 @@ static GFFIType* _gtype_get(GType gtype) {
 }
 
 void gffi_init(void) {
+	if( __gtype_quark__ )
+		return;
 	__gtype_quark__ = g_quark_from_static_string("__ks_gtype_ffi__");
 	assert( __gtype_quark__ );
 

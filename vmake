@@ -63,6 +63,16 @@ vmake_target_add('clean', function(target)
 	os.execute(rm .. 'objs')
 end)
 
+vmake_target_add('puss', function(target)
+	local slibs = vmake('puss_core', 'lua53')
+	local cflags = { '-D_PUSS_MODULE_SUFFIX='..PUSS_MODULE_SUFFIX }
+	local incs = array_pack(INCLUDES, 'modules')
+	local libs = vlua.OS=='windows' and '' or '-lm -ldl'
+	local objs = make_c2objs(target, incs)
+	local output = path_concat('bin', target..PUSS_MODULE_SUFFIX..EXE_SUFFIX)
+	return make_target(output, {objs, slibs}, CC, CFLAGS, '-o', output, objs, slibs, libs)
+end)
+
 vmake_target_add('luaproxy', function(target)
 	local luapath = path_concat('3rd', 'lua-5.3.4', 'src')
 	make_copy('luaconf.h', PUSS_INCLUDE_PATH, luapath)
@@ -111,15 +121,6 @@ vmake_target_add('puss_core', function(target)
 	return make_target(lib, objs, AR, lib, objs)
 end)
 
-vmake_target_add('puss', function(target)
-	local slibs = vmake('puss_core', 'lua53')
-	local cflags = { '-D_PUSS_MODULE_SUFFIX='..PUSS_MODULE_SUFFIX }
-	local libs = vlua.OS=='windows' and '' or '-lm -ldl'
-	local objs = make_c2objs(target, INCLUDES)
-	local output = path_concat('bin', target..PUSS_MODULE_SUFFIX..EXE_SUFFIX)
-	return make_target(output, {objs, slibs}, CC, CFLAGS, '-o', output, objs, slibs, libs)
-end)
-
 vmake_target_add('puss_gobject', function(target)
 	vmake('puss_core')
 
@@ -127,12 +128,30 @@ vmake_target_add('puss_gobject', function(target)
 	make_copy('puss_gobject_ffi_reg.h', PUSS_INCLUDE_PATH, srcpath)
 	make_copy('puss_gobject_module.h', PUSS_INCLUDE_PATH, srcpath)
 
-	local ffi_cflags = shell('pkg-config --cflags libffi')
-	local ffi_libs = shell('pkg-config --libs libffi')
-	local gtk_cflags = shell('pkg-config --cflags gio-2.0')
-	local gtk_libs = shell('pkg-config --libs gio-2.0')
-	local objs = make_c2objs(srcpath, INCLUDES, '-fPIC', '-fvisibility=hidden', gtk_cflags, ffi_cflags)
+	local cflags = shell('pkg-config --cflags glib-2.0 gobject-2.0 gio-2.0 libffi')
+	local libs = shell('pkg-config --libs glib-2.0 gobject-2.0 gio-2.0 libffi')
+	local objs = make_c2objs(srcpath, INCLUDES, '-fPIC', '-fvisibility=hidden', cflags)
 	local output = path_concat('bin', 'modules', target, target..PUSS_MODULE_SUFFIX..'.so')
-	return make_target(output, objs, CC, '-shared', '-o', output, objs, gtk_libs, ffi_libs)
+	return make_target(output, objs, CC, '-shared', '-o', output, objs, libs)
+end)
+
+vmake_target_add('puss_gtk', function(target)
+	vmake('puss_gobject')
+
+	local cflags = shell('pkg-config --cflags gtk+-3.0')
+	local libs = shell('pkg-config --libs gtk+-3.0')
+	local objs = make_c2objs(path_concat('modules', target), INCLUDES, '-fPIC', '-fvisibility=hidden', cflags)
+	local output = path_concat('bin', 'modules', target, target..PUSS_MODULE_SUFFIX..'.so')
+	return make_target(output, objs, CC, '-shared', '-o', output, objs, libs)
+end)
+
+vmake_target_add('puss_gtksourceview', function(target)
+	vmake('puss_gobject')
+
+	local cflags = shell('pkg-config --cflags gtksourceview-3.0')
+	local libs = shell('pkg-config --libs gtksourceview-3.0')
+	local objs = make_c2objs(path_concat('modules', target), INCLUDES, '-fPIC', '-fvisibility=hidden', cflags)
+	local output = path_concat('bin', 'modules', target, target..PUSS_MODULE_SUFFIX..'.so')
+	return make_target(output, objs, CC, '-shared', '-o', output, objs, libs)
 end)
 

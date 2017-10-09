@@ -6,7 +6,7 @@
 #include <memory.h>
 #include <assert.h>
 
-#include "puss_lua.h"
+#include "puss_core/puss_lua.h"
 
 #ifdef _WIN32
 	#include <windows.h>

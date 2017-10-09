@@ -38,12 +38,11 @@ typedef void	(*PussGObjectReg)	(lua_State* L, PussGObjectRegIface* reg_iface, in
 
 struct PussGObjectRegIface {
 	gboolean	(*push_gfunction)			(lua_State* L, const char* name, GType rtype, const void* addr, ... /*GType atype ... */);
-	void		(*push_gtype_index_table)	(lua_State* L, GType type, const char* prefix);	// [-0,+1,-]
+	gboolean	(*push_gtype_index_table)	(lua_State* L, GType type, const char* prefix);	// [-0,+1,-]
 	void		(*push_c_struct0_boxed_type_new_method)	(lua_State* L, GType type, gsize struct_size);	// [-0,+1,-]
 
 	void		(*reg_gtype)				(lua_State* L, int glua_env_index, GType type, const char* prefix, const luaL_Reg* methods);
 };
-
 
 typedef struct PussGObjectInterface {
 	// gobject

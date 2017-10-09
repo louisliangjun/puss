@@ -171,23 +171,9 @@ static void glua_glib_register(lua_State* L, PussGObjectRegIface* reg_iface, int
 	gtype_reg_start(G_TYPE_MOUNT_OPERATION, g_mount_operation); gtype_reg_end();
 }
 
-
-static gboolean __glua_inited__ = FALSE;
-/*
-static int __glua_gtk_argc = 1;
-static char __glua_gtk_arg0[32] = { '.', '/', 'a', 'p', 'p', 0 };
-static char* __glua_gtk_args[2] = { __glua_gtk_arg0, NULL };
-static char** __glua_gtk_argv = __glua_gtk_args;
-		guint64 now = (guint64)g_get_real_time();
-		sprintf(__glua_gtk_arg0, "glua_%u_%u", (unsigned)(now>>32), (unsigned)(now));
-*/
-
 PUSS_MODULE_EXPORT void* __puss_module_init__(lua_State* L, PussInterface* puss, void* ud) {
-	if( !__glua_inited__ ) {
-		__glua_inited__ = TRUE;
-		__lua_proxy_import__(puss->luaproxy());
-		gffi_init();
-	}
+	__lua_proxy_import__(puss->luaproxy());
+	gffi_init();
 
 	puss_gobject_interface.module_reg(L, glua_glib_register);
 
