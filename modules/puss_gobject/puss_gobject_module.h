@@ -42,6 +42,7 @@ struct PussGObjectRegIface {
 	void		(*push_c_struct0_boxed_type_new_method)	(lua_State* L, GType type, gsize struct_size);	// [-0,+1,-]
 
 	void		(*reg_gtype)				(lua_State* L, int glua_env_index, GType type, const char* prefix, const luaL_Reg* methods);
+	void		(*reg_genum)				(lua_State* L, int glua_env_index, GType type);
 };
 
 typedef struct PussGObjectInterface {

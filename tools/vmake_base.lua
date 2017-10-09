@@ -59,6 +59,25 @@ function table_convert(tbl, convert)
 	return outs
 end
 
+function path_concat(...)
+	local pth = vlua.filename_format( table.concat(array_pack(...), '/') )
+	return pth
+end
+
+function shell(...)
+	local cmd = args_concat(...)
+	local p = io.popen(cmd)
+	local r = p:read('*a'):match('^%s*(.-)%s*$')
+	p:close()
+	return r
+end
+
+function shell_execute(...)
+	local cmd = args_concat(...)
+	print(cmd)
+	if not os.execute(cmd) then os.exit(1) end
+end
+
 function scan_files(path, matcher, no_path_prefix, no_loop)
 	local last = path:sub(-1)
 	if last~='/' and last~='\\' then path = path .. '/' end
@@ -83,23 +102,13 @@ function scan_files(path, matcher, no_path_prefix, no_loop)
 	return outs
 end
 
-function path_concat(...)
-	local pth = vlua.filename_format( table.concat(array_pack(...), '/') )
-	return pth
-end
-
-function shell(...)
-	local cmd = args_concat(...)
-	local p = io.popen(cmd)
-	local r = p:read('*a'):match('^%s*(.-)%s*$')
-	p:close()
-	return r
-end
-
-function shell_execute(...)
-	local cmd = args_concat(...)
-	print(cmd)
-	if not os.execute(cmd) then os.exit(1) end
+function scan_and_lookup_file(cflags, filename)
+	local cflags = args_concat(cflags)
+	for pth in cflags:gmatch('%-I([^ ]+)') do
+		local f = path_concat(pth, filename)
+		local exist, size, mtime = vlua.file_stat(f)
+		if exist then return f, size, mtime end
+	end
 end
 
 -- thread tasks

@@ -18,6 +18,7 @@ static PussGObjectRegIface reg_iface =
 	, glua_push_gtype_index_table
 	, glua_push_c_struct0_boxed_type_new_method
 	, glua_reg_gtype
+	, glua_reg_genum
 	};
  
 static int reg_wrapper(lua_State* L) {
