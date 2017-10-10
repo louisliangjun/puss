@@ -38,15 +38,17 @@ end
 
 function array_convert(arr, convert)
 	local outs = {}
-	if type(arr)=='table' then
-		for _, v in ipairs(arr) do
-			local o = convert(v)
+	local function cvt(a)
+		if type(a)=='table' then
+			for _, v in ipairs(a) do
+				cvt(out, v, convert)
+			end
+		elseif a then
+			local o = convert(a)
 			if o then table.insert(outs, o) end
 		end
-	elseif arr then
-		local o = convert(arr)
-		if o then table.insert(outs, o) end
 	end
+	cvt(arr)
 	return outs
 end
 
