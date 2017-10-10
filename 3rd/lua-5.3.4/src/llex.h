@@ -69,6 +69,9 @@ typedef struct LexState {
   struct Dyndata *dyd;  /* dynamic structures used by the parser */
   TString *source;  /* current source name */
   TString *envn;  /* environment variable name */
+#ifdef LUA_USE_OPTIMIZATION_WITH_CONST
+  Table* const_table; /* consts table from register */
+#endif
 } LexState;
 
 

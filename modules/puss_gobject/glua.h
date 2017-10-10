@@ -8,12 +8,13 @@
 PUSS_DECLS_BEGIN
 
 void		glua_push_master_table(lua_State* L);	// [-0,+1,-]
+void		glua_push_symbol_table(lua_State* L);	// [-0,+1,-]
 
 gboolean	glua_push_gtype_index_table(lua_State* L, GType type, const char* prefix);	// [-0,+1,-], return already exist
 void		glua_push_c_struct0_boxed_type_new_method(lua_State* L, GType type, gsize struct_size);	// [-0,+1,-]
 
-void		glua_reg_gtype(lua_State* L, int glua_env_index, GType type, const char* prefix, const luaL_Reg* methods);
-void		glua_reg_genum(lua_State* L, int glua_env_index, GType type);
+void		glua_reg_gtype(lua_State* L, int glua_symbols_index, GType type, const char* prefix, const luaL_Reg* methods);
+void		glua_reg_genum(lua_State* L, int glua_consts_index, GType type);
 
 GValue*		glua_value_check(lua_State* L, int idx);
 GValue*		glua_value_test(lua_State* L, int idx);

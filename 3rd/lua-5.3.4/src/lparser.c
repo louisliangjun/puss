@@ -929,6 +929,31 @@ static void suffixedexp (LexState *ls, expdesc *v) {
 
 
 static void simpleexp (LexState *ls, expdesc *v) {
+
+#ifdef LUA_USE_OPTIMIZATION_WITH_CONST
+  if (ls->const_table && ls->t.token==TK_NAME) {
+    Table* const_table = ls->const_table;
+    Token* tk = &(ls->t);
+    TString* ts = tk->seminfo.ts;
+    const TValue* o = luaH_getstr(const_table, ts);
+    /* NOTICE : now only support int/flt/true/false/string, not support function/table ... */
+    if( ttisnil(o) ) {
+      /* most of name not const */
+    } else if( ttisinteger(o) ) {
+      tk->token = TK_INT;
+      tk->seminfo.i = val_(o).i;
+    } else if( ttisfloat(o) ) {
+      tk->token = TK_FLT;
+      tk->seminfo.r = val_(o).n;
+    } else if( ttisboolean(o) ) {
+      tk->token = val_(o).b ? TK_TRUE : TK_FALSE;
+    } else if( ttisstring(o) ) {
+      tk->token = TK_STRING;
+      tk->seminfo.ts = gco2ts(val_(o).gc);
+    }
+  }
+#endif
+
   /* simpleexp -> FLT | INT | STRING | NIL | TRUE | FALSE | ... |
                   constructor | FUNCTION body | suffixedexp */
   switch (ls->t.token) {
@@ -1640,6 +1665,10 @@ LClosure *luaY_parser (lua_State *L, ZIO *z, Mbuffer *buff,
   lexstate.dyd = dyd;
   dyd->actvar.n = dyd->gt.n = dyd->label.n = 0;
   luaX_setinput(L, &lexstate, z, funcstate.f->source, firstchar);
+#ifdef LUA_USE_OPTIMIZATION_WITH_CONST
+  lexstate.const_table = (lua_getfield(L, LUA_REGISTRYINDEX, LUA_USE_OPTIMIZATION_WITH_CONST)==LUA_TTABLE) ? (Table*)lua_topointer(L, -1) : NULL;
+  lua_pop(L, 1);
+#endif
   mainfunc(&lexstate, &funcstate);
   lua_assert(!funcstate.prev && funcstate.nups == 1 && !lexstate.fs);
   /* all scopes should be correctly finished */

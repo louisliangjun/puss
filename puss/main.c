@@ -16,10 +16,8 @@
 	#define FILE_PATH_SEP "/"
 #endif
 
-#ifdef _PUSS_MODULE_SUFFIX
-	#define PUSS_MODULE_SUFFIX #_PUSS_MODULE_SUFFIX ".so" 
-#else
-	#define PUSS_MODULE_SUFFIX ".so"
+#ifndef _PUSS_MODULE_SUFFIX
+	#define _PUSS_MODULE_SUFFIX	".so"
 #endif
 
 #define PUSS_DEFAULT_SCRIPT_FILE "default.lua"
@@ -46,9 +44,9 @@ static void puss_setup_path_and_self(lua_State* L, const char* arg0) {
 	}
 
 	if( len > 0 ) {
-		puss_module_setup(L, pth, pth+1, PUSS_MODULE_SUFFIX);
+		puss_module_setup(L, pth, pth+len+1, _PUSS_MODULE_SUFFIX);
 	} else {
-		puss_module_setup(L, ".", pth, PUSS_MODULE_SUFFIX);
+		puss_module_setup(L, ".", pth, _PUSS_MODULE_SUFFIX);
 	}
 }
 
@@ -132,7 +130,7 @@ static int puss_init(lua_State* L) {
 	} else if( luaL_loadbuffer(L, script, strlen(script), "<-e>") ) {
 		lua_error(L);
 	}
-	fprintf( stderr, "puss_init() return: %s\n", lua_typename(L, lua_type(L, -1)) );
+	// fprintf( stderr, "puss_init() return: %s\n", lua_typename(L, lua_type(L, -1)) );
 	return 1;
 }
 

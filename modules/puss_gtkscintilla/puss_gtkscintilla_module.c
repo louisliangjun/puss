@@ -143,13 +143,13 @@ static int _lua__sci_send_wrap(lua_State* L) {
 
 #include "scintilla.iface.inl"
 
-static void glua_gtkscintilla_register(lua_State* L, PussGObjectRegIface* reg_iface, int glua_env_index) {
+static void glua_gtkscintilla_register(lua_State* L, PussGObjectRegIface* reg_iface) {
 	// vals
 	{
 		IFaceVal* p;
 		for( p=sci_values; p->name; ++p ) {
 			lua_pushinteger(L, p->val);
-			lua_setfield(L, glua_env_index, p->name);
+			lua_setfield(L, REG_CONSTS_INDEX, p->name);
 		}
 	}
 
@@ -170,7 +170,7 @@ static void glua_gtkscintilla_register(lua_State* L, PussGObjectRegIface* reg_if
 #ifdef _USE_GTK_SCINTILLA_REG_TO_GLUA
 			sprintf(buf, "gtk_scintilla_%s", name);
 			lua_pushvalue(L, -1);
-			lua_setfield(L, glua_env_index, name);
+			lua_setfield(L, REG_SYMBOLS_INDEX, name);
 #endif
 			lua_setfield(L, -2, p->alias);	// use alias only
 		}
@@ -184,7 +184,7 @@ static void glua_gtkscintilla_register(lua_State* L, PussGObjectRegIface* reg_if
 PUSS_MODULE_EXPORT void* __puss_module_init__(lua_State* L, PussInterface* puss, void* ud) {
 	if( !gobject_iface ) {
 		__lua_proxy_import__(puss->luaproxy());
-		gobject_iface = puss->require(L, "puss_gobject", ud);
+		gobject_iface = puss->require(L, "puss_gtk", ud);
 		if( !gobject_iface ) {
 			luaL_error(L, "require puss_gobject failed!");
 			return NULL;
@@ -192,6 +192,7 @@ PUSS_MODULE_EXPORT void* __puss_module_init__(lua_State* L, PussInterface* puss,
 	}
 
 	gobject_iface->module_reg(L, glua_gtkscintilla_register);
-	return NULL;
+	gobject_iface->push_master_table(L);
+	return gobject_iface;
 }
 

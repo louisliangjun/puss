@@ -11,13 +11,16 @@
 
 // register function format : see PussGObjectReg
 
+#define REG_SYMBOLS_INDEX 1
+#define REG_CONSTS_INDEX  2
+
 #define gtype_reg_global_ffi(rtype, func, ...) \
 	reg_iface->push_gfunction(L, #func, rtype, func, __VA_ARGS__, G_TYPE_INVALID); \
-	lua_setfield(L, glua_env_index, #func)
+	lua_setfield(L, REG_SYMBOLS_INDEX, #func)
 
 #define gtype_reg_global_ffi_rnew(rtype, func, ...) \
 	reg_iface->push_gfunction(L, "*" #func, rtype, func, __VA_ARGS__, G_TYPE_INVALID); \
-	lua_setfield(L, glua_env_index, #func)
+	lua_setfield(L, REG_SYMBOLS_INDEX, #func)
 
 #define gtype_reg_start(gtype, prefix) \
 	{ \
@@ -32,14 +35,14 @@
 #define _gtype_reg_setfield(func) do {\
 		lua_pushvalue(L, -1); \
 		lua_setfield(L, -3, ((const char*)#func) + __gtype_reg_prefix_len); \
-		lua_setfield(L, glua_env_index, (const char*)#func); \
+		lua_setfield(L, REG_SYMBOLS_INDEX, (const char*)#func); \
 	} while(0)
 
 #define gtype_reg_ffi_full(rtype, prefix, name, func, ...) do {\
 		reg_iface->push_gfunction(L, prefix name, rtype, func, __VA_ARGS__, G_TYPE_INVALID); \
 		lua_pushvalue(L, -1); \
 		lua_setfield(L, -3, ((const char*)name) + __gtype_reg_prefix_len); \
-		lua_setfield(L, glua_env_index, (const char*)name); \
+		lua_setfield(L, REG_SYMBOLS_INDEX, (const char*)name); \
 	} while (0)
 
 #define gtype_reg_lua(func) \

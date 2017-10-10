@@ -776,7 +776,7 @@
 */
 
 
-
+#define LUA_USE_OPTIMIZATION_WITH_CONST	"__@consts@__"
 
 
 #endif

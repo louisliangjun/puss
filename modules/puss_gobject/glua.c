@@ -7,11 +7,12 @@
 #include <memory.h>
 #include <string.h>
 
-static const char*	GOBJECT_MASTER_TABLE_NAME  = "__gobject_master__";
+static const char*	GOBJECT_MODULE_TABLE_NAME  = "__gobject_module__";
+static const char*	GOBJECT_SYMBOL_TABLE_NAME  = "__gobject_symbol__";
 static const char*	GOBJECT_TYPES_TABLE_NAME   = "__gobject_types__";
 static const char*	GOBJECT_G_TYPES_TABLE_NAME = "__gobject_gtypes__";
 
-static const char*	GOBJECT_LUA_NAME = "__GObject__";
+static const char*	GOBJECT_LUA_NAME = "__GOBJECT__";
 static const char*	GVALUE_LUA_NAME = "__GVALUE__";
 static const char*	GPARAMSPEC_LUA_NAME = "__GPARAMSPEC__";
 static const char*	GSIGNAL_HANDLE_LUA_NAME = "__GSIGNAL_HANDLE__";
@@ -51,7 +52,7 @@ typedef struct _MarshalLuaCallEnv {
 static void _lua_push_types_table(lua_State* L);
 
 static void _lua_push_g_types_table(lua_State* L) {
-	// __gtypes__ = { GType : AllMethods }	-- all type methods, INCLUDE parents and interfaces methods
+	// __gtypes = { GType : AllMethods }	-- all type methods, INCLUDE parents and interfaces methods
 	if( lua_getfield(L, LUA_REGISTRYINDEX, GOBJECT_G_TYPES_TABLE_NAME)!=LUA_TTABLE ) {
 		lua_pop(L, 1);
 		lua_newtable(L);
@@ -854,11 +855,11 @@ static void _lua_push_types_table(lua_State* L) {
 		lua_pushvalue(L, -1);
 		lua_setfield(L, LUA_REGISTRYINDEX, GOBJECT_TYPES_TABLE_NAME);
 
-		glua_push_master_table(L);
+		glua_push_symbol_table(L);
 		{
-			int glua_env_index = lua_gettop(L);
-			glua_reg_gtype(L, glua_env_index, G_TYPE_OBJECT, "g_object", _gobject_metatable_methods);
-			glua_reg_gtype(L, glua_env_index, G_TYPE_INITIALLY_UNOWNED, "g_initially_unowned", NULL);
+			int glua_symbols_index = lua_gettop(L);
+			glua_reg_gtype(L, glua_symbols_index, G_TYPE_OBJECT, "g_object", _gobject_metatable_methods);
+			glua_reg_gtype(L, glua_symbols_index, G_TYPE_INITIALLY_UNOWNED, "g_initially_unowned", NULL);
 		}
 		lua_pop(L, 1);
 	}
@@ -879,15 +880,38 @@ static void _lua_reg_g_fundamental_value_type(lua_State* L, GType tp) {
 }
 
 void glua_push_master_table(lua_State* L) {
-	if( lua_getfield(L, LUA_REGISTRYINDEX, GOBJECT_MASTER_TABLE_NAME)!=LUA_TTABLE ) {
+	if( lua_getfield(L, LUA_REGISTRYINDEX, GOBJECT_MODULE_TABLE_NAME)!=LUA_TTABLE ) {
 		lua_pop(L, 1);
 
 		// new master table & set to register
 		lua_newtable(L);
 		lua_pushvalue(L, -1);
-		lua_setfield(L, LUA_REGISTRYINDEX, GOBJECT_MASTER_TABLE_NAME);
+		lua_setfield(L, LUA_REGISTRYINDEX, GOBJECT_MODULE_TABLE_NAME);
 
 		luaL_setfuncs(L, _gobject_module_methods, 0);
+
+		// module.__symbols = { symbol : funciton / enum }
+		glua_push_symbol_table(L);
+		lua_setfield(L, -2, "_symbols");
+
+		// module.__types = { GTypeName : TypeMethods }	-- ONLY type methods, not include parents or interfaces methods
+		_lua_push_types_table(L);
+		lua_setfield(L, -2, "_types");
+
+		// module.__gtypes = { GType : AllMethods }	-- all type methods, INCLUDE parents and interfaces methods
+		_lua_push_g_types_table(L);
+		lua_setfield(L, -2, "_gtypes");
+	}
+}
+
+void glua_push_symbol_table(lua_State* L) {
+	if( lua_getfield(L, LUA_REGISTRYINDEX, GOBJECT_SYMBOL_TABLE_NAME)!=LUA_TTABLE ) {
+		lua_pop(L, 1);
+
+		// new symbol table & set to register
+		lua_newtable(L);
+		lua_pushvalue(L, -1);
+		lua_setfield(L, LUA_REGISTRYINDEX, GOBJECT_SYMBOL_TABLE_NAME);
 
 		_lua_reg_g_fundamental_value_type(L, G_TYPE_NONE);
 		_lua_reg_g_fundamental_value_type(L, G_TYPE_CHAR);
@@ -902,14 +926,6 @@ void glua_push_master_table(lua_State* L) {
 		_lua_reg_g_fundamental_value_type(L, G_TYPE_FLOAT);
 		_lua_reg_g_fundamental_value_type(L, G_TYPE_DOUBLE);
 		_lua_reg_g_fundamental_value_type(L, G_TYPE_STRING);
-
-		// master.types = { GTypeName : TypeMethods }	-- ONLY type methods, not include parents or interfaces methods
-		_lua_push_types_table(L);
-		lua_setfield(L, -2, "types");
-
-		// master.__gtypes__ = { GType : AllMethods }	-- all type methods, INCLUDE parents and interfaces methods
-		_lua_push_g_types_table(L);
-		lua_setfield(L, -2, "__gtypes__");
 	}
 }
 
@@ -963,7 +979,6 @@ static int g_object_new_lua(lua_State* L, GType tp, int args) {
 #if GLIB_CHECK_VERSION(2,54,0)
 	const char** names = (argc > 0) ? alloca(sizeof(const char*) * argc) : NULL;
 	GValue* values = (argc > 0) ? alloca(sizeof(GValue) * argc) : NULL;
-	GParameter param;
 	memset(names, 0, sizeof(const char*) * argc);
 	memset(values, 0, sizeof(GValue) * argc);
 	if( !klass ) {
@@ -1031,7 +1046,7 @@ gboolean glua_push_gtype_index_table(lua_State* L, GType type, const char* prefi
 			lua_pushinteger(L, (lua_Integer)type);
 			lua_pushcclosure(L, lua_gnew_boxed, 1);
 			if( prefix ) {
-				glua_push_master_table(L);
+				glua_push_symbol_table(L);
 				lua_pushfstring(L, "%s_new", prefix);
 				lua_pushvalue(L, -3);
 				lua_settable(L, -3);
@@ -1042,7 +1057,7 @@ gboolean glua_push_gtype_index_table(lua_State* L, GType type, const char* prefi
 			lua_pushinteger(L, (lua_Integer)type);
 			lua_pushcclosure(L, lua_gnew_object, 1);
 			if( prefix ) {
-				glua_push_master_table(L);
+				glua_push_symbol_table(L);
 				lua_pushfstring(L, "%s_new", prefix);
 				lua_pushvalue(L, -3);
 				lua_settable(L, -3);
@@ -1073,7 +1088,8 @@ void glua_push_c_struct0_boxed_type_new_method(lua_State* L, GType type, gsize s
 	lua_pushcclosure(L, c_struct_boxed_type_new0_wrapper, 2);
 }
 
-void glua_reg_gtype(lua_State* L, int glua_env_index, GType type, const char* prefix, const luaL_Reg* methods) {
+void glua_reg_gtype(lua_State* L, int glua_symbols_index, GType type, const char* prefix, const luaL_Reg* methods) {
+	assert( lua_istable(L, glua_symbols_index) );
 	if( glua_push_gtype_index_table(L, type, prefix) ) {
 		lua_pop(L, 1);
 		return;
@@ -1085,7 +1101,7 @@ void glua_reg_gtype(lua_State* L, int glua_env_index, GType type, const char* pr
 			if( prefix ) {
 				lua_pushfstring(L, "%s_%s", prefix, l->name);
 				lua_pushvalue(L, -2);
-				lua_settable(L, glua_env_index);
+				lua_settable(L, glua_symbols_index);
 			}
 			lua_setfield(L, -2, l->name);
 		}
@@ -1093,11 +1109,8 @@ void glua_reg_gtype(lua_State* L, int glua_env_index, GType type, const char* pr
 	lua_pop(L, 1);
 }
 
-void glua_reg_genum(lua_State* L, int glua_env_index, GType type) {
-	if( !glua_push_gtype_index_table(L, type, NULL) ) {
-		_lua_enums_fill_by_type(L, type, lua_gettop(L));
-		_lua_hash_table_copy_top_table_into_target_table(L, glua_env_index);
-	}
-	lua_pop(L, 1);
+void glua_reg_genum(lua_State* L, int glua_consts_index, GType type) {
+	assert( lua_istable(L, glua_consts_index) );
+	_lua_enums_fill_by_type(L, type, glua_consts_index);
 }
 

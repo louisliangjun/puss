@@ -34,20 +34,21 @@ PUSS_DECLS_BEGIN
 //		iface->push_gfunction(L, "*foo", G_TYPE_STRING, foo);
 // 
 typedef struct PussGObjectRegIface	PussGObjectRegIface;
-typedef void	(*PussGObjectReg)	(lua_State* L, PussGObjectRegIface* reg_iface, int glua_env_index);
+typedef void	(*PussGObjectReg)	(lua_State* L, PussGObjectRegIface* reg_iface);
 
 struct PussGObjectRegIface {
 	gboolean	(*push_gfunction)			(lua_State* L, const char* name, GType rtype, const void* addr, ... /*GType atype ... */);
 	gboolean	(*push_gtype_index_table)	(lua_State* L, GType type, const char* prefix);	// [-0,+1,-]
 	void		(*push_c_struct0_boxed_type_new_method)	(lua_State* L, GType type, gsize struct_size);	// [-0,+1,-]
 
-	void		(*reg_gtype)				(lua_State* L, int glua_env_index, GType type, const char* prefix, const luaL_Reg* methods);
-	void		(*reg_genum)				(lua_State* L, int glua_env_index, GType type);
+	void		(*reg_gtype)				(lua_State* L, GType type, const char* prefix, const luaL_Reg* methods);
+	void		(*reg_genum)				(lua_State* L, GType type);
 };
 
 typedef struct PussGObjectInterface {
 	// gobject
 	void		(*push_master_table)		(lua_State* L);	// [-0,+1,-]
+	void		(*push_symbol_table)		(lua_State* L);	// [-0,+1,-]
 
 	void		(*module_reg)				(lua_State* L, PussGObjectReg f);
 

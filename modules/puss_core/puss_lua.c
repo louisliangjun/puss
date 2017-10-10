@@ -205,9 +205,21 @@ static const char* module_app_path(lua_State* L) {
 static int puss_module_require(lua_State* L) {
 	const char* m = luaL_checkstring(L, 1);
 	void* ud = lua_touserdata(L, 2);
-	int top = lua_gettop(L);
 	module_require(L, m, ud);
-	return lua_gettop(L) - top;
+	return lua_gettop(L);
+}
+
+static void puss_push_const_table(lua_State* L) {
+#ifdef LUA_USE_OPTIMIZATION_WITH_CONST
+	if( lua_getfield(L, LUA_REGISTRYINDEX, LUA_USE_OPTIMIZATION_WITH_CONST)!=LUA_TTABLE ) {
+		lua_pop(L, 1);
+		lua_newtable(L);
+		lua_pushvalue(L, -1);
+		lua_setfield(L, LUA_REGISTRYINDEX, LUA_USE_OPTIMIZATION_WITH_CONST);
+	}
+#else
+	lua_pushglobaltable(L);
+#endif
 }
 
 static PussInterface puss_iface =
@@ -216,11 +228,17 @@ static PussInterface puss_iface =
 	, module_app_path
 	, puss_rawget_ex
 	, puss_pcall_stacktrace
+	, puss_push_const_table
 	};
 
 void puss_module_setup(lua_State* L, const char* app_path, const char* app_name, const char* module_suffix) {
+	// fprintf(stderr, "!!!puss_module_setup %s %s %s\n", app_path, app_name, module_suffix);
+
 	puss_namespace_rawget(L, PUSS_NAMESPACE_PUSS);
 	assert( lua_type(L, -1)==LUA_TTABLE );
+
+	puss_push_const_table(L);
+	lua_setfield(L, -2, "_consts");	// puss._consts
 
 	lua_pushstring(L, app_path);
 	lua_pushvalue(L, -1);
@@ -244,7 +262,6 @@ static void* module_require(lua_State* L, const char* m, void* ud) {
 	const char* module_suffix = puss_ns_rawget_string(L, PUSS_NAMESPACE_MODULE_SUFFIX, ".so");
 	const char* module_fname;
 	luaL_Buffer B;
-	lua_pop(L, 2);
 	luaL_buffinit(L, &B);
 	luaL_addstring(&B, app_path);
 #ifdef _WIN32
@@ -266,6 +283,7 @@ static void* module_require(lua_State* L, const char* m, void* ud) {
 	f = (PussModuleInit)lua_tocfunction(L, -2);
 	if( !f )
 		luaL_error(L, "load module fetch init function failed!");
+	lua_settop(L, 0);
 	return f(L, &puss_iface, ud);
 }
 

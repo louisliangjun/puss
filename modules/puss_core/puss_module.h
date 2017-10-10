@@ -19,6 +19,7 @@ typedef struct PussInterface {
 	const char*	(*app_path)			(lua_State* L);
 	int			(*rawget_ex)		(lua_State* L, const char* name);
 	int			(*pcall_stacktrace)	(lua_State* L, int n, int r);
+	void        (*push_const_table) (lua_State* L);
 } PussInterface;
 
 #ifdef _WIN32

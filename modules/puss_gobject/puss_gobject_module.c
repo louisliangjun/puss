@@ -13,20 +13,31 @@
 
 #include "luaproxy_import.inl"
 
+static PussInterface* puss_iface = NULL;
+
+static void reg_gtype(lua_State* L, GType type, const char* prefix, const luaL_Reg* methods) {
+	glua_reg_gtype(L, REG_SYMBOLS_INDEX, type, prefix, methods);
+}
+
+static void reg_genum(lua_State* L, GType type) {
+	glua_reg_genum(L, REG_CONSTS_INDEX, type);
+}
+
 static PussGObjectRegIface reg_iface =
 	{ gffi_function_va_create
 	, glua_push_gtype_index_table
 	, glua_push_c_struct0_boxed_type_new_method
-	, glua_reg_gtype
-	, glua_reg_genum
+	, reg_gtype
+	, reg_genum
 	};
  
 static int reg_wrapper(lua_State* L) {
 	PussGObjectReg f = (PussGObjectReg)lua_touserdata(L, 1);
 	lua_settop(L, 0);
-	glua_push_master_table(L);
-	assert( lua_gettop(L)==1 );
-	f(L, &reg_iface, 1);
+	glua_push_symbol_table(L);
+	puss_iface->push_const_table(L);
+	assert( lua_gettop(L)==2 );
+	f(L, &reg_iface);
 	lua_settop(L, 0);
 	return 0;
 }
@@ -39,6 +50,7 @@ static void puss_gobject_module_reg(lua_State* L, PussGObjectReg f) {
 
 static PussGObjectInterface puss_gobject_interface =
 	{ glua_push_master_table
+	, glua_push_symbol_table
 	, puss_gobject_module_reg
 	, glua_value_check
 	, glua_value_test
@@ -120,9 +132,9 @@ static luaL_Reg strv_methods[] =
 	, {NULL, NULL}
 	};
 
-static void glua_glib_register(lua_State* L, PussGObjectRegIface* reg_iface, int glua_env_index) {
+static void glua_glib_register(lua_State* L, PussGObjectRegIface* reg_iface) {
 	// glib boxed
-	reg_iface->reg_gtype(L, glua_env_index, G_TYPE_STRV, "g_strv", strv_methods);
+	reg_iface->reg_gtype(L, G_TYPE_STRV, "g_strv", strv_methods);
 
 	// gio
 	gtype_reg_start(G_TYPE_FILE, g_file);
@@ -173,11 +185,13 @@ static void glua_glib_register(lua_State* L, PussGObjectRegIface* reg_iface, int
 }
 
 PUSS_MODULE_EXPORT void* __puss_module_init__(lua_State* L, PussInterface* puss, void* ud) {
+	puss_iface = puss;
 	__lua_proxy_import__(puss->luaproxy());
 	gffi_init();
 
 	puss_gobject_interface.module_reg(L, glua_glib_register);
 
+	glua_push_master_table(L);
 	return &puss_gobject_interface;
 }
 
