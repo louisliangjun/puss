@@ -1,5 +1,13 @@
 -- vmake_base.lua
 
+function trace()
+	-- default not print
+end
+
+if vlua.match_arg('^%-vmake%-trace$') then
+	trace = function(...) print(args_concat('>', ...)) end
+end
+
 -- utils
 
 function array_push(arr, ...)
@@ -38,17 +46,15 @@ end
 
 function array_convert(arr, convert)
 	local outs = {}
-	local function cvt(a)
-		if type(a)=='table' then
-			for _, v in ipairs(a) do
-				cvt(out, v, convert)
-			end
-		elseif a then
-			local o = convert(a)
+	if type(arr)=='table' then
+		for _, v in ipairs(arr) do
+			local o = convert(v)
 			if o then table.insert(outs, o) end
 		end
+	elseif arr then
+		local o = convert(arr)
+		if o then table.insert(outs, o) end
 	end
-	cvt(arr)
 	return outs
 end
 
@@ -116,7 +122,7 @@ end
 -- thread tasks
 
 function fetch_includes_by_regex(src, include_paths)
-	-- print('fetch_includes_by_regex', src)
+	trace('fetch_includes_by_regex', src)
 	local res = {}
 	local function search_include_path(inc, paths)
 		if paths==nil then return false end
@@ -163,7 +169,7 @@ function mkdir_by_targets(targets)
 	dirs = table_convert(dirs, function(k,v) return k end)
 	table.sort(dirs, function(a,b) return #a<#b end)
 	for _, dir in ipairs(dirs) do
-		-- print('mkdir', dir)
+		trace('mkdir', dir)
 		vlua.file_mkdir(dir)
 	end
 end
@@ -215,8 +221,8 @@ end
 
 function compile_tasks_create(...)
 	local srcs = array_pack(...)
-	-- for k,v in ipairs(srcs) do print(k,v) end
-	return array_convert(srcs, function(src) return {obj=nil, src=src, deps={} } end)	-- deps={ filename : mtime }
+	trace('compile_tasks_create:', srcs)
+	return array_convert(srcs, function(src) return {obj=nil, src=src, deps={}} end)	-- deps={ filename : mtime }
 end
 
 function compile_tasks_fetch_deps(tasks, include_paths)
@@ -233,17 +239,22 @@ function compile_tasks_fetch_deps(tasks, include_paths)
 	end
 
 	for _, t in ipairs(tasks) do
+		if not t.src then
+			print('task=', t)
+			for k,v in pairs(t) do print(k,v) end
+			error('comile bad <task>.src!')
+		end
 		local exist, size, mtime = vlua.file_stat(t.src)
 		if not exist then error('file not found: ' .. t.src) end
 		parse_file(t.src, mtime)
 	end
 
 	vlua.thread_pool:wait(function(src, res)
-		-- print('> fetch_includes_by_regex', src)
+		trace('fetch_includes_by_regex', src)
 		local incs = {}
 		includes[src] = incs
 		for inc, mtime in pairs(res) do
-			-- print('  >> add ', inc, mtime)
+			trace('  add ', inc, mtime)
 			table.insert(incs, inc)
 			parse_file(inc, mtime)
 		end
@@ -275,7 +286,7 @@ function compile_tasks_src2obj(tasks, objpath_build, parent_replace)
 			obj = obj:gsub('[\\/](%.%.)[\\/]', parent_replace)
 		end
 		t.obj = objpath_build(obj, is_abs_path)
-		-- print('src2obj', src, obj)
+		trace('src2obj', src, t.obj)
 	end
 end
 
@@ -288,12 +299,14 @@ function compile_tasks_build(tasks, command_build)	-- command_build(task) is com
 	assert( vlua.thread_pool, "MUST in main thread!" )
 	for _, t in pairs(tasks) do
 		local deps = next(t.deps) and t.deps or {t.src}
-		-- print('start run:', t.src, 'check_deps_execute', t.obj, deps, command_build(t))
+		trace('check_deps_execute:', command_build(t))
 		vlua.thread_pool:run(t.src, 'check_deps_execute', t.obj, deps, command_build(t))
 	end
 	vlua.thread_pool:wait(function(src, ok, res, code)
-		if not ok then
-			print( string.format('compile file(%s) failed: %s %s!', src, res, code) )
+		if ok then
+			trace('build target(', src, ') succeed')
+		else
+			print( string.format('build target(%s) failed: %s %s!', src, res, code) )
 			os.exit(code)
 		end
 	end)

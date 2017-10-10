@@ -6,6 +6,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include <gtk/gtk.h>
+
 #include <Scintilla.h>
 #include <SciLexer.h>
 #define GTK
@@ -76,7 +78,7 @@ typedef struct _IFaceVal {
 
 static int _lua__sci_send_wrap(lua_State* L) {
 	IFaceDecl* decl = (IFaceDecl*)lua_touserdata(L, lua_upvalueindex(1));
-	ScintillaObject* editor = SCINTILLA(glua_object_check(L, 1));
+	ScintillaObject* editor = SCINTILLA(gobject_iface->gobject_check(L, 1));
 	int nret = 0;
 	uptr_t wparam = 0;
 	sptr_t lparam = 0;
@@ -139,7 +141,7 @@ static int _lua__sci_send_wrap(lua_State* L) {
 	return nret;
 }
 
-#include "scintilla_iface.inl"
+#include "scintilla.iface.inl"
 
 static void glua_gtkscintilla_register(lua_State* L, PussGObjectRegIface* reg_iface, int glua_env_index) {
 	// vals
@@ -156,7 +158,7 @@ static void glua_gtkscintilla_register(lua_State* L, PussGObjectRegIface* reg_if
 // #define _USE_GTK_SCINTILLA_REG_TO_GLUA
 
 	// fun/get/set
-	reg_iface->push_gtype_index_table(L, SCINTILLA, "gtk_scintilla")
+	reg_iface->push_gtype_index_table(L, SCINTILLA_TYPE_OBJECT, "scintilla");
 	{
 		IFaceDecl* p;
 #ifdef _USE_GTK_SCINTILLA_REG_TO_GLUA
@@ -174,6 +176,9 @@ static void glua_gtkscintilla_register(lua_State* L, PussGObjectRegIface* reg_if
 		}
 	}
 	lua_pop(L, 1);
+
+	reg_iface->push_gtype_index_table(L, SCINTILLA_TYPE_NOTIFICATION, "scnotification");
+	lua_pop(L, 1);	
 }
 
 PUSS_MODULE_EXPORT void* __puss_module_init__(lua_State* L, PussInterface* puss, void* ud) {
