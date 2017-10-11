@@ -168,7 +168,7 @@ static void glua_gtkscintilla_register(lua_State* L, PussGObjectRegIface* reg_if
 			lua_pushlightuserdata(L, p);
 			lua_pushcclosure(L, _lua__sci_send_wrap, 1);
 #ifdef _USE_GTK_SCINTILLA_REG_TO_GLUA
-			sprintf(buf, "gtk_scintilla_%s", name);
+			sprintf(buf, "scintilla_%s", name);
 			lua_pushvalue(L, -1);
 			lua_setfield(L, REG_SYMBOLS_INDEX, name);
 #endif

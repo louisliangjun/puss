@@ -8,6 +8,7 @@ local AR  = 'ar -rc'
 local DLL_SUFFIX = '.so'
 local EXE_SUFFIX = vlua.OS=='windows' and '.exe' or ''
 local CFLAGS  = {}
+local CXX_CFLAGS = {}
 local OBJPATH = path_concat('objs', 'release')
 
 local PUSS_INCLUDE_PATH = path_concat('bin', 'include')
@@ -159,9 +160,12 @@ vmake_target_add('puss_gobject', function(target)
 
 	local cflags = shell('pkg-config --cflags glib-2.0 gobject-2.0 gio-2.0 libffi')
 	local libs = shell('pkg-config --libs glib-2.0 gobject-2.0 gio-2.0 libffi')
+	gobject_enums_parse(cflags, 'gobject', 'glib-types.h', '^%s*#%s*define%s+(G_TYPE_[_%w]+)')	-- #define G_TYPE_XXX
+	gobject_enums_parse(cflags, 'gio', 'gioenumtypes.h', '^%s*#%s*define%s+(G_TYPE_[_%w]+)')	-- #define G_TYPE_XXX
+
 	local objs = make_c2objs(srcpath, INCLUDES, '-fPIC', '-fvisibility=hidden', cflags)
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
-	return make_target(output, objs, CC, '-shared', '-o', output, objs, libs)
+	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs, libs)
 end)
 
 vmake_target_add('puss_gtk', function(target)
@@ -174,7 +178,7 @@ vmake_target_add('puss_gtk', function(target)
 
 	local objs = make_c2objs(path_concat('modules', target), INCLUDES, '-fPIC', '-fvisibility=hidden', cflags)
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
-	return make_target(output, objs, CC, '-shared', '-o', output, objs, libs)
+	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs, libs)
 end)
 
 vmake_target_add('puss_gtksourceview', function(target)
@@ -186,7 +190,7 @@ vmake_target_add('puss_gtksourceview', function(target)
 
 	local objs = make_c2objs(path_concat('modules', target), INCLUDES, '-fPIC', '-fvisibility=hidden', cflags)
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
-	return make_target(output, objs, CC, '-shared', '-o', output, objs, libs)
+	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs, libs)
 end)
 
 -----------------------------
@@ -241,6 +245,6 @@ vmake_target_add('puss_gtkscintilla', function(target)
 	local libs = shell('pkg-config --libs glib-2.0 gmodule-2.0 gtk+-3.0')
 	local objs = make_c2objs(path_concat('modules', target), array_pack(INCLUDES, SCINTILLA_INCLUDE_PATH), '-fPIC', '-fvisibility=hidden', cflags)
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
-	return make_target(output, {objs, slibs}, CXX, '-shared', cflags, '-o', output, objs, slibs, libs)
+	return make_target(output, {objs, slibs}, CXX, CFLAGS, CXXFLAGS, '-shared', cflags, '-o', output, objs, slibs, libs)
 end)
 
