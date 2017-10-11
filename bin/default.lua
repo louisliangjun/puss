@@ -1,57 +1,33 @@
 -- default.lua
 
-table.trace = function(t)
-	local keys = {}
-	local table_insert = table.insert
-	for k,v in pairs(t) do table_insert(keys, k) end
-	table.sort(keys)
-	for _, k in ipairs(keys) do print(k, t[k]) end
-	print('>>>> table keys:', #keys) 
-end
+local function samples()
+	print('samples test:')
+	print(' 1 - puss test')
+	print(' 2 - const test')
+	print(' 3 - glua test')
+	print(' 4 - gtk test')
+	io.stdout:write('please select: ')
+	io.stdout:flush()
+	local sel = math.tointeger(io.stdin:read('*l'))
+	print('select:', sel)
 
-local function _trace_test()
-	print('============== puss');	table.trace(puss)
-
-	if false then
-		local glua = puss.require('puss_gobject')
-		print('============== glua', glua);	table.trace(glua)
-		print('============== glua._gtypes', glua._gtypes);	table.trace(glua._gtypes)
-		print('============== glua._types', glua._types);	table.trace(glua._types)
-		print('============== glua._symbols', glua._symbols);	table.trace(glua._symbols)
+	local function run(script)
+		local cmd = string.format('%s/%s %s', puss._path, puss._self, script)
+		print(cmd)
+		os.execute(cmd)
 	end
 
-	if false then
-		local glua = puss.require('puss_gtk')
-		print('============== glua', glua);	table.trace(glua)
-		print('============== glua._types', glua._types);	table.trace(glua._types)
-		print('============== glua._symbols', glua._symbols);	table.trace(glua._symbols)
-	end
-
-	if false then
-		local glua = puss.require('puss_gtksourceview')
-		print('============== glua', glua);	table.trace(glua)
-		print('============== glua._types', glua._types);	table.trace(glua._types)
-		print('============== glua._symbols', glua._symbols);	table.trace(glua._symbols)
-	end
-
-	if true then
-		local glua = puss.require('puss_gtkscintilla')
-		print('============== glua', glua);	table.trace(glua)
-		print('============== glua._types', glua._types);	table.trace(glua._types)
-		print('============== glua._symbols', glua._symbols);	table.trace(glua._symbols)
-	end
-
-	if true then
-		local enums = puss._consts
-		print('============== puss._consts', puss._consts);	table.trace(puss._consts)
-
-		print('NOTICE: current file already compiled, so no enums replace, GTK_MAJOR_VERSION:', tostring(GTK_MAJOR_VERSION))
-		print('NOTICE: if current file want use enums, use puss._consts.GTK_MAJOR_VERSION:', puss._consts.GTK_MAJOR_VERSION)
-		load("print('NOTICE: new compiled file/string support, GTK_MAJOR_VERSION:', GTK_MAJOR_VERSION)", 'string')()
-	end
+	if sel==1 then return run('samples/1_puss.lua') end
+	if sel==2 then return run('samples/2_const.lua') end
+	if sel==3 then return run('samples/3_glua.lua') end
+	if sel==4 then return run('samples/4_gtk.lua') end
 end
 
 function __main__()
-	_trace_test()
+	print('usage: ./puss <script> [options...]')
+	print()
+	while true do
+		samples()
+	end
 end
 

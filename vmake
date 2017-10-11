@@ -182,7 +182,7 @@ vmake_target_add('puss_gtksourceview', function(target)
 
 	local cflags = shell('pkg-config --cflags gtksourceview-3.0')
 	local libs = shell('pkg-config --libs gtksourceview-3.0')
-	gobject_enums_parse(cflags, 'gtksourceview', 'gtksourceview-enumtypes.h', '^%s*#%s*define%s+(GTK_SOURCE_TYPE_[_%w]+)')		-- #define GTK_SOURCE_TYPE_XXX
+	gobject_enums_parse(cflags, 'gtksourceview', 'gtksourceview-enumtypes.h', '^%s*#%s*define%s+(GTK_SOURCE_TYPE_[_%w]+)')	-- #define GTK_SOURCE_TYPE_XXX
 
 	local objs = make_c2objs(path_concat('modules', target), INCLUDES, '-fPIC', '-fvisibility=hidden', cflags)
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
@@ -214,15 +214,10 @@ end)
 
 vmake_target_add('gtkscintilla', function(target)
 	-- see <scintilla/gtk/makefile>
+	local cxxflags = { '-fPIC', '-DGTK', '-DSCI_LEXER', '-DNO_CXX11_REGEX' }
 	local gtkcflags =
 		{ shell('pkg-config --cflags gtk+-3.0')
 		, '-DGDK_PIXBUF_DISABLE_DEPRECATED -DGDK_DISABLE_DEPRECATED -DGTK_DISABLE_DEPRECATED -DDISABLE_GDK_FONT' 
-		}
-	local cxxflags =
-		{ '-fPIC'
-		, '-DGTK'
-		, '-DSCI_LEXER'
-		, '-DNO_CXX11_REGEX'
 		}
 	local incs =
 		{ SCINTILLA_INCLUDE_PATH
@@ -242,10 +237,10 @@ end)
 vmake_target_add('puss_gtkscintilla', function(target)
 	vmake('puss_gobject')
 	local slibs = vmake('gtkscintilla')
-	local cflags = { '-fPIC', shell('pkg-config --cflags glib-2.0 gtk+-3.0') }
-	local libs = shell('pkg-config --libs glib-2.0 gtk+-3.0')
+	local cflags = { '-fPIC', shell('pkg-config --cflags glib-2.0 gmodule-2.0 gtk+-3.0') }
+	local libs = shell('pkg-config --libs glib-2.0 gmodule-2.0 gtk+-3.0')
 	local objs = make_c2objs(path_concat('modules', target), array_pack(INCLUDES, SCINTILLA_INCLUDE_PATH), '-fPIC', '-fvisibility=hidden', cflags)
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
-	return make_target(output, {'vmake', objs, slibs}, CXX, '-shared', cflags, '-o', output, objs, slibs, libs)
+	return make_target(output, {objs, slibs}, CXX, '-shared', cflags, '-o', output, objs, slibs, libs)
 end)
 
