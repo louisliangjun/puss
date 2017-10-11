@@ -12,8 +12,9 @@ local CXX_CFLAGS = {}
 local OBJPATH = path_concat('objs', 'release')
 
 local PUSS_INCLUDE_PATH = path_concat('bin', 'include')
+local GEN_INCLUDE_PATH = path_concat('objs', 'gen')
 local PUSS_MODULE_SUFFIX = ''
-local INCLUDES = { '3rd', PUSS_INCLUDE_PATH }
+local INCLUDES = { '3rd', PUSS_INCLUDE_PATH, GEN_INCLUDE_PATH }
 
 -- debug && asan
 do
@@ -137,7 +138,7 @@ end)
 local function gobject_enums_parse(cflags, spath, source, match_regex)
 	local src, sz, mtime = scan_and_lookup_file(cflags, path_concat(spath, source))
 	if not src then return end
-	local target = path_concat(PUSS_INCLUDE_PATH, source..'.inl')
+	local target = path_concat(GEN_INCLUDE_PATH, source..'.inl')
 	if check_deps(target, { [src] = mtime }) then return true end
 	local strfmt = string.format
 	local f = io.open(target, 'w')
@@ -200,11 +201,11 @@ local SCINTILLA_ROOT_PATH = path_concat('3rd', 'scintilla-4.0.0')
 local SCINTILLA_INCLUDE_PATH = path_concat(SCINTILLA_ROOT_PATH, 'include')
 
 vmake_target_add('scintilla_iface', function(target)
-	make_copy('Scintilla.iface', PUSS_INCLUDE_PATH, SCINTILLA_INCLUDE_PATH)
+	make_copy('Scintilla.iface', GEN_INCLUDE_PATH, SCINTILLA_INCLUDE_PATH)
 
 	local scintilla_iface_lua = path_concat('tools', 'scintilla_iface.lua')
-	local scintilla_iface = path_concat(PUSS_INCLUDE_PATH, 'Scintilla.iface')
-	local scintilla_output = path_concat(PUSS_INCLUDE_PATH, 'scintilla.iface.inl')
+	local scintilla_iface = path_concat(GEN_INCLUDE_PATH, 'Scintilla.iface')
+	local scintilla_output = path_concat(GEN_INCLUDE_PATH, 'scintilla.iface.inl')
 	local deps =
 		{ scintilla_iface_lua
 		, scintilla_iface

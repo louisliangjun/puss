@@ -1,14 +1,9 @@
 -- app.lua
--- 
 
-local editor = puss.module_import('source_editor/editor.lua')
+local EDITOR = puss.import('editor')
 
-main_builder = nil
-main_window = nil
-
-local function puss_modules_open()
-	puss.module_load('scene_editor/filebrowser.lua')
-end
+local main_builder = nil
+local main_window = nil
 
 function on_main_window_delete(w, ...)
 	print('on_main_window_delete signal handle!')
@@ -18,14 +13,6 @@ end
 function on_main_window_destroy(w, ...)
 	print('on_main_window_destroy signal handle!')
 	return true
-end
-
-function open_file(label, filename, line)
-	local ed = editor.create(label)
-	editor.set_language(ed, 'cpp')
-	local cxt = g_file_get_content(filename)
-	ed:set_text(nil, cxt)
-	return ed
 end
 
 local function puss_main_window_open()
@@ -45,8 +32,8 @@ local function puss_app_activate(...)
 		puss_main_window_open()
 		app:add_window(main_window)
 
-		local ed = editor.create('noname')
-		editor.set_language(ed, 'cpp')
+		local ed = EDITOR.create('noname')
+		EDITOR.set_language(ed, 'cpp')
 	end
 
 	main_window.window:raise()
@@ -74,7 +61,19 @@ local function puss_app_open(app, files, nfiles, hint)
 	end
 end
 
-function main()
+_exports.main_builder = function()
+	return main_builder
+end
+
+_exports.open_file = function(label, filename, line)
+	local ed = EDITOR.create(label)
+	EDITOR.set_language(ed, 'cpp')
+	local cxt = g_file_get_content(filename)
+	ed:set_text(nil, cxt)
+	return ed
+end
+
+_exports.main = function()
 	app = gtk_application_new('puss.org', G_APPLICATION_HANDLES_OPEN)
 	app:set_default()
 	app:signal_connect('activate', puss_app_activate)

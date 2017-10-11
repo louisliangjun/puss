@@ -1,14 +1,16 @@
--- source_editor.lua
+-- editor.lua
 
-local app = puss.module_import('source_editor/app.lua')
+local APP = puss.import('app')
 
-function create(label)
+_exports.create = function(label)
 	local ed = scintilla_new()
 	ed:set_code_page(SC_CP_UTF8)
 	ed:style_set_font(STYLE_DEFAULT, "monospace")
 	local sw = gtk_scrolled_window_new()
 	sw:add(ed)
-	local doc_panel = app.main_builder:get_object('doc_panel')
+	print('builder:', APP, APP.main_builder)
+	print('xxx', APP.main_builder())
+	local doc_panel = APP.main_builder():get_object('doc_panel')
 	local label_widget = gtk_label_new()
 	label_widget.label = label
 	doc_panel:append_page(sw, label_widget)
@@ -16,8 +18,7 @@ function create(label)
 	return ed
 end
 
-
-function set_language(ed, lang)
+_exports.set_language = function(ed, lang)
 	ed:set_lexer_language(nil, lang)
 	if lang=='cpp' then
 		local cpp_keywords = [[
