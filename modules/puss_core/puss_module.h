@@ -15,11 +15,11 @@ typedef struct _LuaProxy	LuaProxy;
 
 typedef struct PussInterface {
 	LuaProxy*	(*luaproxy)			(void);
-	void*		(*require)			(lua_State* L, const char* m, void* ud);
-	const char*	(*app_path)			(lua_State* L);
-	int			(*rawget_ex)		(lua_State* L, const char* name);
-	int			(*pcall_stacktrace)	(lua_State* L, int n, int r);
-	void        (*push_const_table) (lua_State* L);
+	void*		(*require)			(lua_State* L, const char* name);	// [-0,+0,e]
+	void        (*push_const_table) (lua_State* L);	// [-0,+1,-]
+	const char*	(*app_path)			(lua_State* L);	// [-0,+0,-]
+	int			(*rawget_ex)		(lua_State* L, const char* name);	// [-0,+1,-]
+	int			(*pcall_stacktrace)	(lua_State* L, int n, int r);		// [-0,+1,-]
 } PussInterface;
 
 #ifdef _WIN32
@@ -29,13 +29,25 @@ typedef struct PussInterface {
 #endif
 
 // puss module need :
-//   extern "C"
-//   PUSS_MODULE_EXPORT
-//   void* __puss_module_init__(lua_State* L, PussInterface* puss, void* ud);
+//   extern "C" PUSS_MODULE_EXPORT void* __puss_module_init__(lua_State* L, PussInterface* puss);
 // 
-// return module interface
+// usage :
+//   local module = puss.require(module_name, p1, p2, ...)
 // 
-typedef void* (*PussModuleInit)(lua_State* L, PussInterface* puss, void* ud);
+// example :
+//   struct ModuleIFace {
+//      void* (*foo)(int, const char*);
+//      int   (*bar)(void);
+//   };
+// 
+//   static struct ModuleIFace module_iface = { foo, bar };
+// 
+//   extern "C" PUSS_MODULE_EXPORT void* __puss_module_init__(lua_State* L, PussInterface* puss) {
+//      puss->luaproxy()->lua_newtable(L);	// module iface for lua
+//      return &module_iface;				// module iface for C
+//   }
+//   
+typedef void* (*PussModuleInit)(lua_State* L, PussInterface* puss);
 
 PUSS_DECLS_END
 

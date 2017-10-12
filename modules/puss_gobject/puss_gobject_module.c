@@ -189,7 +189,7 @@ static void glua_glib_register(lua_State* L, PussGObjectRegIface* reg_iface) {
 	gtype_reg_start(G_TYPE_MOUNT_OPERATION, g_mount_operation); gtype_reg_end();
 }
 
-PUSS_MODULE_EXPORT void* __puss_module_init__(lua_State* L, PussInterface* puss, void* ud) {
+PUSS_MODULE_EXPORT void* __puss_module_init__(lua_State* L, PussInterface* puss) {
 	puss_iface = puss;
 	__lua_proxy_import__(puss->luaproxy());
 	gffi_init();

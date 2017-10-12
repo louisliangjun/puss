@@ -1,4 +1,4 @@
-dofile('samples/z_utils.lua')
+puss.dofile('samples/utils.lua')
 
 function __main__()
 	print('* main', glua, GTK_MAJOR_VERSION)
@@ -25,6 +25,6 @@ if not glua then
 	local glua_symbols = glua._symbols
 	_ENV.glua = glua
 	setmetatable(_ENV, {__index=glua_symbols})
-	dofile('samples/4_gtk.lua')	-- for use glib symbols & enums
+	puss.dofile('samples/gtk.lua')	-- for use glib symbols & enums
 end
 

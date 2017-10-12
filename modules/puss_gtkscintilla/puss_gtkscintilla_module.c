@@ -181,10 +181,10 @@ static void glua_gtkscintilla_register(lua_State* L, PussGObjectRegIface* reg_if
 	lua_pop(L, 1);	
 }
 
-PUSS_MODULE_EXPORT void* __puss_module_init__(lua_State* L, PussInterface* puss, void* ud) {
+PUSS_MODULE_EXPORT void* __puss_module_init__(lua_State* L, PussInterface* puss) {
 	if( !gobject_iface ) {
 		__lua_proxy_import__(puss->luaproxy());
-		gobject_iface = puss->require(L, "puss_gtk", ud);
+		gobject_iface = puss->require(L, "puss_gtk");
 		if( !gobject_iface ) {
 			luaL_error(L, "require puss_gobject failed!");
 			return NULL;

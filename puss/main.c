@@ -119,10 +119,9 @@ static int puss_init(lua_State* L) {
 	lua_setfield(L, -2, "_script");			// puss._script
 
 	if( is_script_file ) {
-		script = lua_pushfstring(L, "%s" FILE_PATH_SEP "%s", puss_interface()->app_path(L), script);
-		if( luaL_loadfile(L, script) || lua_pcall(L, 0, 0, 0) ) {
-			lua_error(L);
-		}
+		puss_rawget_ex(L, "puss.dofile");
+		lua_pushstring(L, script);
+		lua_call(L, 1, 0);
 		if( lua_getglobal(L, "__main__")!=LUA_TFUNCTION ) {
 			lua_pop(L, 1);
 			lua_pushcfunction(L, puss_dummy_main);

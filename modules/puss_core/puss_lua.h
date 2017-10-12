@@ -12,13 +12,12 @@ PUSS_DECLS_BEGIN
 // 
 void puss_lua_open(lua_State* L, int namespace_max_num);	// namespace_max_num, MUST >= PUSS_NAMESPACE_MAX_NUM
 
-PussInterface* puss_interface(void);
-
 #define PUSS_METATABLE_(T)		PUSS_METATABLE_##T
 #define PUSS_METATABLE_NAME_(T)	#T
 
 typedef enum _PussBuiltinNamespace
 	{ PUSS_NAMESPACE_PUSS = LUA_RIDX_LAST + 1
+	, PUSS_NAMESPACE_MODULES_LOADED
 	, PUSS_NAMESPACE_APP_PATH
 	, PUSS_NAMESPACE_APP_NAME
 	, PUSS_NAMESPACE_MODULE_SUFFIX

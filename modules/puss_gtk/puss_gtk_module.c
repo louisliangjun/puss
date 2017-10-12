@@ -910,12 +910,12 @@ static char __gtk_arg0[64] = { '.', '/', 'a', 'p', 'p', 0 };
 static char* __gtk_args[2] = { __gtk_arg0, NULL };
 static char** __gtk_argv = __gtk_args;
 
-PUSS_MODULE_EXPORT void* __puss_module_init__(lua_State* L, PussInterface* puss, void* ud) {
+PUSS_MODULE_EXPORT void* __puss_module_init__(lua_State* L, PussInterface* puss) {
 	if( !gobject_iface ) {
 		guint64 now = (guint64)g_get_real_time();
 		__lua_proxy_import__(puss->luaproxy());
 
-		gobject_iface = puss->require(L, "puss_gobject", ud);
+		gobject_iface = puss->require(L, "puss_gobject");
 		if( !gobject_iface ) {
 			luaL_error(L, "require puss_gobject failed!");
 			return NULL;

@@ -1,5 +1,38 @@
 // puss_lua.c
 
+const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
+	"local sep = ...\n"
+	"local strfmt = string.format\n"
+	"\n"
+	"local function puss_loadfile(name, env)\n"
+	"	local path = strfmt('%s%s%s', puss._path, sep, name)\n"
+	"	local f, err = loadfile(path, 'bt', env or _ENV)\n"
+	"	if not f then return f, strfmt('load script(%s) failed: %s', path, err) end\n"
+	"	return f\n"
+	"end\n"
+	"\n"
+	"local function puss_dofile(name, env, ...)\n"
+	"	local f, err = puss_loadfile(name, env)\n"
+	"	if not f then\n"
+	"		print(debug.traceback( strfmt('loadfile(%s) failed!', name) ))\n"
+	"		error(err)\n"
+	"	end\n"
+	"	return f(...)\n"
+	"end\n"
+	"\n"
+	"puss.loadfile = puss_loadfile\n"
+	"puss.dofile = puss_dofile\n"
+	"\n"
+	"do\n"
+	"	local _traceback = debug.traceback\n"
+	"	local _logerr = print\n"
+	"	local _logerr_handle = function(err) _logerr(_traceback(err,2)); return err;  end\n"
+	"	puss.trace_pcall = function(f, ...) return xpcall(f, _logerr_handle, ...) end\n"
+	"	puss.trace_dofile = function(name, env, ...) return xpcall(puss_dofile, _logerr_handle, name, env, ...) end\n"
+	"end\n"
+	"\n"
+	;
+
 #include "puss_lua.h"
 
 #include <assert.h>
@@ -8,7 +41,15 @@
 
 #include "luaproxy_export.inl"
 
-static void* module_require(lua_State* L, const char* m, void* ud);
+#ifdef _WIN32
+	#define PATH_SEP	"\\"
+#else
+	#define PATH_SEP	"/"
+#endif
+
+typedef struct PussModuleUD {
+	void*	iface;
+} PussModuleUD;
 
 int puss_ns_newmetatable(lua_State* L, int metatable_namespace, const char* metatable_name) {
 	if( puss_namespace_rawget(L, metatable_namespace)==LUA_TTABLE )
@@ -198,15 +239,23 @@ static const char* puss_ns_rawget_string(lua_State* L, int ns, const char* def) 
 	return str;
 }
 
-static const char* module_app_path(lua_State* L) {
-	return puss_ns_rawget_string(L, PUSS_NAMESPACE_APP_PATH, ".");
-}
+static int module_init_wrapper(lua_State* L);
 
-static int puss_module_require(lua_State* L) {
-	const char* m = luaL_checkstring(L, 1);
-	void* ud = lua_touserdata(L, 2);
-	module_require(L, m, ud);
-	return lua_gettop(L);
+static void* module_require(lua_State* L, const char* name) {
+	int top = lua_gettop(L);
+	PussModuleUD* m = NULL;
+	puss_namespace_rawget(L, PUSS_NAMESPACE_MODULES_LOADED);
+	lua_getfield(L, -1, name);
+	m = lua_touserdata(L, -1);
+	lua_settop(L, top);
+	if( !m ) {
+		m = lua_newuserdata(L, sizeof(PussModuleUD));
+		lua_pushstring(L, name);
+		lua_pushcclosure(L, module_init_wrapper, 2);
+		lua_call(L, 0, 0);
+	}
+	assert( lua_gettop(L)==top );
+	return m->iface;
 }
 
 static void puss_push_const_table(lua_State* L) {
@@ -222,14 +271,94 @@ static void puss_push_const_table(lua_State* L) {
 #endif
 }
 
+static const char* puss_app_path(lua_State* L) {
+	return puss_ns_rawget_string(L, PUSS_NAMESPACE_APP_PATH, ".");
+}
+
 static PussInterface puss_iface =
 	{ __lua_proxy_export__
 	, module_require
-	, module_app_path
+	, puss_push_const_table
+	, puss_app_path
 	, puss_rawget_ex
 	, puss_pcall_stacktrace
-	, puss_push_const_table
 	};
+
+static int module_init_wrapper(lua_State* L) {
+	PussModuleUD* ud = (PussModuleUD*)lua_touserdata(L, lua_upvalueindex(1));
+	const char* name = (const char*)lua_tostring(L, lua_upvalueindex(2));
+	const char* app_path = puss_ns_rawget_string(L, PUSS_NAMESPACE_APP_PATH, ".");
+	const char* module_suffix = puss_ns_rawget_string(L, PUSS_NAMESPACE_MODULE_SUFFIX, ".so");
+	PussModuleInit f = NULL;
+	ud->iface = NULL;
+	assert( lua_gettop(L)==0 );
+
+	// local f, err = package.loadlib(module_filename, '__puss_module_init__')
+	// 
+	puss_rawget_ex(L, "package.loadlib");
+	{
+		luaL_Buffer B;
+		luaL_buffinit(L, &B);
+		luaL_addstring(&B, app_path);
+		luaL_addstring(&B, PATH_SEP "modules" PATH_SEP);
+		luaL_addstring(&B, name);
+		luaL_addstring(&B, module_suffix);
+		luaL_pushresult(&B);
+	}
+	lua_pushstring(L, "__puss_module_init__");
+	lua_call(L, 2, 2);
+	if( lua_type(L, -2)!=LUA_TFUNCTION )
+		lua_error(L);
+	f = (PussModuleInit)lua_tocfunction(L, -2);
+	if( !f )
+		luaL_error(L, "load module fetch init function failed!");
+	lua_pop(L, 2);
+	assert( lua_gettop(L)==0 );
+
+	// __puss_module_init__()
+	// 
+	ud->iface = f(L, &puss_iface);
+	if( lua_gettop(L)==0 ) {
+		lua_pushnil(L);	// no return, lua_module_interface use nil
+	}
+
+	// set ud.uservalue = <lua_module_interface: last return value>
+	// 
+	lua_pushvalue(L, lua_upvalueindex(1));
+	lua_pushvalue(L, -2);
+	lua_setuservalue(L, -2);
+
+	// puss_module_loaded[name] = m
+	puss_namespace_rawget(L, PUSS_NAMESPACE_MODULES_LOADED);
+	lua_pushvalue(L, -2);
+	lua_setfield(L, -2, name);
+	lua_pop(L, 2);
+	assert( lua_gettop(L) > 0 );
+
+	// fprintf(stderr, "require init : %s\n", lua_typename(L, lua_type(L, -1)));
+	return 1;
+}
+
+static int puss_module_require(lua_State* L) {
+	const char* name = luaL_checkstring(L, 1);
+	PussModuleUD* m = NULL;
+	puss_namespace_rawget(L, PUSS_NAMESPACE_MODULES_LOADED);
+	lua_getfield(L, -1, name);
+	m = (PussModuleUD*)lua_touserdata(L, -1);
+	if( m ) {
+		lua_getuservalue(L, -1);
+		return 1;
+	}
+	lua_pop(L, 2);
+
+	lua_newuserdata(L, sizeof(PussModuleUD));
+	lua_pushvalue(L, 1);
+	lua_pushcclosure(L, module_init_wrapper, 2);
+	lua_replace(L, 1);
+	lua_settop(L, 1);
+	lua_call(L, 0, 1);
+	return 1;
+}
 
 void puss_module_setup(lua_State* L, const char* app_path, const char* app_name, const char* module_suffix) {
 	// fprintf(stderr, "!!!puss_module_setup %s %s %s\n", app_path, app_name, module_suffix);
@@ -256,46 +385,11 @@ void puss_module_setup(lua_State* L, const char* app_path, const char* app_name,
 	lua_setfield(L, -2, "_module_suffix");	// puss._module_suffix
 }
 
-static void* module_require(lua_State* L, const char* m, void* ud) {
-	PussModuleInit f;
-	const char* app_path = puss_ns_rawget_string(L, PUSS_NAMESPACE_APP_PATH, ".");
-	const char* module_suffix = puss_ns_rawget_string(L, PUSS_NAMESPACE_MODULE_SUFFIX, ".so");
-	const char* module_fname;
-	luaL_Buffer B;
-	luaL_buffinit(L, &B);
-	luaL_addstring(&B, app_path);
-#ifdef _WIN32
-	luaL_addstring(&B, "\\modules\\");
-#else
-	luaL_addstring(&B, "/modules/");
-#endif
-	luaL_addstring(&B, m);
-	luaL_addstring(&B, module_suffix);
-	luaL_pushresult(&B);
-	module_fname = lua_tostring(L, -1);
-
-	puss_rawget_ex(L, "package.loadlib");
-	lua_pushstring(L, module_fname);
-	lua_pushstring(L, "__puss_module_init__");
-	lua_call(L, 2, 2);
-	if( lua_type(L, -2)!=LUA_TFUNCTION )
-		lua_error(L);
-	f = (PussModuleInit)lua_tocfunction(L, -2);
-	if( !f )
-		luaL_error(L, "load module fetch init function failed!");
-	lua_settop(L, 0);
-	return f(L, &puss_iface, ud);
-}
-
-PussInterface* puss_interface(void) {
-	return &puss_iface;
-}
-
 void puss_lua_open(lua_State* L, int namespace_max_num) {
 	int ridx;
 
 	// check already open
-	if (LUA_TTABLE == puss_namespace_rawget(L, PUSS_NAMESPACE_PUSS)) {
+	if( puss_namespace_rawget(L, PUSS_NAMESPACE_PUSS)==LUA_TTABLE ) {
 		lua_pop(L, 1);
 		return;
 	}
@@ -323,6 +417,18 @@ void puss_lua_open(lua_State* L, int namespace_max_num) {
 	puss_namespace_rawset(L, PUSS_NAMESPACE_PUSS);
 	puss_module_setup(L, ".", "puss", ".so");
 
+	// loaded["puss"] = puss-module
+	lua_newtable(L);
+	{
+		PussModuleUD* ud = lua_newuserdata(L, sizeof(PussModuleUD));
+		ud->iface = &puss_iface;
+		lua_pushvalue(L, -2);
+		lua_setuservalue(L, -2);
+		lua_setfield(L, -2, "puss");
+	}
+	puss_namespace_rawset(L, PUSS_NAMESPACE_MODULES_LOADED);
+	lua_pop(L, 1);
+
 	// set to _G.puss
 	lua_pushvalue(L, -1);
 	lua_setglobal(L, "puss");
@@ -342,9 +448,18 @@ void puss_lua_open(lua_State* L, int namespace_max_num) {
 	lua_pushcfunction(L, puss_function_wrap);
 	lua_setfield(L, -2, "function_wrap");
 
-	// module
+	// puss.require = _G.require = puss_module_require
 	lua_pushcfunction(L, puss_module_require);
+	lua_pushvalue(L, -1);
+	lua_setglobal(L, "require");
 	lua_setfield(L, -2, "require");
+
+	// setup builtins
+	if( luaL_loadbuffer(L, builtin_scripts, sizeof(builtin_scripts)-1, "@puss_builtin.lua") ) {
+		lua_error(L);
+	}
+	lua_pushstring(L, PATH_SEP);
+	lua_call(L, 1, 0);
 
 	lua_pop(L, 1);
 }
