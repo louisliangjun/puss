@@ -1,24 +1,6 @@
 -- editor.lua
 
-local APP = puss.import('app')
-
-_exports.create = function(label)
-	local ed = scintilla_new()
-	ed:set_code_page(SC_CP_UTF8)
-	ed:style_set_font(STYLE_DEFAULT, "monospace")
-	local sw = gtk_scrolled_window_new()
-	sw:add(ed)
-	print('builder:', APP, APP.main_builder)
-	print('xxx', APP.main_builder())
-	local doc_panel = APP.main_builder():get_object('doc_panel')
-	local label_widget = gtk_label_new()
-	label_widget.label = label
-	doc_panel:append_page(sw, label_widget)
-	sw:show_all()
-	return ed
-end
-
-_exports.set_language = function(ed, lang)
+local function set_language(ed, lang)
 	ed:set_lexer_language(nil, lang)
 	if lang=='cpp' then
 		local cpp_keywords = [[
@@ -44,4 +26,22 @@ _exports.set_language = function(ed, lang)
 		ed:style_set_fore(SCE_C_COMMENTDOC, 0x00008000);
 	end
 end
+
+_exports.create = function(main_builder, label, lang)
+	local ed = scintilla_new()
+	ed:set_code_page(SC_CP_UTF8)
+	ed:style_set_font(STYLE_DEFAULT, "monospace")
+	set_language(ed, lang)
+
+	local sw = gtk_scrolled_window_new()
+	sw:add(ed)
+	local doc_panel = main_builder:get_object('doc_panel')
+	local label_widget = gtk_label_new()
+	label_widget.label = label
+	doc_panel:append_page(sw, label_widget)
+	sw:show_all()
+	return ed
+end
+
+_exports.set_language = set_language
 

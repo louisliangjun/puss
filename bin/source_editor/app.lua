@@ -15,7 +15,7 @@ function on_main_window_destroy(w, ...)
 	return true
 end
 
-local function puss_main_window_open()
+local function main_window_open()
 	assert( main_builder==nil, 'not support open twice!' )
 	main_builder = gtk_builder_new()
 	main_builder:add_from_file( string.format('%s/source_editor/app.glade', puss._path) )
@@ -26,38 +26,36 @@ local function puss_main_window_open()
 	main_window:show_all()
 end
 
-local function puss_app_activate(...)
+local function on_app_activate(...)
 	print('activate', ...)
 	if not main_window then
-		puss_main_window_open()
+		main_window_open()
 		app:add_window(main_window)
 
-		local ed = EDITOR.create('noname')
-		EDITOR.set_language(ed, 'cpp')
+		local ed = EDITOR.create(main_builder, 'noname', 'cpp')
 	end
 
 	main_window.window:raise()
 end
 
-local function puss_open_from_gfile(gfile)
-	local ed = editor.create(gfile:get_basename())
-	editor.set_language(ed, 'cpp')
+local function open_from_gfile(gfile)
+	local ed = EDITOR.create(main_builder, gfile:get_basename(), 'cpp')
 	local cxt = g_file_get_content(gfile:get_path())
 	ed:set_text(nil, cxt)
 	return ed
 end
 
-local function puss_app_open(app, files, nfiles, hint)
+local function on_app_open(app, files, nfiles, hint)
 	print('open', app, files, nfiles, hint, #hint)
 	if not main_window then
-		puss_main_window_open()
+		main_window_open()
 		app:add_window(main_window)
 	end
 
 	local t = glua.gobject_array_pointer_parse(files, nfiles)
 	for i,v in ipairs(t) do
 		-- print('open', app, files, nfiles, hint, #hint)
-		puss_open_from_gfile(v)
+		open_from_gfile(v)
 	end
 end
 
@@ -66,9 +64,8 @@ _exports.main_builder = function()
 end
 
 _exports.open_file = function(label, filename, line)
-	local ed = EDITOR.create(label)
-	EDITOR.set_language(ed, 'cpp')
 	local cxt = g_file_get_content(filename)
+	local ed = EDITOR.create(main_builder, label, 'cpp')
 	ed:set_text(nil, cxt)
 	return ed
 end
@@ -76,8 +73,8 @@ end
 _exports.main = function()
 	app = gtk_application_new('puss.org', G_APPLICATION_HANDLES_OPEN)
 	app:set_default()
-	app:signal_connect('activate', puss_app_activate)
-	app:signal_connect('open', puss_app_open)
+	app:signal_connect('activate', on_app_activate)
+	app:signal_connect('open', on_app_open)
 
 	local args = g_strv_new(puss._args)
 	app:run(args:len(), args)
