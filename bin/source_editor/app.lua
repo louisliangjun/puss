@@ -1,6 +1,6 @@
 -- app.lua
 
-local EDITOR = puss.import('editor')
+local puss_editor = puss.import('editor')
 
 local main_builder = nil
 local main_window = nil
@@ -32,14 +32,14 @@ local function on_app_activate(...)
 		main_window_open()
 		app:add_window(main_window)
 
-		local ed = EDITOR.create(main_builder, 'noname', 'cpp')
+		local ed = puss_editor.create(main_builder, 'noname', 'cpp')
 	end
 
 	main_window.window:raise()
 end
 
 local function open_from_gfile(gfile)
-	local ed = EDITOR.create(main_builder, gfile:get_basename(), 'cpp')
+	local ed = puss_editor.create(main_builder, gfile:get_basename(), 'cpp')
 	local cxt = g_file_get_content(gfile:get_path())
 	ed:set_text(nil, cxt)
 	return ed
@@ -65,7 +65,7 @@ end
 
 _exports.open_file = function(label, filename, line)
 	local cxt = g_file_get_content(filename)
-	local ed = EDITOR.create(main_builder, label, 'cpp')
+	local ed = puss_editor.create(main_builder, label, 'cpp')
 	ed:set_text(nil, cxt)
 	return ed
 end

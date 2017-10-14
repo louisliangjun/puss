@@ -1,5 +1,10 @@
 -- module.lua
 
+-- NOTICE : puss.function_wrap()
+--   wrapper = puss.function_wrap(method)       -- create wrapper
+--   method  = puss.function_wrap(nil, wrapper) -- fetch method from wrapper
+--   puss.function_wrap(new_methods, wrapper)   -- replace wrapper method
+
 local function create_exports()
 	local wrappers = {}
 	
@@ -23,14 +28,14 @@ local function create_exports()
 		local wrapper = wrappers[k]
 		if not wrapper then 
 			wrapper = create_export(k, v)
-		elseif wrapper==v then
-			print('export self wrapper error:', k)
-		else
+		elseif wrapper~=v then
 			puss.function_wrap(v, wrapper)
+		else
+			error('export recursion wrapper dead loop error:'..tostring(k))
 		end
 		return wrapper
 	end
-	
+
 	return setmetatable({}, mt)
 end
 
@@ -39,12 +44,18 @@ puss._modules = puss._modules or {}
 
 local modules = puss._modules
 
-puss.import = function(name)
+puss.import = function(name, reload)
 	local env = modules[name]
-	if env then return getmetatable(env).__exports end
-	local exports = create_exports()
-	env = setmetatable({_name=name, _exports=exports}, {__index=_ENV, __name=name, __exports=exports})
-	modules[name] = env
+	local exports
+	if env then
+		exports = getmetatable(env).__exports
+		if not reload then return exports end
+	else
+		exports = create_exports()
+		env = setmetatable({_name=name, _exports=exports}, {__index=_ENV, __name=name, __exports=exports})
+		modules[name] = env
+	end
+
 	local fname = string.format('source_editor/%s.lua', name)
 	-- print('import', fname, 'begin')
 	puss.dofile(fname, env)
