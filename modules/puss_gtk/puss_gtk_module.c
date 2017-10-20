@@ -230,9 +230,12 @@ static int _lua_gtk_tree_selection_get_selected_rows(lua_State* L) {
 
 static void _iter_callback(GtkWidget* w, gpointer data) {
 	lua_State* L = (lua_State*)data;
+	int top = lua_gettop(L);
+	int i;
 	lua_pushvalue(L, 2);	// func
 	gobject_iface->gobject_push(L, G_OBJECT(w));
-	lua_call(L, 1, 0);
+	for( i=3; i<=top; ++i ) { lua_pushvalue(L, i); }
+	lua_call(L, top-2+1, 0);
 }
 
 static int _lua_gtk_container_foreach(lua_State* L) {

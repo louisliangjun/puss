@@ -7,12 +7,10 @@ function __main__()
 	local ok, err = css_provider:load_from_data([[
 		.TestClass {
 			background: #ff0 ;
-			background-color: #ff0 ;
 		}
 
 		* {
-			background: #f0f ;
-			background-color: #f0f ;
+			background: #0cc ;
 		}
 	]], -1)
 	if not ok then print(err:get_message()) end
@@ -30,13 +28,13 @@ function __main__()
 	end)
 	w:show_all()
 
-	local function apply_css(w)
-		w:get_style_context():add_provider(css_provider, 1000)
-		if not glua.gtype_check(w, 'GtkContainer') then return end
-		gtk_container_forall(w, apply_css)
+	local function apply_css(w, css, prio)
+		w:get_style_context():add_provider(css, prio)
+		if glua.gtype_check(w, 'GtkContainer') then
+			gtk_container_forall(w, apply_css, css, prio)
+		end
 	end
-
-	apply_css(w)
+	apply_css(w, css_provider, 1000)
 
 	while run_sign do
 		gtk_run_once()
