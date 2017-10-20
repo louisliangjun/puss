@@ -672,6 +672,13 @@ static int lua_gtype_name_from_instance(lua_State* L) {
 	return 1;
 }
 
+static int lua_gtype_check(lua_State* L) {
+	GType tp = lua_isinteger(L, 2) ? (GType)lua_tointeger(L, 2) : g_type_from_name(luaL_checkstring(L, 2));
+	GObject* obj = _gobject_test(L, 1);
+	lua_pushboolean(L, obj && tp!=G_TYPE_INVALID && g_type_is_a(G_OBJECT_TYPE(obj), tp));
+	return 1;
+}
+
 static int lua_gnew_from_typename(lua_State* L) {
 	const char* gtypename = luaL_checkstring(L, 1);
 	GType tp = g_type_from_name(gtypename);
@@ -829,6 +836,7 @@ static luaL_Reg _gobject_module_methods[] =
 	, {"gtype_from_name",				lua_gtype_from_name}
 	, {"gtype_fetch_enum_values",		lua_gtype_fetch_enum_values}
 	, {"gtype_name_from_instance",		lua_gtype_name_from_instance}
+	, {"gtype_check",					lua_gtype_check}
 
 	// misc
 	, {"gobject_array_pointer_parse",	lua_gobject_array_pointer_parse}

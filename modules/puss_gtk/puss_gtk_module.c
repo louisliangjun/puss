@@ -142,10 +142,7 @@ static void _gtk_builder_connect_wrapper(GtkBuilder* builder, GObject* object, c
 }
 
 static int _lua_gtk_builder_add_from_string(lua_State* L) {
-	GObject* obj = gobject_iface->gobject_check(L, 1);
-	GtkBuilder* builder = GTK_BUILDER(obj);
-	if( !builder )
-		return luaL_argerror(L, 1, "need GtkBuilder");
+	GtkBuilder* builder = (GtkBuilder*)(gobject_iface->gobject_check_type(L, 1, GTK_TYPE_BUILDER));
 	size_t len = 0;
 	const char* str = luaL_checklstring(L, 2, &len);
 	GError* err = NULL;
@@ -160,10 +157,7 @@ static int _lua_gtk_builder_add_from_string(lua_State* L) {
 }
 
 static int _lua_gtk_builder_connect_signals(lua_State* L) {
-	GObject* obj = gobject_iface->gobject_check(L, 1);
-	GtkBuilder* builder = GTK_BUILDER(obj);
-	if( !builder )
-		return luaL_argerror(L, 1, "need GtkBuilder");
+	GtkBuilder* builder = (GtkBuilder*)(gobject_iface->gobject_check_type(L, 1, GTK_TYPE_BUILDER));
 	if( !(lua_istable(L, 2) || lua_isfunction(L, 2)) )
 		return luaL_argerror(L, 2, "need table or function");
 	gtk_builder_connect_signals_full(builder, _gtk_builder_connect_wrapper, L);
@@ -196,12 +190,9 @@ static int _lua_gtk_list_store_new(lua_State* L) {
 }
 
 static int _lua_gtk_list_store_set_column_types(lua_State* L) {
-	GObject* obj = gobject_iface->gobject_check(L, 1);
-	GtkListStore* store = GTK_LIST_STORE(obj);
+	GtkListStore* store = (GtkListStore*)(gobject_iface->gobject_check_type(L, 1, GTK_TYPE_LIST_STORE));
 	lua_Integer i, n;
 	GType* types;
-	if( !store )
-		return luaL_argerror(L, 1, "need GtkListStore");
 	n = lua_istable(L, 2) ? luaL_len(L, 2) : (lua_gettop(L) - 1);
 	types = g_alloca(sizeof(GType) * (n + 1));
 	memset(types, 0, sizeof(GType) * (n + 1));
@@ -222,8 +213,7 @@ static int _lua_gtk_list_store_set_column_types(lua_State* L) {
 }
 
 static int _lua_gtk_tree_selection_get_selected_rows(lua_State* L) {
-	GObject* obj = gobject_iface->gobject_check(L, 1);
-	GtkTreeSelection* sel = GTK_TREE_SELECTION(obj);
+	GtkTreeSelection* sel = (GtkTreeSelection*)(gobject_iface->gobject_check_type(L, 1, GTK_TYPE_TREE_SELECTION));
 	GList* sels = gtk_tree_selection_get_selected_rows(sel, NULL);
 	GList* p;
 	int n = 0;
@@ -236,6 +226,27 @@ static int _lua_gtk_tree_selection_get_selected_rows(lua_State* L) {
 	}
 	g_list_free(sels);
 	return 1;
+}
+
+static void _iter_callback(GtkWidget* w, gpointer data) {
+	lua_State* L = (lua_State*)data;
+	lua_pushvalue(L, 2);	// func
+	gobject_iface->gobject_push(L, G_OBJECT(w));
+	lua_call(L, 1, 0);
+}
+
+static int _lua_gtk_container_foreach(lua_State* L) {
+	GtkContainer* c = (GtkContainer*)(gobject_iface->gobject_check_type(L, 1, GTK_TYPE_CONTAINER));
+	luaL_argcheck(L, lua_type(L,2)==LUA_TFUNCTION, 2, "need function!");
+	gtk_container_foreach(c, _iter_callback, L);
+	return 0;
+}
+
+static int _lua_gtk_container_forall(lua_State* L) {
+	GtkContainer* c = (GtkContainer*)(gobject_iface->gobject_check_type(L, 1, GTK_TYPE_CONTAINER));
+	luaL_argcheck(L, lua_type(L,2)==LUA_TFUNCTION, 2, "need function!");
+	gtk_container_forall(c, _iter_callback, L);
+	return 0;
 }
 
 static void glua_gtk_register(lua_State* L, PussGObjectRegIface* reg_iface) {
@@ -335,8 +346,13 @@ static void glua_gtk_register(lua_State* L, PussGObjectRegIface* reg_iface) {
 		gtype_reg_ffi(G_TYPE_NONE, gtk_container_remove, GTK_TYPE_CONTAINER, GTK_TYPE_WIDGET);
 		gtype_reg_ffi(G_TYPE_NONE, gtk_container_set_focus_child, GTK_TYPE_CONTAINER, GTK_TYPE_WIDGET);
 		gtype_reg_ffi(GTK_TYPE_WIDGET, gtk_container_get_focus_child, GTK_TYPE_CONTAINER);
+		gtype_reg_lua(gtk_container_foreach);
+		gtype_reg_lua(gtk_container_forall);
 	gtype_reg_end();
-	gtype_reg_start(GTK_TYPE_CSS_PROVIDER, gtk_css_provider); gtype_reg_end();
+	gtype_reg_start(GTK_TYPE_CSS_PROVIDER, gtk_css_provider);
+		gtype_reg_ffi(GTK_TYPE_CSS_PROVIDER, gtk_css_provider_get_default, G_TYPE_INVALID);
+		gtype_reg_ffi(G_TYPE_BOOLEAN, gtk_css_provider_load_from_data, GTK_TYPE_CSS_PROVIDER, G_TYPE_STRING, G_TYPE_INT, out G_TYPE_ERROR);
+	gtype_reg_end();
 	gtype_reg_start(GTK_TYPE_CSS_SECTION, gtk_css_section); gtype_reg_end();
 
 	// D
@@ -578,7 +594,12 @@ static void glua_gtk_register(lua_State* L, PussGObjectRegIface* reg_iface) {
 	gtype_reg_start(GTK_TYPE_STACK_SIDEBAR, gtk_stack_sidebar); gtype_reg_end();
 	gtype_reg_start(GTK_TYPE_STACK_SWITCHER, gtk_stack_switcher); gtype_reg_end();
 	gtype_reg_start(GTK_TYPE_STATUSBAR, gtk_statusbar); gtype_reg_end();
-	gtype_reg_start(GTK_TYPE_STYLE_CONTEXT, gtk_style_context); gtype_reg_end();
+	gtype_reg_start(GTK_TYPE_STYLE_CONTEXT, gtk_style_context);
+		gtype_reg_ffi(G_TYPE_NONE, gtk_style_context_add_provider, GTK_TYPE_STYLE_CONTEXT, GTK_TYPE_STYLE_PROVIDER, G_TYPE_UINT);
+		gtype_reg_ffi(G_TYPE_NONE, gtk_style_context_add_class, GTK_TYPE_STYLE_CONTEXT, G_TYPE_STRING);
+		gtype_reg_ffi(G_TYPE_BOOLEAN, gtk_style_context_has_class, GTK_TYPE_STYLE_CONTEXT, G_TYPE_STRING);
+		gtype_reg_ffi(G_TYPE_NONE, gtk_style_context_remove_class, GTK_TYPE_STYLE_CONTEXT, G_TYPE_STRING);
+	gtype_reg_end();
 	gtype_reg_start(GTK_TYPE_STYLE_PROVIDER, gtk_style_provider); gtype_reg_end();
 	gtype_reg_start(GTK_TYPE_SWITCH, gtk_switch); gtype_reg_end();
 
@@ -861,6 +882,7 @@ static void glua_gtk_register(lua_State* L, PussGObjectRegIface* reg_iface) {
 		gtype_reg_ffi(G_TYPE_BOOLEAN, gtk_widget_activate, GTK_TYPE_WIDGET);
 		gtype_reg_ffi(G_TYPE_NONE, gtk_widget_grab_focus, GTK_TYPE_WIDGET);
 		gtype_reg_ffi(G_TYPE_NONE, gtk_widget_grab_default, GTK_TYPE_WIDGET);
+		gtype_reg_ffi(GTK_TYPE_STYLE_CONTEXT, gtk_widget_get_style_context, GTK_TYPE_WIDGET);
 	gtype_reg_end();
 	gtype_reg_start(GTK_TYPE_WIDGET_PATH, gtk_widget_path);	gtype_reg_end();
 	gtype_reg_start(GTK_TYPE_WINDOW, gtk_window);

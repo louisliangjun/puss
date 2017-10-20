@@ -131,6 +131,18 @@ static luaL_Reg strv_methods[] =
 	, {NULL, NULL}
 	};
 
+static int gerr_get_message(lua_State* L) {
+	GValue* v = glua_value_check_type(L, 1, G_TYPE_ERROR);
+	const GError* gerr = (const GError*)g_value_get_boxed(v);
+	lua_pushstring(L, gerr->message);
+	return 1;
+}
+
+static luaL_Reg gerr_methods[] =
+	{ {"get_message", gerr_get_message}
+	, {NULL, NULL}
+	};
+
 static void glua_glib_register(lua_State* L, PussGObjectRegIface* reg_iface) {
 	// enums & flags register
 #define __reg(e)	reg_iface->reg_genum(L, e)
@@ -140,7 +152,7 @@ static void glua_glib_register(lua_State* L, PussGObjectRegIface* reg_iface) {
 
 	// glib boxed
 	reg_iface->reg_gtype(L, G_TYPE_STRV, "g_strv", strv_methods);
-
+	reg_iface->reg_gtype(L, G_TYPE_ERROR, "g_error", gerr_methods);
 	// gio
 	gtype_reg_start(G_TYPE_FILE, g_file);
 		gtype_reg_ffi(G_TYPE_FILE, g_file_new_for_path, G_TYPE_STRING);
