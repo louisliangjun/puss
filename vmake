@@ -86,22 +86,16 @@ end)
 
 vmake_target_add('luaproxy', function(target)
 	local luapath = path_concat('3rd', 'lua-5.3.4', 'src')
-	make_copy('luaconf.h', PUSS_INCLUDE_PATH, luapath)
-	make_copy('lua.h', PUSS_INCLUDE_PATH, luapath)
-	make_copy('lua.hpp', PUSS_INCLUDE_PATH, luapath)
-	make_copy('lualib.h', PUSS_INCLUDE_PATH, luapath)
-	make_copy('lauxlib.h', PUSS_INCLUDE_PATH, luapath)
-
 	local luaproxy_lua = path_concat('tools', 'luaproxy.lua')
 	local deps =
 		{ luaproxy_lua
-		, path_concat(PUSS_INCLUDE_PATH, 'lua.h')
-		, path_concat(PUSS_INCLUDE_PATH, 'lualib.h')
-		, path_concat(PUSS_INCLUDE_PATH, 'lauxlib.h')
+		, make_copy('luaconf.h', PUSS_INCLUDE_PATH, luapath)
+		, make_copy('lua.h', PUSS_INCLUDE_PATH, luapath)
+		, make_copy('lualib.h', PUSS_INCLUDE_PATH, luapath)
+		, make_copy('lauxlib.h', PUSS_INCLUDE_PATH, luapath)
 		}
 	if not( check_deps(path_concat(PUSS_INCLUDE_PATH, 'luaproxy.h'), deps)
-		and check_deps(path_concat(PUSS_INCLUDE_PATH, 'luaproxy_export.inl'), deps)
-		and check_deps(path_concat(PUSS_INCLUDE_PATH, 'luaproxy_import.inl'), deps)
+		and check_deps(path_concat(PUSS_INCLUDE_PATH, 'luaproxy.symbols'), deps)
 		)
 	then
 		shell_execute(vlua.self, luaproxy_lua, '-path="'..PUSS_INCLUDE_PATH..'"')
@@ -122,6 +116,8 @@ vmake_target_add('lua53', function(target)
 end)
 
 vmake_target_add('puss_core', function(target)
+	vmake('luaproxy')
+
 	local srcpath = path_concat('modules', target)
 	vmake('luaproxy')
 	make_copy('puss_macros.h', PUSS_INCLUDE_PATH, srcpath)
@@ -196,7 +192,44 @@ vmake_target_add('puss_gtksourceview', function(target)
 end)
 
 -----------------------------
--- scintilla
+-- puss glfw
+
+vmake_target_add('puss_glfw_proxy', function(target)
+	local src = path_concat('3rd', 'glfw-3.2.1', 'include', 'GLFW')
+	local glfwproxy_lua = path_concat('tools', 'glfwproxy.lua')
+	local deps =
+		{ glfwproxy_lua
+		, make_copy('glfw3.h', PUSS_INCLUDE_PATH, src)
+		, make_copy('glfw3native.h', PUSS_INCLUDE_PATH, src)
+		}
+	if not( check_deps(path_concat(PUSS_INCLUDE_PATH, 'glfwproxy.h'), deps)
+		and check_deps(path_concat(PUSS_INCLUDE_PATH, 'glfwproxy.symbols'), deps)
+		)
+	then
+		shell_execute(vlua.self, glfwproxy_lua, '-path="'..PUSS_INCLUDE_PATH..'"')
+	end
+end)
+
+vmake_target_add('puss_glfw', function(target)
+	vmake('puss_core', 'puss_glfw_proxy')
+--[[
+	local srcpath = path_concat('modules', target)
+	make_copy('puss_gobject_ffi_reg.h', PUSS_INCLUDE_PATH, srcpath)
+	make_copy('puss_gobject_module.h', PUSS_INCLUDE_PATH, srcpath)
+
+	local cflags = shell('pkg-config --cflags glib-2.0 gobject-2.0 gio-2.0 libffi')
+	local libs = shell('pkg-config --libs glib-2.0 gobject-2.0 gio-2.0 libffi')
+	gobject_enums_parse(cflags, 'gobject', 'glib-types.h', '^%s*#%s*define%s+(G_TYPE_[_%w]+)')	-- #define G_TYPE_XXX
+	gobject_enums_parse(cflags, 'gio', 'gioenumtypes.h', '^%s*#%s*define%s+(G_TYPE_[_%w]+)')	-- #define G_TYPE_XXX
+
+	local objs = make_c2objs(srcpath, INCLUDES, '-fPIC', '-fvisibility=hidden', cflags)
+	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
+	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs, libs)
+--]]
+end)
+
+-----------------------------
+-- scintilla iface
 
 local SCINTILLA_ROOT_PATH = path_concat('3rd', 'scintilla-4.0.0')
 local SCINTILLA_INCLUDE_PATH = path_concat(SCINTILLA_ROOT_PATH, 'include')
@@ -217,6 +250,9 @@ vmake_target_add('scintilla_iface', function(target)
 		, '-output='..scintilla_output
 		)
 end)
+
+-----------------------------
+-- scintilla gtk
 
 vmake_target_add('gtkscintilla', function(target)
 	-- see <scintilla/gtk/makefile>

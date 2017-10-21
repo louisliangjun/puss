@@ -3,9 +3,13 @@
 #ifndef _INC_PUSS_LUA_H_
 #define _INC_PUSS_LUA_H_
 
-#include "puss_module.h"
+#include "puss_macros.h"
 
 PUSS_DECLS_BEGIN
+
+#include "lua.h"
+#include "lualib.h"
+#include "lauxlib.h"
 
 // NOTICE：this will use lua register table [LUA_RIDX_LAST+1 ... namespace_max_num]
 // so, puss_lua_open() MUST before any other lib open!!!
@@ -18,6 +22,7 @@ void puss_lua_open(lua_State* L, int namespace_max_num);	// namespace_max_num, M
 typedef enum _PussBuiltinNamespace
 	{ PUSS_NAMESPACE_PUSS = LUA_RIDX_LAST + 1
 	, PUSS_NAMESPACE_MODULES_LOADED
+	, PUSS_NAMESPACE_INTERFACES
 	, PUSS_NAMESPACE_APP_PATH
 	, PUSS_NAMESPACE_APP_NAME
 	, PUSS_NAMESPACE_MODULE_SUFFIX

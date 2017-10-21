@@ -11,10 +11,6 @@
 
 #include "puss_gobject_ffi_reg.h"
 
-#include "luaproxy_import.inl"
-
-static PussInterface* puss_iface = NULL;
-
 static void reg_gtype(lua_State* L, GType type, const char* prefix, const luaL_Reg* methods) {
 	glua_reg_gtype(L, REG_SYMBOLS_INDEX, type, prefix, methods);
 }
@@ -35,7 +31,7 @@ static int reg_wrapper(lua_State* L) {
 	PussGObjectReg f = (PussGObjectReg)lua_touserdata(L, 1);
 	lua_settop(L, 0);
 	glua_push_symbol_table(L);
-	puss_iface->push_const_table(L);
+	puss_push_const_table(L);
 	assert( lua_gettop(L)==2 );
 	f(L, &reg_iface);
 	lua_settop(L, 0);
@@ -201,14 +197,16 @@ static void glua_glib_register(lua_State* L, PussGObjectRegIface* reg_iface) {
 	gtype_reg_start(G_TYPE_MOUNT_OPERATION, g_mount_operation); gtype_reg_end();
 }
 
-PUSS_MODULE_EXPORT void* __puss_module_init__(lua_State* L, PussInterface* puss) {
-	puss_iface = puss;
-	__lua_proxy_import__(puss->luaproxy());
-	gffi_init();
+PussInterface* __puss_iface__ = NULL;
 
-	puss_gobject_interface.module_reg(L, glua_glib_register);
-
+PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
+	if( !__puss_iface__ ) {
+		__puss_iface__ = puss;
+		gffi_init();
+	}
+	puss_interface_register(L, "PussGObjectInterface", &puss_gobject_interface);
+	puss_gobject_module_reg(L, glua_glib_register);
 	glua_push_master_table(L);
-	return &puss_gobject_interface;
+	return 1;
 }
 

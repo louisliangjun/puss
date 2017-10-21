@@ -1,12 +1,11 @@
 -- luaproxy.lua
--- 
 
-local root = vlua.match_arg('^%-path=(.+)$') or '.'
+local table_insert = table.insert
+local table_concat = table.concat
 
 local function pasre_header(gen, fname)
 	local s = ''
-	local fpath = vlua.filename_format(root..'/'..fname)
-	for line in io.lines(fpath) do
+	for line in io.lines(fname) do
 		local decl
 		if s:len() > 0 then
 			line = line:match('^%s*(.-)%s*$')
@@ -28,7 +27,7 @@ local function pasre_header(gen, fname)
 							vaargs = true
 						else
 							local aname = av:match('^.-([%w_]+)[%s%[%]]*$')
-							if aname then table.insert(anames, aname) end
+							if aname then table_insert(anames, aname) end
 						end
 					end
 				end
@@ -42,106 +41,114 @@ local function pasre_header(gen, fname)
 	end
 end
 
-local apis = {}
-
-local function gen_luaproxy_h()
-	local output = io.open(vlua.filename_format(root..'/'..'luaproxy.h'), 'w')
-	output:write('// NOTICE : generate by luaproxy.lua\n\n')
-	output:write('#ifndef _LUA_PROXY_INC_DECL_H__\n')
-	output:write('#define _LUA_PROXY_INC_DECL_H__\n\n')
-	output:write('typedef struct _LuaProxy {\n')
-	output:write('	int     __lua_proxy_inited__;\n')
-	for _,v in ipairs(apis) do
-		local ret, name, args, anames = table.unpack(v)
-		output:write( string.format('  %-16s(*_%s)(%s);\n', ret, name, args) )
-	end
-	output:write('} LuaProxy;\n\n')
-	output:write('#endif//_LUA_PROXY_INC_DECL_H__\n')
-	output:close()
-end
-
-local function gen_luaproxy_export()
-	local output = io.open(vlua.filename_format(root..'/'..'luaproxy_export.inl'), 'w')
-	output:write('// NOTICE : generate by luaproxy.lua\n\n')
-	output:write('#include "luaproxy.h"\n')
-	output:write([===[
-static LuaProxy* __lua_proxy_export__(void) {
-	static LuaProxy _proxy = {0};
-	if( _proxy.__lua_proxy_inited__==0 ) {
-		_proxy.__lua_proxy_inited__ = 1;
-
-		#ifndef LUA_COMPAT_MODULE
-			#define luaL_pushmodule	NULL
-			#define luaL_openlib	NULL
-		#endif
-]===])
-
-	for _,v in ipairs(apis) do
-		local ret, name, args, anames = table.unpack(v)
-		output:write('		_proxy._' .. name .. ' = ' .. name .. ';\n')
-	end
-
-	output:write([===[
-	}
-	return &_proxy;
-}
-]===])
-
-	output:close()
-end
-
-local function gen_luaproxy_import()
-	local output = io.open(vlua.filename_format(root..'/'..'luaproxy_import.inl'), 'w')
-	output:write('// NOTICE : generate by luaproxy.lua\n\n')
-	output:write('#include "luaproxy.h"\n')
-	output:write('static LuaProxy* __lua_proxy__ = 0;\n')
-	output:write('static void __lua_proxy_import__(LuaProxy* proxy) { __lua_proxy__=proxy; }\n\n')
-
-	output:write([[
-int luaL_error(lua_State *L, const char *fmt, ...) {
-  va_list argp;
-  va_start(argp, fmt);
-  luaL_where(L, 1);
-  lua_pushvfstring(L, fmt, argp);
-  va_end(argp);
-  lua_concat(L, 2);
-  return lua_error(L);
-}
-
-const char * lua_pushfstring(lua_State *L, const char *fmt, ...) {
-  const char * res;
-  va_list argp;
-  va_start(argp, fmt);
-  res = lua_pushvfstring(L,fmt,argp);
-  va_end(argp);
-  return res;
-}
-
-]])
-
-	for _,v in ipairs(apis) do
-		local ret, name, args, anames, vaargs = table.unpack(v)
-		if not vaargs then
-			output:write(ret .. ' ' .. name .. '(' .. args .. ') {')
-				if ret~='void' then output:write(' return') end
-				output:write(' __lua_proxy__->_' .. name .. '(' .. table.concat(anames, ',') .. '); ')
-			output:write('}\n')
-		end
-	end
-	output:close()
-end
-
 function main()
+	local apis = {}
+
 	local function gen_api(ret, name, args, anames, vaargs)
-		table.insert(apis, {ret, name, args, anames, vaargs})
+		-- NOTICE : not use LUA_COMPAT_MODULE
+		if name=='luaL_pushmodule' then return end
+		if name=='luaL_openlib' then return end
+		table_insert(apis, {ret, name, args, anames, vaargs})
 	end
 
-	pasre_header(gen_api, 'lua.h')
-	pasre_header(gen_api, 'lauxlib.h')
-	pasre_header(gen_api, 'lualib.h')
+	local root = vlua.match_arg('^%-path=(.+)$') or '.'
 
-	gen_luaproxy_h()
-	gen_luaproxy_export()
-	gen_luaproxy_import()
+	pasre_header(gen_api, vlua.filename_format(root..'/lua.h'))
+	pasre_header(gen_api, vlua.filename_format(root..'/lauxlib.h'))
+	pasre_header(gen_api, vlua.filename_format(root..'/lualib.h'))
+
+	local function generate_file(filename, cb)
+		local output_lines = {}
+
+		local function writeln(...)
+			local line = table_concat({...})
+			table_insert(output_lines, line)
+		end
+
+		cb(writeln)
+
+		local f = io.open(filename, 'w')
+		f:write( table_concat(output_lines, '\n') )
+		f:close()
+	end
+
+	generate_file(vlua.filename_format(root..'/'..'luaproxy.symbols'), function(writeln)
+		for _,v in ipairs(apis) do
+			writeln('__LUAPROXY_SYMBOL(', v[2], ')')
+		end
+	end)
+
+	generate_file(vlua.filename_format(root..'/'..'luaproxy.h'), function(writeln)
+		writeln('// NOTICE : generate by luaproxy.lua')
+		writeln()
+		writeln('#ifndef _LUA_PROXY_H__')
+		writeln('#define _LUA_PROXY_H__')
+		writeln()
+		writeln('PUSS_DECLS_BEGIN')
+		writeln()
+		writeln('#include "lua.h"')
+		writeln('#include "lualib.h"')
+		writeln('#include "lauxlib.h"')
+		writeln()
+		writeln('typedef struct _LuaProxy {')
+		for _,v in ipairs(apis) do
+			local ret, name, args, anames = table.unpack(v)
+			writeln( string.format('  %-20s(*%s)(%s);', ret, name, args) )
+		end
+		writeln('} LuaProxy;')
+		writeln()
+		writeln('#ifndef _LUAPROXY_NOT_USE_SYMBOL_MACROS')
+		writeln('	#ifndef __lua_proxy__')
+		writeln('		#error "need define __lua_proxy__(sym) first!"')
+		writeln('	#endif')
+		for _,v in ipairs(apis) do
+			local name = v[2]
+			writeln('	#define ' .. name .. '	__lua_proxy__(' .. name .. ')')
+		end
+		writeln('#endif//_LUAPROXY_NOT_USE_SYMBOL_MACROS')
+		writeln()
+		writeln('PUSS_DECLS_END')
+		writeln()
+		writeln('#endif//_LUA_PROXY_H__')
+		writeln()
+	end)
+
+	-- NOTICE : now not need use importlib for puss
+	--[[
+	generate_file(vlua.filename_format(root..'/'..'luaproxy_importlib.inl'), function(writeln)
+		writeln('static LuaProxy* __lua_proxy_imp__ = 0;')
+		writeln('static void __lua_proxy_import__(LuaProxy* proxy) { __lua_proxy_imp__=proxy; }')
+		writeln()
+		writeln('int luaL_error(lua_State *L, const char *fmt, ...) {')
+		writeln('  va_list argp;')
+		writeln('  va_start(argp, fmt);')
+		writeln('  luaL_where(L, 1);')
+		writeln('  lua_pushvfstring(L, fmt, argp);')
+		writeln('  va_end(argp);')
+		writeln('  lua_concat(L, 2);')
+		writeln('  return lua_error(L);')
+		writeln('}')
+		writeln()
+		writeln('const char * lua_pushfstring(lua_State *L, const char *fmt, ...) {')
+		writeln('  const char * res;')
+		writeln('  va_list argp;')
+		writeln('  va_start(argp, fmt);')
+		writeln('  res = lua_pushvfstring(L,fmt,argp);')
+		writeln('  va_end(argp);')
+		writeln('  return res;')
+		writeln('}')
+		writeln()
+		for _,v in ipairs(apis) do
+			local ret, name, args, anames, vaargs = table.unpack(v)
+			if not vaargs then
+				writeln(ret .. ' ' .. name .. '(' .. args .. ') {')
+					if ret~='void' then writeln(' return') end
+					writeln(' __lua_proxy_imp__->' .. name .. '(' .. table_concat(anames, ',') .. '); ')
+				writeln('}')
+			end
+		end
+		writeln()
+	end)
+	--]]
 end
 

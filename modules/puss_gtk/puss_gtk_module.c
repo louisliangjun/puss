@@ -10,9 +10,6 @@
 
 #include "puss_gobject_ffi_reg.h"
 
-#include "luaproxy_import.inl"
-
-
 static PussGObjectInterface* gobject_iface = NULL;
 
 static void glua_gdk_register(lua_State* L, PussGObjectRegIface* reg_iface) {
@@ -931,29 +928,27 @@ static void glua_gtk_helper_register(lua_State* L, PussGObjectRegIface* reg_ifac
 }
 
 static int __gtk_argc = 1;
-static char __gtk_arg0[64] = { '.', '/', 'a', 'p', 'p', 0 };
+static char __gtk_arg0[64] = { 'p', 'u', 's', 's', 0 };
 static char* __gtk_args[2] = { __gtk_arg0, NULL };
 static char** __gtk_argv = __gtk_args;
 
-PUSS_MODULE_EXPORT void* __puss_module_init__(lua_State* L, PussInterface* puss) {
-	if( !gobject_iface ) {
+PussInterface* __puss_iface__ = NULL;
+
+PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
+	if( !__puss_iface__ ) {
 		guint64 now = (guint64)g_get_real_time();
-		__lua_proxy_import__(puss->luaproxy());
-
-		gobject_iface = puss->require(L, "puss_gobject");
-		if( !gobject_iface ) {
-			luaL_error(L, "require puss_gobject failed!");
-			return NULL;
-		}
-
+		__puss_iface__ = puss;
 		sprintf(__gtk_arg0, "puss_gtk_%u_%u", (unsigned)(now>>32), (unsigned)(now));
 		gtk_init(&__gtk_argc, &__gtk_argv);
 	}
 
+	puss_module_require(L, "puss_gobject");
+
+	gobject_iface = puss_interface_check(L, PussGObjectInterface);
 	gobject_iface->module_reg(L, glua_gdk_register);
 	gobject_iface->module_reg(L, glua_gtk_register);
 	gobject_iface->module_reg(L, glua_gtk_helper_register);
 	gobject_iface->push_master_table(L);
-	return gobject_iface;
+	return 1;
 }
 

@@ -15,11 +15,7 @@
 
 #include "puss_gobject_ffi_reg.h"
 
-#include "luaproxy_import.inl"
-
-
 static PussGObjectInterface* gobject_iface = NULL;
-
 
 #define _sci_send(editor, msg, u, s)	scintilla_send_message(SCINTILLA(editor), (msg), (uptr_t)(u), (sptr_t)(s))
 
@@ -181,18 +177,14 @@ static void glua_gtkscintilla_register(lua_State* L, PussGObjectRegIface* reg_if
 	lua_pop(L, 1);	
 }
 
-PUSS_MODULE_EXPORT void* __puss_module_init__(lua_State* L, PussInterface* puss) {
-	if( !gobject_iface ) {
-		__lua_proxy_import__(puss->luaproxy());
-		gobject_iface = puss->require(L, "puss_gtk");
-		if( !gobject_iface ) {
-			luaL_error(L, "require puss_gobject failed!");
-			return NULL;
-		}
-	}
+PussInterface* __puss_iface__ = NULL;
 
+PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
+	__puss_iface__ = puss;
+	puss_module_require(L, "puss_gtk");
+	gobject_iface = puss_interface_check(L, PussGObjectInterface);
 	gobject_iface->module_reg(L, glua_gtkscintilla_register);
 	gobject_iface->push_master_table(L);
-	return gobject_iface;
+	return 1;
 }
 
