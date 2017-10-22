@@ -154,7 +154,7 @@ vmake_target_add('puss_gobject', function(target)
 
 	local srcpath = path_concat('modules', target)
 	make_copy('puss_gobject_ffi_reg.h', PUSS_INCLUDE_PATH, srcpath)
-	make_copy('puss_gobject_module.h', PUSS_INCLUDE_PATH, srcpath)
+	make_copy('puss_module_gobject.h', PUSS_INCLUDE_PATH, srcpath)
 
 	local cflags = shell('pkg-config --cflags glib-2.0 gobject-2.0 gio-2.0 libffi')
 	local libs = shell('pkg-config --libs glib-2.0 gobject-2.0 gio-2.0 libffi')
@@ -212,19 +212,13 @@ end)
 
 vmake_target_add('puss_glfw', function(target)
 	vmake('puss_core', 'puss_glfw_proxy')
---[[
+
 	local srcpath = path_concat('modules', target)
-	make_copy('puss_gobject_ffi_reg.h', PUSS_INCLUDE_PATH, srcpath)
-	make_copy('puss_gobject_module.h', PUSS_INCLUDE_PATH, srcpath)
+	make_copy('puss_module_glfw.h', PUSS_INCLUDE_PATH, srcpath)
 
-	local cflags = shell('pkg-config --cflags glib-2.0 gobject-2.0 gio-2.0 libffi')
-	local libs = shell('pkg-config --libs glib-2.0 gobject-2.0 gio-2.0 libffi')
-	gobject_enums_parse(cflags, 'gobject', 'glib-types.h', '^%s*#%s*define%s+(G_TYPE_[_%w]+)')	-- #define G_TYPE_XXX
-	gobject_enums_parse(cflags, 'gio', 'gioenumtypes.h', '^%s*#%s*define%s+(G_TYPE_[_%w]+)')	-- #define G_TYPE_XXX
-
-	local objs = make_c2objs(srcpath, INCLUDES, '-fPIC', '-fvisibility=hidden', cflags)
+	local objs = make_c2objs(srcpath, INCLUDES, '-fPIC', '-fvisibility=hidden')
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
-	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs, libs)
+	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs)
 --]]
 end)
 

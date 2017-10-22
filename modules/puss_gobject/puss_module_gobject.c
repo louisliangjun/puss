@@ -1,6 +1,6 @@
-// puss_gobject_module.c
+// puss_module_gobject.c
 
-#include "puss_gobject_module.h"
+#include "puss_module_gobject.h"
 
 #include <assert.h>
 #include <string.h>

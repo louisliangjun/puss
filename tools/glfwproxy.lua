@@ -3,25 +3,32 @@
 local table_insert = table.insert
 local table_concat = table.concat
 
-local function pasre_header(gen, fname)
+local function pasre_header(apis, enums, fname)
 	local expose = nil
 
 	local function parse_line(line)
+		local enum = line:match('^%s*#%s*define%s+(GLFW_[_%w]+)%s+.+$')
+		if enum then
+			table_insert(enums, {expose, enum})
+			return
+		end
+
 		local re_expose = line:match('^%s*(#%s*if%s+defined%s*%(%s*GLFW_EXPOSE_.*)$')
 		if re_expose then
-			__expose = re_expose
+			expose = re_expose
 			return
 		end
 
 		local re_undef = line:match('^%s*#%s*undef.*$')
 		if re_undef then
-			__expose = nil
+			expose = nil
 			return
 		end
 
 		local ret, name, args = line:match('^%s*GLFWAPI%s+(%w+)%s+(%w+)%s*%(%s*(.*)%s*%)%s*;%s*$')
 		if ret then
-			return gen(expose, ret, name, args)
+			table_insert(apis, {expose, ret, name, args})
+			return
 		end
 	end
 
@@ -32,15 +39,12 @@ end
 
 function main()
 	local apis = {}
-
-	local function gen_api(expose, ret, name, args)
-		table_insert(apis, {expose, ret, name, args})
-	end
+	local enums = {}
 
 	local root = vlua.match_arg('^%-path=(.+)$') or '.'
 
-	pasre_header(gen_api, vlua.filename_format(root..'/glfw3.h'))
-	pasre_header(gen_api, vlua.filename_format(root..'/glfw3native.h'))
+	pasre_header(apis, enums, vlua.filename_format(root..'/glfw3.h'))
+	pasre_header(apis, enums, vlua.filename_format(root..'/glfw3native.h'))
 
 	local function generate_file(filename, cb)
 		local output_lines = {}
@@ -57,23 +61,29 @@ function main()
 		f:close()
 	end
 
-	local function generate_line(writeln, cb)
+	local function generate_line(arr, writeln, cb)
 		local last_expose
-		for _,v in ipairs(apis) do
-			local expose, ret, name, args = table.unpack(v)
+		for _,v in ipairs(arr) do
+			local expose = v[1]
 			if expose~=last_expose then
 				if last_expose then writeln('#undef') end
 				if expose then writeln(expose) end
 				last_expose = expose
 			end
-			cb(writeln, ret, name, args)
+			cb(writeln, table.unpack(v, 2))
 		end
 		if last_expose then writeln('#undef') end
 	end
 
 	generate_file(vlua.filename_format(root..'/'..'glfw3proxy.symbols'), function(writeln)
-		generate_line(writeln, function(writeln, ret, name, args)
+		generate_line(apis, writeln, function(writeln, ret, name, args)
 			writeln('__GLFWPROXY_SYMBOL(', name, ')')
+		end)
+	end)
+
+	generate_file(vlua.filename_format(root..'/'..'glfw3proxy.enums'), function(writeln)
+		generate_line(enums, writeln, function(writeln, enum)
+			writeln('__GLFWPROXY_ENUM(', enum, ')')
 		end)
 	end)
 
@@ -89,14 +99,14 @@ function main()
 		writeln('PUSS_DECLS_BEGIN')
 		writeln()
 		writeln('typedef struct _GLFWProxy {')
-		generate_line(writeln, function(writeln, ret, name, args)
+		generate_line(apis, writeln, function(writeln, ret, name, args)
 			writeln( string.format('  %-24s(*%s)(%s);', ret, name, args) )
 		end)
 		writeln('} GLFWProxy;')
 		writeln()
 		writeln('#ifndef _GLFWPROXY_NOT_USE_SYMBOL_MACROS')
 		writeln('	extern GLFWProxy* __glfw_proxy__;')
-		generate_line(writeln, function(writeln, ret, name, args)
+		generate_line(apis, writeln, function(writeln, ret, name, args)
 			writeln('	#define ' .. name .. '	__glfw_proxy__(' .. name .. ')')
 		end)
 		writeln('#endif//_GLFWPROXY_NOT_USE_SYMBOL_MACROS')

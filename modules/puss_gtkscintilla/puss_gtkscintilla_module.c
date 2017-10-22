@@ -1,6 +1,6 @@
 // puss_gtkscintilla_module.inl
 
-#include "puss_gobject_module.h"
+#include "puss_module_gobject.h"
 
 #include <assert.h>
 #include <string.h>

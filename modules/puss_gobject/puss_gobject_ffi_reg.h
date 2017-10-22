@@ -1,6 +1,6 @@
 // puss_gobject_ffi_reg.h
 
-#include "puss_gobject_module.h"
+#include "puss_module_gobject.h"
 
 // GType register methods utils
 

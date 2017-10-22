@@ -1,7 +1,7 @@
-// puss_gobject_module.h
+// puss_module_gobject.h
 
-#ifndef _INC_PUSS_GOBJECT_MODULE_H_
-#define _INC_PUSS_GOBJECT_MODULE_H_
+#ifndef _INC_PUSS_MODULE_GOBJECT_H_
+#define _INC_PUSS_MODULE_GOBJECT_H_
 
 #include "puss_module.h"
 
@@ -71,5 +71,5 @@ typedef struct PussGObjectInterface {
 
 PUSS_DECLS_END
 
-#endif//_INC_PUSS_GOBJECT_MODULE_H_
+#endif//_INC_PUSS_MODULE_GOBJECT_H_
 
