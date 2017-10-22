@@ -31,7 +31,7 @@ local function pasre_header(apis, enums, fname)
 			return
 		end
 
-		local ret, name, args = line:match('^%s*GLFWAPI%s+(%w+)%s+(%w+)%s*%(%s*(.*)%s*%)%s*;%s*$')
+		local ret, name, args = line:match('^%s*GLFWAPI%s+([_%w%*]+)%s+([_%w]+)%s*%(%s*(.*)%s*%)%s*;%s*$')
 		if ret then
 			table_insert(apis, {expose, ret, name, args})
 			return
@@ -112,7 +112,7 @@ function main()
 				writeln(expose)
 				writeln('  ', string.format('%-24s(*%s)(%s);', ret, name, args))
 				writeln('#else')
-				writeln('  ', string.format('%-24s(*%s)(%s); /* keep pos */', 'void', name, ''))
+				writeln('  ', string.format('%-24s(*%s)(%s); /* keep pos */', 'void*', name, ''))
 				writeln('#endif')
 			else
 				writeln(string.format('  %-24s(*%s)(%s);', ret, name, args))

@@ -61,7 +61,10 @@ vmake_target_add('', function(target)
 	local targets = vmake_target_all()
 	targets['clean'] = nil	-- ignore clean
 	targets[target] = nil   -- ignore this
-	for target in pairs(targets) do vmake(target) end
+	for target in pairs(targets) do
+		local ok, err = pcall(vmake, target)
+		if not ok then print('vmake', target, 'error:', err) end
+	end
 	local te = os.time()
 	print('use time:', te-ts)
 end)
@@ -221,7 +224,6 @@ vmake_target_add('puss_glfw', function(target)
 	local objs = make_c2objs(srcpath, INCLUDES, '-fPIC', '-fvisibility=hidden')
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
 	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs)
---]]
 end)
 
 -----------------------------
