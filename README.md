@@ -39,7 +39,7 @@ vlua - make tool with lua script
 -----------
 
 * linux compile: gcc -s -O2 -pthread -Wall -o vlua ./vlua.c -llua -lm -ldl
-* mingw compile: gcc -s -O2 -Wall -I./3rd/lua53 -o vlua ./vlua.c ./3rd/lua53/*.c -lm
+* mingw compile: cd ../3rd/lua-5.3.4 && make mingw && gcc -s -O2 -Wall -I../3rd/lua-5.3.4/src -o vlua ./vlua.c ../3rd/lua-5.3.4/src/liblua.a -lm
 
 * more tips: see ./tools/vlua.c
 

@@ -105,9 +105,20 @@ function main()
 		writeln('PUSS_DECLS_BEGIN')
 		writeln()
 		writeln('typedef struct _GLFWProxy {')
-		generate_line(apis, writeln, function(writeln, ret, name, args)
-			writeln( string.format('  %-24s(*%s)(%s);', ret, name, args) )
-		end)
+
+		for _,v in ipairs(apis) do
+			local expose, ret, name, args = table.unpack(v)
+			if expose then
+				writeln(expose)
+				writeln('  ', string.format('%-24s(*%s)(%s);', ret, name, args))
+				writeln('#else')
+				writeln('  ', string.format('%-24s(*%s)(%s); /* keep pos */', 'void', name, ''))
+				writeln('#endif')
+			else
+				writeln(string.format('  %-24s(*%s)(%s);', ret, name, args))
+			end
+		end
+
 		writeln('} GLFWProxy;')
 		writeln()
 		writeln('#ifndef _GLFWPROXY_NOT_USE_SYMBOL_MACROS')
