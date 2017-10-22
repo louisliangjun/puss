@@ -3,7 +3,7 @@
 #ifndef __PUSS_INC_GOBJECT_LUA_H__
 #define __PUSS_INC_GOBJECT_LUA_H__
 
-#include "puss_gobject_module.h"
+#include "puss_module_gobject.h"
 
 PUSS_DECLS_BEGIN
 

@@ -1,4 +1,4 @@
-// puss_gtk_module.c
+// puss_module_gtksourceview.c
 
 #include "puss_module_gobject.h"
 

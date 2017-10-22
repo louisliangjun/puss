@@ -196,17 +196,19 @@ end)
 
 vmake_target_add('puss_glfw_proxy', function(target)
 	local src = path_concat('3rd', 'glfw-3.2.1', 'include', 'GLFW')
+	local dst = path_concat(PUSS_INCLUDE_PATH, 'GLFW')
 	local glfwproxy_lua = path_concat('tools', 'glfwproxy.lua')
 	local deps =
 		{ glfwproxy_lua
-		, make_copy('glfw3.h', PUSS_INCLUDE_PATH, src)
-		, make_copy('glfw3native.h', PUSS_INCLUDE_PATH, src)
+		, make_copy('glfw3.h', dst, src)
+		, make_copy('glfw3native.h', dst, src)
 		}
-	if not( check_deps(path_concat(PUSS_INCLUDE_PATH, 'glfwproxy.h'), deps)
-		and check_deps(path_concat(PUSS_INCLUDE_PATH, 'glfwproxy.symbols'), deps)
+	if not( check_deps(path_concat(dst, 'glfw3proxy.h'), deps)
+		and check_deps(path_concat(dst, 'glfw3proxy.symbols'), deps)
+		and check_deps(path_concat(dst, 'glfw3proxy.enums'), deps)
 		)
 	then
-		shell_execute(vlua.self, glfwproxy_lua, '-path="'..PUSS_INCLUDE_PATH..'"')
+		shell_execute(vlua.self, glfwproxy_lua, '-path="'..dst..'"')
 	end
 end)
 

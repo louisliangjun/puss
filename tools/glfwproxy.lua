@@ -19,6 +19,12 @@ local function pasre_header(apis, enums, fname)
 			return
 		end
 
+		local re_expose = line:match('^%s*(#%s*if%s+defined%s*%(%s*VK_.*)$')
+		if re_expose then
+			expose = re_expose
+			return
+		end
+
 		local re_undef = line:match('^%s*#%s*undef.*$')
 		if re_undef then
 			expose = nil
@@ -66,13 +72,13 @@ function main()
 		for _,v in ipairs(arr) do
 			local expose = v[1]
 			if expose~=last_expose then
-				if last_expose then writeln('#undef') end
+				if last_expose then writeln('#endif') end
 				if expose then writeln(expose) end
 				last_expose = expose
 			end
 			cb(writeln, table.unpack(v, 2))
 		end
-		if last_expose then writeln('#undef') end
+		if last_expose then writeln('#endif') end
 	end
 
 	generate_file(vlua.filename_format(root..'/'..'glfw3proxy.symbols'), function(writeln)

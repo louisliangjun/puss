@@ -1,4 +1,4 @@
-// puss_gtkscintilla_module.inl
+// puss_module_gtkscintilla.c
 
 #include "puss_module_gobject.h"
 

@@ -13,7 +13,7 @@ static void register_enums(lua_State* L) {
 	puss_push_const_table(L);
 
 	#define __GLFWPROXY_ENUM(sym)		lua_pushinteger(L, sym); lua_setfield(L, -2, #sym);
-	#include "glfw3proxy.enums"
+	#include "GLFW/glfw3proxy.enums"
 	#undef __GLFWPROXY_ENUM
 
 	lua_pop(L, 1);
@@ -33,7 +33,7 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 		__puss_iface__ = puss;
 
 		#define __GLFWPROXY_SYMBOL(sym)		glfw_iface.sym = sym;
-		#include "glfw3proxy.symbols"
+		#include "GLFW/glfw3proxy.symbols"
 		#undef __GLFWPROXY_SYMBOL
 	}
 

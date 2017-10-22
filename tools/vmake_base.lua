@@ -83,7 +83,7 @@ end
 function shell_execute(...)
 	local cmd = args_concat(...)
 	print(cmd)
-	if not os.execute(cmd) then os.exit(1) end
+	if not os.execute(cmd) then error('shell_execute('..tostring(cmd)..')') end
 end
 
 function scan_files(path, matcher, no_path_prefix, no_loop)
@@ -306,8 +306,7 @@ function compile_tasks_build(tasks, command_build)	-- command_build(task) is com
 		if ok then
 			trace('build target(', src, ') succeed')
 		else
-			print( string.format('build target(%s) failed: %s %s!', src, res, code) )
-			os.exit(code)
+			error( string.format('build target(%s) failed: %s %s!', src, res, code) )
 		end
 	end)
 end
@@ -323,8 +322,7 @@ end
 
 function make_target(target, deps, ...)	-- ... is commands
 	if check_deps_execute(target, deps, ...) then return target end
-	print('make('..tostring(target)..'): failed!')
-	os.exit(1)
+	error('make('..tostring(target)..'): failed!')
 end
 
 function make_copy(filename, target_path, source_path)
