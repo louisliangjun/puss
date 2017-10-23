@@ -221,9 +221,28 @@ vmake_target_add('puss_glfw', function(target)
 	local srcpath = path_concat('modules', target)
 	make_copy('puss_module_glfw.h', PUSS_INCLUDE_PATH, srcpath)
 
+	-- TODO : now test
+	local libs =
+		{ path_concat('3rd', 'glfw-3.2.1', 'build', 'src', 'libglfw3.a')
+		, '-lGL -lX11 -lXi -lXrandr -lXxf86vm -lXinerama -lXcursor -lrt -lm'
+		}
 	local objs = make_c2objs(srcpath, INCLUDES, '-fPIC', '-fvisibility=hidden')
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
-	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs)
+	return make_target(output, {vlua.script, objs}, CC, CFLAGS, '-shared', '-o', output, objs, libs)
+end)
+
+-----------------------------
+-- puss nuklear based glfw
+
+vmake_target_add('puss_nuklear', function(target)
+	vmake('puss_glfw')
+
+	local src = path_concat('modules', target)
+	local incs = array_pack(INCLUDES, src)
+	local libs = '-lm'
+	local objs = make_c2objs(src, incs, '-fPIC', '-fvisibility=hidden')
+	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
+	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs, libs)
 end)
 
 -----------------------------

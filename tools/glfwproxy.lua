@@ -31,7 +31,7 @@ local function pasre_header(apis, enums, fname)
 			return
 		end
 
-		local ret, name, args = line:match('^%s*GLFWAPI%s+([_%w%*]+)%s+([_%w]+)%s*%(%s*(.*)%s*%)%s*;%s*$')
+		local ret, name, args = line:match('^%s*GLFWAPI%s+(.+)%s+([_%w]+)%s*%(%s*(.*)%s*%)%s*;%s*$')
 		if ret then
 			table_insert(apis, {expose, ret, name, args})
 			return
@@ -122,7 +122,9 @@ function main()
 		writeln('} GLFWProxy;')
 		writeln()
 		writeln('#ifndef _GLFWPROXY_NOT_USE_SYMBOL_MACROS')
-		writeln('	extern GLFWProxy* __glfw_proxy__;')
+		writeln('	#ifndef __glfw_proxy__')
+		writeln('		#error "need define __glfw_proxy__(sym) first"')
+		writeln('	#endif')
 		generate_line(apis, writeln, function(writeln, ret, name, args)
 			writeln('	#define ' .. name .. '	__glfw_proxy__(' .. name .. ')')
 		end)

@@ -17,6 +17,7 @@ function __main__()
 		, 'samples/const.lua'
 		, 'samples/glua.lua'
 		, 'samples/gtk.lua'
+		, 'samples/nuklear.lua'
 		, 'source_editor/main.lua'
 		}
 
