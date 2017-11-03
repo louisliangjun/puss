@@ -1,14 +1,9 @@
-/* nuklear - 1.32.0 - public domain */
+// puss_module_nuklear_glfw3.c
+
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
-#include <stdarg.h>
 #include <string.h>
-#include <math.h>
-#include <assert.h>
-#include <math.h>
-#include <limits.h>
-#include <time.h>
+#include <memory.h>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -16,15 +11,11 @@
 
 #include "puss_module.h"
 
-#define NK_INCLUDE_FIXED_TYPES
-#define NK_INCLUDE_STANDARD_IO
-#define NK_INCLUDE_STANDARD_VARARGS
-#define NK_INCLUDE_DEFAULT_ALLOCATOR
-#define NK_INCLUDE_VERTEX_BUFFER_OUTPUT
-#define NK_INCLUDE_FONT_BAKING
-#define NK_INCLUDE_DEFAULT_FONT
-#define NK_IMPLEMENTATION
+#define _NUKLEARPROXY_NOT_USE_SYMBOL_MACROS
 #include "nuklear.h"
+
+#define NK_IMPLEMENTATION
+#include <nuklear/nuklear.h>
 
 #define NK_GLFW_GL3_IMPLEMENTATION
 #include "nuklear_glfw_gl3.h"
@@ -35,44 +26,23 @@
 #define MAX_VERTEX_BUFFER 512 * 1024
 #define MAX_ELEMENT_BUFFER 128 * 1024
 
-#define UNUSED(a) (void)a
-#define MIN(a,b) ((a) < (b) ? (a) : (b))
-#define MAX(a,b) ((a) < (b) ? (b) : (a))
-#define LEN(a) (sizeof(a)/sizeof(a)[0])
+static void error_callback(int e, const char *d) {
+	printf("Error %d: %s\n", e, d);
+}
 
-/* ===============================================================
- *
- *                          EXAMPLE
- *
- * ===============================================================*/
-/* This are some code examples to provide a small overview of what can be
- * done with this library. To try out an example uncomment the include
- * and the corresponding function. */
-/*#include "../style.c"*/
-/*#include "../calculator.c"*/
-/*#include "../overview.c"*/
-/*#include "../node_editor.c"*/
-
-/* ===============================================================
- *
- *                          DEMO
- *
- * ===============================================================*/
-static void error_callback(int e, const char *d)
-{printf("Error %d: %s\n", e, d);}
-
-int test(lua_State* L) {
+static int test(lua_State* L) {
     /* Platform */
     static GLFWwindow *win;
     int width = 0, height = 0;
     struct nk_context *ctx;
     struct nk_color background;
 
+	luaL_argcheck(L, lua_type(L, 1)==LUA_TFUNCTION, 1, "need function!");
+
     /* GLFW */
     glfwSetErrorCallback(error_callback);
     if (!glfwInit()) {
-        fprintf(stdout, "[GFLW] failed to init!\n");
-        exit(1);
+        return luaL_error(L, "[GFLW] failed to init!\n");
     }
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -118,46 +88,13 @@ int test(lua_State* L) {
         glfwPollEvents();
         nk_glfw3_new_frame();
 
-        /* GUI */
-        if (nk_begin(ctx, "Demo", nk_rect(50, 50, 230, 250),
-            NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
-            NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))
-        {
-            enum {EASY, HARD};
-            static int op = EASY;
-            static int property = 20;
-            nk_layout_row_static(ctx, 30, 80, 1);
-            if (nk_button_label(ctx, "button"))
-                fprintf(stdout, "button pressed\n");
-
-            nk_layout_row_dynamic(ctx, 30, 2);
-            if (nk_option_label(ctx, "easy", op == EASY)) op = EASY;
-            if (nk_option_label(ctx, "hard", op == HARD)) op = HARD;
-
-            nk_layout_row_dynamic(ctx, 25, 1);
-            nk_property_int(ctx, "Compression:", 0, &property, 100, 10, 1);
-
-            nk_layout_row_dynamic(ctx, 20, 1);
-            nk_label(ctx, "background:", NK_TEXT_LEFT);
-            nk_layout_row_dynamic(ctx, 25, 1);
-            if (nk_combo_begin_color(ctx, background, nk_vec2(nk_widget_width(ctx),400))) {
-                nk_layout_row_dynamic(ctx, 120, 1);
-                background = nk_color_picker(ctx, background, NK_RGBA);
-                nk_layout_row_dynamic(ctx, 25, 1);
-                background.r = (nk_byte)nk_propertyi(ctx, "#R:", 0, background.r, 255, 1,1);
-                background.g = (nk_byte)nk_propertyi(ctx, "#G:", 0, background.g, 255, 1,1);
-                background.b = (nk_byte)nk_propertyi(ctx, "#B:", 0, background.b, 255, 1,1);
-                background.a = (nk_byte)nk_propertyi(ctx, "#A:", 0, background.a, 255, 1,1);
-                nk_combo_end(ctx);
-            }
-        }
-        nk_end(ctx);
-
-        /* -------------- EXAMPLES ---------------- */
-        /*calculator(ctx);*/
-        /*overview(ctx);*/
-        /*node_editor(ctx);*/
-        /* ----------------------------------------- */
+		/* GUI */
+		lua_pushvalue(L, 1);
+		lua_pushlightuserdata(L, ctx);
+		if( puss_pcall_stacktrace(L, 1, 0) ) {
+			printf("script error: %s\n", lua_tostring(L, -1));
+			lua_pop(L, 1);
+		}
 
         /* Draw */
         {float bg[4];
@@ -179,12 +116,26 @@ int test(lua_State* L) {
     return 0;
 }
 
+static NuklearProxy nuklear_proxy;
+
 PussInterface* __puss_iface__ = NULL;
 
-PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
-	__puss_iface__= puss;
+extern int test1(lua_State* L);
 
-	lua_pushcfunction(L, test);
+PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
+	if( !__puss_iface__ ) {
+		__puss_iface__= puss;
+
+		#define __NUKLEARPROXY_SYMBOL(f)	nuklear_proxy.f = f;
+			#include "nuklear.symbols"
+		#undef __NUKLEARPROXY_SYMBOL
+	}
+
+	puss_interface_register(L, "NuklearProxy", &nuklear_proxy);
+
+	lua_newtable(L);
+	lua_pushcfunction(L, test);		lua_setfield(L, -2, "test");
+	lua_pushcfunction(L, test1);	lua_setfield(L, -2, "test1");
 	return 1;
 }
 

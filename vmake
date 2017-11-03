@@ -27,7 +27,7 @@ do
 	end
 
 	if vlua.match_arg('^%-asan$') then
-		array_push(CFLAGS, '-fsanitize=address', '-fno-omit-frame-pointer')
+		array_push(CFLAGS, '-ggdb', '-fsanitize=address', '-fno-omit-frame-pointer')
 		OBJPATH = OBJPATH .. '_asan'
 		PUSS_MODULE_SUFFIX = PUSS_MODULE_SUFFIX .. '_asan'
 	end
@@ -195,34 +195,36 @@ vmake_target_add('puss_gtksourceview', function(target)
 end)
 
 -----------------------------
--- puss nuklear based glfw
+-- puss nuklear
 
 vmake_target_add('puss_nuklear_proxy', function(target)
-	local src = path_concat('modules', 'puss_nuklear', 'nuklear.h')
+	local src = path_concat('3rd', 'nuklear', 'nuklear.h')
 	local nuklearproxy_lua = path_concat('tools', 'nuklearproxy.lua')
 	local deps =
 		{ src
 		, nuklearproxy_lua
 		}
 	if not( check_deps(path_concat(PUSS_INCLUDE_PATH, 'nuklear.h'), deps)
-		and check_deps(path_concat(PUSS_INCLUDE_PATH, 'nuklearproxy.symbols'), deps)
+		and check_deps(path_concat(PUSS_INCLUDE_PATH, 'nuklear.symbols'), deps)
+		and check_deps(path_concat(PUSS_INCLUDE_PATH, 'nuklear.enums'), deps)
 		)
 	then
 		shell_execute(vlua.self, nuklearproxy_lua, '-out="'..PUSS_INCLUDE_PATH..'"', '-src="'..src..'"')
 	end
 end)
 
-vmake_target_add('puss_nuklear', function(target)
+vmake_target_add('puss_nuklear_glfw3', function(target)
 	vmake('puss_nuklear_proxy')
 
+	local use_static = (vlua.OS=='windows')
 	local src = path_concat('modules', target)
 	local incs = array_pack(INCLUDES, src)
 	local libs = '-lm'
-	local cflags = shell('pkg-config --static --cflags glfw3')
-	local libs = shell('pkg-config --static --libs glfw3')
+	local cflags = use_static and {'-static', shell('pkg-config --static --cflags glfw3')} or shell('pkg-config --cflags glfw3')
+	local libs = use_static and shell('pkg-config --static --libs glfw3') or shell('pkg-config --libs glfw3')
 	local objs = make_c2objs(src, incs, '-fPIC', '-fvisibility=hidden')
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
-	return make_target(output, objs, CC, CFLAGS, '-static', cflags, '-shared', '-o', output, objs, libs)
+	return make_target(output, objs, CC, CFLAGS, cflags, '-shared', '-o', output, objs, libs)
 end)
 
 -----------------------------
