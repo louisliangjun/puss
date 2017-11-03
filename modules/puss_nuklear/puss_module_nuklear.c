@@ -11,11 +11,10 @@
 #include <time.h>
 
 #include <glad/glad.h>
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
 
-#define __glfw_proxy__(sym) (__puss_glfw_iface__->sym)
-#include "puss_module_glfw.h"
-
-static PussGLFWInterface* __puss_glfw_iface__ = NULL;
+#include "puss_module.h"
 
 #define NK_INCLUDE_FIXED_TYPES
 #define NK_INCLUDE_STANDARD_IO
@@ -25,8 +24,9 @@ static PussGLFWInterface* __puss_glfw_iface__ = NULL;
 #define NK_INCLUDE_FONT_BAKING
 #define NK_INCLUDE_DEFAULT_FONT
 #define NK_IMPLEMENTATION
-#define NK_GLFW_GL3_IMPLEMENTATION
 #include "nuklear.h"
+
+#define NK_GLFW_GL3_IMPLEMENTATION
 #include "nuklear_glfw_gl3.h"
 
 #define WINDOW_WIDTH 1200
@@ -113,6 +113,7 @@ int test(lua_State* L) {
     background = nk_rgb(28,48,62);
     while (!glfwWindowShouldClose(win))
     {
+    	glfwWaitEventsTimeout(0.2);
         /* Input */
         glfwPollEvents();
         nk_glfw3_new_frame();
@@ -181,11 +182,7 @@ int test(lua_State* L) {
 PussInterface* __puss_iface__ = NULL;
 
 PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
-	if( !__puss_iface__ ) {
-		__puss_iface__= puss;
-		puss_module_require(L, "puss_glfw");
-		__puss_glfw_iface__ = puss_interface_check(L, PussGLFWInterface);
-	}
+	__puss_iface__= puss;
 
 	lua_pushcfunction(L, test);
 	return 1;
