@@ -1,9 +1,8 @@
 // tests.c
 
-#define __nuklear_proxy__(sym)	__nk_proxy__->sym
-#include "nuklear.h"
+#include "puss_module_nuklear.h"
 
-static NuklearProxy* __nk_proxy__ = NULL;
+PussNuklearInterface* __puss_nuklear_iface__ = NULL;
 
 #define UNUSED(a) (void)a
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
@@ -12,8 +11,8 @@ static NuklearProxy* __nk_proxy__ = NULL;
 
 int test1(lua_State* L) {
 	struct nk_context * ctx = lua_touserdata(L, 1);
-	if( !__nk_proxy__) {
-		__nk_proxy__ = puss_interface_check(L, NuklearProxy);
+	if( !__puss_nuklear_iface__) {
+		__puss_nuklear_iface__ = puss_interface_check(L, PussNuklearInterface);
 	}
 
     /* GUI */

@@ -98,10 +98,10 @@ vmake_target_add('luaproxy', function(target)
 		, make_copy('lauxlib.h', PUSS_INCLUDE_PATH, luapath)
 		}
 	if not( check_deps(path_concat(PUSS_INCLUDE_PATH, 'luaproxy.h'), deps)
-		and check_deps(path_concat(PUSS_INCLUDE_PATH, 'luaproxy.symbols'), deps)
+		and check_deps(path_concat(GEN_INCLUDE_PATH, 'luaproxy.symbols'), deps)
 		)
 	then
-		shell_execute(vlua.self, luaproxy_lua, '-path="'..PUSS_INCLUDE_PATH..'"')
+		shell_execute(vlua.self, luaproxy_lua, '-path="'..PUSS_INCLUDE_PATH..'"', '-gen="'..GEN_INCLUDE_PATH..'"')
 	end
 end)
 
@@ -205,21 +205,22 @@ vmake_target_add('puss_nuklear_proxy', function(target)
 		, nuklearproxy_lua
 		}
 	if not( check_deps(path_concat(PUSS_INCLUDE_PATH, 'nuklear.h'), deps)
-		and check_deps(path_concat(PUSS_INCLUDE_PATH, 'nuklear.symbols'), deps)
-		and check_deps(path_concat(PUSS_INCLUDE_PATH, 'nuklear.enums'), deps)
+		and check_deps(path_concat(PUSS_INCLUDE_PATH, 'nuklear_proxy.h'), deps)
+		and check_deps(path_concat(GEN_INCLUDE_PATH, 'nuklear.symbols'), deps)
+		and check_deps(path_concat(GEN_INCLUDE_PATH, 'nuklear.enums'), deps)
 		)
 	then
-		shell_execute(vlua.self, nuklearproxy_lua, '-out="'..PUSS_INCLUDE_PATH..'"', '-src="'..src..'"')
+		shell_execute(vlua.self, nuklearproxy_lua, '-out="'..PUSS_INCLUDE_PATH..'"', '-gen="'..GEN_INCLUDE_PATH..'"', '-src="'..src..'"')
 	end
 end)
 
-vmake_target_add('puss_nuklear_glfw3', function(target)
+vmake_target_add('puss_nuklear', function(target)
 	vmake('puss_nuklear_proxy')
 
 	local use_static = (vlua.OS=='windows')
 	local src = path_concat('modules', target)
+	make_copy('puss_module_nuklear.h', PUSS_INCLUDE_PATH, src)
 	local incs = array_pack(INCLUDES, src)
-	local libs = '-lm'
 	local cflags = use_static and {'-static', shell('pkg-config --static --cflags glfw3')} or shell('pkg-config --cflags glfw3')
 	local libs = use_static and shell('pkg-config --static --libs glfw3') or shell('pkg-config --libs glfw3')
 	local objs = make_c2objs(src, incs, '-fPIC', '-fvisibility=hidden')

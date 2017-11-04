@@ -52,6 +52,7 @@ function main()
 	end
 
 	local root = vlua.match_arg('^%-path=(.+)$') or '.'
+	local gen = vlua.match_arg('^%-gen=(.+)$') or '.'
 
 	pasre_header(gen_api, vlua.filename_format(root..'/lua.h'))
 	pasre_header(gen_api, vlua.filename_format(root..'/lauxlib.h'))
@@ -72,7 +73,7 @@ function main()
 		f:close()
 	end
 
-	generate_file(vlua.filename_format(root..'/'..'luaproxy.symbols'), function(writeln)
+	generate_file(vlua.filename_format(gen..'/'..'luaproxy.symbols'), function(writeln)
 		for _,v in ipairs(apis) do
 			writeln('__LUAPROXY_SYMBOL(', v[2], ')')
 		end

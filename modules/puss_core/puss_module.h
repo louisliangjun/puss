@@ -14,7 +14,7 @@ typedef struct PussInterface	PussInterface;
 
 	#define puss_module_require			(*(__puss_iface__->module_require))
 	#define puss_interface_register		(*(__puss_iface__->interface_register))
-	#define puss_interface_check(L, I)	((I*)( (*(__puss_iface__->interface_check))((L), #I)))
+	#define puss_interface_check(L, I)	((I*)((*(__puss_iface__->interface_check))((L), #I)))
 	#define puss_push_const_table		(*(__puss_iface__->push_const_table))
 	#define puss_app_path				(*(__puss_iface__->app_path))
 	#define puss_rawget_ex				(*(__puss_iface__->rawget_ex))

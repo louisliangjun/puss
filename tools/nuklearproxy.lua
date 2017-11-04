@@ -79,7 +79,7 @@ local function parse_enums(enums, segs)
 		for block in cxt:gmatch('enum%s+[_%w]*%s*(%b{})%s*;') do
 			block = block:gsub('%b()', ' ')
 			for line in block:gmatch('[%s{]*(.-)%s*[,}]') do
-				local enum = line:match('^([nN][kK]_[_%w]+)%s*')
+				local enum = line:match('^(NK_[_%w]+)%s*')
 				if enum then table_insert(syms, enum) end
 			end
 		end
@@ -91,6 +91,7 @@ end
 
 function main()
 	local out = vlua.match_arg('^%-out=(.+)$') or '.'
+	local gen = vlua.match_arg('^%-gen=(.+)$') or '.'
 	local lines = {}
 	do
 		local fname = vlua.match_arg('^%-src=(.+)$') or 'nuklear.h'
@@ -105,7 +106,8 @@ function main()
 	end
 
 	local header = table_concat(lines, '\n')
-	header = header:gsub('/%*.-%*/', ' ')	-- remove comment
+	header = header:gsub('/%*.-%*/', ' ')			-- remove comment
+	header = header:gsub('[ \t]+([\r\n]+)', '%1')	-- remove line end space
 
 	local apis = {}
 	local enums = {}
@@ -131,21 +133,15 @@ function main()
 	end
 
 	generate_file(vlua.filename_format(out..'/'..'nuklear.h'), function(writeln)
-		writeln('// NOTICE : generate by nuklearproxy.lua')
+		writeln('/* NOTICE : generate by nuklearproxy.lua */')
 		writeln()
-		writeln('#define NK_INCLUDE_FIXED_TYPES')
-		writeln('#define NK_INCLUDE_STANDARD_IO')
-		writeln('#define NK_INCLUDE_STANDARD_VARARGS')
-		writeln('#define NK_INCLUDE_DEFAULT_ALLOCATOR')
-		writeln('#define NK_INCLUDE_VERTEX_BUFFER_OUTPUT')
-		writeln('#define NK_INCLUDE_FONT_BAKING')
-		writeln('#define NK_INCLUDE_DEFAULT_FONT')
 		writeln(header)
 		writeln()
+	end)
+
+	generate_file(vlua.filename_format(out..'/'..'nuklear_proxy.h'), function(writeln)
 		writeln('#ifndef __INC_NUKLEAR_PROXY_H__')
 		writeln('#define __INC_NUKLEAR_PROXY_H__')
-		writeln()
-		writeln('#include "puss_module.h"')
 		writeln()
 		writeln('PUSS_DECLS_BEGIN')
 		writeln()
@@ -182,7 +178,7 @@ function main()
 		writeln()
 	end)
 
-	generate_file(vlua.filename_format(out..'/'..'nuklear.symbols'), function(writeln)
+	generate_file(vlua.filename_format(gen..'/'..'nuklear.symbols'), function(writeln)
 		for _, segv in ipairs(apis) do
 			local seg, syms = table.unpack(segv)
 			if seg then
@@ -199,7 +195,7 @@ function main()
 		end
 	end)
 
-	generate_file(vlua.filename_format(out..'/'..'nuklear.enums'), function(writeln)
+	generate_file(vlua.filename_format(gen..'/'..'nuklear.enums'), function(writeln)
 		for _, segv in ipairs(enums) do
 			local seg, syms = table.unpack(segv)
 			if seg then
