@@ -153,18 +153,9 @@ function main()
 
 		for _, segv in ipairs(apis) do
 			local seg, syms = table.unpack(segv)
-			local inc = seg and seg:match('^#%s*ifdef%s*NK_INCLUDE_.*')
 			for _,v in ipairs(syms) do
 				local ret, name, args = table.unpack(v)
-				if inc then
-					writeln(inc)
-					writeln('  ', string.format('%-24s (*%s) %s;', ret, name, args))
-					writeln('#else')
-					writeln('  ', string.format('%-24s (*%s) %s; /* keep pos */', 'void*', name, '()'))
-					writeln('#endif')
-				else
-					writeln(string.format('  %-24s (*%s) %s;', ret, name, args))
-				end
+				writeln(string.format('  %-24s (*%s) %s;', ret, name, args))
 			end
 		end
 
