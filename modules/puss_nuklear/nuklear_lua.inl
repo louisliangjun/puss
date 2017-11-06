@@ -8,6 +8,7 @@
 #define lua_check_nk_flags(L, arg)		(nk_flags)luaL_checkinteger((L), (arg) )
 
 #define lua_check_nk_int(L, arg)		(int)luaL_checkinteger((L), (arg) )
+#define lua_check_nk_uint(L, arg)		(nk_uint)luaL_checkinteger((L), (arg) )
 #define lua_check_nk_size(L, arg)		(nk_size)luaL_checkinteger((L), (arg) )
 #define lua_check_nk_float(L, arg)		(float)luaL_checknumber((L), (arg) )
 #define lua_check_nk_double(L, arg)		luaL_checknumber((L), (arg) )
@@ -60,6 +61,16 @@ static void lua_push_nk_vec2(lua_State* L, struct nk_vec2 v) {
 	lua_pushnumber(L, v.x);	lua_rawseti(L, -2, 2);
 }
 
+static void struct nk_style_item lua_check_nk_style_item(lua_State* L, int arg) {
+	struct nk_style_item v;
+	luaL_argerror(L, arg, "lua_check_nk_style_item not implement");
+	return v;
+}
+
+static void lua_push_nk_style_item(lua_State* L, struct nk_style_item) {
+	luaL_error(L, "lua_push_nk_style_item not implement");
+}
+
 static struct nk_rect* lua_check_nk_rect_ref(lua_State* L, int arg) {
 	luaL_argerror(L, arg, "lua_check_nk_rect_ref not implement")
 	return NULL;
@@ -108,6 +119,24 @@ static struct nk_image lua_check_nk_image(lua_State* L, int arg) {
 	return img;
 }
 
+static nk_plugin_filter lua_check_nk_plugin_filter(lua_State* L, int arg) {
+	const char* filter = luaL_optstring(L, arg, "");
+	if( strcmp(filter, "ascii")==0 ) {
+		return nk_filter_ascii;
+	} else if( strcmp(filter, "float")==0 ) {
+		return nk_filter_float;
+	} else if( strcmp(filter, "decimal")==0 ) {
+		return nk_filter_decimal;
+	} else if( strcmp(filter, "hex")==0 ) {
+		return nk_filter_hex;
+	} else if( strcmp(filter, "oct")==0 ) {
+		return nk_filter_oct;
+	} else if( strcmp(filter, "binary")==0 ) {
+		return nk_filter_binary;
+	}
+	return nk_filter_default;
+}
+
 static struct nk_context* lua_check_nk_context(lua_State* L, int arg) {
 	struct nk_context* ctx = lua_touserdata(L, arg);
 	luaL_argcheck(L, ctx, arg, "nil nk_context");
@@ -132,6 +161,14 @@ static void lua_push_nk_panel(lua_State* L, struct nk_panel* p) {
 		lua_pushlightuserdata(L, p);
 	} else {
 		lua_pushnil(L, p);
+	}
+}
+
+static void lua_push_nk_font(lua_State* L, struct nk_font* f) {
+	if( w ) {
+		lua_pushlightuserdata(L, f);
+	} else {
+		lua_pushnil(L, f);
 	}
 }
 
@@ -175,8 +212,53 @@ static struct nk_color* lua_check_nk_color_ref(lua_State* L, int arg) {
 	return NULL;
 }
 
+static struct nk_vec2* lua_check_nk_vec2_ref(lua_State* L, int arg) {
+	luaL_argerror(L, arg, "lua_check_nk_vec2_ref not implement");
+	return NULL;
+}
+
+static struct nk_rect* lua_check_nk_rect_ref(lua_State* L, int arg) {
+	luaL_argerror(L, arg, "lua_check_nk_rect_ref not implement");
+	return NULL;
+}
+
+static struct nk_image* lua_check_nk_image_ref(lua_State* L, int arg) {
+	luaL_argerror(L, arg, "lua_check_nk_image_ref not implement");
+	return NULL;
+}
+
+static struct nk_style_item* lua_check_nk_style_item_ref(lua_State* L, int arg) {
+	luaL_argerror(L, arg, "lua_check_nk_style_item_ref not implement");
+	return NULL;
+}
+
 static struct nk_style_button* lua_check_nk_style_button_ref(lua_State* L, int arg) {
 	luaL_argerror(L, arg, "lua_check_nk_style_button_ref not implement");
+	return NULL;
+}
+
+static struct nk_font_atlas* lua_check_nk_font_atlas_ref(lua_State* L, int arg) {
+	luaL_argerror(L, arg, "lua_check_nk_font_atlas_ref not implement");
+	return NULL;
+}
+
+static struct nk_font_config* lua_check_nk_font_config_ref(lua_State* L, int arg) {
+	luaL_argerror(L, arg, "lua_check_nk_font_config_ref not implement");
+	return NULL;
+}
+
+static struct nk_font* lua_check_nk_font_ref(lua_State* L, int arg) {
+	luaL_argerror(L, arg, "lua_check_nk_font_ref not implement");
+	return NULL;
+}
+
+static struct nk_buffer* lua_check_nk_buffer_ref(lua_State* L, int arg) {
+	luaL_argerror(L, arg, "lua_check_nk_buffer_ref not implement");
+	return NULL;
+}
+
+static struct nk_input* lua_check_nk_input_ref(lua_State* L, int arg) {
+	luaL_argerror(L, arg, "lua_check_nk_input_ref not implement");
 	return NULL;
 }
 
@@ -195,6 +277,11 @@ static void lua_push_nk_command_buffer(lua_State* L, struct nk_command_buffer* b
 
 static float* lua_check_nk_float_array(lua_State* L, int arg, int len) {
 	luaL_argerror(L, arg, "lua_check_nk_float_array not implement");
+	return NULL;
+}
+
+static struct nk_vec2* lua_check_nk_vec2_array(lua_State* L, int arg, int len) {
+	luaL_argerror(L, arg, "lua_check_nk_vec2_array not implement");
 	return NULL;
 }
 
@@ -223,11 +310,17 @@ static struct nk_user_font* lua_check_nk_user_font(lua_State* L, int arg) {
 	return NULL;
 }
 
+static struct nk_draw_list* lua_check_nk_draw_list(lua_State* L, int arg) {
+	luaL_argerror(L, arg, "lua_check_nk_draw_list not implement");
+	return NULL;
+}
+
+
 #define LUA_NK_API_NORET( api, ... ) \
 	static int api ## _lua(lua_State* L) { return api(__VA_ARGS__), 0; }
 
 #define LUA_NK_API( push, api, ... ) \
-	static int lua_ ## api(lua_State* L) { return push(L, api(__VA_ARGS__) ), 1; }
+	static int api ## _lua(lua_State* L) { return push(L, api(__VA_ARGS__) ), 1; }
 
 //----------------------------------------------------------
 
@@ -241,7 +334,10 @@ LUA_NK_API( lua_pushboolean, nk_init_default, lua_check_nk_context(L,1), lua_che
 
 // NK_API int nk_init_fixed(struct nk_context*, void *memory, nk_size size, const struct nk_user_font*);
 // NK_API int nk_init(struct nk_context*, struct nk_allocator*, const struct nk_user_font*);
+
 // NK_API int nk_init_custom(struct nk_context*, struct nk_buffer *cmds, struct nk_buffer *pool, const struct nk_user_font*);
+LUA_NK_API( lua_pushboolean, nk_init_default, lua_check_nk_context(L,1), lua_check_nk_buffer_ref(L,2), lua_check_nk_buffer_ref(L,3), lua_check_nk_user_font(L,4) )
+
 
 // NK_API void nk_clear(struct nk_context*);
 LUA_NK_API_NORET( nk_clear, lua_check_nk_context(L,1) )
@@ -287,10 +383,10 @@ LUA_NK_API_NORET( nk_input_unicode, lua_check_nk_context(L,1), (nk_rune)luaL_che
 LUA_NK_API_NORET( nk_input_end, lua_check_nk_context(L,1) )
 
 // NK_API const struct nk_command* nk__begin(struct nk_context*);
-// LUA_NK_API( lua_push_nk_command_buffer, nk__begin, lua_check_nk_context(L,1) )
+LUA_NK_API( lua_push_nk_command_buffer, nk__begin, lua_check_nk_context(L,1) )
 
 // NK_API const struct nk_command* nk__next(struct nk_context*, const struct nk_command*);
-// LUA_NK_API( lua_push_nk_command_buffer, nk__next, lua_check_nk_context(L,1), lua_check_nk_command_buffer(L,2) )
+LUA_NK_API( lua_push_nk_command_buffer, nk__next, lua_check_nk_context(L,1), lua_check_nk_command_buffer(L,2) )
 
 // #define nk_foreach(c, ctx) for((c) = nk__begin(lua_check_nk_context(L,1) ); (c) != 0; (c) = nk__next(lua_check_nk_context(L,1),c) )
 #ifdef NK_INCLUDE_VERTEX_BUFFER_OUTPUT
@@ -298,8 +394,10 @@ LUA_NK_API_NORET( nk_input_end, lua_check_nk_context(L,1) )
 // NK_API nk_flags nk_convert(struct nk_context*, struct nk_buffer *cmds, struct nk_buffer *vertices, struct nk_buffer *elements, const struct nk_convert_config*);
 
 // NK_API const struct nk_draw_command* nk__draw_begin(const struct nk_context*, const struct nk_buffer*);
+LUA_NK_API( lua_push_nk_command_buffer, nk__draw_begin, lua_check_nk_context(L,1), lua_check_nk_buffer_ref(L,2) )
 
 // NK_API const struct nk_draw_command* nk__draw_end(const struct nk_context*, const struct nk_buffer*);
+LUA_NK_API( lua_push_nk_command_buffer, nk__draw_end, lua_check_nk_context(L,1), lua_check_nk_buffer_ref(L,2) )
 
 // NK_API const struct nk_draw_command* nk__draw_next(const struct nk_draw_command*, const struct nk_buffer*, const struct nk_context*);
 
@@ -505,9 +603,8 @@ LUA_NK_API( lua_pushboolean, nk_tree_push_hashed, lua_check_nk_context(L,1), lua
 		, luaL_checkstring(L,5), lua_check_nk_text_len(L,6)
 		, lua_check_nk_int(L,7) )
 
-// TODO if need
-#define nk_tree_image_push(ctx, type, img, title, state) nk_tree_image_push_hashed(ctx, type, img, title, state, NK_FILE_LINE,nk_strlen(NK_FILE_LINE),__LINE__)
-#define nk_tree_image_push_id(ctx, type, img, title, state, id) nk_tree_image_push_hashed(ctx, type, img, title, state, NK_FILE_LINE,nk_strlen(NK_FILE_LINE),id)
+// #define nk_tree_image_push(ctx, type, img, title, state) nk_tree_image_push_hashed(ctx, type, img, title, state, NK_FILE_LINE,nk_strlen(NK_FILE_LINE),__LINE__)
+// #define nk_tree_image_push_id(ctx, type, img, title, state, id) nk_tree_image_push_hashed(ctx, type, img, title, state, NK_FILE_LINE,nk_strlen(NK_FILE_LINE),id)
 
 // NK_API int nk_tree_image_push_hashed(struct nk_context*, enum nk_tree_type, struct nk_image, const char *title, enum nk_collapse_states initial_state, const char *hash, int len,int seed);
 LUA_NK_API( lua_pushboolean, nk_tree_image_push_hashed, lua_check_nk_context(L,1), lua_check_nk_enum(nk_tree_type,2)
@@ -518,7 +615,7 @@ LUA_NK_API( lua_pushboolean, nk_tree_image_push_hashed, lua_check_nk_context(L,1
 LUA_NK_API_NORET( nk_tree_pop, lua_check_nk_context(L,1) )
 
 // NK_API int nk_tree_state_push(struct nk_context*, enum nk_tree_type, const char *title, enum nk_collapse_states *state);
-LUA_NK_API( nk_tree_state_push, lua_pushboolean(L, nk_tree_state_push(lua_check_nk_context(L,1), lua_check_nk_enum(nk_tree_type,2)
+LUA_NK_API( lua_pushboolean, nk_tree_state_push, lua_check_nk_context(L,1), lua_check_nk_enum(nk_tree_type,2)
 		, luaL_checkstring(L,3), lua_check_nk_enum(nk_collapse_states,4) )
 
 // NK_API int nk_tree_state_image_push(struct nk_context*, enum nk_tree_type, struct nk_image, const char *title, enum nk_collapse_states *state);
@@ -744,7 +841,7 @@ LUA_NK_API( lua_pushboolean, nk_select_text, lua_check_nk_context(L,1), luaL_che
 LUA_NK_API( lua_pushboolean, nk_select_image_label, lua_check_nk_context(L,1), lua_check_nk_image(L,2), luaL_checkstring(L,3), lua_check_nk_flags(L,4), lua_check_nk_int(L,5) )
 
 // NK_API int nk_select_image_text(struct nk_context*, struct nk_image,const char*, int, nk_flags align, int value);
-LUA_NK_API( /nk_select_image_text, lua_pushboolean, lua_check_nk_context(L,1), lua_check_nk_image(L,2)
+LUA_NK_API( lua_pushboolean, nk_select_image_text, lua_check_nk_context(L,1), lua_check_nk_image(L,2)
 	, luaL_checkstring(L,3), lua_check_nk_text_len(L,4)
 	, lua_check_nk_flags(L,5), lua_check_nk_int(L,6) )
 
@@ -804,7 +901,7 @@ LUA_NK_API( lua_pushnumber, nk_propertyd, lua_check_nk_context(L,1), luaL_checks
 // NK_API nk_flags nk_edit_string_zero_terminated(struct nk_context*, nk_flags, char *buffer, int max, NULL);
 
 // NK_API nk_flags nk_edit_buffer(struct nk_context*, nk_flags, struct nk_text_edit*, nk_plugin_filter);
-LUA_NK_API( lua_pushinteger, nk_edit_buffer, lua_check_nk_context(L,1), lua_check_nk_flags(L,2), lua_check_nk_text_edit(L,3), NULL) )
+LUA_NK_API( lua_pushinteger, nk_edit_buffer, lua_check_nk_context(L,1), lua_check_nk_flags(L,2), lua_check_nk_text_edit(L,3), lua_check_nk_plugin_filter(L,4) )
 
 // NK_API void nk_edit_focus(struct nk_context*, nk_flags flags);
 LUA_NK_API_NORET( nk_edit_focus, lua_check_nk_context(L,1), lua_check_nk_flags(L,2) )
@@ -1063,24 +1160,23 @@ LUA_NK_API_NORET( nk_style_show_cursor, lua_check_nk_context(L,1) )
 LUA_NK_API_NORET( nk_style_hide_cursor, lua_check_nk_context(L,1) )
 
 
-/*
 // NK_API int nk_style_push_font(struct nk_context*, const struct nk_user_font*);
 LUA_NK_API( lua_pushboolean, nk_style_push_font, lua_check_nk_context(L,1), lua_check_nk_user_font(L,2) )
 
 // NK_API int nk_style_push_float(struct nk_context*, float*, float);
-LUA_NK_API( lua_pushboolean, nk_style_push_float, lua_check_nk_context(L,1), float*, float) )
+LUA_NK_API( lua_pushboolean, nk_style_push_float, lua_check_nk_context(L,1), lua_check_nk_float_ref(L,2), lua_check_nk_float(L,3) )
 
 // NK_API int nk_style_push_vec2(struct nk_context*, struct nk_vec2*, struct nk_vec2);
-LUA_NK_API( lua_pushboolean, nk_style_push_vec2, lua_check_nk_context(L,1), struct nk_vec2*, struct nk_vec2) )
+LUA_NK_API( lua_pushboolean, nk_style_push_vec2, lua_check_nk_context(L,1), lua_check_nk_vec2_ref(L,2), lua_check_nk_vec2(L,3) )
 
 // NK_API int nk_style_push_style_item(struct nk_context*, struct nk_style_item*, struct nk_style_item);
-LUA_NK_API( lua_pushboolean, nk_style_push_style_item, lua_check_nk_context(L,1), struct nk_style_item*, struct nk_style_item) )
+LUA_NK_API( lua_pushboolean, nk_style_push_style_item, lua_check_nk_context(L,1), lua_check_nk_style_item_ref(L,2), lua_check_nk_style_item(L,3) )
 
 // NK_API int nk_style_push_flags(struct nk_context*, nk_flags*, nk_flags);
-LUA_NK_API( lua_pushboolean, nk_style_push_flags, lua_check_nk_context(L,1), lua_check_nk_flags_ref(L,2), lua_check_nk_flags(L,2) )
+LUA_NK_API( lua_pushboolean, nk_style_push_flags, lua_check_nk_context(L,1), lua_check_nk_flags_ref(L,2), lua_check_nk_flags(L,3) )
 
 // NK_API int nk_style_push_color(struct nk_context*, struct nk_color*, struct nk_color);
-LUA_NK_API( lua_pushboolean, nk_style_push_color, lua_check_nk_context(L,1), struct nk_color*, struct nk_color) )
+LUA_NK_API( lua_pushboolean, nk_style_push_color, lua_check_nk_context(L,1), lua_check_nk_color_ref(L,2), lua_check_nk_color(L,3) )
 
 
 // NK_API int nk_style_pop_font(struct nk_context*);
@@ -1115,157 +1211,90 @@ LUA_NK_API( lua_push_nk_color, nk_rgb_bv, const nk_byte* rgb) )
 LUA_NK_API( lua_push_nk_color, nk_rgb_f, lua_check_nk_float(L,1), lua_check_nk_float(L,2), lua_check_nk_float(L,3) )
 
 // NK_API struct nk_color nk_rgb_fv(const float *rgb);
-LUA_NK_API( lua_push_nk_color, nk_rgb_fv, const float *rgb) )
-
 // NK_API struct nk_color nk_rgb_hex(const char *rgb);
-LUA_NK_API( lua_push_nk_color, nk_rgb_hex, const char *rgb) )
-
 
 // NK_API struct nk_color nk_rgba(int r, int g, int b, int a);
 LUA_NK_API( lua_push_nk_color, nk_rgba, lua_check_nk_int(L,1), lua_check_nk_int(L,2), lua_check_nk_int(L,3), lua_check_nk_int(L,4) )
 
 // NK_API struct nk_color nk_rgba_u32(nk_uint);
-LUA_NK_API( lua_push_nk_color, nk_rgba_u32, nk_uint) )
+LUA_NK_API( lua_push_nk_color, nk_rgba_u32, lua_check_nk_uint(L,1) )
 
 // NK_API struct nk_color nk_rgba_iv(const int *rgba);
-LUA_NK_API( lua_push_nk_color, nk_rgba_iv, const int *rgba) )
-
 // NK_API struct nk_color nk_rgba_bv(const nk_byte *rgba);
-LUA_NK_API( lua_push_nk_color, nk_rgba_bv, const nk_byte *rgba) )
 
 // NK_API struct nk_color nk_rgba_f(float r, float g, float b, float a);
 LUA_NK_API( lua_push_nk_color, nk_rgba_f, lua_check_nk_float(L,1), lua_check_nk_float(L,2), lua_check_nk_float(L,3), lua_check_nk_float(L,4) )
 
 // NK_API struct nk_color nk_rgba_fv(const float *rgba);
-LUA_NK_API( lua_push_nk_color, nk_rgba_fv, const float *rgba) )
-
 // NK_API struct nk_color nk_rgba_hex(const char *rgb);
-LUA_NK_API( lua_push_nk_color, nk_rgba_hex, const char *rgb) )
+LUA_NK_API( lua_push_nk_color, nk_rgba_hex, luaL_checkstring(L,1) )
 
 
 // NK_API struct nk_color nk_hsv(int h, int s, int v);
 LUA_NK_API( lua_push_nk_color, nk_hsv, lua_check_nk_int(L,1), lua_check_nk_int(L,2), lua_check_nk_int(L,3) )
 
 // NK_API struct nk_color nk_hsv_iv(const int *hsv);
-LUA_NK_API( lua_push_nk_color, nk_hsv_iv, const int *hsv) )
+LUA_NK_API( lua_push_nk_color, nk_hsv_iv, luaL_checkstring(L,1) )
 
 // NK_API struct nk_color nk_hsv_bv(const nk_byte *hsv);
-LUA_NK_API( lua_push_nk_color, nk_hsv_bv, const nk_byte *hsv) )
+LUA_NK_API( lua_push_nk_color, nk_hsv_bv, luaL_checkstring(L,1) )
 
 // NK_API struct nk_color nk_hsv_f(float h, float s, float v);
 LUA_NK_API( lua_push_nk_color, nk_hsv_f, lua_check_nk_float(L,1), lua_check_nk_float(L,2), lua_check_nk_float(L,3) )
 
 // NK_API struct nk_color nk_hsv_fv(const float *hsv);
-LUA_NK_API( lua_push_nk_color, nk_hsv_fv, const float *hsv) )
+LUA_NK_API( lua_push_nk_color, nk_hsv_fv, luaL_checkstring(L,1) )
 
 
 // NK_API struct nk_color nk_hsva(int h, int s, int v, int a);
 LUA_NK_API( lua_push_nk_color, nk_hsva, lua_check_nk_int(L,1), lua_check_nk_int(L,2), lua_check_nk_int(L,3), lua_check_nk_int(L,4) )
 
 // NK_API struct nk_color nk_hsva_iv(const int *hsva);
-LUA_NK_API( lua_push_nk_color, nk_hsva_iv, const int *hsva) )
-
 // NK_API struct nk_color nk_hsva_bv(const nk_byte *hsva);
-LUA_NK_API( lua_push_nk_color, nk_hsva_bv, const nk_byte *hsva) )
 
 // NK_API struct nk_color nk_hsva_f(float h, float s, float v, float a);
 LUA_NK_API( lua_push_nk_color, nk_hsva_f, lua_check_nk_float(L,1), lua_check_nk_float(L,2), lua_check_nk_float(L,3), lua_check_nk_float(L,4) )
 
 // NK_API struct nk_color nk_hsva_fv(const float *hsva);
-LUA_NK_API( lua_push_nk_color, nk_hsva_fv, const float *hsva) )
-
 
 
 // NK_API void nk_color_f(float *r, float *g, float *b, float *a, struct nk_color);
-LUA_NK_API_NORET( nk_color_f, float *r, float *g, float *b, float *a, struct nk_color) )
-
 // NK_API void nk_color_fv(float *rgba_out, struct nk_color);
-LUA_NK_API_NORET( nk_color_fv, float *rgba_out, struct nk_color) )
-
 // NK_API void nk_color_d(double *r, double *g, double *b, double *a, struct nk_color);
-LUA_NK_API_NORET( nk_color_d, double *r, double *g, double *b, double *a, struct nk_color) )
-
 // NK_API void nk_color_dv(double *rgba_out, struct nk_color);
-LUA_NK_API_NORET( nk_color_dv, double *rgba_out, struct nk_color) )
-
 
 // NK_API nk_uint nk_color_u32(struct nk_color);
+LUA_NK_API( lua_pushinteger, nk_color_u32, lua_check_nk_color(L,1) )
+
 // NK_API void nk_color_hex_rgba(char *output, struct nk_color);
-LUA_NK_API_NORET( nk_color_hex_rgba, char *output, struct nk_color) )
-
 // NK_API void nk_color_hex_rgb(char *output, struct nk_color);
-LUA_NK_API_NORET( nk_color_hex_rgb, char *output, struct nk_color) )
-
 
 // NK_API void nk_color_hsv_i(int *out_h, int *out_s, int *out_v, struct nk_color);
-LUA_NK_API_NORET( nk_color_hsv_i, int *out_h, int *out_s, int *out_v, struct nk_color) )
-
 // NK_API void nk_color_hsv_b(nk_byte *out_h, nk_byte *out_s, nk_byte *out_v, struct nk_color);
-LUA_NK_API_NORET( nk_color_hsv_b, nk_byte *out_h, nk_byte *out_s, nk_byte *out_v, struct nk_color) )
-
 // NK_API void nk_color_hsv_iv(int *hsv_out, struct nk_color);
-LUA_NK_API_NORET( nk_color_hsv_iv, int *hsv_out, struct nk_color) )
-
 // NK_API void nk_color_hsv_bv(nk_byte *hsv_out, struct nk_color);
-LUA_NK_API_NORET( nk_color_hsv_bv, nk_byte *hsv_out, struct nk_color) )
-
 // NK_API void nk_color_hsv_f(float *out_h, float *out_s, float *out_v, struct nk_color);
-LUA_NK_API_NORET( nk_color_hsv_f, float *out_h, float *out_s, float *out_v, struct nk_color) )
-
 // NK_API void nk_color_hsv_fv(float *hsv_out, struct nk_color);
-LUA_NK_API_NORET( nk_color_hsv_fv, float *hsv_out, struct nk_color) )
-
-
 // NK_API void nk_color_hsva_i(int *h, int *s, int *v, int *a, struct nk_color);
-LUA_NK_API_NORET( nk_color_hsva_i, int *h, int *s, int *v, int *a, struct nk_color) )
-
 // NK_API void nk_color_hsva_b(nk_byte *h, nk_byte *s, nk_byte *v, nk_byte *a, struct nk_color);
-LUA_NK_API_NORET( nk_color_hsva_b, nk_byte *h, nk_byte *s, nk_byte *v, nk_byte *a, struct nk_color) )
-
 // NK_API void nk_color_hsva_iv(int *hsva_out, struct nk_color);
-LUA_NK_API_NORET( nk_color_hsva_iv, int *hsva_out, struct nk_color) )
-
 // NK_API void nk_color_hsva_bv(nk_byte *hsva_out, struct nk_color);
-LUA_NK_API_NORET( nk_color_hsva_bv, nk_byte *hsva_out, struct nk_color) )
-
 // NK_API void nk_color_hsva_f(float *out_h, float *out_s, float *out_v, float *out_a, struct nk_color);
-LUA_NK_API_NORET( nk_color_hsva_f, float *out_h, float *out_s, float *out_v, float *out_a, struct nk_color) )
-
 // NK_API void nk_color_hsva_fv(float *hsva_out, struct nk_color);
-LUA_NK_API_NORET( nk_color_hsva_fv, float *hsva_out, struct nk_color) )
-
 
 // NK_API nk_handle nk_handle_ptr(void*);
-LUA_NK_API( lua_push_nk_handle, nk_handle_ptr, void*) )
-
 // NK_API nk_handle nk_handle_id(int);
-LUA_NK_API( lua_push_nk_handle, nk_handle_id, int) )
-
 // NK_API struct nk_image nk_image_handle(nk_handle);
-LUA_NK_API( lua_push_nk_image, nk_image_handle, nk_handle) )
-
 // NK_API struct nk_image nk_image_ptr(void*);
-LUA_NK_API( lua_push_nk_image, nk_image_ptr, void*) )
-
 // NK_API struct nk_image nk_image_id(int);
-LUA_NK_API( lua_push_nk_image, nk_image_id, int) )
-
 // NK_API int nk_image_is_subimage(const struct nk_image* img);
-LUA_NK_API( lua_pushboolean, nk_image_is_subimage, const struct nk_image* img) )
-
 // NK_API struct nk_image nk_subimage_ptr(void*, unsigned short w, unsigned short h, struct nk_rect sub_region);
-LUA_NK_API( lua_push_nk_image, nk_subimage_ptr, void*, unsigned short w, unsigned short h, lua_check_nk_rect(L,2) )
-
 // NK_API struct nk_image nk_subimage_id(int, unsigned short w, unsigned short h, struct nk_rect sub_region);
-LUA_NK_API( lua_push_nk_image, nk_subimage_id, int, unsigned short w, unsigned short h, lua_check_nk_rect(L,2) )
-
 // NK_API struct nk_image nk_subimage_handle(nk_handle, unsigned short w, unsigned short h, struct nk_rect sub_region);
-LUA_NK_API( lua_push_nk_image, nk_subimage_handle, nk_handle, unsigned short w, unsigned short h, lua_check_nk_rect(L,2) )
-
 
 // NK_API nk_hash nk_murmur_hash(const void *key, int len, nk_hash seed);
 // NK_API void nk_triangle_from_direction(struct nk_vec2 *result, struct nk_rect r, float pad_x, float pad_y, enum nk_heading);
-LUA_NK_API_NORET( nk_triangle_from_direction, struct nk_vec2 *result, lua_check_nk_rect(L,2), float pad_x, float pad_y, enum nk_heading) )
+LUA_NK_API_NORET( nk_triangle_from_direction, lua_check_nk_vec2_ref(L,1), lua_check_nk_rect(L,2), lua_check_nk_float(L,3), lua_check_nk_float(L,4), lua_check_nk_enum(nk_heading,5) )
 
 
 // NK_API struct nk_vec2 nk_vec2(float x, float y);
@@ -1275,14 +1304,11 @@ LUA_NK_API( lua_push_nk_vec2, nk_vec2, lua_check_nk_float(L,1), lua_check_nk_flo
 LUA_NK_API( lua_push_nk_vec2, nk_vec2i, lua_check_nk_int(L,1), lua_check_nk_int(L,2) )
 
 // NK_API struct nk_vec2 nk_vec2v(const float *xy);
-LUA_NK_API( lua_push_nk_vec2, nk_vec2v, const float *xy) )
-
 // NK_API struct nk_vec2 nk_vec2iv(const int *xy);
-LUA_NK_API( lua_push_nk_vec2, nk_vec2iv, const int *xy) )
 
 
 // NK_API struct nk_rect nk_get_null_rect(void);
-LUA_NK_API( lua_push_nk_rect, nk_get_null_rect, void) )
+// LUA_NK_API( lua_push_nk_rect, nk_get_null_rect, void) )
 
 // NK_API struct nk_rect nk_rect(float x, float y, float w, float h);
 LUA_NK_API( lua_push_nk_rect, nk_rect, lua_check_nk_float(L,1), lua_check_nk_float(L,2), lua_check_nk_float(L,3), lua_check_nk_float(L,4) )
@@ -1291,58 +1317,31 @@ LUA_NK_API( lua_push_nk_rect, nk_rect, lua_check_nk_float(L,1), lua_check_nk_flo
 LUA_NK_API( lua_push_nk_rect, nk_recti, lua_check_nk_int(L,1), lua_check_nk_int(L,2), lua_check_nk_int(L,3), lua_check_nk_int(L,4) )
 
 // NK_API struct nk_rect nk_recta(struct nk_vec2 pos, struct nk_vec2 size);
-LUA_NK_API( lua_push_nk_rect, nk_recta, lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,3) )
+LUA_NK_API( lua_push_nk_rect, nk_recta, lua_check_nk_vec2(L,1), lua_check_nk_vec2(L,2) )
 
 // NK_API struct nk_rect nk_rectv(const float *xywh);
-LUA_NK_API( lua_push_nk_rect, nk_rectv, const float *xywh) )
-
 // NK_API struct nk_rect nk_rectiv(const int *xywh);
-LUA_NK_API( lua_push_nk_rect, nk_rectiv, const int *xywh) )
 
 // NK_API struct nk_vec2 nk_rect_pos(struct nk_rect);
-LUA_NK_API( lua_push_nk_vec2, nk_rect_pos, lua_check_nk_rect(L,2) )
+LUA_NK_API( lua_push_nk_vec2, nk_rect_pos, lua_check_nk_rect(L,1) )
 
 // NK_API struct nk_vec2 nk_rect_size(struct nk_rect);
-LUA_NK_API( lua_push_nk_vec2, nk_rect_size, lua_check_nk_rect(L,2) )
+LUA_NK_API( lua_push_nk_vec2, nk_rect_size, lua_check_nk_rect(L,1) )
 
 
 // NK_API int nk_strlen(const char *str);
-LUA_NK_API( lua_pushboolean, nk_strlen, const char *str) )
-
 // NK_API int nk_stricmp(const char *s1, const char *s2);
-LUA_NK_API( lua_pushboolean, nk_stricmp, const char *s1, const char *s2) )
-
 // NK_API int nk_stricmpn(const char *s1, const char *s2, int n);
-LUA_NK_API( lua_pushboolean, nk_stricmpn, const char *s1, const char *s2, int n) )
-
 // NK_API int nk_strtoi(const char *str, const char **endptr);
-LUA_NK_API( lua_pushboolean, nk_strtoi, const char *str, const char **endptr) )
-
 // NK_API float nk_strtof(const char *str, const char **endptr);
-LUA_NK_API( lua_pushnumber, nk_strtof, const char *str, const char **endptr) )
-
 // NK_API double nk_strtod(const char *str, const char **endptr);
-LUA_NK_API( lua_pushnumber, nk_strtod, const char *str, const char **endptr) )
-
 // NK_API int nk_strfilter(const char *text, const char *regexp);
-LUA_NK_API( lua_pushboolean, nk_strfilter, const char *text, const char *regexp) )
-
 // NK_API int nk_strmatch_fuzzy_string(char const *str, char const *pattern, int *out_score);
-LUA_NK_API( lua_pushboolean, nk_strmatch_fuzzy_string, char const *str, char const *pattern, int *out_score) )
-
 // NK_API int nk_strmatch_fuzzy_text(const char *txt, int txt_len, const char *pattern, int *out_score);
-LUA_NK_API( lua_pushboolean, nk_strmatch_fuzzy_text, const char *txt, lua_check_nk_text_len(L,3), const char *pattern, int *out_score) )
-
 
 // NK_API int nk_utf_decode(const char*, nk_rune*, int);
-LUA_NK_API( lua_pushboolean, nk_utf_decode, luaL_checkstring(L,2), nk_rune*, int) )
-
 // NK_API int nk_utf_encode(nk_rune, char*, int);
-LUA_NK_API( lua_pushboolean, nk_utf_encode, nk_rune, char*, int) )
-
 // NK_API int nk_utf_len(const char*, int byte_len);
-LUA_NK_API( lua_pushboolean, nk_utf_len, luaL_checkstring(L,2), int byte_len) )
-
 // NK_API const char* nk_utf_at(const char *buffer, int length, int index, nk_rune *unicode, int *len);
 
 #ifdef NK_INCLUDE_FONT_BAKING
@@ -1354,39 +1353,41 @@ LUA_NK_API( lua_pushboolean, nk_utf_len, luaL_checkstring(L,2), int byte_len) )
 
 #ifdef NK_INCLUDE_DEFAULT_ALLOCATOR
 // NK_API void nk_font_atlas_init_default(struct nk_font_atlas*);
-LUA_NK_API_NORET( nk_font_atlas_init_default, struct nk_font_atlas*) )
+LUA_NK_API_NORET( nk_font_atlas_init_default, lua_check_nk_font_atlas_ref(L,1) )
 
 #endif
 // NK_API void nk_font_atlas_init(struct nk_font_atlas*, struct nk_allocator*);
-LUA_NK_API_NORET( nk_font_atlas_init, struct nk_font_atlas*, struct nk_allocator*) )
-
 // NK_API void nk_font_atlas_init_custom(struct nk_font_atlas*, struct nk_allocator *persistent, struct nk_allocator *transient);
-LUA_NK_API_NORET( nk_font_atlas_init_custom, struct nk_font_atlas*, struct nk_allocator *persistent, struct nk_allocator *transient) )
 
 // NK_API void nk_font_atlas_begin(struct nk_font_atlas*);
-LUA_NK_API_NORET( nk_font_atlas_begin, struct nk_font_atlas*) )
+LUA_NK_API_NORET( nk_font_atlas_begin, lua_check_nk_font_atlas_ref(L,1) )
 
 // NK_API struct nk_font_config nk_font_config(float pixel_height);
+
 // NK_API struct nk_font *nk_font_atlas_add(struct nk_font_atlas*, const struct nk_font_config*);
+LUA_NK_API(lua_push_nk_font, nk_font_atlas_add, lua_check_nk_font_atlas_ref(L,1), lua_check_nk_font_config_ref(L,2) )
+
 #ifdef NK_INCLUDE_DEFAULT_FONT
 // NK_API struct nk_font* nk_font_atlas_add_default(struct nk_font_atlas*, float height, const struct nk_font_config*);
+LUA_NK_API(lua_push_nk_font, nk_font_atlas_add_default, lua_check_nk_font_atlas_ref(L,1), lua_check_nk_float(L,2), lua_check_nk_font_config_ref(L,3) )
+
 #endif
 // NK_API struct nk_font* nk_font_atlas_add_from_memory(struct nk_font_atlas *atlas, void *memory, nk_size size, float height, const struct nk_font_config *config);
 #ifdef NK_INCLUDE_STANDARD_IO
 // NK_API struct nk_font* nk_font_atlas_add_from_file(struct nk_font_atlas *atlas, const char *file_path, float height, const struct nk_font_config*);
+LUA_NK_API(lua_push_nk_font, nk_font_atlas_add_from_file, lua_check_nk_font_atlas_ref(L,1), luaL_checkstring(L,2), luaL_check_nk_float(L,3), lua_check_nk_font_config_ref(L,4) )
+
 #endif
 // NK_API struct nk_font *nk_font_atlas_add_compressed(struct nk_font_atlas*, void *memory, nk_size size, float height, const struct nk_font_config*);
 // NK_API struct nk_font* nk_font_atlas_add_compressed_base85(struct nk_font_atlas*, const char *data, float height, const struct nk_font_config *config);
 // NK_API const void* nk_font_atlas_bake(struct nk_font_atlas*, int *width, int *height, enum nk_font_atlas_format);
 // NK_API void nk_font_atlas_end(struct nk_font_atlas*, nk_handle tex, struct nk_draw_null_texture*);
-LUA_NK_API_NORET( nk_font_atlas_end, struct nk_font_atlas*, nk_handle tex, struct nk_draw_null_texture*) )
-
 // NK_API const struct nk_font_glyph* nk_font_find_glyph(struct nk_font*, nk_rune unicode);
 // NK_API void nk_font_atlas_cleanup(struct nk_font_atlas *atlas);
-LUA_NK_API_NORET( nk_font_atlas_cleanup, struct nk_font_atlas *atlas) )
+LUA_NK_API_NORET( nk_font_atlas_cleanup, lua_check_nk_font_atlas_ref(L,1) )
 
 // NK_API void nk_font_atlas_clear(struct nk_font_atlas*);
-LUA_NK_API_NORET( nk_font_atlas_clear, struct nk_font_atlas*) )
+LUA_NK_API_NORET( nk_font_atlas_clear, lua_check_nk_font_atlas_ref(L,1) )
 
 
 #endif
@@ -1397,28 +1398,20 @@ LUA_NK_API_NORET( nk_buffer_init_default, struct nk_buffer*) )
 
 #endif
 // NK_API void nk_buffer_init(struct nk_buffer*, const struct nk_allocator*, nk_size size);
-LUA_NK_API_NORET( nk_buffer_init, struct nk_buffer*, const struct nk_allocator*, nk_size size) )
-
 // NK_API void nk_buffer_init_fixed(struct nk_buffer*, void *memory, nk_size size);
-LUA_NK_API_NORET( nk_buffer_init_fixed, struct nk_buffer*, void *memory, nk_size size) )
-
 // NK_API void nk_buffer_info(struct nk_memory_status*, struct nk_buffer*);
-LUA_NK_API_NORET( nk_buffer_info, struct nk_memory_status*, struct nk_buffer*) )
-
 // NK_API void nk_buffer_push(struct nk_buffer*, enum nk_buffer_allocation_type type, const void *memory, nk_size size, nk_size align);
-LUA_NK_API_NORET( nk_buffer_push, struct nk_buffer*, enum nk_buffer_allocation_type type, const void *memory, nk_size size, nk_size align) )
-
 // NK_API void nk_buffer_mark(struct nk_buffer*, enum nk_buffer_allocation_type type);
-LUA_NK_API_NORET( nk_buffer_mark, struct nk_buffer*, enum nk_buffer_allocation_type type) )
+LUA_NK_API_NORET( nk_buffer_mark, lua_check_nk_buffer_ref(L,1), lua_check_nk_enum(nk_buffer_allocation_type,2) )
 
 // NK_API void nk_buffer_reset(struct nk_buffer*, enum nk_buffer_allocation_type type);
-LUA_NK_API_NORET( nk_buffer_reset, struct nk_buffer*, enum nk_buffer_allocation_type type) )
+LUA_NK_API_NORET( nk_buffer_reset, lua_check_nk_buffer_ref(L,1), lua_check_nk_enum(nk_buffer_allocation_type,2) )
 
 // NK_API void nk_buffer_clear(struct nk_buffer*);
-LUA_NK_API_NORET( nk_buffer_clear, struct nk_buffer*) )
+LUA_NK_API_NORET( nk_buffer_clear, lua_check_nk_buffer_ref(L,1) )
 
 // NK_API void nk_buffer_free(struct nk_buffer*);
-LUA_NK_API_NORET( nk_buffer_free, struct nk_buffer*) )
+LUA_NK_API_NORET( nk_buffer_free, lua_check_nk_buffer_ref(L,1) )
 
 // NK_API void *nk_buffer_memory(struct nk_buffer*);
 // NK_API const void *nk_buffer_memory_const(const struct nk_buffer*);
@@ -1426,79 +1419,33 @@ LUA_NK_API_NORET( nk_buffer_free, struct nk_buffer*) )
 
 #ifdef NK_INCLUDE_DEFAULT_ALLOCATOR
 // NK_API void nk_str_init_default(struct nk_str*);
-LUA_NK_API_NORET( nk_str_init_default, struct nk_str*) )
-
 #endif
 // NK_API void nk_str_init(struct nk_str*, const struct nk_allocator*, nk_size size);
-LUA_NK_API_NORET( nk_str_init, struct nk_str*, const struct nk_allocator*, nk_size size) )
-
 // NK_API void nk_str_init_fixed(struct nk_str*, void *memory, nk_size size);
-LUA_NK_API_NORET( nk_str_init_fixed, struct nk_str*, void *memory, nk_size size) )
-
 // NK_API void nk_str_clear(struct nk_str*);
-LUA_NK_API_NORET( nk_str_clear, struct nk_str*) )
-
 // NK_API void nk_str_free(struct nk_str*);
-LUA_NK_API_NORET( nk_str_free, struct nk_str*) )
-
 
 // NK_API int nk_str_append_text_char(struct nk_str*, const char*, int);
-LUA_NK_API( lua_pushboolean, nk_str_append_text_char, struct nk_str*, luaL_checkstring(L,2), int) )
-
 // NK_API int nk_str_append_str_char(struct nk_str*, const char*);
-LUA_NK_API( lua_pushboolean, nk_str_append_str_char, struct nk_str*, luaL_checkstring(L,2) )
-
 // NK_API int nk_str_append_text_utf8(struct nk_str*, const char*, int);
-LUA_NK_API( lua_pushboolean, nk_str_append_text_utf8, struct nk_str*, luaL_checkstring(L,2), int) )
-
 // NK_API int nk_str_append_str_utf8(struct nk_str*, const char*);
-LUA_NK_API( lua_pushboolean, nk_str_append_str_utf8, struct nk_str*, luaL_checkstring(L,2) )
-
 // NK_API int nk_str_append_text_runes(struct nk_str*, const nk_rune*, int);
-LUA_NK_API( lua_pushboolean, nk_str_append_text_runes, struct nk_str*, const nk_rune*, int) )
-
 // NK_API int nk_str_append_str_runes(struct nk_str*, const nk_rune*);
-LUA_NK_API( lua_pushboolean, nk_str_append_str_runes, struct nk_str*, const nk_rune*) )
-
 
 // NK_API int nk_str_insert_at_char(struct nk_str*, int pos, const char*, int);
-LUA_NK_API( lua_pushboolean, nk_str_insert_at_char, struct nk_str*, int pos, luaL_checkstring(L,2), int) )
-
 // NK_API int nk_str_insert_at_rune(struct nk_str*, int pos, const char*, int);
-LUA_NK_API( lua_pushboolean, nk_str_insert_at_rune, struct nk_str*, int pos, luaL_checkstring(L,2), int) )
-
 
 // NK_API int nk_str_insert_text_char(struct nk_str*, int pos, const char*, int);
-LUA_NK_API( lua_pushboolean, nk_str_insert_text_char, struct nk_str*, int pos, luaL_checkstring(L,2), int) )
-
 // NK_API int nk_str_insert_str_char(struct nk_str*, int pos, const char*);
-LUA_NK_API( lua_pushboolean, nk_str_insert_str_char, struct nk_str*, int pos, luaL_checkstring(L,2) )
-
 // NK_API int nk_str_insert_text_utf8(struct nk_str*, int pos, const char*, int);
-LUA_NK_API( lua_pushboolean, nk_str_insert_text_utf8, struct nk_str*, int pos, luaL_checkstring(L,2), int) )
-
 // NK_API int nk_str_insert_str_utf8(struct nk_str*, int pos, const char*);
-LUA_NK_API( lua_pushboolean, nk_str_insert_str_utf8, struct nk_str*, int pos, luaL_checkstring(L,2) )
-
 // NK_API int nk_str_insert_text_runes(struct nk_str*, int pos, const nk_rune*, int);
-LUA_NK_API( lua_pushboolean, nk_str_insert_text_runes, struct nk_str*, int pos, const nk_rune*, int) )
-
 // NK_API int nk_str_insert_str_runes(struct nk_str*, int pos, const nk_rune*);
-LUA_NK_API( lua_pushboolean, nk_str_insert_str_runes, struct nk_str*, int pos, const nk_rune*) )
-
 
 // NK_API void nk_str_remove_chars(struct nk_str*, int len);
-LUA_NK_API_NORET( nk_str_remove_chars, struct nk_str*, int len) )
-
 // NK_API void nk_str_remove_runes(struct nk_str *str, int len);
-LUA_NK_API_NORET( nk_str_remove_runes, struct nk_str *str, int len) )
-
 // NK_API void nk_str_delete_chars(struct nk_str*, int pos, int len);
-LUA_NK_API_NORET( nk_str_delete_chars, struct nk_str*, int pos, int len) )
-
 // NK_API void nk_str_delete_runes(struct nk_str*, int pos, int len);
-LUA_NK_API_NORET( nk_str_delete_runes, struct nk_str*, int pos, int len) )
-
 
 // NK_API char *nk_str_at_char(struct nk_str*, int pos);
 // NK_API char *nk_str_at_rune(struct nk_str*, int pos, nk_rune *unicode, int *len);
@@ -1509,281 +1456,281 @@ LUA_NK_API_NORET( nk_str_delete_runes, struct nk_str*, int pos, int len) )
 // NK_API char *nk_str_get(struct nk_str*);
 // NK_API const char *nk_str_get_const(const struct nk_str*);
 // NK_API int nk_str_len(struct nk_str*);
-LUA_NK_API( lua_pushboolean, nk_str_len, struct nk_str*) )
-
 // NK_API int nk_str_len_char(struct nk_str*);
-LUA_NK_API( lua_pushboolean, nk_str_len_char, struct nk_str*) )
-
 
 // NK_API int nk_filter_default(const struct nk_text_edit*, nk_rune unicode);
-LUA_NK_API( lua_pushboolean, nk_filter_default, const struct nk_text_edit*, nk_rune unicode) )
-
 // NK_API int nk_filter_ascii(const struct nk_text_edit*, nk_rune unicode);
-LUA_NK_API( lua_pushboolean, nk_filter_ascii, const struct nk_text_edit*, nk_rune unicode) )
-
 // NK_API int nk_filter_float(const struct nk_text_edit*, nk_rune unicode);
-LUA_NK_API( lua_pushboolean, nk_filter_float, const struct nk_text_edit*, nk_rune unicode) )
-
 // NK_API int nk_filter_decimal(const struct nk_text_edit*, nk_rune unicode);
-LUA_NK_API( lua_pushboolean, nk_filter_decimal, const struct nk_text_edit*, nk_rune unicode) )
-
 // NK_API int nk_filter_hex(const struct nk_text_edit*, nk_rune unicode);
-LUA_NK_API( lua_pushboolean, nk_filter_hex, const struct nk_text_edit*, nk_rune unicode) )
-
 // NK_API int nk_filter_oct(const struct nk_text_edit*, nk_rune unicode);
-LUA_NK_API( lua_pushboolean, nk_filter_oct, const struct nk_text_edit*, nk_rune unicode) )
-
 // NK_API int nk_filter_binary(const struct nk_text_edit*, nk_rune unicode);
-LUA_NK_API( lua_pushboolean, nk_filter_binary, const struct nk_text_edit*, nk_rune unicode) )
-
-
 
 #ifdef NK_INCLUDE_DEFAULT_ALLOCATOR
 // NK_API void nk_textedit_init_default(struct nk_text_edit*);
-LUA_NK_API_NORET( nk_textedit_init_default, struct nk_text_edit*) )
+LUA_NK_API_NORET( nk_textedit_init_default, lua_check_nk_text_edit(L,1) )
 
 #endif
 // NK_API void nk_textedit_init(struct nk_text_edit*, struct nk_allocator*, nk_size size);
-LUA_NK_API_NORET( nk_textedit_init, struct nk_text_edit*, struct nk_allocator*, nk_size size) )
-
 // NK_API void nk_textedit_init_fixed(struct nk_text_edit*, void *memory, nk_size size);
-LUA_NK_API_NORET( nk_textedit_init_fixed, struct nk_text_edit*, void *memory, nk_size size) )
-
 // NK_API void nk_textedit_free(struct nk_text_edit*);
-LUA_NK_API_NORET( nk_textedit_free, struct nk_text_edit*) )
+LUA_NK_API_NORET( nk_textedit_free, lua_check_nk_text_edit(L,1) )
 
 // NK_API void nk_textedit_text(struct nk_text_edit*, const char*, int total_len);
-LUA_NK_API_NORET( nk_textedit_text, struct nk_text_edit*, luaL_checkstring(L,2), int total_len) )
+LUA_NK_API_NORET( nk_textedit_text, lua_check_nk_text_edit(L,1), luaL_checkstring(L,2), lua_check_nk_text_len(L,3) )
 
 // NK_API void nk_textedit_delete(struct nk_text_edit*, int where, int len);
-LUA_NK_API_NORET( nk_textedit_delete, struct nk_text_edit*, int where, int len) )
+LUA_NK_API_NORET( nk_textedit_delete, lua_check_nk_text_edit(L,1), lua_check_nk_int(L,2), lua_check_nk_int(L,3) )
 
 // NK_API void nk_textedit_delete_selection(struct nk_text_edit*);
-LUA_NK_API_NORET( nk_textedit_delete_selection, struct nk_text_edit*) )
+LUA_NK_API_NORET( nk_textedit_delete_selection, lua_check_nk_text_edit(L,1) )
 
 // NK_API void nk_textedit_select_all(struct nk_text_edit*);
-LUA_NK_API_NORET( nk_textedit_select_all, struct nk_text_edit*) )
+LUA_NK_API_NORET( nk_textedit_select_all, lua_check_nk_text_edit(L,1) )
 
 // NK_API int nk_textedit_cut(struct nk_text_edit*);
-LUA_NK_API( lua_pushboolean, nk_textedit_cut, struct nk_text_edit*) )
+LUA_NK_API( lua_pushboolean, nk_textedit_cut, lua_check_nk_text_edit(L,1) )
 
 // NK_API int nk_textedit_paste(struct nk_text_edit*, char const*, int len);
-LUA_NK_API( lua_pushboolean, nk_textedit_paste, struct nk_text_edit*, char const*, int len) )
+LUA_NK_API( lua_pushboolean, nk_textedit_paste, lua_check_nk_text_edit(L,1), luaL_checkstring(L,2), lua_check_nk_text_len(L,3) )
 
 // NK_API void nk_textedit_undo(struct nk_text_edit*);
-LUA_NK_API_NORET( nk_textedit_undo, struct nk_text_edit*) )
+LUA_NK_API_NORET( nk_textedit_undo, lua_check_nk_text_edit(L,1) )
 
 // NK_API void nk_textedit_redo(struct nk_text_edit*);
-LUA_NK_API_NORET( nk_textedit_redo, struct nk_text_edit*) )
+LUA_NK_API_NORET( nk_textedit_redo, lua_check_nk_text_edit(L,1) )
 
 
 // NK_API void nk_stroke_line(struct nk_command_buffer *b, float x0, float y0, float x1, float y1, float line_thickness, struct nk_color);
-LUA_NK_API_NORET( nk_stroke_line, struct nk_command_buffer *b, float x0, float y0, float x1, float y1, float line_thickness, struct nk_color) )
+LUA_NK_API_NORET( nk_stroke_line, lua_check_nk_command_buffer(L,1), lua_check_nk_float(L,2), lua_check_nk_float(L,3)
+	, lua_check_nk_float(L,4), lua_check_nk_float(L,5), lua_check_nk_float(L,6)
+	, lua_check_nk_color(L,7) )
 
 // NK_API void nk_stroke_curve(struct nk_command_buffer*, float, float, float, float, float, float, float, float, float line_thickness, struct nk_color);
-LUA_NK_API_NORET( nk_stroke_curve, struct nk_command_buffer*, float, float, float, float, float, float, float, float, float line_thickness, struct nk_color) )
+LUA_NK_API_NORET( nk_stroke_curve, lua_check_nk_command_buffer(L,1), lua_check_nk_float(L,2), lua_check_nk_float(L,3)
+	, lua_check_nk_float(L,4), lua_check_nk_float(L,5), lua_check_nk_float(L,6)
+	, lua_check_nk_float(L,7), lua_check_nk_float(L,8), lua_check_nk_float(L,9)
+	, lua_check_nk_float(L,10), lua_check_nk_color(L,11) )
 
 // NK_API void nk_stroke_rect(struct nk_command_buffer*, struct nk_rect, float rounding, float line_thickness, struct nk_color);
-LUA_NK_API_NORET( nk_stroke_rect, struct nk_command_buffer*, lua_check_nk_rect(L,2), float rounding, float line_thickness, struct nk_color) )
+LUA_NK_API_NORET( nk_stroke_rect, lua_check_nk_command_buffer(L,1), lua_check_nk_rect(L,2), lua_check_nk_float(L,3), lua_check_nk_float(L,4), lua_check_nk_color(L,5) )
 
 // NK_API void nk_stroke_circle(struct nk_command_buffer*, struct nk_rect, float line_thickness, struct nk_color);
-LUA_NK_API_NORET( nk_stroke_circle, struct nk_command_buffer*, lua_check_nk_rect(L,2), float line_thickness, struct nk_color) )
+LUA_NK_API_NORET( nk_stroke_circle, lua_check_nk_command_buffer(L,1), lua_check_nk_rect(L,2), lua_check_nk_float(L,3), lua_check_nk_color(L,4) )
 
 // NK_API void nk_stroke_arc(struct nk_command_buffer*, float cx, float cy, float radius, float a_min, float a_max, float line_thickness, struct nk_color);
-LUA_NK_API_NORET( nk_stroke_arc, struct nk_command_buffer*, float cx, float cy, float radius, float a_min, float a_max, float line_thickness, struct nk_color) )
+LUA_NK_API_NORET( nk_stroke_arc, lua_check_nk_command_buffer(L,1), lua_check_nk_float(L,2), lua_check_nk_float(L,3)
+	, lua_check_nk_float(L,4), lua_check_nk_float(L,5), lua_check_nk_float(L,6)
+	, lua_check_nk_float(L,7), lua_check_nk_color(L,8) )
 
 // NK_API void nk_stroke_triangle(struct nk_command_buffer*, float, float, float, float, float, float, float line_thichness, struct nk_color);
-LUA_NK_API_NORET( nk_stroke_triangle, struct nk_command_buffer*, float, float, float, float, float, float, float line_thichness, struct nk_color) )
+LUA_NK_API_NORET( nk_stroke_triangle, lua_check_nk_command_buffer(L,1), lua_check_nk_float(L,2), lua_check_nk_float(L,3)
+	, lua_check_nk_float(L,4), lua_check_nk_float(L,5), lua_check_nk_float(L,6)
+	, lua_check_nk_float(L,7), lua_check_nk_float(L,8), lua_check_nk_color(L,9) )
 
 // NK_API void nk_stroke_polyline(struct nk_command_buffer*, float *points, int point_count, float line_thickness, struct nk_color col);
-LUA_NK_API_NORET( nk_stroke_polyline, struct nk_command_buffer*, float *points, int point_count, float line_thickness, struct nk_color col) )
+LUA_NK_API_NORET( nk_stroke_polyline, lua_check_nk_command_buffer(L,1), lua_check_nk_float_array(L,2,lua_check_nk_int(L,3)), lua_check_nk_int(L,3)
+	, lua_check_nk_float(L,4), lua_check_nk_color(L,5) )
 
 // NK_API void nk_stroke_polygon(struct nk_command_buffer*, float*, int point_count, float line_thickness, struct nk_color);
-LUA_NK_API_NORET( nk_stroke_polygon, struct nk_command_buffer*, float*, int point_count, float line_thickness, struct nk_color) )
+LUA_NK_API_NORET( nk_stroke_polygon, lua_check_nk_command_buffer(L,1), lua_check_nk_float_array(L,2,lua_check_nk_int(L,3)), lua_check_nk_int(L,3)
+	, lua_check_nk_float(L,4), lua_check_nk_color(L,5) )
 
 
 
 // NK_API void nk_fill_rect(struct nk_command_buffer*, struct nk_rect, float rounding, struct nk_color);
-LUA_NK_API_NORET( nk_fill_rect, struct nk_command_buffer*, lua_check_nk_rect(L,2), float rounding, struct nk_color) )
+LUA_NK_API_NORET( nk_fill_rect, lua_check_nk_command_buffer(L,1), lua_check_nk_rect(L,2), lua_check_nk_float(L,3), lua_check_nk_color(L,4) )
 
 // NK_API void nk_fill_rect_multi_color(struct nk_command_buffer*, struct nk_rect, struct nk_color left, struct nk_color top, struct nk_color right, struct nk_color bottom);
-LUA_NK_API_NORET( nk_fill_rect_multi_color, struct nk_command_buffer*, lua_check_nk_rect(L,2), struct nk_color left, struct nk_color top, struct nk_color right, struct nk_color bottom) )
+LUA_NK_API_NORET( nk_fill_rect_multi_color, lua_check_nk_command_buffer(L,1), lua_check_nk_rect(L,2), lua_check_nk_color(L,3)
+	, lua_check_nk_color(L,4), lua_check_nk_color(L,5), lua_check_nk_color(L,6) )
 
 // NK_API void nk_fill_circle(struct nk_command_buffer*, struct nk_rect, struct nk_color);
-LUA_NK_API_NORET( nk_fill_circle, struct nk_command_buffer*, lua_check_nk_rect(L,2), struct nk_color) )
+LUA_NK_API_NORET( nk_fill_circle, lua_check_nk_command_buffer(L,1), lua_check_nk_rect(L,2), lua_check_nk_color(L,3) )
 
 // NK_API void nk_fill_arc(struct nk_command_buffer*, float cx, float cy, float radius, float a_min, float a_max, struct nk_color);
-LUA_NK_API_NORET( nk_fill_arc, struct nk_command_buffer*, float cx, float cy, float radius, float a_min, float a_max, struct nk_color) )
+LUA_NK_API_NORET( nk_fill_arc, lua_check_nk_command_buffer(L,1), lua_check_nk_float(L,2), lua_check_nk_float(L,3)
+	, lua_check_nk_float(L,4), lua_check_nk_float(L,5), lua_check_nk_float(L,6)
+	, lua_check_nk_color(L,7) )
 
 // NK_API void nk_fill_triangle(struct nk_command_buffer*, float x0, float y0, float x1, float y1, float x2, float y2, struct nk_color);
-LUA_NK_API_NORET( nk_fill_triangle, struct nk_command_buffer*, float x0, float y0, float x1, float y1, float x2, float y2, struct nk_color) )
+LUA_NK_API_NORET( nk_fill_triangle, lua_check_nk_command_buffer(L,1), lua_check_nk_float(L,2), lua_check_nk_float(L,3)
+	, lua_check_nk_float(L,4), lua_check_nk_float(L,5), lua_check_nk_float(L,6)
+	, lua_check_nk_float(L,7), lua_check_nk_color(L,8) )
 
 // NK_API void nk_fill_polygon(struct nk_command_buffer*, float*, int point_count, struct nk_color);
-LUA_NK_API_NORET( nk_fill_polygon, struct nk_command_buffer*, float*, int point_count, struct nk_color) )
-
+LUA_NK_API_NORET( nk_fill_polygon, lua_check_nk_command_buffer(L,1), lua_check_nk_float_array(L,2,lua_check_nk_int(L,3)), lua_check_nk_int(L,3), lua_check_nk_color(L,4) )
 
 
 // NK_API void nk_draw_image(struct nk_command_buffer*, struct nk_rect, const struct nk_image*, struct nk_color);
-LUA_NK_API_NORET( nk_draw_image, struct nk_command_buffer*, lua_check_nk_rect(L,2), const struct nk_image*, struct nk_color) )
+LUA_NK_API_NORET( nk_draw_image, lua_check_nk_command_buffer(L,1), lua_check_nk_rect(L,2), lua_check_nk_image_ref(L,3), lua_check_nk_color(L,4) )
 
 // NK_API void nk_draw_text(struct nk_command_buffer*, struct nk_rect, const char *text, int len, const struct nk_user_font*, struct nk_color, struct nk_color);
-LUA_NK_API_NORET( nk_draw_text, struct nk_command_buffer*, lua_check_nk_rect(L,2), luaL_checkstring(L,2), lua_check_nk_text_len(L,3), lua_check_nk_user_font(L,2), struct nk_color, struct nk_color) )
+LUA_NK_API_NORET( nk_draw_text, lua_check_nk_command_buffer(L,1), lua_check_nk_rect(L,2), luaL_checkstring(L,3), lua_check_nk_text_len(L,4)
+	, lua_check_nk_user_font(L,5), lua_check_nk_color(L,6), lua_check_nk_color(L,7) )
 
 // NK_API void nk_push_scissor(struct nk_command_buffer*, struct nk_rect);
-LUA_NK_API_NORET( nk_push_scissor, struct nk_command_buffer*, lua_check_nk_rect(L,2)) )
+LUA_NK_API_NORET( nk_push_scissor, lua_check_nk_command_buffer(L,1), lua_check_nk_rect(L,2)) )
 
 // NK_API void nk_push_custom(struct nk_command_buffer*, struct nk_rect, nk_command_custom_callback, nk_handle usr);
-LUA_NK_API_NORET( nk_push_custom, struct nk_command_buffer*, lua_check_nk_rect(L,2), nk_command_custom_callback, nk_handle usr) )
-
 
 // NK_API int nk_input_has_mouse_click(const struct nk_input*, enum nk_buttons);
-LUA_NK_API( lua_pushboolean, nk_input_has_mouse_click, const struct nk_input*, enum nk_buttons) )
+LUA_NK_API( lua_pushboolean, nk_input_has_mouse_click, lua_check_nk_input_ref(L,1), lua_check_nk_enum(nk_buttons,2) )
 
 // NK_API int nk_input_has_mouse_click_in_rect(const struct nk_input*, enum nk_buttons, struct nk_rect);
-LUA_NK_API( lua_pushboolean, nk_input_has_mouse_click_in_rect, const struct nk_input*, enum nk_buttons, lua_check_nk_rect(L,2) )
+LUA_NK_API( lua_pushboolean, nk_input_has_mouse_click_in_rect, lua_check_nk_input_ref(L,1), lua_check_nk_enum(nk_buttons,2), lua_check_nk_rect(L,3) )
 
 // NK_API int nk_input_has_mouse_click_down_in_rect(const struct nk_input*, enum nk_buttons, struct nk_rect, int down);
-LUA_NK_API( lua_pushboolean, nk_input_has_mouse_click_down_in_rect, const struct nk_input*, enum nk_buttons, lua_check_nk_rect(L,2), int down) )
+LUA_NK_API( lua_pushboolean, nk_input_has_mouse_click_down_in_rect, lua_check_nk_input_ref(L,1), lua_check_nk_enum(nk_buttons,2), lua_check_nk_rect(L,3), lua_toboolean(L,4) )
 
 // NK_API int nk_input_is_mouse_click_in_rect(const struct nk_input*, enum nk_buttons, struct nk_rect);
-LUA_NK_API( lua_pushboolean, nk_input_is_mouse_click_in_rect, const struct nk_input*, enum nk_buttons, lua_check_nk_rect(L,2) )
+LUA_NK_API( lua_pushboolean, nk_input_is_mouse_click_in_rect, lua_check_nk_input_ref(L,1), lua_check_nk_enum(nk_buttons,2), lua_check_nk_rect(L,3) )
 
 // NK_API int nk_input_is_mouse_click_down_in_rect(const struct nk_input *i, enum nk_buttons id, struct nk_rect b, int down);
-LUA_NK_API( lua_pushboolean, nk_input_is_mouse_click_down_in_rect, const struct nk_input *i, enum nk_buttons id, lua_check_nk_rect(L,2), int down) )
+LUA_NK_API( lua_pushboolean, nk_input_is_mouse_click_down_in_rect, lua_check_nk_input_ref(L,1), lua_check_nk_enum(nk_buttons,2), lua_check_nk_rect(L,3), lua_toboolean(L,4)) )
 
 // NK_API int nk_input_any_mouse_click_in_rect(const struct nk_input*, struct nk_rect);
-LUA_NK_API( lua_pushboolean, nk_input_any_mouse_click_in_rect, const struct nk_input*, lua_check_nk_rect(L,2) )
+LUA_NK_API( lua_pushboolean, nk_input_any_mouse_click_in_rect, lua_check_nk_input_ref(L,1), lua_check_nk_rect(L,2) )
 
 // NK_API int nk_input_is_mouse_prev_hovering_rect(const struct nk_input*, struct nk_rect);
-LUA_NK_API( lua_pushboolean, nk_input_is_mouse_prev_hovering_rect, const struct nk_input*, lua_check_nk_rect(L,2) )
+LUA_NK_API( lua_pushboolean, nk_input_is_mouse_prev_hovering_rect, lua_check_nk_input_ref(L,1), lua_check_nk_rect(L,2) )
 
 // NK_API int nk_input_is_mouse_hovering_rect(const struct nk_input*, struct nk_rect);
-LUA_NK_API( lua_pushboolean, nk_input_is_mouse_hovering_rect, const struct nk_input*, lua_check_nk_rect(L,2) )
+LUA_NK_API( lua_pushboolean, nk_input_is_mouse_hovering_rect, lua_check_nk_input_ref(L,1), lua_check_nk_rect(L,2) )
 
 // NK_API int nk_input_mouse_clicked(const struct nk_input*, enum nk_buttons, struct nk_rect);
-LUA_NK_API( lua_pushboolean, nk_input_mouse_clicked, const struct nk_input*, enum nk_buttons, lua_check_nk_rect(L,2) )
+LUA_NK_API( lua_pushboolean, nk_input_mouse_clicked, lua_check_nk_input_ref(L,1), lua_check_nk_enum(nk_buttons,2), lua_check_nk_rect(L,3) )
 
 // NK_API int nk_input_is_mouse_down(const struct nk_input*, enum nk_buttons);
-LUA_NK_API( lua_pushboolean, nk_input_is_mouse_down, const struct nk_input*, enum nk_buttons) )
+LUA_NK_API( lua_pushboolean, nk_input_is_mouse_down, lua_check_nk_input_ref(L,1), lua_check_nk_enum(nk_buttons,2) )
 
 // NK_API int nk_input_is_mouse_pressed(const struct nk_input*, enum nk_buttons);
-LUA_NK_API( lua_pushboolean, nk_input_is_mouse_pressed, const struct nk_input*, enum nk_buttons) )
+LUA_NK_API( lua_pushboolean, nk_input_is_mouse_pressed, lua_check_nk_input_ref(L,1), lua_check_nk_enum(nk_buttons,2) )
 
 // NK_API int nk_input_is_mouse_released(const struct nk_input*, enum nk_buttons);
-LUA_NK_API( lua_pushboolean, nk_input_is_mouse_released, const struct nk_input*, enum nk_buttons) )
+LUA_NK_API( lua_pushboolean, nk_input_is_mouse_released, lua_check_nk_input_ref(L,1), lua_check_nk_enum(nk_buttons,2) )
 
 // NK_API int nk_input_is_key_pressed(const struct nk_input*, enum nk_keys);
-LUA_NK_API( lua_pushboolean, nk_input_is_key_pressed, const struct nk_input*, enum nk_keys) )
+LUA_NK_API( lua_pushboolean, nk_input_is_key_pressed, lua_check_nk_input_ref(L,1), lua_check_nk_enum(nk_keys,2) )
 
 // NK_API int nk_input_is_key_released(const struct nk_input*, enum nk_keys);
-LUA_NK_API( lua_pushboolean, nk_input_is_key_released, const struct nk_input*, enum nk_keys) )
+LUA_NK_API( lua_pushboolean, nk_input_is_key_released, lua_check_nk_input_ref(L,1), lua_check_nk_enum(nk_keys,2) )
 
 // NK_API int nk_input_is_key_down(const struct nk_input*, enum nk_keys);
-LUA_NK_API( lua_pushboolean, nk_input_is_key_down, const struct nk_input*, enum nk_keys) )
-
+LUA_NK_API( lua_pushboolean, nk_input_is_key_down, lua_check_nk_input_ref(L,1), lua_check_nk_enum(nk_keys,2) )
 
 
 #ifdef NK_INCLUDE_VERTEX_BUFFER_OUTPUT
 
 // NK_API void nk_draw_list_init(struct nk_draw_list*);
-LUA_NK_API_NORET( nk_draw_list_init, struct nk_draw_list*) )
+LUA_NK_API_NORET( nk_draw_list_init, lua_check_nk_draw_list(L,1) )
 
 // NK_API void nk_draw_list_setup(struct nk_draw_list*, const struct nk_convert_config*, struct nk_buffer *cmds, struct nk_buffer *vertices, struct nk_buffer *elements, enum nk_anti_aliasing line_aa,enum nk_anti_aliasing shape_aa);
-LUA_NK_API_NORET( nk_draw_list_setup, struct nk_draw_list*, const struct nk_convert_config*, struct nk_buffer *cmds, struct nk_buffer *vertices, struct nk_buffer *elements, enum nk_anti_aliasing line_aa,enum nk_anti_aliasing shape_aa) )
 
 // NK_API void nk_draw_list_clear(struct nk_draw_list*);
-LUA_NK_API_NORET( nk_draw_list_clear, struct nk_draw_list*) )
+LUA_NK_API_NORET( nk_draw_list_clear, lua_check_nk_draw_list(L,1) )
 
 
 
-#define nk_draw_list_foreach(cmd, can, b) for((cmd)=nk__draw_list_begin(can, b); (cmd)!=0; (cmd)=nk__draw_list_next(cmd, b, can) )
+// #define nk_draw_list_foreach(cmd, can, b) for((cmd)=nk__draw_list_begin(can, b); (cmd)!=0; (cmd)=nk__draw_list_next(cmd, b, can) )
 // NK_API const struct nk_draw_command* nk__draw_list_begin(const struct nk_draw_list*, const struct nk_buffer*);
 // NK_API const struct nk_draw_command* nk__draw_list_next(const struct nk_draw_command*, const struct nk_buffer*, const struct nk_draw_list*);
 // NK_API const struct nk_draw_command* nk__draw_list_end(const struct nk_draw_list*, const struct nk_buffer*);
 // NK_API void nk_draw_list_clear(struct nk_draw_list *list);
-LUA_NK_API_NORET( nk_draw_list_clear, struct nk_draw_list *list) )
-
+LUA_NK_API_NORET( nk_draw_list_clear, lua_check_nk_draw_list(L,1) )
 
 
 // NK_API void nk_draw_list_path_clear(struct nk_draw_list*);
-LUA_NK_API_NORET( nk_draw_list_path_clear, struct nk_draw_list*) )
+LUA_NK_API_NORET( nk_draw_list_path_clear, lua_check_nk_draw_list(L,1) )
 
 // NK_API void nk_draw_list_path_line_to(struct nk_draw_list*, struct nk_vec2 pos);
-LUA_NK_API_NORET( nk_draw_list_path_line_to, struct nk_draw_list*, lua_check_nk_vec2(L,2) )
+LUA_NK_API_NORET( nk_draw_list_path_line_to, lua_check_nk_draw_list(L,1), lua_check_nk_vec2(L,2) )
 
 // NK_API void nk_draw_list_path_arc_to_fast(struct nk_draw_list*, struct nk_vec2 center, float radius, int a_min, int a_max);
-LUA_NK_API_NORET( nk_draw_list_path_arc_to_fast, struct nk_draw_list*, lua_check_nk_vec2(L,2), float radius, int a_min, int a_max) )
+LUA_NK_API_NORET( nk_draw_list_path_arc_to_fast, lua_check_nk_draw_list(L,1), lua_check_nk_vec2(L,2), lua_check_nk_float(L,3), lua_check_nk_int(L,4), lua_check_nk_int(L,5) )
 
 // NK_API void nk_draw_list_path_arc_to(struct nk_draw_list*, struct nk_vec2 center, float radius, float a_min, float a_max, unsigned int segments);
-LUA_NK_API_NORET( nk_draw_list_path_arc_to, struct nk_draw_list*, lua_check_nk_vec2(L,2), float radius, float a_min, float a_max, unsigned int segments) )
+LUA_NK_API_NORET( nk_draw_list_path_arc_to, lua_check_nk_draw_list(L,1), lua_check_nk_vec2(L,2), lua_check_nk_float(L,3)
+	, lua_check_nk_float(L,4), lua_check_nk_float(L,5), lua_check_nk_uint(L,6) )
 
 // NK_API void nk_draw_list_path_rect_to(struct nk_draw_list*, struct nk_vec2 a, struct nk_vec2 b, float rounding);
-LUA_NK_API_NORET( nk_draw_list_path_rect_to, struct nk_draw_list*, lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,2), float rounding) )
+LUA_NK_API_NORET( nk_draw_list_path_rect_to, lua_check_nk_draw_list(L,1), lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,3), lua_check_nk_float(L,4) )
 
 // NK_API void nk_draw_list_path_curve_to(struct nk_draw_list*, struct nk_vec2 p2, struct nk_vec2 p3, struct nk_vec2 p4, unsigned int num_segments);
-LUA_NK_API_NORET( nk_draw_list_path_curve_to, struct nk_draw_list*, lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,2), unsigned int num_segments) )
+LUA_NK_API_NORET( nk_draw_list_path_curve_to, lua_check_nk_draw_list(L,1), lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,3), lua_check_nk_vec2(L,4), lua_check_nk_uint(L,5) )
 
 // NK_API void nk_draw_list_path_fill(struct nk_draw_list*, struct nk_color);
-LUA_NK_API_NORET( nk_draw_list_path_fill, struct nk_draw_list*, struct nk_color) )
+LUA_NK_API_NORET( nk_draw_list_path_fill, lua_check_nk_draw_list(L,1), lua_check_nk_color(L,2) )
 
 // NK_API void nk_draw_list_path_stroke(struct nk_draw_list*, struct nk_color, enum nk_draw_list_stroke closed, float thickness);
-LUA_NK_API_NORET( nk_draw_list_path_stroke, struct nk_draw_list*, struct nk_color, enum nk_draw_list_stroke closed, float thickness) )
-
+LUA_NK_API_NORET( nk_draw_list_path_stroke, lua_check_nk_draw_list(L,1), lua_check_nk_color(L,2), lua_check_nk_enum(nk_draw_list_stroke,3), lua_check_nk_float(L,4) )
 
 
 // NK_API void nk_draw_list_stroke_line(struct nk_draw_list*, struct nk_vec2 a, struct nk_vec2 b, struct nk_color, float thickness);
-LUA_NK_API_NORET( nk_draw_list_stroke_line, struct nk_draw_list*, lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,2), struct nk_color, float thickness) )
+LUA_NK_API_NORET( nk_draw_list_stroke_line, lua_check_nk_draw_list(L,1), lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,2), lua_check_nk_color(L,3), lua_check_nk_float(L,4) )
 
 // NK_API void nk_draw_list_stroke_rect(struct nk_draw_list*, struct nk_rect rect, struct nk_color, float rounding, float thickness);
-LUA_NK_API_NORET( nk_draw_list_stroke_rect, struct nk_draw_list*, lua_check_nk_rect(L,2), struct nk_color, float rounding, float thickness) )
+LUA_NK_API_NORET( nk_draw_list_stroke_rect, lua_check_nk_draw_list(L,1), lua_check_nk_rect(L,2), lua_check_nk_color(L,3), lua_check_nk_float(L,4), lua_check_nk_float(L,5) )
 
 // NK_API void nk_draw_list_stroke_triangle(struct nk_draw_list*, struct nk_vec2 a, struct nk_vec2 b, struct nk_vec2 c, struct nk_color, float thickness);
-LUA_NK_API_NORET( nk_draw_list_stroke_triangle, struct nk_draw_list*, lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,2), struct nk_color, float thickness) )
+LUA_NK_API_NORET( nk_draw_list_stroke_triangle, lua_check_nk_draw_list(L,1), lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,3)
+	, lua_check_nk_vec2(L,4), lua_check_nk_color(L,5), lua_check_nk_float(L,6) )
 
 // NK_API void nk_draw_list_stroke_circle(struct nk_draw_list*, struct nk_vec2 center, float radius, struct nk_color, unsigned int segs, float thickness);
-LUA_NK_API_NORET( nk_draw_list_stroke_circle, struct nk_draw_list*, lua_check_nk_vec2(L,2), float radius, struct nk_color, unsigned int segs, float thickness) )
+LUA_NK_API_NORET( nk_draw_list_stroke_circle, lua_check_nk_draw_list(L,1), lua_check_nk_vec2(L,2), lua_check_nk_float(L,3)
+	, lua_check_nk_color(L,4), lua_check_nk_uint(L,5), lua_check_nk_float(L,6) )
 
 // NK_API void nk_draw_list_stroke_curve(struct nk_draw_list*, struct nk_vec2 p0, struct nk_vec2 cp0, struct nk_vec2 cp1, struct nk_vec2 p1, struct nk_color, unsigned int segments, float thickness);
-LUA_NK_API_NORET( nk_draw_list_stroke_curve, struct nk_draw_list*, lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,2), struct nk_color, unsigned int segments, float thickness) )
+LUA_NK_API_NORET( nk_draw_list_stroke_curve, lua_check_nk_draw_list(L,1), lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,3)
+	, lua_check_nk_vec2(L,4), lua_check_nk_vec2(L,5), lua_check_nk_color(L,6)
+	, lua_check_nk_uint(L,7), lua_check_nk_float(L,8) )
 
 // NK_API void nk_draw_list_stroke_poly_line(struct nk_draw_list*, const struct nk_vec2 *pnts, const unsigned int cnt, struct nk_color, enum nk_draw_list_stroke, float thickness, enum nk_anti_aliasing);
-LUA_NK_API_NORET( nk_draw_list_stroke_poly_line, struct nk_draw_list*, const struct nk_vec2 *pnts, const unsigned int cnt, struct nk_color, enum nk_draw_list_stroke, float thickness, enum nk_anti_aliasing) )
-
+LUA_NK_API_NORET( nk_draw_list_stroke_poly_line, lua_check_nk_draw_list(L,1)
+	, lua_check_nk_vec2_array(L,2,lua_check_nk_uint(L,3)), lua_check_nk_uint(L,3)
+	, lua_check_nk_color(L,4), lua_check_nk_enum(nk_draw_list_stroke,5)
+	, lua_check_nk_float(L,6), lua_check_nk_enum(nk_anti_aliasing,7) )
 
 
 // NK_API void nk_draw_list_fill_rect(struct nk_draw_list*, struct nk_rect rect, struct nk_color, float rounding);
-LUA_NK_API_NORET( nk_draw_list_fill_rect, struct nk_draw_list*, lua_check_nk_rect(L,2), struct nk_color, float rounding) )
+LUA_NK_API_NORET( nk_draw_list_fill_rect, lua_check_nk_draw_list(L,1), lua_check_nk_rect(L,2), lua_check_nk_color(L,3), lua_check_nk_float(L,4) )
 
 // NK_API void nk_draw_list_fill_rect_multi_color(struct nk_draw_list*, struct nk_rect rect, struct nk_color left, struct nk_color top, struct nk_color right, struct nk_color bottom);
-LUA_NK_API_NORET( nk_draw_list_fill_rect_multi_color, struct nk_draw_list*, lua_check_nk_rect(L,2), struct nk_color left, struct nk_color top, struct nk_color right, struct nk_color bottom) )
+LUA_NK_API_NORET( nk_draw_list_fill_rect_multi_color, lua_check_nk_draw_list(L,1), lua_check_nk_rect(L,2), lua_check_nk_color(L,3)
+	, lua_check_nk_color(L,4), lua_check_nk_color(L,5), lua_check_nk_color(L,6) )
 
-// NK_API void nk_draw_list_fill_triangle(struct nk_draw_list*, struct nk_vec2 a, struct nk_vec2 b, struct nk_vec2 c, struct nk_color);
-LUA_NK_API_NORET( nk_draw_list_fill_triangle, struct nk_draw_list*, lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,2), struct nk_color) )
+// NK_API void nk_draw_list_fill_triangle(struct nk_draw_list*, struct nk_vec2 a, struct nk_vec2 b, struct nk_vec2 c, lua_check_nk_color(L,3));
+LUA_NK_API_NORET( nk_draw_list_fill_triangle, lua_check_nk_draw_list(L,1), lua_check_nk_vec2(L,2), lua_check_nk_vec2(L,3), lua_check_nk_vec2(L,4), lua_check_nk_color(L,5) )
 
 // NK_API void nk_draw_list_fill_circle(struct nk_draw_list*, struct nk_vec2 center, float radius, struct nk_color col, unsigned int segs);
-LUA_NK_API_NORET( nk_draw_list_fill_circle, struct nk_draw_list*, lua_check_nk_vec2(L,2), float radius, struct nk_color col, unsigned int segs) )
+LUA_NK_API_NORET( nk_draw_list_fill_circle, lua_check_nk_draw_list(L,1), lua_check_nk_vec2(L,2), lua_check_nk_float(L,3), lua_check_nk_color(L,4), lua_check_nk_uint(L,5) )
 
 // NK_API void nk_draw_list_fill_poly_convex(struct nk_draw_list*, const struct nk_vec2 *points, const unsigned int count, struct nk_color, enum nk_anti_aliasing);
-LUA_NK_API_NORET( nk_draw_list_fill_poly_convex, struct nk_draw_list*, const struct nk_vec2 *points, const unsigned int count, struct nk_color, enum nk_anti_aliasing) )
-
+LUA_NK_API_NORET( nk_draw_list_fill_poly_convex, lua_check_nk_draw_list(L,1)
+	, lua_check_nk_vec2_array(L,2,lua_check_nk_uint(L,3)), lua_check_nk_uint(L,3)
+	, lua_check_nk_color(L,4), lua_check_nk_enum(nk_anti_aliasing,5) )
 
 
 // NK_API void nk_draw_list_add_image(struct nk_draw_list*, struct nk_image texture, struct nk_rect rect, struct nk_color);
-LUA_NK_API_NORET( nk_draw_list_add_image, struct nk_draw_list*, lua_check_nk_image(L,4), lua_check_nk_rect(L,2), struct nk_color) )
+LUA_NK_API_NORET( nk_draw_list_add_image, lua_check_nk_draw_list(L,1), lua_check_nk_image(L,4), lua_check_nk_rect(L,2), lua_check_nk_color(L,3) )
 
 // NK_API void nk_draw_list_add_text(struct nk_draw_list*, const struct nk_user_font*, struct nk_rect, const char *text, int len, float font_height, struct nk_color);
-LUA_NK_API_NORET( nk_draw_list_add_text, struct nk_draw_list*, lua_check_nk_user_font(L,2), lua_check_nk_rect(L,2), luaL_checkstring(L,2), lua_check_nk_text_len(L,3), float font_height, struct nk_color) )
+LUA_NK_API_NORET( nk_draw_list_add_text, lua_check_nk_draw_list(L,1), lua_check_nk_user_font(L,2), lua_check_nk_rect(L,3)
+	, luaL_checkstring(L,4), lua_check_nk_text_len(L,5), lua_check_nk_float(L,6), lua_check_nk_color(L,7) )
 
 #ifdef NK_INCLUDE_COMMAND_USERDATA
 // NK_API void nk_draw_list_push_userdata(struct nk_draw_list*, nk_handle userdata);
-LUA_NK_API_NORET( nk_draw_list_push_userdata, struct nk_draw_list*, nk_handle userdata) )
 
 #endif
 
 #endif
 
 // NK_API struct nk_style_item nk_style_item_image(struct nk_image img);
-// NK_API struct nk_style_item nk_style_item_color(struct nk_color);
-// NK_API struct nk_style_item nk_style_item_hide(void);
+LUA_NK_API( lua_push_nk_style_item, nk_style_item_image, lua_check_nk_image(L,1) )
 
-/* end */
+// NK_API struct nk_style_item nk_style_item_color(struct nk_color);
+LUA_NK_API( lua_push_nk_style_item, nk_style_item_color, lua_check_nk_color(L,1) )
+
+// NK_API struct nk_style_item nk_style_item_hide(void);
+// LUA_NK_API( lua_push_nk_style_item, nk_style_item_hide, void )
+
