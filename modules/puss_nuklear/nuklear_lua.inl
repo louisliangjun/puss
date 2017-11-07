@@ -73,18 +73,20 @@ static void _lua_push_nk_boxed(lua_State* L, const char* tname, const void* src,
 	memcpy(dst, src, len);
 }
 
-struct nk_float_array { int len; float* arr; };
+#define lua_new_nk_array(L, T, num)			(struct T ## _array*)_lua_new_nk_boxed((L), #T "_array", sizeof(struct T ## _array) + sizeof(T) * (num))
 
-static float* lua_check_nk_float_array(lua_State* L, int arg, int len) {
-	struct nk_float_array* v = lua_check_nk_boxed(L, arg, struct nk_float_array);
+struct nk_char_array { int max; int len; char arr[1]; };
+struct nk_float_array { int max; int len; float arr[1]; };
+struct nk_vec2_array { nk_uint max; nk_uint len; struct nk_vec2 arr[1]; };
+
+static float* lua_check_nk_float_array_buffer(lua_State* L, int arg, int len) {
+	struct nk_float_array* v = lua_check_nk_struct(L, arg, nk_float_array);
 	luaL_argcheck(L, (len <= v->len), arg, "nk_float_array out of range");
 	return v->arr;
 }
 
-struct nk_vec2_array { nk_uint len; struct nk_vec2* arr; };
-
-static struct nk_vec2* lua_check_nk_vec2_array(lua_State* L, int arg, nk_uint len) {
-	struct nk_vec2_array* v = lua_check_nk_boxed(L, arg, struct nk_vec2_array);
+static struct nk_vec2* lua_check_nk_vec2_array_buffer(lua_State* L, int arg, nk_uint len) {
+	struct nk_vec2_array* v = lua_check_nk_struct(L, arg, nk_vec2_array);
 	luaL_argcheck(L, (len <= v->len), arg, "nk_vec2_array out of range");
 	return v->arr;
 }
@@ -117,19 +119,24 @@ static int lua_check_nk_text_len(lua_State* L, int arg) {
 
 //----------------------------------------------------------
 
-#define LUA_NK_API_NORET( api, ... ) static int api ## _lua(lua_State* L) { return api(__VA_ARGS__), 0; }
-#define LUA_NK_API( push, api, ... ) static int api ## _lua(lua_State* L) { return push(L, api(__VA_ARGS__) ), 1; }
+#define LUA_NK_API_IMPLEMENT
 	#include "nuklear_lua_apis.inl"
-#undef LUA_NK_API
-#undef LUA_NK_API_NORET
+#undef LUA_NK_API_IMPLEMENT
 
-static luaL_Reg nuklera_lua_apis[] = {
-#define LUA_NK_API_NORET( api, ... )	{ #api, api ## _lua },
-#define LUA_NK_API( push, api, ... )	{ #api, api ## _lua },
+static luaL_Reg nuklera_lua_apis[] =
+	{ {"nk_filter_default", NULL}
+	, {"nk_filter_ascii", NULL}
+	, {"nk_filter_float", NULL}
+	, {"nk_filter_decimal", NULL}
+	, {"nk_filter_hex", NULL}
+	, {"nk_filter_oct", NULL}
+	, {"nk_filter_binary", NULL}
+
+#define LUA_NK_API_REGISTER
 	#include "nuklear_lua_apis.inl"
-#undef LUA_NK_API
-#undef LUA_NK_API_NORET
-	{ NULL, NULL }
+#undef LUA_NK_API_REGISTER
+
+	, { NULL, NULL }
 	};
 
 static void lua_open_nk_lib(lua_State* L) {

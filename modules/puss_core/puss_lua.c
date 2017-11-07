@@ -192,7 +192,7 @@ static int puss_function_wrap(lua_State* L) {
 	return 1;
 }
 
-static const char* puss_ns_rawget_string(lua_State* L, int ns, const char* def) {
+static const char* lua_getfield_str(lua_State* L, const char* ns, const char* def) {
 	const char* str = def;
 	if( lua_getfield(L, LUA_REGISTRYINDEX, ns)==LUA_TSTRING ) {
 		str = lua_tostring(L, -1);
@@ -262,7 +262,7 @@ static void puss_push_const_table(lua_State* L) {
 }
 
 static const char* puss_app_path(lua_State* L) {
-	return puss_ns_rawget_string(L, PUSS_NAMESPACE_APP_PATH, ".");
+	return lua_getfield_str(L, PUSS_NAMESPACE_APP_PATH, ".");
 }
 
 static PussInterface puss_iface =
@@ -277,8 +277,8 @@ static PussInterface puss_iface =
 
 static int module_init_wrapper(lua_State* L) {
 	const char* name = (const char*)lua_tostring(L, lua_upvalueindex(1));
-	const char* app_path = puss_ns_rawget_string(L, PUSS_NAMESPACE_APP_PATH, ".");
-	const char* module_suffix = puss_ns_rawget_string(L, PUSS_NAMESPACE_MODULE_SUFFIX, ".so");
+	const char* app_path = lua_getfield_str(L, PUSS_NAMESPACE_APP_PATH, ".");
+	const char* module_suffix = lua_getfield_str(L, PUSS_NAMESPACE_MODULE_SUFFIX, ".so");
 	PussModuleInit f = NULL;
 	assert( lua_gettop(L)==0 );
 
@@ -357,8 +357,6 @@ void puss_module_setup(lua_State* L, const char* app_path, const char* app_name,
 }
 
 void puss_lua_open(lua_State* L) {
-	int ridx;
-
 	// check already open
 	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_PUSS)==LUA_TTABLE ) {
 		lua_setglobal(L, "puss");
