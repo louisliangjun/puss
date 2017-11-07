@@ -103,7 +103,7 @@ static int puss_init(lua_State* L) {
 	int is_script_file = 0;
 	const char* script = NULL;
 
-	puss_namespace_rawget(L, PUSS_NAMESPACE_PUSS);
+	lua_getglobal(L, "puss");
 
 	puss_setup_path_and_self(L, argv[0]);
 
@@ -137,7 +137,7 @@ int main(int argc, char * argv[]) {
 	int res = 0;
 	lua_State* L = luaL_newstate();
 	luaL_openlibs(L);
-	puss_lua_open(L, PUSS_NAMESPACE_MAX_NUM);
+	puss_lua_open(L);
 
 	lua_pushcfunction(L, puss_init);
 	lua_pushinteger(L, argc);

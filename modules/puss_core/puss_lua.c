@@ -47,48 +47,14 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 	#define PATH_SEP	"/"
 #endif
 
-int puss_ns_newmetatable(lua_State* L, int metatable_namespace, const char* metatable_name) {
-	if( puss_namespace_rawget(L, metatable_namespace)==LUA_TTABLE )
-		return 0;
-	lua_pop(L, 1);
-	lua_createtable(L, 0, 2);
-	lua_pushstring(L, metatable_name);
-	lua_setfield(L, -2, "__name");
-	lua_pushvalue(L, -1);
-	puss_namespace_rawset(L, metatable_namespace);
-	return 1;
-}
+#define PUSS_NAMESPACE(name)			"\x01" #name
 
-void* puss_ns_testudata(lua_State* L, int ud, int metatable_namespace) {
-	void *p = lua_touserdata(L, ud);
-	if( p && lua_getmetatable(L, ud) ) {
-		puss_namespace_rawget(L, metatable_namespace);
-		if( !lua_rawequal(L, -1, -2) )
-			p = NULL;
-		lua_pop(L, 2);
-		return p;
-	}
-	return NULL;
-}
-
-static int typeerror (lua_State *L, int arg, const char *tname) {
-  const char *msg;
-  const char *typearg;  /* name for the type of the actual argument */
-  if (luaL_getmetafield(L, arg, "__name") == LUA_TSTRING)
-    typearg = lua_tostring(L, -1);  /* use the given type name */
-  else if (lua_type(L, arg) == LUA_TLIGHTUSERDATA)
-    typearg = "light userdata";  /* special name for messages */
-  else
-    typearg = luaL_typename(L, arg);  /* standard name */
-  msg = lua_pushfstring(L, "%s expected, got %s", tname, typearg);
-  return luaL_argerror(L, arg, msg);
-}
-
-void* puss_ns_checkudata(lua_State* L, int ud, int metatable_namespace, const char* metatable_name) {
-	void* p = puss_ns_testudata(L, ud, metatable_namespace);
-	if (p == NULL) typeerror(L, ud, metatable_name);
-	return p;
-}
+#define PUSS_NAMESPACE_PUSS				PUSS_NAMESPACE(puss)
+#define PUSS_NAMESPACE_MODULES_LOADED	PUSS_NAMESPACE(modules)
+#define PUSS_NAMESPACE_INTERFACES		PUSS_NAMESPACE(interfaces)
+#define PUSS_NAMESPACE_APP_PATH			PUSS_NAMESPACE(app_path)
+#define PUSS_NAMESPACE_APP_NAME			PUSS_NAMESPACE(app_name)
+#define PUSS_NAMESPACE_MODULE_SUFFIX	PUSS_NAMESPACE(module_suffix)
 
 static int traceback(lua_State* L) {
 	const char *msg = lua_tostring(L, 1);
@@ -228,7 +194,7 @@ static int puss_function_wrap(lua_State* L) {
 
 static const char* puss_ns_rawget_string(lua_State* L, int ns, const char* def) {
 	const char* str = def;
-	if( puss_namespace_rawget(L, ns)==LUA_TSTRING ) {
+	if( lua_getfield(L, LUA_REGISTRYINDEX, ns)==LUA_TSTRING ) {
 		str = lua_tostring(L, -1);
 	}
 	lua_pop(L, 1);
@@ -242,7 +208,7 @@ static void puss_module_require(lua_State* L, const char* name) {
 	if( !name ) {
 		luaL_error(L, "puss_module_require, module name MUST exist!");
 	}
-	puss_namespace_rawget(L, PUSS_NAMESPACE_MODULES_LOADED);
+	lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_MODULES_LOADED);
 	if( lua_getfield(L, -1, name)==LUA_TNIL ) {
 		lua_pop(L, 1);
 		lua_pushstring(L, name);
@@ -257,7 +223,7 @@ static void puss_interface_register(lua_State* L, const char* name, void* iface)
 	if( !(name && iface) ) {
 		luaL_error(L, "puss_interface_register(%s), name and iface MUST exist!", name);
 	}
-	puss_namespace_rawget(L, PUSS_NAMESPACE_INTERFACES);
+	lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_INTERFACES);
 	if( lua_getfield(L, -1, name)==LUA_TNIL ) {
 		lua_pop(L, 1);
 		lua_pushlightuserdata(L, iface);
@@ -271,7 +237,7 @@ static void puss_interface_register(lua_State* L, const char* name, void* iface)
 static void* puss_interface_check(lua_State* L, const char* name) {
 	void* iface = NULL;
 	if( name ) {
-		puss_namespace_rawget(L, PUSS_NAMESPACE_INTERFACES);
+		lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_INTERFACES);
 		lua_getfield(L, -1, name);
 		iface = lua_touserdata(L, -1);
 		lua_pop(L, 2);
@@ -346,7 +312,7 @@ static int module_init_wrapper(lua_State* L) {
 		lua_pushboolean(L, 1);
 	}
 
-	puss_namespace_rawget(L, PUSS_NAMESPACE_MODULES_LOADED);
+	lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_MODULES_LOADED);
 	lua_pushvalue(L, -2);
 	lua_setfield(L, -2, name);
 	lua_pop(L, 1);
@@ -356,7 +322,7 @@ static int module_init_wrapper(lua_State* L) {
 
 static int puss_lua_module_require(lua_State* L) {
 	const char* name = luaL_checkstring(L, 1);
-	puss_namespace_rawget(L, PUSS_NAMESPACE_MODULES_LOADED);
+	lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_MODULES_LOADED);
 	if( lua_getfield(L, -1, name) != LUA_TNIL )
 		return 1;
 	lua_settop(L, 1);
@@ -368,7 +334,7 @@ static int puss_lua_module_require(lua_State* L) {
 void puss_module_setup(lua_State* L, const char* app_path, const char* app_name, const char* module_suffix) {
 	// fprintf(stderr, "!!!puss_module_setup %s %s %s\n", app_path, app_name, module_suffix);
 
-	puss_namespace_rawget(L, PUSS_NAMESPACE_PUSS);
+	lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_PUSS);
 	assert( lua_type(L, -1)==LUA_TTABLE );
 
 	puss_push_const_table(L);
@@ -376,54 +342,38 @@ void puss_module_setup(lua_State* L, const char* app_path, const char* app_name,
 
 	lua_pushstring(L, app_path);
 	lua_pushvalue(L, -1);
-	puss_namespace_rawset(L, PUSS_NAMESPACE_APP_PATH);
+	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_APP_PATH);
 	lua_setfield(L, -2, "_path");	// puss._path
 
 	lua_pushstring(L, app_name);
 	lua_pushvalue(L, -1);
-	puss_namespace_rawset(L, PUSS_NAMESPACE_APP_NAME);
+	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_APP_NAME);
 	lua_setfield(L, -2, "_self");	// puss._self
 
 	lua_pushstring(L, module_suffix);
 	lua_pushvalue(L, -1);
-	puss_namespace_rawset(L, PUSS_NAMESPACE_MODULE_SUFFIX);
+	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_MODULE_SUFFIX);
 	lua_setfield(L, -2, "_module_suffix");	// puss._module_suffix
 }
 
-void puss_lua_open(lua_State* L, int namespace_max_num) {
+void puss_lua_open(lua_State* L) {
 	int ridx;
 
 	// check already open
-	if( puss_namespace_rawget(L, PUSS_NAMESPACE_PUSS)==LUA_TTABLE ) {
-		lua_pop(L, 1);
+	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_PUSS)==LUA_TTABLE ) {
+		lua_setglobal(L, "puss");
 		return;
 	}
 	lua_pop(L, 1);
 
 	#define __LUAPROXY_SYMBOL(sym)	puss_iface.luaproxy.sym = sym;
-	#include "luaproxy.symbols"
+		#include "luaproxy.symbols"
 	#undef __LUAPROXY_SYMBOL
-
-	if( namespace_max_num < PUSS_NAMESPACE_MAX_NUM )
-		luaL_error(L, "namespace_max_num, MUST >= PUSS_NAMESPACE_MAX_NUM"); 
-
-	// check builtin 
-	for( ridx=PUSS_NAMESPACE_PUSS; ridx<namespace_max_num; ++ridx ) {
-		if( puss_namespace_rawget(L, ridx)!=LUA_TNIL ) {
-			const char* err = "puss lua open failed: puss_lua_open MUST before any other lib open!!!\n";
-			fprintf(stderr, err);
-			abort();
-		}
-
-		lua_pop(L, 1);
-		lua_pushboolean(L, 0);
-		puss_namespace_rawset(L, ridx);
-	}
 
 	// puss namespace init
 	lua_newtable(L);	// puss
 	lua_pushvalue(L, -1);
-	puss_namespace_rawset(L, PUSS_NAMESPACE_PUSS);
+	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_PUSS);
 	puss_module_setup(L, ".", "puss", ".so");
 
 	// puss modules["puss"] = puss-module
@@ -432,7 +382,7 @@ void puss_lua_open(lua_State* L, int namespace_max_num) {
 		lua_pushvalue(L, -2);
 		lua_setfield(L, -2, "puss");
 	}
-	puss_namespace_rawset(L, PUSS_NAMESPACE_MODULES_LOADED);
+	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_MODULES_LOADED);
 
 	// puss interfaces["PussInterface"] = puss_iface
 	lua_newtable(L);
@@ -440,7 +390,7 @@ void puss_lua_open(lua_State* L, int namespace_max_num) {
 		lua_pushlightuserdata(L, &puss_iface);
 		lua_setfield(L, -2, "PussInterface");
 	}
-	puss_namespace_rawset(L, PUSS_NAMESPACE_INTERFACES);
+	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_INTERFACES);
 
 	// set to _G.puss
 	lua_pushvalue(L, -1);

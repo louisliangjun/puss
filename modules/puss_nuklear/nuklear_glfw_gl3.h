@@ -15,6 +15,10 @@
 
 #include <GLFW/glfw3.h>
 
+#if 0
+#define NK_API
+#endif
+
 enum nk_glfw_init_state{
     NK_GLFW3_DEFAULT=0,
     NK_GLFW3_INSTALL_CALLBACKS

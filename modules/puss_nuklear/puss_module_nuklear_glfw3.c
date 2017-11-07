@@ -18,6 +18,8 @@
 #define NK_GLFW_GL3_IMPLEMENTATION
 #include "nuklear_glfw_gl3.h"
 
+#include "nuklear_lua.inl"
+
 #define MAX_VERTEX_BUFFER 1 * 1024 * 1024
 #define MAX_ELEMENT_BUFFER 512 * 1024
 
@@ -132,6 +134,8 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 		#undef __NUKLEARPROXY_ENUM
 		lua_pop(L, 1);
 	}
+
+	lua_open_nk_lib(L);
 
 	puss_interface_register(L, "PussNuklearInterface", &puss_nuklear_iface);
 
