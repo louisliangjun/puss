@@ -30,7 +30,10 @@ typedef struct PussNuklearInterface	PussNuklearInterface;
 PUSS_DECLS_BEGIN
 
 struct PussNuklearInterface {
-	NuklearProxy	nuklear_proxy;
+	struct nk_context*	(*check_nk_context)(lua_State* L, int arg);
+	struct nk_font*		(*check_nk_font)(lua_State* L, int arg);
+
+	NuklearProxy		nuklear_proxy;
 };
 
 

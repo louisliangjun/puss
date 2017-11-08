@@ -1,4 +1,4 @@
-// tests.c
+// nuklear_demo.c
 
 #include "puss_module_nuklear.h"
 
@@ -9,13 +9,14 @@ PussNuklearInterface* __puss_nuklear_iface__ = NULL;
 #define MAX(a,b) ((a) < (b) ? (b) : (a))
 #define LEN(a) (sizeof(a)/sizeof(a)[0])
 
-int test1(lua_State* L) {
-	struct nk_context * ctx = lua_touserdata(L, 1);
+int nuklear_demo1(lua_State* L) {
+	struct nk_context * ctx;
 	if( !__puss_nuklear_iface__) {
 		__puss_nuklear_iface__ = puss_interface_check(L, PussNuklearInterface);
 	}
 
     /* GUI */
+	ctx = __puss_nuklear_iface__->check_nk_context(L, 1);
     if (nk_begin(ctx, "Demo", nk_rect(50, 50, 230, 250),
         NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
         NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))

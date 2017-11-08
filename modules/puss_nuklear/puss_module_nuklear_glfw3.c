@@ -76,6 +76,8 @@ static int application_run(lua_State* L) {
     /*set_style(ctx, THEME_BLUE);*/
     /*set_style(ctx, THEME_DARK);*/
 
+    lua_push_nk_context_ptr(L, ctx);
+
     while (!glfwWindowShouldClose(win)) {
     	glfwWaitEventsTimeout(0.1);
         /* Input */
@@ -83,8 +85,8 @@ static int application_run(lua_State* L) {
         nk_glfw3_new_frame();
 
 		/* GUI */
-		lua_pushvalue(L, 1);
-		lua_pushlightuserdata(L, ctx);
+		lua_pushvalue(L, 1);	// function
+		lua_pushvalue(L, -2);	// nk_context
 		if( puss_pcall_stacktrace(L, 1, 0) ) {
 			fprintf(stderr, "[Script] error: %s\n", lua_tostring(L, -1));
 			lua_pop(L, 1);
@@ -108,18 +110,14 @@ static int application_run(lua_State* L) {
     return 0;
 }
 
-extern int test1(lua_State* L);
-
-static int lua_push_nuklear_interface(lua_State* L) {
-	lua_newtable(L);
-	lua_pushcfunction(L, application_run);	lua_setfield(L, -2, "application_run");
-	lua_pushcfunction(L, test1);			lua_setfield(L, -2, "test1");
-	return 1;
-}
-
 PussInterface* __puss_iface__ = NULL;
 
-static PussNuklearInterface puss_nuklear_iface;
+static PussNuklearInterface puss_nuklear_iface =
+	{ lua_check_nk_context
+	, lua_check_nk_font
+	};
+
+int nuklear_demo1(lua_State* L);
 
 PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 	if( !__puss_iface__ ) {
@@ -135,10 +133,13 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 		lua_pop(L, 1);
 	}
 
-	lua_open_nk_lib(L);
-
 	puss_interface_register(L, "PussNuklearInterface", &puss_nuklear_iface);
 
-	return lua_push_nuklear_interface(L);
+	if( lua_new_nk_lib(L) ) {
+		lua_pushcfunction(L, application_run);	lua_setfield(L, -2, "application_run");
+		lua_pushcfunction(L, nuklear_demo1);	lua_setfield(L, -2, "nuklear_demo1");
+	}
+
+	return 1;
 }
 
