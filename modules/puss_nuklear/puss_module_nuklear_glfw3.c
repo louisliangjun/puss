@@ -83,17 +83,19 @@ static int application_run(lua_State* L) {
         /* Input */
         glfwPollEvents();
         nk_glfw3_new_frame();
+        glfwGetWindowSize(win, &width, &height);
 
 		/* GUI */
 		lua_pushvalue(L, 1);	// function
 		lua_pushvalue(L, -2);	// nk_context
-		if( puss_pcall_stacktrace(L, 1, 0) ) {
+		lua_pushinteger(L, width);
+		lua_pushinteger(L, height);
+		if( puss_pcall_stacktrace(L, 3, 0) ) {
 			fprintf(stderr, "[Script] error: %s\n", lua_tostring(L, -1));
 			lua_pop(L, 1);
 		}
 
         /* Draw */
-        glfwGetWindowSize(win, &width, &height);
         glViewport(0, 0, width, height);
         glClear(GL_COLOR_BUFFER_BIT);
         glClearColor(bg[0], bg[1], bg[2], bg[3]);
