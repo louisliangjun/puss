@@ -30,8 +30,10 @@ static void puss_setup_path_and_self(lua_State* L, const char* arg0) {
 #else
 	len = readlink("/proc/self/exe", pth, 4096);
 #endif
-	// try use argv[0]
-	if( len <= 0 ) {
+	if( len > 0 ) {
+		pth[len] = '\0';
+	} else {
+		// try use argv[0]
 		len = strlen(arg0); 
 		strcpy(pth, arg0);
 	}
