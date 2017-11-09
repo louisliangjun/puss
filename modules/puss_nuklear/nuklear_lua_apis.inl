@@ -1,147 +1,140 @@
 // nuklear_lua_apis.inl
 
-#if defined(LUA_NK_API_REGISTER)
-	#define LUA_NK_API_DECLARE( api )     , { #api, api ## _lua }
-	#define LUA_NK_API_NORET( api, ... )  LUA_NK_API_DECLARE( api )
-	#define LUA_NK_API( push, api, ... )  LUA_NK_API_DECLARE( api )
-#elif defined(LUA_NK_API_IMPLEMENT)
-	#define LUA_NK_API_DECLARE( api )    static int api ## _lua(lua_State* L)
-	#define LUA_NK_API_NORET( api, ... ) LUA_NK_API_DECLARE(api) { return api(__VA_ARGS__), 0; }
-	#define LUA_NK_API( push, api, ... ) LUA_NK_API_DECLARE(api) { return push(L, api(__VA_ARGS__) ), 1; }
+#if defined(USE_LUA_NK_API_REGISTER)
+	#define LUA_NK_API_DEFINE( api, ... ) , { #api, api ## _lua }
+	#define LUA_NK_API_NORET( api, ... )  LUA_NK_API_DEFINE( api, __VA_ARGS__ )
+	#define LUA_NK_API( push, api, ... )  LUA_NK_API_DEFINE( api, __VA_ARGS__ )
+
+#elif defined(USE_LUA_NK_API_IMPLEMENT)
+	#define LUA_NK_API_DEFINE( api, ... ) static int api ## _lua(lua_State* L) __VA_ARGS__
+	#define LUA_NK_API_NORET( api, ... )  LUA_NK_API_DEFINE( api, { api(__VA_ARGS__); return 0; } )
+	#define LUA_NK_API( push, api, ... )  LUA_NK_API_DEFINE( api, { push(L, api(__VA_ARGS__) ); return 1; } )
+
+	// boxed implement
+	static void* _lua_new_nk_boxed(lua_State* L, const char* tname, size_t struct_sz) {
+		void* ud = lua_newuserdata(L, struct_sz);
+		memset(ud, 0, struct_sz);
+		luaL_newmetatable(L, tname);
+		lua_setmetatable(L, -2);
+		return ud;
+	}
+
+	static void _lua_push_nk_boxed(lua_State* L, const char* tname, const void* src, size_t len) {
+		void* dst = _lua_new_nk_boxed(L, tname, len);
+		memcpy(dst, src, len);
+	}
+
+	// base types
+	#define lua_check_nk_enum(L, arg, T)		(enum T)luaL_checkinteger((L), (arg))
+	#define lua_check_nk_flags(L, arg)			(nk_flags)luaL_checkinteger((L), (arg))
+	#define lua_check_nk_int(L, arg)			(int)luaL_checkinteger((L), (arg))
+	#define lua_check_nk_uint(L, arg)			(nk_uint)luaL_checkinteger((L), (arg))
+	#define lua_check_nk_size(L, arg)			(nk_size)luaL_checkinteger((L), (arg))
+	#define lua_check_nk_float(L, arg)			(float)luaL_checknumber((L), (arg))
+	#define lua_check_nk_double(L, arg)			luaL_checknumber((L), (arg))
+
+	// base boxed
+	#define lua_new_nk_boxed(L, T)				(T*)_lua_new_nk_boxed((L), #T, sizeof(T))
+	#define lua_push_nk_boxed(L, ptr, T)		_lua_push_nk_boxed((L), #T, ptr, sizeof(T))
+	#define lua_check_nk_boxed(L, arg, T)		(T*)luaL_checkudata((L), (arg), #T)
+	#define lua_check_nk_flags_boxed(L, arg)	lua_check_nk_boxed((L), (arg), nk_flags)
+	#define lua_check_nk_uint_boxed(L, arg)		lua_check_nk_boxed((L), (arg), nk_uint)
+	#define lua_check_nk_float_boxed(L, arg)	lua_check_nk_boxed((L), (arg), float)
+
+	// struct boxed
+	#define lua_new_nk_struct(L, T)				(struct T*)_lua_new_nk_boxed((L), #T, sizeof(struct T))
+	#define lua_push_nk_struct(L, ptr, T)		_lua_push_nk_boxed((L), #T, ptr, sizeof(struct T))
+	#define lua_check_nk_struct(L, arg, T)		(struct T*)luaL_checkudata((L), (arg), #T)
+	#define lua_check_nk_vec2(L, arg)			lua_check_nk_struct((L), (arg), nk_vec2)
+	#define lua_check_nk_rect(L, arg)			lua_check_nk_struct((L), (arg), nk_rect)
+	#define lua_check_nk_color(L, arg)			lua_check_nk_struct((L), (arg), nk_color)
+	#define lua_check_nk_image(L, arg)			lua_check_nk_struct((L), (arg), nk_image)
+	#define lua_check_nk_text_edit(L, arg)		lua_check_nk_struct((L), (arg), nk_text_edit)
+	#define lua_check_nk_scroll(L, arg)			lua_check_nk_struct((L), (arg), nk_scroll)
+	#define lua_check_nk_list_view(L, arg)		lua_check_nk_struct((L), (arg), nk_list_view)
+	#define lua_check_nk_cursor(L, arg)			lua_check_nk_struct((L), (arg), nk_cursor)
+	#define lua_check_nk_user_font(L, arg)		lua_check_nk_struct((L), (arg), nk_user_font)
+	#define lua_check_nk_draw_list(L, arg)		lua_check_nk_struct((L), (arg), nk_draw_list)
+	#define lua_check_nk_style_item(L, arg)		lua_check_nk_struct((L), (arg), nk_style_item)
+	#define lua_check_nk_style_button(L, arg)	lua_check_nk_struct((L), (arg), nk_style_button)
+	#define lua_check_nk_font_atlas(L, arg)		lua_check_nk_struct((L), (arg), nk_font_atlas)
+	#define lua_check_nk_font_config(L, arg)	lua_check_nk_struct((L), (arg), nk_font_config)
+	#define lua_check_nk_buffer(L, arg)			lua_check_nk_struct((L), (arg), nk_buffer)
+	#define lua_check_nk_input(L, arg)			lua_check_nk_struct((L), (arg), nk_input)
+	#define lua_check_nk_command_buffer(L, arg)	lua_check_nk_struct((L), (arg), nk_command_buffer)
+
+	static inline void lua_push_nk_vec2(lua_State* L, struct nk_vec2 v) { lua_push_nk_struct(L, &v, nk_vec2); }
+	static inline void lua_push_nk_rect(lua_State* L, struct nk_rect v) { lua_push_nk_struct(L, &v, nk_rect); }
+	static inline void lua_push_nk_color(lua_State* L, struct nk_color v) { lua_push_nk_struct(L, &v, nk_color); }
+	static inline void lua_push_nk_image(lua_State* L, struct nk_image v) { lua_push_nk_struct(L, &v, nk_image); }
+	static inline void lua_push_nk_style_item(lua_State* L, struct nk_style_item v) { lua_push_nk_struct(L, &v, nk_style_item); }
+
+	// pointer boxed
+	#define lua_new_nk_pointer(L, T)			(struct T**)_lua_new_nk_boxed((L), #T "*", sizeof(struct T**))
+	#define lua_push_nk_pointer(L, ptr, T)		(*(lua_new_nk_pointer(L, T)) = ptr)
+	#define lua_check_nk_pointer(L, arg, T)		(*(struct T**)luaL_checkudata((L), (arg), #T "*"))
+	static struct nk_context* lua_check_nk_context(lua_State* L, int arg) { return lua_check_nk_pointer((L), (arg), nk_context); }
+	static struct nk_font* lua_check_nk_font(lua_State* L, int arg) { return lua_check_nk_pointer((L), (arg), nk_font); }
+
+	static inline void lua_push_nk_context_ptr(lua_State* L, struct nk_context* v) { lua_push_nk_pointer(L, v, nk_context); }
+	static inline void lua_push_nk_window_ptr(lua_State* L, struct nk_window* v) { lua_push_nk_pointer(L, v, nk_window); }
+	static inline void lua_push_nk_panel_ptr(lua_State* L, struct nk_panel* v) { lua_push_nk_pointer(L, v, nk_panel); }
+	static inline void lua_push_nk_font_ptr(lua_State* L, struct nk_font* v) { lua_push_nk_pointer(L, v, nk_font); }
+
+	// misc
+	#define lua_check_nk_plugin_filter(L, arg)	(nk_plugin_filter)luaL_checkudata((L), (arg), "nk_plugin_filter")
+	static inline void lua_push_nk_plugin_filter(lua_State* L, nk_plugin_filter v) { lua_push_nk_boxed(L, &v, nk_plugin_filter); }
+
+	// array
+	struct nk_char_array { int max; int len; char arr[1]; };
+	struct nk_string_array { int len; const char* arr[1]; };
+	struct nk_float_array { int len; float arr[1]; };
+	struct nk_vec2_array { nk_uint len; struct nk_vec2 arr[1]; };
+
+	#define lua_check_nk_char_array(L, arg)		lua_check_nk_struct((L), (arg), nk_char_array)
+	#define lua_check_nk_string_array(L, arg)	lua_check_nk_struct((L), (arg), nk_string_array)
+
+	static float* lua_check_nk_float_array_buffer(lua_State* L, int arg, int len) {
+		struct nk_float_array* v = lua_check_nk_struct(L, arg, nk_float_array);
+		luaL_argcheck(L, (len <= v->len), arg, "nk_float_array out of range");
+		return v->arr;
+	}
+
+	static struct nk_vec2* lua_check_nk_vec2_array_buffer(lua_State* L, int arg, nk_uint len) {
+		struct nk_vec2_array* v = lua_check_nk_struct(L, arg, nk_vec2_array);
+		luaL_argcheck(L, (len <= v->len), arg, "nk_vec2_array out of range");
+		return v->arr;
+	}
+
+	static char lua_check_nk_char(lua_State* L, int arg) {
+		char ch = 0;
+		if( lua_isinteger(L, arg) ) {
+			ch = (char)lua_tointeger(L, arg);
+		} else {
+			size_t n = 0;
+			const char* s = luaL_checklstring(L, arg, &n);
+			luaL_argcheck(L, n==1, 2, "need char, 1 byte string");
+			ch = *s;
+		}
+		return ch;
+	}
+
+	static const char* lua_check_nk_glyph(lua_State* L, int arg) {
+		size_t n = 0;
+		const char* s = luaL_checklstring(L, arg, &n);
+		luaL_argcheck(L, n==NK_UTF_SIZE , arg, "need glyph, 4 bytes string");
+		return s;
+	}
+
+	static int lua_check_nk_text_len(lua_State* L, int arg) {
+		size_t n = luaL_len(L, arg - 1);
+		int len = (int)luaL_optinteger(L, arg, -1);
+		return (len<0 || ((size_t)len>n) ) ? (int)n : len;
+	}
+
 #else
 	#error "inner file, can NOT direct include"
 #endif
-
-
-// wrap
-
-
-#ifdef LUA_NK_API_IMPLEMENT
-
-// boxed implement
-static void* _lua_new_nk_boxed(lua_State* L, const char* tname, size_t struct_sz) {
-	void* ud = lua_newuserdata(L, struct_sz);
-	memset(ud, 0, struct_sz);
-	luaL_newmetatable(L, tname);
-	lua_setmetatable(L, -2);
-	return ud;
-}
-
-static void _lua_push_nk_boxed(lua_State* L, const char* tname, const void* src, size_t len) {
-	void* dst = _lua_new_nk_boxed(L, tname, len);
-	memcpy(dst, src, len);
-}
-
-// base types
-#define lua_check_nk_enum(L, arg, T)		(enum T)luaL_checkinteger((L), (arg))
-#define lua_check_nk_flags(L, arg)			(nk_flags)luaL_checkinteger((L), (arg))
-#define lua_check_nk_int(L, arg)			(int)luaL_checkinteger((L), (arg))
-#define lua_check_nk_uint(L, arg)			(nk_uint)luaL_checkinteger((L), (arg))
-#define lua_check_nk_size(L, arg)			(nk_size)luaL_checkinteger((L), (arg))
-#define lua_check_nk_float(L, arg)			(float)luaL_checknumber((L), (arg))
-#define lua_check_nk_double(L, arg)			luaL_checknumber((L), (arg))
-
-// base boxed
-#define lua_new_nk_boxed(L, T)				(T*)_lua_new_nk_boxed((L), #T, sizeof(T))
-#define lua_push_nk_boxed(L, ptr, T)		_lua_push_nk_boxed((L), #T, ptr, sizeof(T))
-#define lua_check_nk_boxed(L, arg, T)		(T*)luaL_checkudata((L), (arg), #T)
-#define lua_check_nk_enum_boxed(L, arg, T)	(enum T*)luaL_checkudata((L), (arg), #T)
-#define lua_check_nk_flags_boxed(L, arg)	lua_check_nk_boxed((L), (arg), nk_flags)
-#define lua_check_nk_bool_boxed(L, arg)		lua_check_nk_boxed((L), (arg), int)
-#define lua_check_nk_int_boxed(L, arg)		lua_check_nk_boxed((L), (arg), nk_int)
-#define lua_check_nk_uint_boxed(L, arg)		lua_check_nk_boxed((L), (arg), nk_uint)
-#define lua_check_nk_size_boxed(L, arg)		lua_check_nk_boxed((L), (arg), nk_size)
-#define lua_check_nk_float_boxed(L, arg)	lua_check_nk_boxed((L), (arg), float)
-#define lua_check_nk_double_boxed(L, arg)	lua_check_nk_boxed((L), (arg), double)
-
-// struct boxed
-#define lua_new_nk_struct(L, T)				(struct T*)_lua_new_nk_boxed((L), #T, sizeof(struct T))
-#define lua_push_nk_struct(L, ptr, T)		_lua_push_nk_boxed((L), #T, ptr, sizeof(struct T))
-#define lua_check_nk_struct(L, arg, T)		(struct T*)luaL_checkudata((L), (arg), #T)
-#define lua_check_nk_vec2(L, arg)			lua_check_nk_struct((L), (arg), nk_vec2)
-#define lua_check_nk_rect(L, arg)			lua_check_nk_struct((L), (arg), nk_rect)
-#define lua_check_nk_color(L, arg)			lua_check_nk_struct((L), (arg), nk_color)
-#define lua_check_nk_image(L, arg)			lua_check_nk_struct((L), (arg), nk_image)
-#define lua_check_nk_text_edit(L, arg)		lua_check_nk_struct((L), (arg), nk_text_edit)
-#define lua_check_nk_scroll(L, arg)			lua_check_nk_struct((L), (arg), nk_scroll)
-#define lua_check_nk_list_view(L, arg)		lua_check_nk_struct((L), (arg), nk_list_view)
-#define lua_check_nk_cursor(L, arg)			lua_check_nk_struct((L), (arg), nk_cursor)
-#define lua_check_nk_user_font(L, arg)		lua_check_nk_struct((L), (arg), nk_user_font)
-#define lua_check_nk_draw_list(L, arg)		lua_check_nk_struct((L), (arg), nk_draw_list)
-#define lua_check_nk_style_item(L, arg)		lua_check_nk_struct((L), (arg), nk_style_item)
-#define lua_check_nk_style_button(L, arg)	lua_check_nk_struct((L), (arg), nk_style_button)
-#define lua_check_nk_font_atlas(L, arg)		lua_check_nk_struct((L), (arg), nk_font_atlas)
-#define lua_check_nk_font_config(L, arg)	lua_check_nk_struct((L), (arg), nk_font_config)
-#define lua_check_nk_buffer(L, arg)			lua_check_nk_struct((L), (arg), nk_buffer)
-#define lua_check_nk_input(L, arg)			lua_check_nk_struct((L), (arg), nk_input)
-#define lua_check_nk_command_buffer(L, arg)	lua_check_nk_struct((L), (arg), nk_command_buffer)
-
-static inline void lua_push_nk_vec2(lua_State* L, struct nk_vec2 v) { lua_push_nk_struct(L, &v, nk_vec2); }
-static inline void lua_push_nk_rect(lua_State* L, struct nk_rect v) { lua_push_nk_struct(L, &v, nk_rect); }
-static inline void lua_push_nk_color(lua_State* L, struct nk_color v) { lua_push_nk_struct(L, &v, nk_color); }
-static inline void lua_push_nk_image(lua_State* L, struct nk_image v) { lua_push_nk_struct(L, &v, nk_image); }
-static inline void lua_push_nk_style_item(lua_State* L, struct nk_style_item v) { lua_push_nk_struct(L, &v, nk_style_item); }
-
-// pointer boxed
-#define lua_new_nk_pointer(L, T)			(struct T**)_lua_new_nk_boxed((L), #T "*", sizeof(struct T**))
-#define lua_push_nk_pointer(L, ptr, T)		(*(lua_new_nk_pointer(L, T)) = ptr)
-#define lua_check_nk_pointer(L, arg, T)		(*(struct T**)luaL_checkudata((L), (arg), #T "*"))
-static struct nk_context* lua_check_nk_context(lua_State* L, int arg) { return lua_check_nk_pointer((L), (arg), nk_context); }
-static struct nk_font* lua_check_nk_font(lua_State* L, int arg) { return lua_check_nk_pointer((L), (arg), nk_font); }
-
-static inline void lua_push_nk_context_ptr(lua_State* L, struct nk_context* v) { lua_push_nk_pointer(L, v, nk_context); }
-static inline void lua_push_nk_window_ptr(lua_State* L, struct nk_window* v) { lua_push_nk_pointer(L, v, nk_window); }
-static inline void lua_push_nk_panel_ptr(lua_State* L, struct nk_panel* v) { lua_push_nk_pointer(L, v, nk_panel); }
-static inline void lua_push_nk_font_ptr(lua_State* L, struct nk_font* v) { lua_push_nk_pointer(L, v, nk_font); }
-
-// misc boxed
-#define lua_check_nk_plugin_filter(L, arg)	(nk_plugin_filter)luaL_checkudata((L), (arg), "nk_plugin_filter")
-static inline void lua_push_nk_plugin_filter(lua_State* L, nk_plugin_filter v) { lua_push_nk_boxed(L, &v, nk_plugin_filter); }
-
-#define lua_new_nk_array(L, T, num)			(struct T ## _array*)_lua_new_nk_boxed((L), #T "_array", sizeof(struct T ## _array) + sizeof(T) * (num))
-
-struct nk_char_array { int max; int len; char arr[1]; };
-struct nk_float_array { int max; int len; float arr[1]; };
-struct nk_vec2_array { nk_uint max; nk_uint len; struct nk_vec2 arr[1]; };
-
-static float* lua_check_nk_float_array_buffer(lua_State* L, int arg, int len) {
-	struct nk_float_array* v = lua_check_nk_struct(L, arg, nk_float_array);
-	luaL_argcheck(L, (len <= v->len), arg, "nk_float_array out of range");
-	return v->arr;
-}
-
-static struct nk_vec2* lua_check_nk_vec2_array_buffer(lua_State* L, int arg, nk_uint len) {
-	struct nk_vec2_array* v = lua_check_nk_struct(L, arg, nk_vec2_array);
-	luaL_argcheck(L, (len <= v->len), arg, "nk_vec2_array out of range");
-	return v->arr;
-}
-
-static char lua_check_nk_char(lua_State* L, int arg) {
-	char ch = 0;
-	if( lua_isinteger(L, arg) ) {
-		ch = (char)lua_tointeger(L, arg);
-	} else {
-		size_t n = 0;
-		const char* s = luaL_checklstring(L, arg, &n);
-		luaL_argcheck(L, n==1, 2, "need char, 1 byte string");
-		ch = *s;
-	}
-	return ch;
-}
-
-static const char* lua_check_nk_glyph(lua_State* L, int arg) {
-	size_t n = 0;
-	const char* s = luaL_checklstring(L, arg, &n);
-	luaL_argcheck(L, n==NK_UTF_SIZE , arg, "need glyph, 4 bytes string");
-	return s;
-}
-
-static int lua_check_nk_text_len(lua_State* L, int arg) {
-	size_t n = luaL_len(L, arg - 1);
-	int len = (int)luaL_optinteger(L, arg, -1);
-	return (len<0 || ((size_t)len>n) ) ? (int)n : len;
-}
-#endif//LUA_NK_API_IMPLEMENT
 
 
 // apis
@@ -149,20 +142,20 @@ static int lua_check_nk_text_len(lua_State* L, int arg) {
 
 #ifdef NK_INCLUDE_DEFAULT_ALLOCATOR
 // NK_API int nk_init_default(struct nk_context*, const struct nk_user_font*);
-LUA_NK_API( lua_pushboolean, nk_init_default, lua_check_nk_context(L,1), lua_check_nk_user_font(L,2) )
+// LUA_NK_API( lua_pushboolean, nk_init_default, lua_check_nk_context(L,1), lua_check_nk_user_font(L,2) )
 #endif
 
 // NK_API int nk_init_fixed(struct nk_context*, void *memory, nk_size size, const struct nk_user_font*);
 // NK_API int nk_init(struct nk_context*, struct nk_allocator*, const struct nk_user_font*);
 
 // NK_API int nk_init_custom(struct nk_context*, struct nk_buffer *cmds, struct nk_buffer *pool, const struct nk_user_font*);
-LUA_NK_API( lua_pushboolean, nk_init_custom, lua_check_nk_context(L,1), lua_check_nk_buffer(L,2), lua_check_nk_buffer(L,3), lua_check_nk_user_font(L,4) )
+// LUA_NK_API( lua_pushboolean, nk_init_custom, lua_check_nk_context(L,1), lua_check_nk_buffer(L,2), lua_check_nk_buffer(L,3), lua_check_nk_user_font(L,4) )
 
 // NK_API void nk_clear(struct nk_context*);
 LUA_NK_API_NORET( nk_clear, lua_check_nk_context(L,1) )
 
 // NK_API void nk_free(struct nk_context*);
-LUA_NK_API_NORET( nk_free, lua_check_nk_context(L,1) )
+// LUA_NK_API_NORET( nk_free, lua_check_nk_context(L,1) )
 
 #ifdef NK_INCLUDE_COMMAND_USERDATA
 
@@ -433,12 +426,20 @@ LUA_NK_API( lua_pushboolean, nk_tree_image_push_hashed, lua_check_nk_context(L,1
 LUA_NK_API_NORET( nk_tree_pop, lua_check_nk_context(L,1) )
 
 // NK_API int nk_tree_state_push(struct nk_context*, enum nk_tree_type, const char *title, enum nk_collapse_states *state);
-LUA_NK_API( lua_pushboolean, nk_tree_state_push, lua_check_nk_context(L,1), lua_check_nk_enum(L,2,nk_tree_type)
-		, luaL_checkstring(L,3), lua_check_nk_enum_boxed(L,4,nk_collapse_states) )
+LUA_NK_API_DEFINE( nk_tree_state_push, {
+	enum nk_collapse_states state = lua_check_nk_enum(L,4,nk_collapse_states);
+	lua_pushboolean(L, nk_tree_state_push(lua_check_nk_context(L,1), lua_check_nk_enum(L,2,nk_tree_type), luaL_checkstring(L,3), &state));
+	lua_pushinteger(L, state);
+	return 2;
+} )
 
 // NK_API int nk_tree_state_image_push(struct nk_context*, enum nk_tree_type, struct nk_image, const char *title, enum nk_collapse_states *state);
-LUA_NK_API( lua_pushboolean, nk_tree_state_image_push, lua_check_nk_context(L,1), lua_check_nk_enum(L,2,nk_tree_type)
-		, *lua_check_nk_image(L,3), luaL_checkstring(L,4), lua_check_nk_enum_boxed(L,5,nk_collapse_states) )
+LUA_NK_API_DEFINE( nk_tree_state_image_push, {
+	enum nk_collapse_states state = lua_check_nk_enum(L,4,nk_collapse_states);
+	lua_pushboolean(L, nk_tree_state_image_push(lua_check_nk_context(L,1), lua_check_nk_enum(L,2,nk_tree_type), *lua_check_nk_image(L,3), luaL_checkstring(L,4), &state));
+	lua_pushinteger(L, state);
+	return 2;
+} )
 
 // NK_API void nk_tree_state_pop(struct nk_context*);
 LUA_NK_API_NORET( nk_tree_state_pop, lua_check_nk_context(L,1) )
@@ -516,7 +517,7 @@ LUA_NK_API_NORET( nk_value_bool, lua_check_nk_context(L,1), luaL_checkstring(L,2
 LUA_NK_API_NORET( nk_value_int, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_int(L,3) )
 
 // NK_API void nk_value_uint(struct nk_context*, const char *prefix, unsigned int);
-LUA_NK_API_NORET( nk_value_uint, lua_check_nk_context(L,1), luaL_checkstring(L,2), (unsigned int)luaL_checkinteger(L,3) )
+LUA_NK_API_NORET( nk_value_uint, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_uint(L,3) )
 
 // NK_API void nk_value_float(struct nk_context*, const char *prefix, float);
 LUA_NK_API_NORET( nk_value_float, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_float(L,3) )
@@ -605,30 +606,59 @@ LUA_NK_API( lua_pushboolean, nk_check_label, lua_check_nk_context(L,1), luaL_che
 LUA_NK_API( lua_pushboolean, nk_check_text, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_text_len(L,3), lua_toboolean(L,4) )
 
 // NK_API unsigned nk_check_flags_label(struct nk_context*, const char*, unsigned int flags, unsigned int value);
-LUA_NK_API( lua_pushinteger, nk_check_flags_label, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_flags(L,3), (unsigned int)luaL_checkinteger(L,4) )
+LUA_NK_API( lua_pushinteger, nk_check_flags_label, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_flags(L,3), lua_check_nk_uint(L,4) )
 
 // NK_API unsigned nk_check_flags_text(struct nk_context*, const char*, int, unsigned int flags, unsigned int value);
 LUA_NK_API( lua_pushinteger, nk_check_flags_text, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_text_len(L,3)
-	, lua_check_nk_flags(L,4), (unsigned int)luaL_checkinteger(L,5) )
+	, lua_check_nk_flags(L,4), lua_check_nk_uint(L,5) )
 
 // NK_API int nk_checkbox_label(struct nk_context*, const char*, int *active);
-LUA_NK_API( lua_pushboolean, nk_checkbox_label, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_bool_boxed(L,3) )
+LUA_NK_API_DEFINE( nk_checkbox_label, {
+	int active = lua_toboolean(L,3);
+	lua_pushboolean(L, nk_checkbox_label(lua_check_nk_context(L,1), luaL_checkstring(L,2), &active));
+	lua_pushboolean(L, active);
+	return 2;
+} )
 
 // NK_API int nk_checkbox_text(struct nk_context*, const char*, int, int *active);
-LUA_NK_API( lua_pushboolean, nk_checkbox_text, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_text_len(L,3), lua_check_nk_bool_boxed(L,4) )
+LUA_NK_API_DEFINE( nk_checkbox_text, {
+	int active = lua_toboolean(L,3);
+	lua_pushboolean(L, nk_checkbox_text(lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_text_len(L,3), &active));
+	lua_pushboolean(L, active);
+	return 2;
+} )
 
 // NK_API int nk_checkbox_flags_label(struct nk_context*, const char*, unsigned int *flags, unsigned int value);
-LUA_NK_API( lua_pushboolean, nk_checkbox_flags_label, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_flags_boxed(L,3), (unsigned int)luaL_checkinteger(L,4) )
+LUA_NK_API_DEFINE( nk_checkbox_flags_label, {
+	unsigned int flags = lua_check_nk_flags(L,3);
+	lua_pushboolean(L, nk_checkbox_flags_label(lua_check_nk_context(L,1), luaL_checkstring(L,2), &flags, lua_check_nk_uint(L,4)));
+	lua_pushinteger(L, flags);
+	return 2;
+} )
 
 // NK_API int nk_checkbox_flags_text(struct nk_context*, const char*, int, unsigned int *flags, unsigned int value);
-LUA_NK_API( lua_pushboolean, nk_checkbox_flags_text, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_text_len(L,3)
-	, lua_check_nk_flags_boxed(L,4), (unsigned int)luaL_checkinteger(L,5) )
+LUA_NK_API_DEFINE( nk_checkbox_flags_text, {
+	unsigned int flags = lua_check_nk_flags(L,4);
+	lua_pushboolean(L, nk_checkbox_flags_text(lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_text_len(L,3), &flags, lua_check_nk_uint(L,5)));
+	lua_pushinteger(L, flags);
+	return 2;
+} )
 
 // NK_API int nk_radio_label(struct nk_context*, const char*, int *active);
-LUA_NK_API( lua_pushboolean, nk_radio_label, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_bool_boxed(L,3) )
+LUA_NK_API_DEFINE( nk_radio_label, {
+	int active = lua_toboolean(L,3);
+	lua_pushboolean(L, nk_radio_label(lua_check_nk_context(L,1), luaL_checkstring(L,2), &active));
+	lua_pushboolean(L, active);
+	return 2;
+} )
 
 // NK_API int nk_radio_text(struct nk_context*, const char*, int, int *active);
-LUA_NK_API( lua_pushboolean, nk_radio_text, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_text_len(L,3), lua_check_nk_bool_boxed(L,4) )
+LUA_NK_API_DEFINE( nk_radio_text, {
+	int active = lua_toboolean(L,4);
+	lua_pushboolean(L, nk_radio_text(lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_text_len(L,3), &active));
+	lua_pushboolean(L, active);
+	return 2;
+} )
 
 // NK_API int nk_option_label(struct nk_context*, const char*, int active);
 LUA_NK_API( lua_pushboolean, nk_option_label, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_toboolean(L,3) )
@@ -637,18 +667,38 @@ LUA_NK_API( lua_pushboolean, nk_option_label, lua_check_nk_context(L,1), luaL_ch
 LUA_NK_API( lua_pushboolean, nk_option_text, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_text_len(L,3), lua_toboolean(L,4) )
 
 // NK_API int nk_selectable_label(struct nk_context*, const char*, nk_flags align, int *value);
-LUA_NK_API( lua_pushboolean, nk_selectable_label, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_flags(L,3), lua_check_nk_bool_boxed(L,4) )
+LUA_NK_API_DEFINE( nk_selectable_label, {
+	int value = lua_check_nk_int(L,4);
+	lua_pushboolean(L, nk_selectable_label(lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_flags(L,3), &value));
+	lua_pushinteger(L, value);
+	return 2;
+} )
 
 // NK_API int nk_selectable_text(struct nk_context*, const char*, int, nk_flags align, int *value);
-LUA_NK_API( lua_pushboolean, nk_selectable_text, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_text_len(L,3), lua_check_nk_flags(L,4), lua_check_nk_bool_boxed(L,4) )
+LUA_NK_API_DEFINE( nk_selectable_text, {
+	int value = lua_check_nk_int(L,5);
+	lua_pushboolean(L, nk_selectable_text(lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_text_len(L,3), lua_check_nk_flags(L,4), &value));
+	lua_pushinteger(L, value);
+	return 2;
+} )
 
 // NK_API int nk_selectable_image_label(struct nk_context*,struct nk_image,  const char*, nk_flags align, int *value);
-LUA_NK_API( lua_pushboolean, nk_selectable_image_label, lua_check_nk_context(L,1), *lua_check_nk_image(L,2), luaL_checkstring(L,3), lua_check_nk_flags(L,4), lua_check_nk_bool_boxed(L,5) )
+LUA_NK_API_DEFINE( nk_selectable_image_label, {
+	int value = lua_check_nk_int(L,5);
+	lua_pushboolean(L, nk_selectable_image_label(lua_check_nk_context(L,1), *lua_check_nk_image(L,2), luaL_checkstring(L,3), lua_check_nk_flags(L,4), &value));
+	lua_pushinteger(L, value);
+	return 2;
+} )
 
 // NK_API int nk_selectable_image_text(struct nk_context*,struct nk_image, const char*, int, nk_flags align, int *value);
-LUA_NK_API( lua_pushboolean, nk_selectable_image_text, lua_check_nk_context(L,1), *lua_check_nk_image(L,2)
-	, luaL_checkstring(L,3), lua_check_nk_text_len(L,4)
-	, lua_check_nk_flags(L,5), lua_check_nk_bool_boxed(L,6) )
+LUA_NK_API_DEFINE( nk_selectable_image_text, {
+	int value = lua_check_nk_int(L,6);
+	lua_pushboolean(L, nk_selectable_image_text(lua_check_nk_context(L,1), *lua_check_nk_image(L,2)
+		, luaL_checkstring(L,3), lua_check_nk_text_len(L,4)
+		, lua_check_nk_flags(L,5), &value));
+	lua_pushinteger(L, value);
+	return 2;
+} )
 
 // NK_API int nk_select_label(struct nk_context*, const char*, nk_flags align, int value);
 LUA_NK_API( lua_pushboolean, nk_select_label, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_flags(L,3), lua_check_nk_int(L,4) )
@@ -673,15 +723,28 @@ LUA_NK_API( lua_pushinteger, nk_slide_int, lua_check_nk_context(L,1), lua_check_
 	, lua_check_nk_int(L,3), lua_check_nk_int(L,4), lua_check_nk_int(L,5) )
 
 // NK_API int nk_slider_float(struct nk_context*, float min, float *val, float max, float step);
-LUA_NK_API( lua_pushboolean, nk_slider_float, lua_check_nk_context(L,1), lua_check_nk_float(L,2)
-	, lua_check_nk_float_boxed(L,3), lua_check_nk_float(L,4), lua_check_nk_float(L,5) )
+LUA_NK_API_DEFINE( nk_slider_float, {
+	float val = lua_check_nk_float(L,3);
+	lua_pushboolean(L, nk_slider_float(lua_check_nk_context(L,1), lua_check_nk_float(L,2), &val, lua_check_nk_float(L,4), lua_check_nk_float(L,5)));
+	lua_pushnumber(L, val);
+	return 2;
+} )
 
 // NK_API int nk_slider_int(struct nk_context*, int min, int *val, int max, int step);
-LUA_NK_API( lua_pushboolean, nk_slider_int, lua_check_nk_context(L,1), lua_check_nk_int(L,2)
-	, lua_check_nk_int_boxed(L,3), lua_check_nk_int(L,4), lua_check_nk_int(L,5) )
+LUA_NK_API_DEFINE( nk_slider_int, {
+	int val = lua_check_nk_int(L,3);
+	lua_pushboolean(L, nk_slider_int(lua_check_nk_context(L,1), lua_check_nk_int(L,2), &val, lua_check_nk_int(L,4), lua_check_nk_int(L,5)));
+	lua_pushinteger(L, val);
+	return 2;
+} )
 
 // NK_API int nk_progress(struct nk_context*, nk_size *cur, nk_size max, int modifyable);
-LUA_NK_API( lua_pushboolean, nk_progress, lua_check_nk_context(L,1), lua_check_nk_size_boxed(L,2), lua_check_nk_size(L,3), lua_toboolean(L,4) )
+LUA_NK_API_DEFINE( nk_progress, {
+	nk_size cur = lua_check_nk_size(L,2);
+	lua_pushboolean(L, nk_progress(lua_check_nk_context(L,1), &cur, lua_check_nk_size(L,3), lua_toboolean(L,4)));
+	lua_pushinteger(L, cur);
+	return 2;
+} )
 
 // NK_API nk_size nk_prog(struct nk_context*, nk_size cur, nk_size max, int modifyable);
 LUA_NK_API( lua_pushinteger, nk_prog, lua_check_nk_context(L,1), lua_check_nk_size(L,2), lua_check_nk_size(L,3), lua_toboolean(L,4) )
@@ -693,16 +756,28 @@ LUA_NK_API( lua_push_nk_color, nk_color_picker, lua_check_nk_context(L,1), *lua_
 LUA_NK_API( lua_pushboolean, nk_color_pick, lua_check_nk_context(L,1), lua_check_nk_color(L,2), lua_check_nk_enum(L,3,nk_color_format) )
 
 // NK_API void nk_property_int(struct nk_context*, const char *name, int min, int *val, int max, int step, float inc_per_pixel);
-LUA_NK_API_NORET( nk_property_int, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_int(L,3)
-	, lua_check_nk_int_boxed(L,4), lua_check_nk_int(L,5), lua_check_nk_int(L,6), lua_check_nk_float(L,7) )
+LUA_NK_API_DEFINE( nk_property_int, {
+	int val = lua_check_nk_int(L,4);
+	nk_property_int(lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_int(L,3), &val
+		, lua_check_nk_int(L,5), lua_check_nk_int(L,6), lua_check_nk_float(L,7));
+	return 1;
+} )
 
 // NK_API void nk_property_float(struct nk_context*, const char *name, float min, float *val, float max, float step, float inc_per_pixel);
-LUA_NK_API_NORET( nk_property_float, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_float(L,3)
-	, lua_check_nk_float_boxed(L,4), lua_check_nk_float(L,5), lua_check_nk_float(L,6), lua_check_nk_float(L,7) )
+LUA_NK_API_DEFINE( nk_property_float, {
+	float val = lua_check_nk_float(L,4);
+	nk_property_float(lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_float(L,3), &val
+		, lua_check_nk_float(L,5), lua_check_nk_float(L,6), lua_check_nk_float(L,7));
+	return 1;
+} )
 
 // NK_API void nk_property_double(struct nk_context*, const char *name, double min, double *val, double max, double step, float inc_per_pixel);
-LUA_NK_API_NORET( nk_property_double, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_double(L,3)
-	, lua_check_nk_double_boxed(L,4), lua_check_nk_double(L,5), lua_check_nk_double(L,6), lua_check_nk_float(L,7) )
+LUA_NK_API_DEFINE( nk_property_double, {
+	double val = lua_check_nk_double(L,4);
+	nk_property_double(lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_double(L,3), &val
+		, lua_check_nk_double(L,5), lua_check_nk_double(L,6), lua_check_nk_float(L,7));
+	return 1;
+} )
 
 // NK_API int nk_propertyi(struct nk_context*, const char *name, int min, int val, int max, int step, float inc_per_pixel);
 LUA_NK_API( lua_pushinteger, nk_propertyi, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_int(L,3)
@@ -717,14 +792,12 @@ LUA_NK_API( lua_pushnumber, nk_propertyd, lua_check_nk_context(L,1), luaL_checks
 	, lua_check_nk_double(L,4), lua_check_nk_double(L,5), lua_check_nk_double(L,6), lua_check_nk_float(L,7) )
 
 // NK_API nk_flags nk_edit_string(struct nk_context*, nk_flags, char *buffer, int *len, int max, nk_plugin_filter);
-LUA_NK_API_DECLARE( nk_edit_string )
-	#ifdef LUA_NK_API_IMPLEMENT
-	{
-		struct nk_char_array* b = lua_check_nk_struct(L,3,nk_char_array);
-		return lua_pushinteger(L, nk_edit_string(lua_check_nk_context(L,1), lua_check_nk_flags(L,2)
-			, b->arr, &(b->len), b->max, lua_check_nk_plugin_filter(L,4))), 1;
-	}
-	#endif
+LUA_NK_API_DEFINE( nk_edit_string, {
+	struct nk_char_array* b = lua_check_nk_char_array(L,3);
+	lua_pushinteger(L, nk_edit_string(lua_check_nk_context(L,1), lua_check_nk_flags(L,2)
+		, b->arr, &(b->len), b->max, lua_check_nk_plugin_filter(L,4)));
+	return 1;
+} )
 
 // NK_API nk_flags nk_edit_string_zero_terminated(struct nk_context*, nk_flags, char *buffer, int max, NULL);
 
@@ -782,7 +855,12 @@ LUA_NK_API_NORET( nk_popup_end, lua_check_nk_context(L,1) )
 
 
 // NK_API int nk_combo(struct nk_context*, const char **items, int count, int selected, int item_height, struct nk_vec2 size);
-// LUA_NK_API( lua_pushinteger, nk_combo, lua_check_nk_context(L,1), const char **items, int count, int selected, int item_height, *lua_check_nk_vec2(L,3) )
+LUA_NK_API_DEFINE( nk_combo, {
+	struct nk_string_array* arr = lua_check_nk_string_array(L,2);
+	lua_pushinteger(L, nk_combo(lua_check_nk_context(L,1), arr->arr, arr->len, lua_check_nk_int(L,3)
+		, lua_check_nk_int(L,4), *lua_check_nk_vec2(L,5)));
+	return 1;
+} )
 
 // NK_API int nk_combo_separator(struct nk_context*, const char *items_separated_by_separator, int separator, int selected, int count, int item_height, struct nk_vec2 size);
 LUA_NK_API( lua_pushinteger, nk_combo_separator, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_char(L,3)
@@ -796,15 +874,30 @@ LUA_NK_API( lua_pushinteger, nk_combo_string, lua_check_nk_context(L,1), luaL_ch
 // LUA_NK_API( lua_pushinteger, nk_combo_callback, lua_check_nk_context(L,1), void(*item_getter)(void*, int, const char**), void *userdata, int selected, int count, int item_height, *lua_check_nk_vec2(L,3) )
 
 // NK_API void nk_combobox(struct nk_context*, const char **items, int count, int *selected, int item_height, struct nk_vec2 size);
-// LUA_NK_API_NORET( nk_combobox, lua_check_nk_context(L,1), const char **items, int count, int *selected, int item_height, *lua_check_nk_vec2(L,3) )
+LUA_NK_API_DEFINE( nk_combobox, {
+	struct nk_string_array* arr = lua_check_nk_string_array(L,2);
+	int selected = lua_check_nk_int(L,3);
+	nk_combobox(lua_check_nk_context(L,1), arr->arr, arr->len, &selected, lua_check_nk_int(L,4), *lua_check_nk_vec2(L,5));
+	lua_pushinteger(L, selected);
+	return 1;
+} )
 
 // NK_API void nk_combobox_string(struct nk_context*, const char *items_separated_by_zeros, int *selected, int count, int item_height, struct nk_vec2 size);
-LUA_NK_API_NORET( nk_combobox_string, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_int_boxed(L,3)
-	, lua_check_nk_int(L,4), lua_check_nk_int(L,5), *lua_check_nk_vec2(L,6) )
+LUA_NK_API_DEFINE( nk_combobox_string, {
+	int selected = lua_check_nk_int(L,3);
+	nk_combobox_string(lua_check_nk_context(L,1), luaL_checkstring(L,2), &selected, lua_check_nk_int(L,4), lua_check_nk_int(L,5), *lua_check_nk_vec2(L,6));
+	lua_pushinteger(L, selected);
+	return 1;
+} )
 
 // NK_API void nk_combobox_separator(struct nk_context*, const char *items_separated_by_separator, int separator,int *selected, int count, int item_height, struct nk_vec2 size);
-LUA_NK_API_NORET( nk_combobox_separator, lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_char(L,3)
-	, lua_check_nk_int_boxed(L,4), lua_check_nk_int(L,5), lua_check_nk_int(L,6), *lua_check_nk_vec2(L,7) )
+LUA_NK_API_DEFINE( nk_combobox_separator, {
+	int selected = lua_check_nk_int(L,3);
+	nk_combobox_separator(lua_check_nk_context(L,1), luaL_checkstring(L,2), lua_check_nk_char(L,3), &selected
+		, lua_check_nk_int(L,5), lua_check_nk_int(L,6), *lua_check_nk_vec2(L,7));
+	lua_pushinteger(L, selected);
+	return 1;
+} )
 
 // NK_API void nk_combobox_callback(struct nk_context*, void(*item_getter)(void*, int, const char**), void*, int *selected, int count, int item_height, struct nk_vec2 size);
 // LUA_NK_API_NORET( nk_combobox_callback, lua_check_nk_context(L,1), void(*item_getter)(void*, int, const char**), void*, int *selected, int count, int item_height, *lua_check_nk_vec2(L,3) )
@@ -1087,26 +1180,22 @@ LUA_NK_API( lua_push_nk_color, nk_hsva_f, lua_check_nk_float(L,1), lua_check_nk_
 
 
 // NK_API void nk_color_f(float *r, float *g, float *b, float *a, struct nk_color);
-LUA_NK_API_DECLARE( nk_color_f )
-	#ifdef LUA_NK_API_IMPLEMENT
-	{
-		float r,g,b,a;
-		nk_color_f(&r, &g, &b, &a, *lua_check_nk_color(L,1));
-		return lua_pushnumber(L,r), lua_pushnumber(L,g), lua_pushnumber(L,b), lua_pushnumber(L,a), 4;
-	}
-	#endif
+LUA_NK_API_DEFINE( nk_color_f, {
+	float r,g,b,a;
+	nk_color_f(&r, &g, &b, &a, *lua_check_nk_color(L,1));
+	lua_pushnumber(L,r); lua_pushnumber(L,g); lua_pushnumber(L,b); lua_pushnumber(L,a);
+	return 4;
+} )
 
 // NK_API void nk_color_fv(float *rgba_out, struct nk_color);
 
 // NK_API void nk_color_d(double *r, double *g, double *b, double *a, struct nk_color);
-LUA_NK_API_DECLARE( nk_color_d )
-	#ifdef LUA_NK_API_IMPLEMENT
-	{
-		double r,g,b,a;
-		nk_color_d(&r, &g, &b, &a, *lua_check_nk_color(L,1));
-		return lua_pushnumber(L,r), lua_pushnumber(L,g), lua_pushnumber(L,b), lua_pushnumber(L,a), 4;
-	}
-	#endif
+LUA_NK_API_DEFINE( nk_color_d, {
+	double r,g,b,a;
+	nk_color_d(&r, &g, &b, &a, *lua_check_nk_color(L,1));
+	lua_pushnumber(L,r); lua_pushnumber(L,g); lua_pushnumber(L,b); lua_pushnumber(L,a);
+	return 4;
+} )
 
 // NK_API void nk_color_dv(double *rgba_out, struct nk_color);
 
@@ -1114,24 +1203,20 @@ LUA_NK_API_DECLARE( nk_color_d )
 LUA_NK_API( lua_pushinteger, nk_color_u32, *lua_check_nk_color(L,1) )
 
 // NK_API void nk_color_hex_rgba(char *output, struct nk_color);
-LUA_NK_API_DECLARE( nk_color_hex_rgba )
-	#ifdef LUA_NK_API_IMPLEMENT
-	{
-		char s[16];
-		nk_color_hex_rgba(s, *lua_check_nk_color(L,1));
-		return lua_pushstring(L,s), 1;
-	}
-	#endif
+LUA_NK_API_DEFINE( nk_color_hex_rgba, {
+	char s[16];
+	nk_color_hex_rgba(s, *lua_check_nk_color(L,1));
+	lua_pushstring(L,s);
+	return 1;
+} )
 
 // NK_API void nk_color_hex_rgb(char *output, struct nk_color);
-LUA_NK_API_DECLARE( nk_color_hex_rgb )
-	#ifdef LUA_NK_API_IMPLEMENT
-	{
-		char s[16];
-		nk_color_hex_rgb(s, *lua_check_nk_color(L,1));
-		return lua_pushstring(L,s), 1;
-	}
-	#endif
+LUA_NK_API_DEFINE( nk_color_hex_rgb, {
+	char s[16];
+	nk_color_hex_rgb(s, *lua_check_nk_color(L,1));
+	lua_pushstring(L,s);
+	return 1;
+} )
 
 // NK_API void nk_color_hsv_i(int *out_h, int *out_s, int *out_v, struct nk_color);
 // NK_API void nk_color_hsv_b(nk_byte *out_h, nk_byte *out_s, nk_byte *out_v, struct nk_color);
@@ -1216,8 +1301,7 @@ LUA_NK_API( lua_push_nk_vec2, nk_rect_size, *lua_check_nk_rect(L,1) )
 
 #ifdef NK_INCLUDE_DEFAULT_ALLOCATOR
 // NK_API void nk_font_atlas_init_default(struct nk_font_atlas*);
-LUA_NK_API_NORET( nk_font_atlas_init_default, lua_check_nk_font_atlas(L,1) )
-
+// LUA_NK_API_NORET( nk_font_atlas_init_default, lua_check_nk_font_atlas(L,1) )
 #endif
 // NK_API void nk_font_atlas_init(struct nk_font_atlas*, struct nk_allocator*);
 // NK_API void nk_font_atlas_init_custom(struct nk_font_atlas*, struct nk_allocator *persistent, struct nk_allocator *transient);
@@ -1257,8 +1341,7 @@ LUA_NK_API_NORET( nk_font_atlas_clear, lua_check_nk_font_atlas(L,1) )
 
 #ifdef NK_INCLUDE_DEFAULT_ALLOCATOR
 // NK_API void nk_buffer_init_default(struct nk_buffer*);
-LUA_NK_API_NORET( nk_buffer_init_default, lua_check_nk_buffer(L,1) )
-
+// LUA_NK_API_NORET( nk_buffer_init_default, lua_check_nk_buffer(L,1) )
 #endif
 // NK_API void nk_buffer_init(struct nk_buffer*, const struct nk_allocator*, nk_size size);
 // NK_API void nk_buffer_init_fixed(struct nk_buffer*, void *memory, nk_size size);
@@ -1274,7 +1357,7 @@ LUA_NK_API_NORET( nk_buffer_reset, lua_check_nk_buffer(L,1), lua_check_nk_enum(L
 LUA_NK_API_NORET( nk_buffer_clear, lua_check_nk_buffer(L,1) )
 
 // NK_API void nk_buffer_free(struct nk_buffer*);
-LUA_NK_API_NORET( nk_buffer_free, lua_check_nk_buffer(L,1) )
+// LUA_NK_API_NORET( nk_buffer_free, lua_check_nk_buffer(L,1) )
 
 // NK_API void *nk_buffer_memory(struct nk_buffer*);
 // NK_API const void *nk_buffer_memory_const(const struct nk_buffer*);
@@ -1331,13 +1414,13 @@ LUA_NK_API_NORET( nk_buffer_free, lua_check_nk_buffer(L,1) )
 
 #ifdef NK_INCLUDE_DEFAULT_ALLOCATOR
 // NK_API void nk_textedit_init_default(struct nk_text_edit*);
-LUA_NK_API_NORET( nk_textedit_init_default, lua_check_nk_text_edit(L,1) )
+// LUA_NK_API_NORET( nk_textedit_init_default, lua_check_nk_text_edit(L,1) )
 #endif
 // NK_API void nk_textedit_init(struct nk_text_edit*, struct nk_allocator*, nk_size size);
 // NK_API void nk_textedit_init_fixed(struct nk_text_edit*, void *memory, nk_size size);
 
 // NK_API void nk_textedit_free(struct nk_text_edit*);
-LUA_NK_API_NORET( nk_textedit_free, lua_check_nk_text_edit(L,1) )
+// LUA_NK_API_NORET( nk_textedit_free, lua_check_nk_text_edit(L,1) )
 
 // NK_API void nk_textedit_text(struct nk_text_edit*, const char*, int total_len);
 LUA_NK_API_NORET( nk_textedit_text, lua_check_nk_text_edit(L,1), luaL_checkstring(L,2), lua_check_nk_text_len(L,3) )
@@ -1593,41 +1676,7 @@ LUA_NK_API( lua_push_nk_style_item, nk_style_item_color, *lua_check_nk_color(L,1
 // NK_API struct nk_style_item nk_style_item_hide(void);
 LUA_NK_API( lua_push_nk_style_item, nk_style_item_hide )
 
-// --------------------------------------------------
-// extern apis for lua wrapper
-
-LUA_NK_API_DECLARE( nk_char_array_new )
-	#ifdef LUA_NK_API_IMPLEMENT
-	{
-		size_t n = 0;
-		const char* s = NULL;
-		size_t num = 0;
-		struct nk_char_array* v;
-		if( lua_type(L,1)==LUA_TSTRING ) {
-			s = luaL_checklstring(L, 1, &n);
-			num = (size_t)luaL_optinteger(L, 2, (lua_Integer)n);
-		} else {
-			num = (size_t)luaL_checkinteger(L, 1);
-		}
-		v = lua_new_nk_array(L, nk_char, num);
-		v->max = (int)num;
-		v->len = (int)((n<num) ? n : num);
-		if( (v->len > v->max) || (v->len < 0) || (v->max < 0) )
-			return luaL_argerror(L, 1, "size error");
-		if( s ) { memcpy(v->arr, s, v->len); } 
-		return 1;
-	}
-	#endif
-
-LUA_NK_API_DECLARE( nk_vec2_xy )
-	#ifdef LUA_NK_API_IMPLEMENT
-	{
-		struct nk_vec2* v = lua_check_nk_vec2(L,1);
-		return lua_pushnumber(L, v->x), lua_pushnumber(L, v->y), 2;
-	}
-	#endif
-
-#undef LUA_NK_API_DECLARE
+#undef LUA_NK_API_DEFINE
 #undef LUA_NK_API_NORET
 #undef LUA_NK_API
 
