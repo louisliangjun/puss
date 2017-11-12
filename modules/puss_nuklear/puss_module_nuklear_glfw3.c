@@ -15,56 +15,580 @@
 #define NK_IMPLEMENTATION
 #include <nuklear/nuklear.h>
 
-#define NK_GLFW_GL3_IMPLEMENTATION
-#include "nuklear_glfw_gl3.h"
-
 #include "nuklear_lua.inl"
+
+#ifndef NK_GLFW_TEXT_MAX
+#define NK_GLFW_TEXT_MAX 256
+#endif
+#ifndef NK_GLFW_DOUBLE_CLICK_LO
+#define NK_GLFW_DOUBLE_CLICK_LO 0.02
+#endif
+#ifndef NK_GLFW_DOUBLE_CLICK_HI
+#define NK_GLFW_DOUBLE_CLICK_HI 0.2
+#endif
+
+enum nk_glfw_init_state{
+    NK_GLFW3_DEFAULT=0,
+    NK_GLFW3_INSTALL_CALLBACKS
+};
+
+struct nk_glfw_device {
+    struct nk_buffer cmds;
+    struct nk_draw_null_texture null;
+    GLuint vbo, vao, ebo;
+    GLuint prog;
+    GLuint vert_shdr;
+    GLuint frag_shdr;
+    GLint attrib_pos;
+    GLint attrib_uv;
+    GLint attrib_col;
+    GLint uniform_tex;
+    GLint uniform_proj;
+    GLuint font_tex;
+};
+
+struct nk_glfw_vertex {
+    float position[2];
+    float uv[2];
+    nk_byte col[4];
+};
+
+struct nk_glfw {
+    GLFWwindow *win;
+    int width, height;
+    int display_width, display_height;
+    struct nk_glfw_device ogl;
+    struct nk_context ctx;
+    struct nk_font_atlas atlas;
+    struct nk_vec2 fb_scale;
+    unsigned int text[NK_GLFW_TEXT_MAX];
+    int text_len;
+    struct nk_vec2 scroll;
+    double last_button_click;
+    int is_double_click_down;
+    struct nk_vec2 double_click_pos;
+};
+
+#ifdef __APPLE__
+  #define NK_SHADER_VERSION "#version 150\n"
+#else
+  #define NK_SHADER_VERSION "#version 300 es\n"
+#endif
+
+NK_API void
+nk_glfw3_device_create(struct nk_glfw* glfw)
+{
+    GLint status;
+    static const GLchar *vertex_shader =
+        NK_SHADER_VERSION
+        "uniform mat4 ProjMtx;\n"
+        "in vec2 Position;\n"
+        "in vec2 TexCoord;\n"
+        "in vec4 Color;\n"
+        "out vec2 Frag_UV;\n"
+        "out vec4 Frag_Color;\n"
+        "void main() {\n"
+        "   Frag_UV = TexCoord;\n"
+        "   Frag_Color = Color;\n"
+        "   gl_Position = ProjMtx * vec4(Position.xy, 0, 1);\n"
+        "}\n";
+    static const GLchar *fragment_shader =
+        NK_SHADER_VERSION
+        "precision mediump float;\n"
+        "uniform sampler2D Texture;\n"
+        "in vec2 Frag_UV;\n"
+        "in vec4 Frag_Color;\n"
+        "out vec4 Out_Color;\n"
+        "void main(){\n"
+        "   Out_Color = Frag_Color * texture(Texture, Frag_UV.st);\n"
+        "}\n";
+
+    struct nk_glfw_device *dev = &glfw->ogl;
+    nk_buffer_init_default(&dev->cmds);
+    dev->prog = glCreateProgram();
+    dev->vert_shdr = glCreateShader(GL_VERTEX_SHADER);
+    dev->frag_shdr = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(dev->vert_shdr, 1, &vertex_shader, 0);
+    glShaderSource(dev->frag_shdr, 1, &fragment_shader, 0);
+    glCompileShader(dev->vert_shdr);
+    glCompileShader(dev->frag_shdr);
+    glGetShaderiv(dev->vert_shdr, GL_COMPILE_STATUS, &status);
+    assert(status == GL_TRUE);
+    glGetShaderiv(dev->frag_shdr, GL_COMPILE_STATUS, &status);
+    assert(status == GL_TRUE);
+    glAttachShader(dev->prog, dev->vert_shdr);
+    glAttachShader(dev->prog, dev->frag_shdr);
+    glLinkProgram(dev->prog);
+    glGetProgramiv(dev->prog, GL_LINK_STATUS, &status);
+    assert(status == GL_TRUE);
+
+    dev->uniform_tex = glGetUniformLocation(dev->prog, "Texture");
+    dev->uniform_proj = glGetUniformLocation(dev->prog, "ProjMtx");
+    dev->attrib_pos = glGetAttribLocation(dev->prog, "Position");
+    dev->attrib_uv = glGetAttribLocation(dev->prog, "TexCoord");
+    dev->attrib_col = glGetAttribLocation(dev->prog, "Color");
+
+    {
+        /* buffer setup */
+        GLsizei vs = sizeof(struct nk_glfw_vertex);
+        size_t vp = offsetof(struct nk_glfw_vertex, position);
+        size_t vt = offsetof(struct nk_glfw_vertex, uv);
+        size_t vc = offsetof(struct nk_glfw_vertex, col);
+
+        glGenBuffers(1, &dev->vbo);
+        glGenBuffers(1, &dev->ebo);
+        glGenVertexArrays(1, &dev->vao);
+
+        glBindVertexArray(dev->vao);
+        glBindBuffer(GL_ARRAY_BUFFER, dev->vbo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, dev->ebo);
+
+        glEnableVertexAttribArray((GLuint)dev->attrib_pos);
+        glEnableVertexAttribArray((GLuint)dev->attrib_uv);
+        glEnableVertexAttribArray((GLuint)dev->attrib_col);
+
+        glVertexAttribPointer((GLuint)dev->attrib_pos, 2, GL_FLOAT, GL_FALSE, vs, (void*)vp);
+        glVertexAttribPointer((GLuint)dev->attrib_uv, 2, GL_FLOAT, GL_FALSE, vs, (void*)vt);
+        glVertexAttribPointer((GLuint)dev->attrib_col, 4, GL_UNSIGNED_BYTE, GL_TRUE, vs, (void*)vc);
+    }
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+}
+
+NK_INTERN void
+nk_glfw3_device_upload_atlas(struct nk_glfw* glfw, const void *image, int width, int height)
+{
+    struct nk_glfw_device *dev = &glfw->ogl;
+    glGenTextures(1, &dev->font_tex);
+    glBindTexture(GL_TEXTURE_2D, dev->font_tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, (GLsizei)width, (GLsizei)height, 0,
+                GL_RGBA, GL_UNSIGNED_BYTE, image);
+}
+
+NK_API void
+nk_glfw3_device_destroy(struct nk_glfw* glfw)
+{
+    struct nk_glfw_device *dev = &glfw->ogl;
+    glDetachShader(dev->prog, dev->vert_shdr);
+    glDetachShader(dev->prog, dev->frag_shdr);
+    glDeleteShader(dev->vert_shdr);
+    glDeleteShader(dev->frag_shdr);
+    glDeleteProgram(dev->prog);
+    glDeleteTextures(1, &dev->font_tex);
+    glDeleteBuffers(1, &dev->vbo);
+    glDeleteBuffers(1, &dev->ebo);
+    nk_buffer_free(&dev->cmds);
+}
+
+NK_API void
+nk_glfw3_render(struct nk_glfw* glfw, enum nk_anti_aliasing AA, int max_vertex_buffer, int max_element_buffer)
+{
+    struct nk_glfw_device *dev = &glfw->ogl;
+    struct nk_buffer vbuf, ebuf;
+    GLfloat ortho[4][4] = {
+        {2.0f, 0.0f, 0.0f, 0.0f},
+        {0.0f,-2.0f, 0.0f, 0.0f},
+        {0.0f, 0.0f,-1.0f, 0.0f},
+        {-1.0f,1.0f, 0.0f, 1.0f},
+    };
+    ortho[0][0] /= (GLfloat)glfw->width;
+    ortho[1][1] /= (GLfloat)glfw->height;
+
+    /* setup global state */
+    glEnable(GL_BLEND);
+    glBlendEquation(GL_FUNC_ADD);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_SCISSOR_TEST);
+    glActiveTexture(GL_TEXTURE0);
+
+    /* setup program */
+    glUseProgram(dev->prog);
+    glUniform1i(dev->uniform_tex, 0);
+    glUniformMatrix4fv(dev->uniform_proj, 1, GL_FALSE, &ortho[0][0]);
+    glViewport(0,0,(GLsizei)glfw->display_width,(GLsizei)glfw->display_height);
+    {
+        /* convert from command queue into draw list and draw to screen */
+        const struct nk_draw_command *cmd;
+        void *vertices, *elements;
+        const nk_draw_index *offset = NULL;
+
+        /* allocate vertex and element buffer */
+        glBindVertexArray(dev->vao);
+        glBindBuffer(GL_ARRAY_BUFFER, dev->vbo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, dev->ebo);
+
+        glBufferData(GL_ARRAY_BUFFER, max_vertex_buffer, NULL, GL_STREAM_DRAW);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, max_element_buffer, NULL, GL_STREAM_DRAW);
+
+        /* load draw vertices & elements directly into vertex + element buffer */
+        vertices = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+        elements = glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
+        {
+            /* fill convert configuration */
+            struct nk_convert_config config;
+            static const struct nk_draw_vertex_layout_element vertex_layout[] = {
+                {NK_VERTEX_POSITION, NK_FORMAT_FLOAT, NK_OFFSETOF(struct nk_glfw_vertex, position)},
+                {NK_VERTEX_TEXCOORD, NK_FORMAT_FLOAT, NK_OFFSETOF(struct nk_glfw_vertex, uv)},
+                {NK_VERTEX_COLOR, NK_FORMAT_R8G8B8A8, NK_OFFSETOF(struct nk_glfw_vertex, col)},
+                {NK_VERTEX_LAYOUT_END}
+            };
+            memset(&config, 0, sizeof(config));
+            config.vertex_layout = vertex_layout;
+            config.vertex_size = sizeof(struct nk_glfw_vertex);
+            config.vertex_alignment = NK_ALIGNOF(struct nk_glfw_vertex);
+            config.null = dev->null;
+            config.circle_segment_count = 22;
+            config.curve_segment_count = 22;
+            config.arc_segment_count = 22;
+            config.global_alpha = 1.0f;
+            config.shape_AA = AA;
+            config.line_AA = AA;
+
+            /* setup buffers to load vertices and elements */
+            nk_buffer_init_fixed(&vbuf, vertices, (size_t)max_vertex_buffer);
+            nk_buffer_init_fixed(&ebuf, elements, (size_t)max_element_buffer);
+            nk_convert(&glfw->ctx, &dev->cmds, &vbuf, &ebuf, &config);
+        }
+        glUnmapBuffer(GL_ARRAY_BUFFER);
+        glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
+
+        /* iterate over and execute each draw command */
+        nk_draw_foreach(cmd, &glfw->ctx, &dev->cmds)
+        {
+            if (!cmd->elem_count) continue;
+            glBindTexture(GL_TEXTURE_2D, (GLuint)cmd->texture.id);
+            glScissor(
+                (GLint)(cmd->clip_rect.x * glfw->fb_scale.x),
+                (GLint)((glfw->height - (GLint)(cmd->clip_rect.y + cmd->clip_rect.h)) * glfw->fb_scale.y),
+                (GLint)(cmd->clip_rect.w * glfw->fb_scale.x),
+                (GLint)(cmd->clip_rect.h * glfw->fb_scale.y));
+            glDrawElements(GL_TRIANGLES, (GLsizei)cmd->elem_count, GL_UNSIGNED_SHORT, offset);
+            offset += cmd->elem_count;
+        }
+        nk_clear(&glfw->ctx);
+    }
+
+    /* default OpenGL state */
+    glUseProgram(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    glDisable(GL_BLEND);
+    glDisable(GL_SCISSOR_TEST);
+}
+
+NK_API void
+nk_glfw3_char_callback(GLFWwindow *win, unsigned int codepoint)
+{
+	struct nk_glfw* glfw = (struct nk_glfw*)glfwGetWindowUserPointer(win);
+    if (glfw->text_len < NK_GLFW_TEXT_MAX)
+        glfw->text[glfw->text_len++] = codepoint;
+}
+
+NK_API void
+nk_gflw3_scroll_callback(GLFWwindow *win, double xoff, double yoff)
+{
+	struct nk_glfw* glfw = (struct nk_glfw*)glfwGetWindowUserPointer(win);
+	glfw->scroll.x += (float)xoff;
+	glfw->scroll.y += (float)yoff;
+}
+
+NK_API void
+nk_glfw3_mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
+{
+	struct nk_glfw* glfw = (struct nk_glfw*)glfwGetWindowUserPointer(window);
+    double x, y;
+    if (button != GLFW_MOUSE_BUTTON_LEFT) return;
+    glfwGetCursorPos(window, &x, &y);
+    if (action == GLFW_PRESS)  {
+        double dt = glfwGetTime() - glfw->last_button_click;
+        if (dt > NK_GLFW_DOUBLE_CLICK_LO && dt < NK_GLFW_DOUBLE_CLICK_HI) {
+            glfw->is_double_click_down = nk_true;
+            glfw->double_click_pos = nk_vec2(x, y);
+        }
+        glfw->last_button_click = glfwGetTime();
+    } else glfw->is_double_click_down = nk_false;
+}
+
+NK_INTERN void
+nk_glfw3_clipbard_paste(nk_handle usr, struct nk_text_edit *edit)
+{
+	struct nk_glfw* glfw = (struct nk_glfw*)usr.ptr;
+    const char *text = glfwGetClipboardString(glfw->win);
+    if (text) nk_textedit_paste(edit, text, nk_strlen(text));
+}
+
+NK_INTERN void
+nk_glfw3_clipbard_copy(nk_handle usr, const char *text, int len)
+{
+	struct nk_glfw* glfw = (struct nk_glfw*)usr.ptr;
+    char *str = 0;
+    if (!len) return;
+    str = (char*)malloc((size_t)len+1);
+    if (!str) return;
+    memcpy(str, text, (size_t)len);
+    str[len] = '\0';
+    glfwSetClipboardString(glfw->win, str);
+    free(str);
+}
+
+NK_API struct nk_context*
+nk_glfw3_init(struct nk_glfw* glfw, GLFWwindow *win, enum nk_glfw_init_state init_state)
+{
+    glfw->win = win;
+    glfwSetWindowUserPointer(win, glfw);
+    if (init_state == NK_GLFW3_INSTALL_CALLBACKS) {
+        glfwSetScrollCallback(win, nk_gflw3_scroll_callback);
+        glfwSetCharCallback(win, nk_glfw3_char_callback);
+        glfwSetMouseButtonCallback(win, nk_glfw3_mouse_button_callback);
+    }
+    nk_init_default(&glfw->ctx, 0);
+    glfw->ctx.clip.copy = nk_glfw3_clipbard_copy;
+    glfw->ctx.clip.paste = nk_glfw3_clipbard_paste;
+    glfw->ctx.clip.userdata = nk_handle_ptr(glfw);
+    glfw->last_button_click = 0;
+    nk_glfw3_device_create(glfw);
+
+    glfw->is_double_click_down = nk_false;
+    glfw->double_click_pos = nk_vec2(0, 0);
+
+    return &glfw->ctx;
+}
+
+NK_API void
+nk_glfw3_font_stash_begin(struct nk_glfw* glfw, struct nk_font_atlas **atlas)
+{
+    nk_font_atlas_init_default(&glfw->atlas);
+    nk_font_atlas_begin(&glfw->atlas);
+    *atlas = &glfw->atlas;
+}
+
+NK_API void
+nk_glfw3_font_stash_end(struct nk_glfw* glfw)
+{
+    const void *image; int w, h;
+    image = nk_font_atlas_bake(&glfw->atlas, &w, &h, NK_FONT_ATLAS_RGBA32);
+    nk_glfw3_device_upload_atlas(glfw, image, w, h);
+    nk_font_atlas_end(&glfw->atlas, nk_handle_id((int)glfw->ogl.font_tex), &glfw->ogl.null);
+    if (glfw->atlas.default_font)
+        nk_style_set_font(&glfw->ctx, &glfw->atlas.default_font->handle);
+}
+
+NK_API void
+nk_glfw3_new_frame(struct nk_glfw* glfw)
+{
+    int i;
+    double x, y;
+    struct nk_context *ctx = &glfw->ctx;
+    struct GLFWwindow *win = glfw->win;
+
+    glfwGetWindowSize(win, &glfw->width, &glfw->height);
+    glfwGetFramebufferSize(win, &glfw->display_width, &glfw->display_height);
+    glfw->fb_scale.x = (float)glfw->display_width/(float)glfw->width;
+    glfw->fb_scale.y = (float)glfw->display_height/(float)glfw->height;
+
+    nk_input_begin(ctx);
+    for (i = 0; i < glfw->text_len; ++i)
+        nk_input_unicode(ctx, glfw->text[i]);
+
+#if NK_GLFW_GL3_MOUSE_GRABBING
+    /* optional grabbing behavior */
+    if (ctx->input.mouse.grab)
+        glfwSetInputMode(glfw->win, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+    else if (ctx->input.mouse.ungrab)
+        glfwSetInputMode(glfw->win, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+#endif
+
+    nk_input_key(ctx, NK_KEY_DEL, glfwGetKey(win, GLFW_KEY_DELETE) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_ENTER, glfwGetKey(win, GLFW_KEY_ENTER) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_TAB, glfwGetKey(win, GLFW_KEY_TAB) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_BACKSPACE, glfwGetKey(win, GLFW_KEY_BACKSPACE) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_UP, glfwGetKey(win, GLFW_KEY_UP) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_DOWN, glfwGetKey(win, GLFW_KEY_DOWN) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_TEXT_START, glfwGetKey(win, GLFW_KEY_HOME) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_TEXT_END, glfwGetKey(win, GLFW_KEY_END) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_SCROLL_START, glfwGetKey(win, GLFW_KEY_HOME) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_SCROLL_END, glfwGetKey(win, GLFW_KEY_END) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_SCROLL_DOWN, glfwGetKey(win, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_SCROLL_UP, glfwGetKey(win, GLFW_KEY_PAGE_UP) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_SHIFT, glfwGetKey(win, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS||
+                                    glfwGetKey(win, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
+
+    if (glfwGetKey(win, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
+        glfwGetKey(win, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) {
+        nk_input_key(ctx, NK_KEY_COPY, glfwGetKey(win, GLFW_KEY_C) == GLFW_PRESS);
+        nk_input_key(ctx, NK_KEY_PASTE, glfwGetKey(win, GLFW_KEY_V) == GLFW_PRESS);
+        nk_input_key(ctx, NK_KEY_CUT, glfwGetKey(win, GLFW_KEY_X) == GLFW_PRESS);
+        nk_input_key(ctx, NK_KEY_TEXT_UNDO, glfwGetKey(win, GLFW_KEY_Z) == GLFW_PRESS);
+        nk_input_key(ctx, NK_KEY_TEXT_REDO, glfwGetKey(win, GLFW_KEY_R) == GLFW_PRESS);
+        nk_input_key(ctx, NK_KEY_TEXT_WORD_LEFT, glfwGetKey(win, GLFW_KEY_LEFT) == GLFW_PRESS);
+        nk_input_key(ctx, NK_KEY_TEXT_WORD_RIGHT, glfwGetKey(win, GLFW_KEY_RIGHT) == GLFW_PRESS);
+        nk_input_key(ctx, NK_KEY_TEXT_LINE_START, glfwGetKey(win, GLFW_KEY_B) == GLFW_PRESS);
+        nk_input_key(ctx, NK_KEY_TEXT_LINE_END, glfwGetKey(win, GLFW_KEY_E) == GLFW_PRESS);
+    } else {
+        nk_input_key(ctx, NK_KEY_LEFT, glfwGetKey(win, GLFW_KEY_LEFT) == GLFW_PRESS);
+        nk_input_key(ctx, NK_KEY_RIGHT, glfwGetKey(win, GLFW_KEY_RIGHT) == GLFW_PRESS);
+        nk_input_key(ctx, NK_KEY_COPY, 0);
+        nk_input_key(ctx, NK_KEY_PASTE, 0);
+        nk_input_key(ctx, NK_KEY_CUT, 0);
+        nk_input_key(ctx, NK_KEY_SHIFT, 0);
+    }
+
+    glfwGetCursorPos(win, &x, &y);
+    nk_input_motion(ctx, (int)x, (int)y);
+#if NK_GLFW_GL3_MOUSE_GRABBING
+    if (ctx->input.mouse.grabbed) {
+        glfwSetCursorPos(glfw->win, ctx->input.mouse.prev.x, ctx->input.mouse.prev.y);
+        ctx->input.mouse.pos.x = ctx->input.mouse.prev.x;
+        ctx->input.mouse.pos.y = ctx->input.mouse.prev.y;
+    }
+#endif
+    nk_input_button(ctx, NK_BUTTON_LEFT, (int)x, (int)y, glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
+    nk_input_button(ctx, NK_BUTTON_MIDDLE, (int)x, (int)y, glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS);
+    nk_input_button(ctx, NK_BUTTON_RIGHT, (int)x, (int)y, glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
+    nk_input_button(ctx, NK_BUTTON_DOUBLE, glfw->double_click_pos.x, glfw->double_click_pos.y, glfw->is_double_click_down);
+    nk_input_scroll(ctx, glfw->scroll);
+    nk_input_end(&glfw->ctx);
+    glfw->text_len = 0;
+    glfw->scroll = nk_vec2(0,0);
+}
+
+
+
 
 #define MAX_VERTEX_BUFFER 1 * 1024 * 1024
 #define MAX_ELEMENT_BUFFER 512 * 1024
+
+struct nk_font_atlas glfw_atlas;
 
 static void error_callback(int e, const char *d) {
 	fprintf(stderr, "[GFLW] error %d: %s\n", e, d);
 }
 
-static int application_run(lua_State* L) {
-	const char* title = luaL_optstring(L, 2, "Puss nuklear demo");
-	int width = luaL_optinteger(L, 3, 1024);
-	int height = luaL_optinteger(L, 4, 768);
+static int nk_glfw_destroy_lua(lua_State* L) {
+	struct nk_glfw* glfw = lua_check_nk_struct(L, 1, nk_glfw);
+	if( glfw->win ) {
+		nk_font_atlas_clear(&glfw->atlas);
+		nk_free(&glfw->ctx);
+		nk_glfw3_device_destroy(glfw);
+		glfwDestroyWindow(glfw->win);
+		memset(glfw, 0, sizeof(struct nk_glfw));
+	}
+    return 0;
+}
+
+static int nk_glfw_update_lua(lua_State* L) {
+	struct nk_glfw* glfw = lua_check_nk_struct(L, 1, nk_glfw);
+	if( !(glfw && glfw->win) ) {
+		lua_pushboolean(L, nk_true);
+		return 1;
+	}
+	luaL_argcheck(L, lua_type(L, 2)==LUA_TFUNCTION, 2, "need function!");
+
+    lua_push_nk_context_ptr(L, &glfw->ctx);
+
+    if( glfwWindowShouldClose(glfw->win) ) {
+		lua_pushboolean(L, nk_true);
+    	return 1;
+    }
+
+	glfwWaitEventsTimeout(0.1);
+    /* Input */
+    glfwPollEvents();
+    nk_glfw3_new_frame(glfw);
+
+	/* GUI */
+	lua_pushvalue(L, 2);	// function
+	lua_pushvalue(L, -2);	// nk_context
+	if( puss_pcall_stacktrace(L, 1, 0) ) {
+		error_callback(1, lua_tostring(L, -1));
+		lua_pop(L, 1);
+	}
+	lua_pushboolean(L, nk_false);
+	return 1;
+}
+
+static int nk_glfw_draw_lua(lua_State* L) {
+	struct nk_glfw* glfw = lua_check_nk_struct(L, 1, nk_glfw);
+	int width, height;
+	if( !glfw ) return 0;
+    glfwMakeContextCurrent(glfw->win);
+    glfwGetWindowSize(glfw->win, &width, &height);
+
+    /* Draw */
+    glViewport(0, 0, width, height);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    /* IMPORTANT: `nk_glfw_render` modifies some global OpenGL state
+     * with blending, scissor, face culling, depth test and viewport and
+     * defaults everything back into a default state.
+     * Make sure to either a.) save and restore or b.) reset your own state after
+     * rendering the UI. */
+    nk_glfw3_render(glfw, NK_ANTI_ALIASING_ON, MAX_VERTEX_BUFFER, MAX_ELEMENT_BUFFER);
+    glfwSwapBuffers(glfw->win);
+    glfwMakeContextCurrent(NULL);
+    return 0;
+}
+
+static int glad_inited = 0;
+
+static int nk_glfw_window_create_lua(lua_State* L) {
+	const char* title = luaL_optstring(L, 1, "nuklear glfw window");
+	int width = luaL_optinteger(L, 2, 1024);
+	int height = luaL_optinteger(L, 3, 768);
     GLFWwindow *win;
-    struct nk_context *ctx;
     struct nk_font_atlas *atlas;
-    GLfloat bg[4] = {0.2f, 0.2f, 0.2f, 1.0f};
-	luaL_argcheck(L, lua_type(L, 1)==LUA_TFUNCTION, 1, "need function!");
-
-    glfwSetErrorCallback(error_callback);
-    if (!glfwInit())
-        return luaL_error(L, "[GFLW] failed to init!\n");
-
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	struct nk_glfw* glfw = (struct nk_glfw*)lua_newuserdata(L, sizeof(struct nk_glfw));
+	if( luaL_newmetatable(L, "nk_glfw") ) {
+		static luaL_Reg methods[] =
+			{ {"__index", NULL}
+			, {"__gc", nk_glfw_destroy_lua}
+			, {"destroy", nk_glfw_destroy_lua}
+			, {"update", nk_glfw_update_lua}
+			, {"draw", nk_glfw_draw_lua}
+			// TODO : callbacks( resize/... )
+			, {NULL, NULL}
+			};
+		luaL_setfuncs(L, methods, 0);
+		lua_pushvalue(L, -1);
+		lua_setfield(L, -2, "__index");
+	}
+	lua_setmetatable(L, -2);
 
     win = glfwCreateWindow(width, height, title, NULL, NULL);
+    if( !win ) return luaL_error(L, "glfw window create failed!");
     glfwMakeContextCurrent(win);
+
+	if( !glad_inited ) {
+		glad_inited = gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
+		if( !glad_inited ) {
+			glfwDestroyWindow(win);
+			luaL_error(L, "glad load failed!");
+		}
+	}
+
     glfwGetWindowSize(win, &width, &height);
-
-	gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
-
     glViewport(0, 0, width, height);
 
-    ctx = nk_glfw3_init(win, NK_GLFW3_INSTALL_CALLBACKS);
+    nk_glfw3_init(glfw, win, NK_GLFW3_INSTALL_CALLBACKS);
     /* Load Fonts: if none of these are loaded a default font will be used  */
+	nk_glfw3_font_stash_begin(glfw, &atlas);
 	{
-		nk_glfw3_font_stash_begin(&atlas);
 		/*struct nk_font *droid = nk_font_atlas_add_from_file(atlas, "../../../extra_font/DroidSans.ttf", 14, 0);*/
 		/*struct nk_font *roboto = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Roboto-Regular.ttf", 14, 0);*/
 		/*struct nk_font *future = nk_font_atlas_add_from_file(atlas, "../../../extra_font/kenvector_future_thin.ttf", 13, 0);*/
 		/*struct nk_font *clean = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyClean.ttf", 12, 0);*/
 		/*struct nk_font *tiny = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyTiny.ttf", 10, 0);*/
 		/*struct nk_font *cousine = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Cousine-Regular.ttf", 13, 0);*/
-		nk_glfw3_font_stash_end();
     }
+	nk_glfw3_font_stash_end(glfw);
 
     /* Load Cursor: if you uncomment cursor loading please hide the cursor */
     /*nk_style_load_all_cursors(ctx, atlas->cursors);*/
@@ -75,41 +599,7 @@ static int application_run(lua_State* L) {
     /*set_style(ctx, THEME_RED);*/
     /*set_style(ctx, THEME_BLUE);*/
     /*set_style(ctx, THEME_DARK);*/
-
-    lua_push_nk_context_ptr(L, ctx);
-
-    while (!glfwWindowShouldClose(win)) {
-    	glfwWaitEventsTimeout(0.1);
-        /* Input */
-        glfwPollEvents();
-        nk_glfw3_new_frame();
-        glfwGetWindowSize(win, &width, &height);
-
-		/* GUI */
-		lua_pushvalue(L, 1);	// function
-		lua_pushvalue(L, -2);	// nk_context
-		lua_pushinteger(L, width);
-		lua_pushinteger(L, height);
-		if( puss_pcall_stacktrace(L, 3, 0) ) {
-			fprintf(stderr, "[Script] error: %s\n", lua_tostring(L, -1));
-			lua_pop(L, 1);
-		}
-
-        /* Draw */
-        glViewport(0, 0, width, height);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glClearColor(bg[0], bg[1], bg[2], bg[3]);
-        /* IMPORTANT: `nk_glfw_render` modifies some global OpenGL state
-         * with blending, scissor, face culling, depth test and viewport and
-         * defaults everything back into a default state.
-         * Make sure to either a.) save and restore or b.) reset your own state after
-         * rendering the UI. */
-        nk_glfw3_render(NK_ANTI_ALIASING_ON, MAX_VERTEX_BUFFER, MAX_ELEMENT_BUFFER);
-        glfwSwapBuffers(win);
-    }
-    nk_glfw3_shutdown();
-    glfwTerminate();
-    return 0;
+    return 1;
 }
 
 PussInterface* __puss_iface__ = NULL;
@@ -121,7 +611,21 @@ static PussNuklearInterface puss_nuklear_iface =
 
 int nuklear_demo1(lua_State* L);
 
+static int glfw_inited = 0;
+
 PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
+    if( !glfw_inited ) {
+    	glfw_inited = glfwInit();
+    	if( !glfw_inited ) return luaL_error(L, "[GFLW] failed to init!\n");
+    	atexit(glfwTerminate);
+
+	    glfwSetErrorCallback(error_callback);
+
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	}
+
 	if( !__puss_iface__ ) {
 		__puss_iface__= puss;
 		#define __NUKLEARPROXY_SYMBOL(f)	puss_nuklear_iface.nuklear_proxy.f = f;
@@ -138,8 +642,13 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 	puss_interface_register(L, "PussNuklearInterface", &puss_nuklear_iface);
 
 	if( lua_new_nk_lib(L) ) {
-		lua_pushcfunction(L, application_run);	lua_setfield(L, -2, "application_run");
-		lua_pushcfunction(L, nuklear_demo1);	lua_setfield(L, -2, "nuklear_demo1");
+		luaL_Reg nuklera_glfw3_lua_apis[] =
+			{ {"nk_glfw_window_create", nk_glfw_window_create_lua}
+			, {"nuklear_demo1", nuklear_demo1}
+			, {NULL, NULL}
+			};
+
+		luaL_setfuncs(L, nuklera_glfw3_lua_apis, 0);
 	}
 
 	return 1;

@@ -1,10 +1,10 @@
 puss.dofile('samples/utils.lua')
 
-function lua_nuklear_demo(ctx, w, h)
+function nuklear_demo_lua(ctx)
 	local LABEL = "LuaDemoWindow"
-	nk_window_set_size(ctx, LABEL, nk_vec2(w, h))
+	-- nk_window_set_size(ctx, LABEL, nk_vec2(w, h))
 
-	if nk_begin(ctx, LABEL, nk_rect(0, 0, w, h), NK_WINDOW_BACKGROUND) then
+	if nk_begin(ctx, LABEL, nk_rect(0, 0, 400, 300), NK_WINDOW_BACKGROUND) then
 		nk_layout_row_static(ctx, 30, 80, 1);
 		if nk_button_label(ctx, "button") then
 			print('button pressed')
@@ -31,11 +31,24 @@ function lua_nuklear_demo(ctx, w, h)
 end
 
 function __main__()
-	print(application_run)
+	local w1 = nk_glfw_window_create("nuklear C api", 400, 300)
+	local w2 = nk_glfw_window_create("nuklear lua api", 400, 300)
 
-	application_run(nuklear_demo1)
+	local function run_once(w)
+		if w then
+			if w:update(nuklear_demo1) then
+				w:destroy()
+			else
+				w:draw()
+				return w
+			end
+		end
+	end
 
-	application_run(lua_nuklear_demo)
+	while w1 or w2 do
+		w1 = run_once(w1)
+		w2 = run_once(w2)
+	end
 end
 
 if not nk then
