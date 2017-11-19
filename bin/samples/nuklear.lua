@@ -7,7 +7,7 @@ function nuklear_demo_lua(ctx)
 	if nk_begin(ctx, LABEL, nk_rect(0, 0, 400, 300), NK_WINDOW_BACKGROUND) then
 		nk_layout_row_static(ctx, 30, 80, 1);
 		if nk_button_label(ctx, "button") then
-			print('button pressed')
+			print('button pressed 1')
 		end
 		if nk_button_label(ctx, "button2") then
 			print('button pressed 2')
@@ -24,7 +24,7 @@ function nuklear_demo_lua(ctx)
     then
 		nk_layout_row_static(ctx, 30, 80, 1);
 		if nk_button_label(ctx, "button") then
-			print('button pressed')
+			print('LuaDemo2 button pressed')
 		end
     end
 	nk_end(ctx)
@@ -34,9 +34,9 @@ function __main__()
 	local w1 = nk_glfw_window_create("nuklear C api", 400, 300)
 	local w2 = nk_glfw_window_create("nuklear lua api", 400, 300)
 
-	local function run_once(w)
+	local function run_once(w, update)
 		if w then
-			if w:update(nuklear_demo1) then
+			if w:update(update) then
 				w:destroy()
 			else
 				w:draw()
@@ -46,8 +46,8 @@ function __main__()
 	end
 
 	while w1 or w2 do
-		w1 = run_once(w1)
-		w2 = run_once(w2)
+		w1 = run_once(w1, nuklear_demo1)
+		w2 = run_once(w2, nuklear_demo_lua)
 	end
 end
 

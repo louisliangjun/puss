@@ -486,31 +486,34 @@ static int nk_glfw_destroy_lua(lua_State* L) {
 
 static int nk_glfw_update_lua(lua_State* L) {
 	struct nk_glfw* glfw = lua_check_nk_struct(L, 1, nk_glfw);
+	double wait_timeout = luaL_optnumber(L, 3, 0.0);
 	if( !(glfw && glfw->win) ) {
 		lua_pushboolean(L, nk_true);
 		return 1;
 	}
 	luaL_argcheck(L, lua_type(L, 2)==LUA_TFUNCTION, 2, "need function!");
 
-    lua_push_nk_context_ptr(L, &glfw->ctx);
-
     if( glfwWindowShouldClose(glfw->win) ) {
 		lua_pushboolean(L, nk_true);
     	return 1;
     }
 
-	glfwWaitEventsTimeout(0.1);
-    /* Input */
-    glfwPollEvents();
-    nk_glfw3_new_frame(glfw);
+	if( glfwGetWindowAttrib(glfw->win, GLFW_FOCUSED) ) {
+		glfwWaitEventsTimeout(wait_timeout);
+	}
+
+	/* Input */
+	glfwPollEvents();
+	nk_glfw3_new_frame(glfw);
 
 	/* GUI */
 	lua_pushvalue(L, 2);	// function
-	lua_pushvalue(L, -2);	// nk_context
+	lua_push_nk_context_ptr(L, &glfw->ctx);
 	if( puss_pcall_stacktrace(L, 1, 0) ) {
 		error_callback(1, lua_tostring(L, -1));
 		lua_pop(L, 1);
 	}
+
 	lua_pushboolean(L, nk_false);
 	return 1;
 }
