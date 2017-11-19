@@ -38,21 +38,21 @@ array_push(CFLAGS, '-Wall')
 -----------------------------
 -- common utils
 
-local function make_c2objs(srcs, include_paths, ...)	-- ... is cflags
+local function make_c2objs(srcs, objpath, include_paths, ...)	-- ... is cflags
 	if type(srcs)=='string' then srcs = scan_files(srcs, function(f) return f:match('^.+%.c$') end) end
 	local cflags = args_concat(...)
 	local incs = array_convert(include_paths, function(v) return '-I'..v end)
 	return make_objs(srcs, include_paths
-		, function(f) return path_concat(OBJPATH, f) end
+		, function(f) return path_concat(objpath or OBJPATH, f) end
 		, function(t) return CC, CFLAGS, cflags, incs, '-o', t.obj, '-c', t.src end)
 end
 
-local function make_cpp2objs(srcs, include_paths, ...)	-- ... is cflags
+local function make_cpp2objs(srcs, objpath, include_paths, ...)	-- ... is cflags
 	if type(srcs)=='string' then srcs = scan_files(srcs, function(f) return f:match('^.+%.cpp$') or f:match('^.+%.cxx$') end) end
 	local cflags = args_concat(...)
 	local incs = array_convert(include_paths, function(v) return '-I'..v end)
 	return make_objs(srcs, include_paths
-		, function(f) return path_concat(OBJPATH, f) end
+		, function(f) return path_concat(objpath or OBJPATH, f) end
 		, function(t) return CXX, CFLAGS, CXX_CFLAGS, cflags, incs, '-o', t.obj, '-c', t.src end)
 end
 
@@ -82,7 +82,7 @@ vmake_target_add('puss', function(target)
 	local cflags = { '-D_PUSS_MODULE_SUFFIX=\\"'..PUSS_MODULE_SUFFIX..'.so\\"' }
 	local incs = array_pack(INCLUDES, 'modules')
 	local libs = vlua.OS=='windows' and '' or '-lm -ldl'
-	local objs = make_c2objs(target, incs, cflags)
+	local objs = make_c2objs(target, nil, incs, cflags)
 	local output = path_concat('bin', target..PUSS_MODULE_SUFFIX..EXE_SUFFIX)
 	return make_target(output, {objs, slibs}, CC, CFLAGS, '-o', output, objs, slibs, libs)
 end)
@@ -113,7 +113,7 @@ vmake_target_add('lua53', function(target)
 		if f=='luac.c' then return end
 		return f:match('^.+%.c$')
 	end)
-	local objs = make_c2objs(srcs, nil, cflags)
+	local objs = make_c2objs(srcs, nil, nil, cflags)
 	local output = path_concat(OBJPATH, 'lib'..target..'.a')
 	return make_target(output, objs, AR, output, objs)
 end)
@@ -126,7 +126,7 @@ vmake_target_add('puss_core', function(target)
 	make_copy('puss_macros.h', PUSS_INCLUDE_PATH, srcpath)
 	make_copy('puss_module.h', PUSS_INCLUDE_PATH, srcpath)
 
-	local objs = make_c2objs(srcpath, INCLUDES)
+	local objs = make_c2objs(srcpath, nil, INCLUDES)
 	local lib = path_concat(OBJPATH, 'lib'..target..'.a')
 	return make_target(lib, objs, AR, lib, objs)
 end)
@@ -164,7 +164,7 @@ vmake_target_add('puss_gobject', function(target)
 	gobject_enums_parse(cflags, 'gobject', 'glib-types.h', '^%s*#%s*define%s+(G_TYPE_[_%w]+)')	-- #define G_TYPE_XXX
 	gobject_enums_parse(cflags, 'gio', 'gioenumtypes.h', '^%s*#%s*define%s+(G_TYPE_[_%w]+)')	-- #define G_TYPE_XXX
 
-	local objs = make_c2objs(srcpath, INCLUDES, '-fPIC', '-fvisibility=hidden', cflags)
+	local objs = make_c2objs(srcpath, nil, INCLUDES, '-fPIC', '-fvisibility=hidden', cflags)
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
 	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs, libs)
 end)
@@ -177,7 +177,7 @@ vmake_target_add('puss_gtk', function(target)
 	gobject_enums_parse(cflags, 'gdk', 'gdkenumtypes.h', '^%s*#%s*define%s+(GDK_TYPE_[_%w]+)')		-- #define GDK_TYPE_XXX
 	gobject_enums_parse(cflags, 'gtk', 'gtktypebuiltins.h', '^%s*#%s*define%s+(GTK_TYPE_[_%w]+)')	-- #define GTK_TYPE_XXX
 
-	local objs = make_c2objs(path_concat('modules', target), INCLUDES, '-fPIC', '-fvisibility=hidden', cflags)
+	local objs = make_c2objs(path_concat('modules', target), nil, INCLUDES, '-fPIC', '-fvisibility=hidden', cflags)
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
 	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs, libs)
 end)
@@ -189,7 +189,7 @@ vmake_target_add('puss_gtksourceview', function(target)
 	local libs = shell('pkg-config --libs gtksourceview-3.0')
 	gobject_enums_parse(cflags, 'gtksourceview', 'gtksourceview-enumtypes.h', '^%s*#%s*define%s+(GTK_SOURCE_TYPE_[_%w]+)')	-- #define GTK_SOURCE_TYPE_XXX
 
-	local objs = make_c2objs(path_concat('modules', target), INCLUDES, '-fPIC', '-fvisibility=hidden', cflags)
+	local objs = make_c2objs(path_concat('modules', target), nil, INCLUDES, '-fPIC', '-fvisibility=hidden', cflags)
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
 	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs, libs)
 end)
@@ -223,7 +223,7 @@ vmake_target_add('puss_nuklear', function(target)
 	local incs = array_pack(INCLUDES, src)
 	local cflags = use_static and {'-static', shell('pkg-config --static --cflags glfw3')} or shell('pkg-config --cflags glfw3')
 	local libs = use_static and shell('pkg-config --static --libs glfw3') or shell('pkg-config --libs glfw3')
-	local objs = make_c2objs(src, incs, '-fPIC', '-fvisibility=hidden')
+	local objs = make_c2objs(src, nil, incs, '-fPIC', '-fvisibility=hidden')
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
 	return make_target(output, objs, CC, CFLAGS, cflags, '-shared', '-o', output, objs, libs)
 end)
@@ -266,14 +266,16 @@ vmake_target_add('gtkscintilla', function(target)
 		, path_concat(SCINTILLA_ROOT_PATH, 'src')
 		, path_concat(SCINTILLA_ROOT_PATH, 'lexlib')
 		}
-	local objs = make_c2objs(path_concat(SCINTILLA_ROOT_PATH, 'gtk'), INCLUDES, '-fPIC', gtkcflags)
-	local gtkobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'gtk'), incs, cxxflags, gtkcflags)
-	local srcobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'src'), incs, cxxflags)
-	local lexlibobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'lexlib'), incs, cxxflags)
-	local lexobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'lexers'), incs, cxxflags)
+	local objpath = path_concat(OBJPATH, 'gtk')
+	local objs = make_c2objs(path_concat(SCINTILLA_ROOT_PATH, 'gtk'), objpath, INCLUDES, '-fPIC', gtkcflags)
+	local gtkobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'gtk'), objpath, incs, cxxflags, gtkcflags)
+	local srcobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'src'), objpath, incs, cxxflags)
+	local lexlibobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'lexlib'), objpath, incs, cxxflags)
+	local lexobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'lexers'), objpath, incs, cxxflags)
 	table.sort(lexobjs)
+	local all_objs = { objs, gtkobjs, srcobjs, lexlibobjs, lexobjs }
 	local lib = path_concat(OBJPATH, 'lib'..target..'.a')
-	return make_target(lib, objs, AR, lib, objs, gtkobjs, srcobjs, lexlibobjs, lexobjs)
+	return make_target(lib, all_objs, AR, lib, all_objs)
 end)
 
 vmake_target_add('puss_gtkscintilla', function(target)
@@ -281,8 +283,37 @@ vmake_target_add('puss_gtkscintilla', function(target)
 	local slibs = vmake('gtkscintilla')
 	local cflags = { '-fPIC', shell('pkg-config --cflags glib-2.0 gmodule-2.0 gtk+-3.0') }
 	local libs = shell('pkg-config --libs glib-2.0 gmodule-2.0 gtk+-3.0')
-	local objs = make_c2objs(path_concat('modules', target), array_pack(INCLUDES, SCINTILLA_INCLUDE_PATH), '-fPIC', '-fvisibility=hidden', cflags)
+	local objs = make_c2objs(path_concat('modules', target), nil, array_pack(INCLUDES, SCINTILLA_INCLUDE_PATH), '-fPIC', '-fvisibility=hidden', cflags)
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
 	return make_target(output, {objs, slibs}, CXX, CFLAGS, CXXFLAGS, '-shared', cflags, '-o', output, objs, slibs, libs)
 end)
 
+
+-----------------------------
+-- scintilla nuklear
+vmake_target_add('nuklear_scintilla', function(target)
+	local cxxflags = { '-fPIC', '-DFOX', '-DSCI_LEXER', '-DNO_CXX11_REGEX' }
+	local incs =
+		{ SCINTILLA_INCLUDE_PATH
+		, path_concat(SCINTILLA_ROOT_PATH, 'src')
+		, path_concat(SCINTILLA_ROOT_PATH, 'lexlib')
+		}
+	local objpath = path_concat(OBJPATH, 'nk')
+	local srcobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'src'), objpath, incs, cxxflags)
+	local lexlibobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'lexlib'), objpath, incs, cxxflags)
+	local lexobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'lexers'), objpath, incs, cxxflags)
+	table.sort(lexobjs)
+	local all_objs = { srcobjs, lexlibobjs, lexobjs }
+	local lib = path_concat(OBJPATH, 'lib'..target..'.a')
+	return make_target(lib, all_objs, AR, lib, all_objs)
+end)
+
+--[[
+vmake_target_add('puss_nuklear_scintilla', function(target)
+	vmake('scintilla_iface')
+	local slibs = vmake('nuklear_scintilla')
+	local objs = make_c2objs(path_concat('modules', target), nil, array_pack(INCLUDES, SCINTILLA_INCLUDE_PATH), '-fPIC', '-fvisibility=hidden')
+	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
+	return make_target(output, {objs, slibs}, CXX, CFLAGS, CXXFLAGS, '-shared', cflags, '-o', output, objs, slibs)
+end)
+--]]

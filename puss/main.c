@@ -3,18 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <memory.h>
-#include <assert.h>
 
 #include "puss_core/puss_lua.h"
-
-#ifdef _WIN32
-	#include <windows.h>
-	#define FILE_PATH_SEP "\\"
-#else
-	#include <unistd.h>
-	#define FILE_PATH_SEP "/"
-#endif
 
 #ifndef _PUSS_MODULE_SUFFIX
 	#define _PUSS_MODULE_SUFFIX	".so"
@@ -22,34 +12,20 @@
 
 #define PUSS_DEFAULT_SCRIPT_FILE "default.lua"
 
-static void puss_setup_path_and_self(lua_State* L, const char* arg0) {
-	char pth[4096];
-	int len;
-#ifdef _WIN32
-	len = (int)GetModuleFileNameA(0, pth, 4096);
-#else
-	len = readlink("/proc/self/exe", pth, 4096);
-#endif
-	if( len > 0 ) {
-		pth[len] = '\0';
-	} else {
-		// try use argv[0]
-		len = strlen(arg0); 
-		strcpy(pth, arg0);
-	}
-
-	for( --len; len>0; --len ) {
-		if( pth[len]=='\\' || pth[len]=='/' ) {
-			pth[len] = '\0';
-			break;
+static int puss_get_debug(int argc, char** argv) {
+	int i;
+	for( i=1; i<argc; ++i ) {
+		// --debug[=level]
+		const char* arg = argv[i];
+		if( strncmp(arg, "-debug", 6)==0 ) {
+			if( arg[6]=='\0' )
+				return 1;
+			if( arg[6]!='=' )
+				continue;
+			return (int)strtol(arg+7, NULL, 10);
 		}
 	}
-
-	if( len > 0 ) {
-		puss_module_setup(L, pth, pth+len+1, _PUSS_MODULE_SUFFIX);
-	} else {
-		puss_module_setup(L, ".", pth, _PUSS_MODULE_SUFFIX);
-	}
+	return 0;
 }
 
 static const char* puss_push_parse_args(lua_State* L, int* is_script_file, int argc, const char** argv) {
@@ -107,8 +83,6 @@ static int puss_init(lua_State* L) {
 
 	lua_getglobal(L, "puss");
 
-	puss_setup_path_and_self(L, argv[0]);
-
 	script = puss_push_parse_args(L, &is_script_file, argc, argv);
 	lua_setfield(L, -2, "_args");			// puss._args
 	if( !script ) {
@@ -137,9 +111,9 @@ static int puss_init(lua_State* L) {
 
 int main(int argc, char * argv[]) {
 	int res = 0;
-	lua_State* L = luaL_newstate();
+	lua_State* L = puss_lua_newstate(puss_get_debug(argc, argv), NULL);
 	luaL_openlibs(L);
-	puss_lua_open(L);
+	puss_lua_open_default(L, argv[0], _PUSS_MODULE_SUFFIX);
 
 	lua_pushcfunction(L, puss_init);
 	lua_pushinteger(L, argc);

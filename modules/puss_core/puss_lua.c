@@ -39,11 +39,15 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
+#include <memory.h>
 #include <stdio.h>
 
 #ifdef _WIN32
+	#include <windows.h>
 	#define PATH_SEP	"\\"
 #else
+	#include <unistd.h>
 	#define PATH_SEP	"/"
 #endif
 
@@ -331,7 +335,7 @@ static int puss_lua_module_require(lua_State* L) {
 	return 1;
 }
 
-void puss_module_setup(lua_State* L, const char* app_path, const char* app_name, const char* module_suffix) {
+static void puss_module_setup(lua_State* L, const char* app_path, const char* app_name, const char* module_suffix) {
 	// fprintf(stderr, "!!!puss_module_setup %s %s %s\n", app_path, app_name, module_suffix);
 
 	lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_PUSS);
@@ -340,23 +344,75 @@ void puss_module_setup(lua_State* L, const char* app_path, const char* app_name,
 	puss_push_const_table(L);
 	lua_setfield(L, -2, "_consts");	// puss._consts
 
-	lua_pushstring(L, app_path);
+	lua_pushstring(L, app_path ? app_path : ".");
 	lua_pushvalue(L, -1);
 	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_APP_PATH);
 	lua_setfield(L, -2, "_path");	// puss._path
 
-	lua_pushstring(L, app_name);
+	lua_pushstring(L, app_name ? app_name : "puss");
 	lua_pushvalue(L, -1);
 	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_APP_NAME);
 	lua_setfield(L, -2, "_self");	// puss._self
 
-	lua_pushstring(L, module_suffix);
+	lua_pushstring(L, module_suffix ? module_suffix : ".so");
 	lua_pushvalue(L, -1);
 	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_MODULE_SUFFIX);
 	lua_setfield(L, -2, "_module_suffix");	// puss._module_suffix
 }
 
-void puss_lua_open(lua_State* L) {
+struct MemHead {
+	void*	info;
+};
+
+static void *_debug_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
+	lua_Alloc f = (lua_Alloc)ud;
+	struct MemHead* nptr;
+	if (nsize) {
+		nsize += sizeof(struct MemHead);
+	}
+	if( ptr ) {
+		ptr = (void*)( ((struct MemHead*)ptr) - 1 );
+		osize += sizeof(struct MemHead);
+	}
+	nptr = (struct MemHead*)f(ud, ptr, osize, nsize);
+	if( nptr ) {
+		memset(nptr, 0, sizeof(struct MemHead));
+		++nptr;
+	}
+	return (void*)nptr;
+}
+
+static void *_default_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
+  (void)ud; (void)osize;  /* not used */
+  if (nsize == 0) {
+    free(ptr);
+    return NULL;
+  }
+  else
+    return realloc(ptr, nsize);
+}
+
+static int _default_panic (lua_State *L) {
+  lua_writestringerror("PANIC: unprotected error in call to Lua API (%s)\n",
+                        lua_tostring(L, -1));
+  return 0;  /* return to Lua to abort */
+}
+
+lua_State* puss_lua_newstate(int debug, lua_Alloc f) {
+	lua_State* L;
+	void* ud = NULL;
+	if( debug ) {
+		ud = (void*)(f ? f : _default_alloc);
+		f = _debug_alloc;
+	} else {
+		f = f ? f : _default_alloc;
+	}
+	L = lua_newstate(f, ud);
+	if( L ) lua_atpanic(L, &_default_panic);
+	return L;
+}
+
+void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, const char* module_suffix) {
 	// check already open
 	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_PUSS)==LUA_TTABLE ) {
 		lua_setglobal(L, "puss");
@@ -372,7 +428,7 @@ void puss_lua_open(lua_State* L) {
 	lua_newtable(L);	// puss
 	lua_pushvalue(L, -1);
 	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_PUSS);
-	puss_module_setup(L, ".", "puss", ".so");
+	puss_module_setup(L, app_path, app_name, module_suffix);
 
 	// puss modules["puss"] = puss-module
 	lua_newtable(L);
@@ -423,5 +479,39 @@ void puss_lua_open(lua_State* L) {
 	lua_call(L, 1, 0);
 
 	lua_pop(L, 1);
+}
+
+
+void puss_lua_open_default(lua_State* L, const char* arg0, const char* module_suffix) {
+	char pth[4096];
+	int len;
+	const char* app_path = NULL;
+	const char* app_name = NULL;
+#ifdef _WIN32
+	len = (int)GetModuleFileNameA(0, pth, 4096);
+#else
+	len = readlink("/proc/self/exe", pth, 4096);
+#endif
+	if( len > 0 ) {
+		pth[len] = '\0';
+	} else {
+		// try use argv[0]
+		len = strlen(arg0); 
+		strcpy(pth, arg0);
+	}
+
+	for( --len; len>0; --len ) {
+		if( pth[len]=='\\' || pth[len]=='/' ) {
+			pth[len] = '\0';
+			break;
+		}
+	}
+
+	if( len > 0 ) {
+		app_path = pth;
+		app_name = pth+len+1;
+	}
+
+	puss_lua_open(L, app_path, app_name, module_suffix);
 }
 

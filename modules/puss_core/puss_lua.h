@@ -11,9 +11,19 @@ PUSS_DECLS_BEGIN
 #include "lualib.h"
 #include "lauxlib.h"
 
-void puss_lua_open(lua_State* L);
+// puss newstate
+//  debug=0 mean NOT support debug
+//  f==NULL, means use default lua_Alloc
+// 
+lua_State* puss_lua_newstate(int debug, lua_Alloc f);
 
-void puss_module_setup(lua_State* L, const char* app_path, const char* app_name, const char* module_suffix);
+// puss_lua_open(L, ".", "puss", ".so")
+// 
+void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, const char* module_suffix);
+
+// puss_lua_open_default(L, argv[0], ".so")
+// 
+void puss_lua_open_default(lua_State* L, const char* arg0, const char* module_suffix);
 
 int  puss_pcall_stacktrace(lua_State* L, int n, int r);
 
