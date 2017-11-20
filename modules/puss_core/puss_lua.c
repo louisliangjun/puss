@@ -51,6 +51,8 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 	#define PATH_SEP	"/"
 #endif
 
+#include "puss_debug.inl"
+
 #define PUSS_NAMESPACE(name)			"\x01" #name
 
 #define PUSS_NAMESPACE_PUSS				PUSS_NAMESPACE(puss)
@@ -360,24 +362,25 @@ static void puss_module_setup(lua_State* L, const char* app_path, const char* ap
 	lua_setfield(L, -2, "_module_suffix");	// puss._module_suffix
 }
 
-struct MemHead {
-	void*	info;
-};
-
 static void *_debug_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
-	lua_Alloc f = (lua_Alloc)ud;
-	struct MemHead* nptr;
+	DebugEnv* env = (DebugEnv*)ud;
+	MemHead* nptr;
 	if (nsize) {
-		nsize += sizeof(struct MemHead);
+		nsize += sizeof(MemHead);
 	}
 	if( ptr ) {
-		ptr = (void*)( ((struct MemHead*)ptr) - 1 );
-		osize += sizeof(struct MemHead);
+		ptr = (void*)( ((MemHead*)ptr) - 1 );
+		osize += sizeof(MemHead);
 	}
-	nptr = (struct MemHead*)f(ud, ptr, osize, nsize);
+	nptr = (MemHead*)(*(env->frealloc))(ud, ptr, osize, nsize);
 	if( nptr ) {
-		memset(nptr, 0, sizeof(struct MemHead));
+		memset(nptr, 0, sizeof(MemHead));
+		if( (env->main_addr==NULL) && (osize==LUA_TTHREAD) ) {
+			env->main_addr = nptr;
+		}
 		++nptr;
+	} else if( ptr && (env->main_addr==ptr) ) {
+		debug_env_free(env);
 	}
 	return (void*)nptr;
 }
@@ -398,17 +401,24 @@ static int _default_panic (lua_State *L) {
   return 0;  /* return to Lua to abort */
 }
 
-lua_State* puss_lua_newstate(int debug, lua_Alloc f) {
+lua_State* puss_lua_newstate(int debug, lua_Alloc f, void* ud) {
+	DebugEnv* env = NULL;
 	lua_State* L;
-	void* ud = NULL;
 	if( debug ) {
-		ud = (void*)(f ? f : _default_alloc);
+		env = debug_env_new(f ? f : _default_alloc, ud);
+		if( !env ) return NULL;
+		ud = env;
 		f = _debug_alloc;
 	} else {
 		f = f ? f : _default_alloc;
 	}
 	L = lua_newstate(f, ud);
-	if( L ) lua_atpanic(L, &_default_panic);
+	if( L ) {
+		lua_atpanic(L, &_default_panic);
+	}
+	if( env ) {
+		env->main_state = L;
+	}
 	return L;
 }
 
@@ -477,6 +487,13 @@ void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, con
 	}
 	lua_pushstring(L, PATH_SEP);
 	lua_call(L, 1, 0);
+
+	// debugger
+	if( lua_getallocf(L, NULL)==_debug_alloc ) {
+		lua_pushcfunction(L, debug_env_init);
+		lua_pushvalue(L, -1);
+		lua_call(L, 1, 0);
+	}
 
 	lua_pop(L, 1);
 }

@@ -9,7 +9,7 @@ local DLL_SUFFIX = '.so'
 local EXE_SUFFIX = vlua.OS=='windows' and '.exe' or ''
 local CFLAGS  = {}
 local CXX_CFLAGS = {}
-local OBJPATH = path_concat('objs', 'release')
+local OBJPATH = path_concat('objs', 'r')
 
 local PUSS_INCLUDE_PATH = path_concat('bin', 'include')
 local GEN_INCLUDE_PATH = path_concat('objs', 'gen')
@@ -20,7 +20,7 @@ local INCLUDES = { '3rd', PUSS_INCLUDE_PATH, GEN_INCLUDE_PATH }
 do
 	if vlua.match_arg('^%-debug$') then
 		array_push(CFLAGS, '-g', '-O0', '-D_DEBUG')
-		OBJPATH = path_concat('objs', 'debug')
+		OBJPATH = path_concat('objs', 'd')
 		PUSS_MODULE_SUFFIX = PUSS_MODULE_SUFFIX .. '_d'
 	else
 		array_push(CFLAGS, '-s', '-O2', '-DNDEBUG')
@@ -28,7 +28,7 @@ do
 
 	if vlua.match_arg('^%-asan$') then
 		array_push(CFLAGS, '-ggdb', '-fsanitize=address', '-fno-omit-frame-pointer')
-		OBJPATH = OBJPATH .. '_asan'
+		OBJPATH = OBJPATH .. 'a'
 		PUSS_MODULE_SUFFIX = PUSS_MODULE_SUFFIX .. '_asan'
 	end
 end
@@ -121,12 +121,14 @@ end)
 vmake_target_add('puss_core', function(target)
 	vmake('luaproxy')
 
+	local luapath = path_concat('3rd', 'lua-5.3.4', 'src')
 	local srcpath = path_concat('modules', target)
 	vmake('luaproxy')
 	make_copy('puss_macros.h', PUSS_INCLUDE_PATH, srcpath)
 	make_copy('puss_module.h', PUSS_INCLUDE_PATH, srcpath)
 
-	local objs = make_c2objs(srcpath, nil, INCLUDES)
+	local incs = array_pack(INCLUDES, luapath)
+	local objs = make_c2objs(srcpath, nil, incs)
 	local lib = path_concat(OBJPATH, 'lib'..target..'.a')
 	return make_target(lib, objs, AR, lib, objs)
 end)

@@ -111,7 +111,7 @@ static int puss_init(lua_State* L) {
 
 int main(int argc, char * argv[]) {
 	int res = 0;
-	lua_State* L = puss_lua_newstate(puss_get_debug(argc, argv), NULL);
+	lua_State* L = puss_lua_newstate(puss_get_debug(argc, argv), NULL, NULL);
 	luaL_openlibs(L);
 	puss_lua_open_default(L, argv[0], _PUSS_MODULE_SUFFIX);
 

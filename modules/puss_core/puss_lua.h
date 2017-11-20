@@ -15,7 +15,7 @@ PUSS_DECLS_BEGIN
 //  debug=0 mean NOT support debug
 //  f==NULL, means use default lua_Alloc
 // 
-lua_State* puss_lua_newstate(int debug, lua_Alloc f);
+lua_State* puss_lua_newstate(int debug, lua_Alloc f, void* ud);
 
 // puss_lua_open(L, ".", "puss", ".so")
 // 
@@ -24,6 +24,8 @@ void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, con
 // puss_lua_open_default(L, argv[0], ".so")
 // 
 void puss_lua_open_default(lua_State* L, const char* arg0, const char* module_suffix);
+
+void puss_lua_close(lua_State* L);
 
 int  puss_pcall_stacktrace(lua_State* L, int n, int r);
 
