@@ -197,6 +197,7 @@ static int lua_debug_enable(lua_State* L) {
 	assert( env );
 
 	debug_env_sethook(env, enable, count);
+	return 0;
 }
 
 static luaL_Reg lua_debug_methods[] =
@@ -208,5 +209,6 @@ static int debug_env_init(lua_State* L) {
 	lua_newtable(L);	// new debug
 	luaL_setfuncs(L, lua_debug_methods, 0);
 	lua_setfield(L, 1, "debug");	// ks.debug
+	return 0;
 }
 
