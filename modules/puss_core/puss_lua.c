@@ -275,10 +275,18 @@ static PussInterface puss_iface =
 	{ puss_module_require
 	, puss_interface_register
 	, puss_interface_check
+
 	, puss_push_const_table
+
 	, puss_app_path
 	, puss_rawget_ex
 	, puss_pcall_stacktrace
+
+	, puss_debug_reset
+	, puss_debug_state
+	, puss_debug_sethook
+	, puss_debug_cmd
+
 	};
 
 static int module_init_wrapper(lua_State* L) {
@@ -360,29 +368,6 @@ static void puss_module_setup(lua_State* L, const char* app_path, const char* ap
 	lua_pushvalue(L, -1);
 	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_MODULE_SUFFIX);
 	lua_setfield(L, -2, "_module_suffix");	// puss._module_suffix
-}
-
-static void *_debug_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
-	DebugEnv* env = (DebugEnv*)ud;
-	MemHead* nptr;
-	if (nsize) {
-		nsize += sizeof(MemHead);
-	}
-	if( ptr ) {
-		ptr = (void*)( ((MemHead*)ptr) - 1 );
-		osize += sizeof(MemHead);
-	}
-	nptr = (MemHead*)(*(env->frealloc))(ud, ptr, osize, nsize);
-	if( nptr ) {
-		memset(nptr, 0, sizeof(MemHead));
-		if( (env->main_addr==NULL) && (osize==LUA_TTHREAD) ) {
-			env->main_addr = nptr;
-		}
-		++nptr;
-	} else if( ptr && (env->main_addr==ptr) ) {
-		debug_env_free(env);
-	}
-	return (void*)nptr;
 }
 
 static void *_default_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {

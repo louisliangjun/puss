@@ -1,4 +1,4 @@
-// puss_debug.inl
+// puss_debug.inl - inner used, not include directly
 
 #include "lstate.h"
 #include "lobject.h"
@@ -23,16 +23,25 @@ typedef struct _MemHead {
 } MemHead;
 
 typedef struct _DebugEnv {
-	lua_Alloc	frealloc;
-	void*		ud;
-	lua_State*	debug_state;
-	void*		debug_plugin;
-	void*		main_addr;
-	lua_State*	main_state;
-	lua_State*	current_state;
+	lua_Alloc				frealloc;
+	void*					ud;
+	lua_State*				debug_state;
+	PussDebugEventHandle	event_handle;
 
-	int			breaked;
-	int			pause;
+	void*					main_addr;
+	lua_State*				main_state;
+
+	const FileInfo*			breaked_finfo;
+	int						breaked_line;
+	lua_State*				breaked_state;
+	int						breaked_top;
+	int						breaked;
+
+	const FileInfo*			continue_bp_finfo;
+	int						continue_bp_line;
+	int						continue_signal;
+	
+	int						step_signal;
 } DebugEnv;
 
 static int file_info_free(lua_State* L) {
@@ -75,30 +84,88 @@ static FileInfo* file_info_fetch(DebugEnv* env, const char* fname) {
 }
 
 static int file_info_bp_hit_test(DebugEnv* env, FileInfo* finfo, int line){
-	// lua_State *L = env->current_state;
 	unsigned char bp;
 	if( !(finfo->bps) )
 		return 0;
 	if( (line < 1) || (line > finfo->line_num) )
 		return 0;
-	bp = finfo->bps[line];
+	bp = finfo->bps[line-1];
 	if( bp==BP_ACTIVE )
 		return 1;
 	// TODO : if( bp==BP_CONDITION ) { }
 	return 0;
 }
 
-static int script_on_breaked(DebugEnv* env, lua_State* L, lua_Debug* ar) {
-	env->pause = 0;
-	if( env->debug_plugin && (!(env->breaked)) ) {
-		lua_State* t = env->current_state;
-		env->current_state = L;
-		env->breaked = 1;
-		// env->plugin->breaked();
-		env->breaked = FALSE;
-		env->current_state = t;
+static int script_on_breaked(DebugEnv* env, lua_State* L, lua_Debug* ar, const FileInfo* finfo) {
+	if( env->breaked ) return 0;
+	if( !(env->event_handle) ) return 0;
+
+	env->breaked_finfo = finfo;
+	env->breaked_line = ar->currentline;
+	env->breaked_state = L;
+	env->breaked_top = lua_gettop(L);
+	env->breaked = 1;
+	env->continue_bp_finfo = NULL;
+	env->continue_bp_line = 0;
+	env->continue_signal = 0;
+	env->step_signal = 0;
+
+	env->event_handle(L, PUSS_DEBUG_EVENT_BREAKED_BEGIN);
+
+	while( env->event_handle && env->continue_signal==0 ) {
+		env->event_handle(L, PUSS_DEBUG_EVENT_BREAKED_UPDATE);
 	}
-	return 0;
+
+	if( env->event_handle ) {
+		env->event_handle(L, PUSS_DEBUG_EVENT_BREAKED_END);
+	}
+
+	env->breaked = 0;
+	env->breaked_state = NULL;
+	lua_settop(L, env->breaked_top);
+	return 1;
+}
+
+static DebugEnv* debug_env_new(lua_Alloc f, void* ud) {
+	DebugEnv* env = (DebugEnv*)malloc(sizeof(DebugEnv));
+	if( !env ) return NULL;
+	memset(env, 0, sizeof(DebugEnv));
+	env->frealloc = f;
+	env->ud = ud;
+	env->debug_state = luaL_newstate();
+	return env;
+}
+
+static void debug_env_free(DebugEnv* env) {
+	if( env ) {
+		if( env->debug_state ) {
+			lua_close(env->debug_state);
+		}
+		free(env);
+	}
+}
+
+static void *_debug_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
+	DebugEnv* env = (DebugEnv*)ud;
+	MemHead* nptr;
+	if (nsize) {
+		nsize += sizeof(MemHead);
+	}
+	if( ptr ) {
+		ptr = (void*)( ((MemHead*)ptr) - 1 );
+		osize += sizeof(MemHead);
+	}
+	nptr = (MemHead*)(*(env->frealloc))(ud, ptr, osize, nsize);
+	if( nptr ) {
+		memset(nptr, 0, sizeof(MemHead));
+		if( (env->main_addr==NULL) && (osize==LUA_TTHREAD) ) {
+			env->main_addr = nptr;
+		}
+		++nptr;
+	} else if( ptr && (env->main_addr==ptr) ) {
+		debug_env_free(env);
+	}
+	return (void*)nptr;
 }
 
 static int script_line_hook(DebugEnv* env, lua_State* L, lua_Debug* ar) {
@@ -125,20 +192,31 @@ static int script_line_hook(DebugEnv* env, lua_State* L, lua_Debug* ar) {
 		return 0;
 
 	assert(lua_isfunction(L, -1));
-	if( env->pause )
-		return script_on_breaked(env, L, ar);
+	if( env->step_signal )
+		return script_on_breaked(env, L, ar, hdr->finfo);
+
+	if( env->continue_bp_finfo==hdr->finfo && env->continue_bp_line==ar->currentline )
+		return script_on_breaked(env, L, ar, hdr->finfo);
 
 	if( file_info_bp_hit_test(env, hdr->finfo, ar->currentline) )
-		return script_on_breaked(env, L, ar);
+		return script_on_breaked(env, L, ar, hdr->finfo);
 
 	return 0;
 }
 
-static void script_hook(lua_State* L, lua_Debug* ar) {
+static inline DebugEnv* debug_env_fetch(lua_State* L) {
 	DebugEnv* env = NULL;
-	lua_getallocf(L, (void**)&env);
+	if( lua_getallocf(L, (void**)&env) != _debug_alloc ) {
+		env = NULL;
+	}
+	return env;
+}
+
+static void script_hook(lua_State* L, lua_Debug* ar) {
+	DebugEnv* env = debug_env_fetch(L);
 	assert( env );
-	if( !(env->debug_plugin) ) {
+
+	if( !(env->event_handle) ) {
 		lua_sethook(L, NULL, 0, 0);
 		return;
 	}
@@ -151,27 +229,11 @@ static void script_hook(lua_State* L, lua_Debug* ar) {
 		break;
 	case LUA_HOOKRET:
 		break;
+	case LUA_HOOKCOUNT:
+		env->event_handle(L, PUSS_DEBUG_EVENT_HOOK_COUNT);
+		break;
 	default:
 		break;
-	}
-}
-
-static DebugEnv* debug_env_new(lua_Alloc f, void* ud) {
-	DebugEnv* env = (DebugEnv*)malloc(sizeof(DebugEnv));
-	if( !env ) return NULL;
-	memset(env, 0, sizeof(DebugEnv));
-	env->frealloc = f;
-	env->ud = ud;
-	env->debug_state = luaL_newstate();
-	return env;
-}
-
-static void debug_env_free(DebugEnv* env) {
-	if( env ) {
-		if( env->debug_state ) {
-			lua_close(env->debug_state);
-		}
-		free(env);
 	}
 }
 
@@ -179,23 +241,28 @@ static void debug_env_free(DebugEnv* env) {
 	#define LUA_MASKERROR	0
 #endif//LUA_MASKERROR
 
-#define DEBUG_HOOK_MASK (LUA_MASKCALL | LUA_MASKRET | LUA_MASKLINE | LUA_MASKCOUNT | LUA_MASKERROR)
+#define DEBUG_HOOK_MASK (LUA_MASKCALL | LUA_MASKRET | LUA_MASKLINE | LUA_MASKERROR)
 
-static void debug_env_sethook(DebugEnv* env, int enable, int count) {
+static void debug_env_sethook(DebugEnv* env, int enable, int enable_count) {
+	lua_Hook hook = NULL;
+	int mask = 0;
+	int count = 0;
 	if( enable ) {
-		lua_sethook(env->main_state, script_hook, DEBUG_HOOK_MASK, count);
-	} else {
-		lua_sethook(env->main_state, NULL, 0, 0);
+		hook = script_hook;
+		mask = DEBUG_HOOK_MASK;
+		if( enable_count > 0 ) {
+			mask |= LUA_MASKCOUNT;
+			count = enable_count;
+		}
 	}
+	lua_sethook(env->main_state, hook, mask, count);
 }
 
 static int lua_debug_enable(lua_State* L) {
-	DebugEnv* env = NULL;
+	DebugEnv* env = debug_env_fetch(L);
 	int enable = lua_toboolean(L, 1);
 	int count = (int)luaL_optinteger(L, 2, 4096);
-	lua_getallocf(L, (void**)&env);
 	assert( env );
-
 	debug_env_sethook(env, enable, count);
 	return 0;
 }
@@ -209,6 +276,129 @@ static int debug_env_init(lua_State* L) {
 	lua_newtable(L);	// new debug
 	luaL_setfuncs(L, lua_debug_methods, 0);
 	lua_setfield(L, 1, "debug");	// ks.debug
+	return 0;
+}
+
+static void puss_debug_reset(lua_State* L, PussDebugEventHandle h) {
+	DebugEnv* env = debug_env_fetch(L);
+	if( !env )	return;
+	env->event_handle = h;
+}
+
+static lua_State* puss_debug_state(lua_State* L) {
+	DebugEnv* env = debug_env_fetch(L);
+	return env ? env->debug_state : NULL;
+}
+
+static void puss_debug_sethook(lua_State* L, int enable, int count) {
+	DebugEnv* env = debug_env_fetch(L);
+	if( !env )	return;
+	debug_env_sethook(env, enable, count);
+}
+
+static int debug_set_bp(DebugEnv* env, const char* fname, int line) {
+	FileInfo* finfo = file_info_fetch(env, fname);
+	if( !finfo )
+		return 0;
+	if( line < 1 || line > 100000 )	// not support 10w lines script
+		return 0;
+
+	if( line > finfo->line_num ) {
+		int num = line + 100;
+		finfo->bps = realloc(finfo->bps, sizeof(char) * num);
+		if( finfo->bps ) {
+			memset(finfo->bps + finfo->line_num, 0, sizeof(char) * (num - finfo->line_num));
+			finfo->line_num = num;
+		} else {
+			finfo->line_num = 0;
+			return 0;
+		}
+	}
+
+	finfo->bps[line-1] = BP_ACTIVE;
+	return 1;
+}
+
+static int debug_del_bp(DebugEnv* env, const char* fname, int line) {
+	FileInfo* finfo = file_info_fetch(env, fname);
+	if( finfo && line>=1 && line<=finfo->line_num ) {
+		finfo->bps[line-1] = BP_NOT_SET;
+	}
+	return 0;
+}
+
+static int debug_invoke(DebugEnv* env, const char* key, const char* s, int n) {
+	lua_State* L = env->breaked_state;
+	int top = env->breaked_top;
+	assert( L );
+	lua_settop(L, top);
+	if( key ) {
+		if( puss_rawget_ex(L, key)==LUA_TFUNCTION ) {
+			if( s && n ) {
+				lua_pushlstring(L, s, n);
+			} else {
+				lua_pushnil(L);
+			}
+			lua_pcall(L, 1, LUA_MULTRET, 0);
+		} else {
+			lua_pop(L, 1);
+			lua_pushnil(L);
+		}
+	} else {
+		// TODO : dostring
+		lua_pushnil(L);
+	}
+	return lua_gettop(L) - top;
+}
+
+static int puss_debug_cmd(lua_State* L, PussDebugCmd cmd, const char* key, const char* s, int n) {
+	DebugEnv* env = debug_env_fetch(L);
+	if( !env )	return 0;
+
+	switch( cmd ) {
+	case PUSS_DEBUG_CMD_BP_SET:		// s=filename, n=line, return 0 if set failed
+		return debug_set_bp(env, s, n);
+
+	case PUSS_DEBUG_CMD_BP_DEL:		// s=filename, n=line
+		return debug_del_bp(env, s, n);
+
+	case PUSS_DEBUG_CMD_STEP_INTO:
+		env->step_signal = 1;
+		env->continue_signal = 1;
+		break;
+
+	case PUSS_DEBUG_CMD_STEP_OVER:
+		env->step_signal = 1;
+		env->continue_signal = 1;
+		// TODO : 
+		break;
+
+	case PUSS_DEBUG_CMD_STEP_OUT:
+		env->step_signal = 1;
+		env->continue_signal = 1;
+		// TODO : 
+		break;
+
+	case PUSS_DEBUG_CMD_CONTINUE:	// s=filename or NULL, n=line
+		env->continue_signal = 1;
+		env->continue_bp_finfo = NULL;
+		env->continue_bp_line = 0;
+		if( s && (n > 0) ) {
+			env->continue_bp_finfo = file_info_fetch(env, s);
+			env->continue_bp_line = n;
+		}
+		break;
+
+	case PUSS_DEBUG_CMD_INVOKE:		// key=funcname or NULL, s=packed_args, n=length, return num of retval on top of state
+		if( env->breaked && env->breaked_state ) {
+			return debug_invoke(env, key, s, n);
+		}
+		break;
+
+	default:
+		break;
+	}
+
 	return 0;
 }
 

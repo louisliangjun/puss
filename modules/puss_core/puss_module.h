@@ -5,6 +5,8 @@
 
 #include "puss_macros.h"
 
+PUSS_DECLS_BEGIN
+
 typedef struct PussInterface	PussInterface;
 
 #ifdef _PUSS_MODULE_IMPLEMENT
@@ -23,19 +25,52 @@ typedef struct PussInterface	PussInterface;
 	#define	__lua_proxy__(sym)			(*(__puss_iface__->luaproxy.sym))
 #endif
 
+PUSS_DECLS_END
+
 #include "luaproxy.h"
 
 PUSS_DECLS_BEGIN
 
+typedef enum PussDebugCmd
+	{ PUSS_DEBUG_CMD_BP_SET		// s=filename, n=line, return 0 if set failed
+	, PUSS_DEBUG_CMD_BP_DEL		// s=filename, n=line 
+	, PUSS_DEBUG_CMD_STEP_INTO
+	, PUSS_DEBUG_CMD_STEP_OVER
+	, PUSS_DEBUG_CMD_STEP_OUT
+	, PUSS_DEBUG_CMD_CONTINUE	// s=filename or NULL, n=line
+	, PUSS_DEBUG_CMD_INVOKE		// key=funcname or NULL, s=packed_args, n=length, return num of retval on top of state
+	} PussDebugCmd;
+
+typedef enum PussDebugEvent
+	{ PUSS_DEBUG_EVENT_HOOK_COUNT
+	, PUSS_DEBUG_EVENT_BREAKED_BEGIN
+	, PUSS_DEBUG_EVENT_BREAKED_UPDATE
+	, PUSS_DEBUG_EVENT_BREAKED_END
+	} PussDebugEvent;
+
+typedef void   (*PussDebugEventHandle)	(lua_State* L, enum PussDebugEvent ev);
+
 struct PussInterface {
+	// module
 	void		(*module_require)		(lua_State* L, const char* name);	// [-0,+0,e]
 	void		(*interface_register)	(lua_State* L, const char* name, void* iface);	// [-0,+0,e]
 	void*		(*interface_check)		(lua_State* L, const char* name);	// [-0,+0,e]
+
+	// consts
 	void        (*push_const_table)		(lua_State* L);	// [-0,+1,-]
+
+	// misc
 	const char*	(*app_path)				(lua_State* L);	// [-0,+0,-]
 	int			(*rawget_ex)			(lua_State* L, const char* name);	// [-0,+1,-]
 	int			(*pcall_stacktrace)		(lua_State* L, int n, int r);		// [-0,+1,-]
 
+	// debug
+	void		(*debug_reset)			(lua_State* L, PussDebugEventHandle h);
+	lua_State* 	(*debug_state)			(lua_State* L);
+	void	 	(*debug_sethook)		(lua_State* L, int enable, int count);
+	int			(*debug_cmd)			(lua_State* L, PussDebugCmd cmd, const char* key, const char* s, int n);
+
+	// luaproxy
 	LuaProxy	luaproxy;
 };
 
