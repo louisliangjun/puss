@@ -1,8 +1,5 @@
 -- default.lua
 
-local function samples()
-end
-
 function __main__()
 	print('usage: ./puss <script> [options...]')
 	print()
@@ -15,10 +12,10 @@ function __main__()
 	local samples =
 		{ 'samples/puss.lua'
 		, 'samples/const.lua'
-		, 'samples/glua.lua'
-		, 'samples/gtk.lua'
 		, 'samples/nuklear.lua'
-		, 'source_editor/main.lua'
+		-- , 'samples/glua.lua'
+		-- , 'samples/gtk.lua'
+		-- , 'source_editor/main.lua'
 		}
 
 	while true do
