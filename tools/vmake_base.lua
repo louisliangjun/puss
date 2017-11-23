@@ -200,7 +200,7 @@ function check_deps(target, deps)
 					if not do_check(v) then return false end
 				end
 			end
-		else
+		elseif dep then
 			error('not support this deps format: ' .. tostring(dep))
 		end
 		return true
