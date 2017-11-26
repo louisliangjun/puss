@@ -282,10 +282,7 @@ static PussInterface puss_iface =
 	, puss_rawget_ex
 	, puss_pcall_stacktrace
 
-	, puss_debug_reset
-	, puss_debug_state
-	, puss_debug_sethook
-	, puss_debug_cmd
+	, puss_debug_command
 
 	};
 
@@ -475,9 +472,18 @@ void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, con
 
 	// debugger
 	if( lua_getallocf(L, NULL)==_debug_alloc ) {
-		lua_pushcfunction(L, debug_env_init);
-		lua_pushvalue(L, -1);
-		lua_call(L, 1, 0);
+		luaL_newlib(L, lua_debug_methods);
+		lua_setfield(L, 1, "debug");	// ks.debug
+
+		puss_push_const_table(L);
+	#define _reg(e)	lua_pushinteger(L, e);	lua_setfield(L, -2, #e)
+		_reg(PUSS_DEBUG_EVENT_ATTACHED);
+		_reg(PUSS_DEBUG_EVENT_HOOK_COUNT);
+		_reg(PUSS_DEBUG_EVENT_BREAKED_BEGIN);
+		_reg(PUSS_DEBUG_EVENT_BREAKED_UPDATE);
+		_reg(PUSS_DEBUG_EVENT_BREAKED_END);
+	#undef _reg
+		lua_pop(L, 1);
 	}
 
 	lua_pop(L, 1);

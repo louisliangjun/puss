@@ -21,6 +21,7 @@ typedef struct PussInterface	PussInterface;
 	#define puss_app_path				(*(__puss_iface__->app_path))
 	#define puss_rawget_ex				(*(__puss_iface__->rawget_ex))
 	#define puss_pcall_stacktrace		(*(__puss_iface__->pcall_stacktrace))
+	#define puss_debug_command			(*(__puss_iface__->debug_command))
 
 	#define	__lua_proxy__(sym)			(*(__puss_iface__->luaproxy.sym))
 #endif
@@ -32,17 +33,19 @@ PUSS_DECLS_END
 PUSS_DECLS_BEGIN
 
 typedef enum PussDebugCmd
-	{ PUSS_DEBUG_CMD_BP_SET		// s=filename, n=line, return 0 if set failed
-	, PUSS_DEBUG_CMD_BP_DEL		// s=filename, n=line 
+	{ PUSS_DEBUG_CMD_RESET		// p=PussDebugEventHandle, n=count hook
+	, PUSS_DEBUG_CMD_BP_SET		// p=filename, n=line, return 0 if set failed
+	, PUSS_DEBUG_CMD_BP_DEL		// p=filename, n=line
 	, PUSS_DEBUG_CMD_STEP_INTO
 	, PUSS_DEBUG_CMD_STEP_OVER
 	, PUSS_DEBUG_CMD_STEP_OUT
-	, PUSS_DEBUG_CMD_CONTINUE	// s=filename or NULL, n=line
-	, PUSS_DEBUG_CMD_INVOKE		// key=funcname or NULL, s=packed_args, n=length, return num of retval on top of state
+	, PUSS_DEBUG_CMD_CONTINUE
+	, PUSS_DEBUG_CMD_RUNTO		// p=filename or NULL, n=line
 	} PussDebugCmd;
 
 typedef enum PussDebugEvent
-	{ PUSS_DEBUG_EVENT_HOOK_COUNT
+	{ PUSS_DEBUG_EVENT_ATTACHED
+	, PUSS_DEBUG_EVENT_HOOK_COUNT
 	, PUSS_DEBUG_EVENT_BREAKED_BEGIN
 	, PUSS_DEBUG_EVENT_BREAKED_UPDATE
 	, PUSS_DEBUG_EVENT_BREAKED_END
@@ -65,10 +68,7 @@ struct PussInterface {
 	int			(*pcall_stacktrace)		(lua_State* L, int n, int r);		// [-0,+1,-]
 
 	// debug
-	void		(*debug_reset)			(lua_State* L, PussDebugEventHandle h);
-	lua_State* 	(*debug_state)			(lua_State* L);
-	void	 	(*debug_sethook)		(lua_State* L, int enable, int count);
-	int			(*debug_cmd)			(lua_State* L, PussDebugCmd cmd, const char* key, const char* s, int n);
+	int			(*debug_command)		(lua_State* L, PussDebugCmd cmd, const void* p, int n);
 
 	// luaproxy
 	LuaProxy	luaproxy;

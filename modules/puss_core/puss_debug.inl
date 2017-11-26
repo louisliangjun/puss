@@ -26,7 +26,7 @@ typedef struct _DebugEnv {
 	lua_Alloc				frealloc;
 	void*					ud;
 	lua_State*				debug_state;
-	PussDebugEventHandle	event_handle;
+	PussDebugEventHandle	debug_event_handle;
 
 	void*					main_addr;
 	lua_State*				main_state;
@@ -37,11 +37,11 @@ typedef struct _DebugEnv {
 	int						breaked_top;
 	int						breaked;
 
-	const FileInfo*			continue_bp_finfo;
-	int						continue_bp_line;
 	int						continue_signal;
-	
 	int						step_signal;
+
+	const FileInfo*			runto_finfo;
+	int						runto_line;
 } DebugEnv;
 
 static int file_info_free(lua_State* L) {
@@ -61,9 +61,9 @@ static FileInfo* file_info_fetch(DebugEnv* env, const char* fname) {
 	lua_State* L = env->debug_state;
 	FileInfo* finfo = NULL;
 	const char* name;
-	if (!fname)
+	if( !fname )
 		return NULL;
-	if (*fname=='@' || *fname=='=')
+	if( *fname=='@' || *fname=='=' )
 		++fname;
 	if( lua_getfield(L, LUA_REGISTRYINDEX, fname)==LUA_TUSERDATA ) {
 		finfo = (FileInfo*)lua_touserdata(L, -1);
@@ -98,26 +98,26 @@ static int file_info_bp_hit_test(DebugEnv* env, FileInfo* finfo, int line){
 
 static int script_on_breaked(DebugEnv* env, lua_State* L, lua_Debug* ar, const FileInfo* finfo) {
 	if( env->breaked ) return 0;
-	if( !(env->event_handle) ) return 0;
+	if( !(env->debug_event_handle) ) return 0;
 
 	env->breaked_finfo = finfo;
 	env->breaked_line = ar->currentline;
 	env->breaked_state = L;
 	env->breaked_top = lua_gettop(L);
 	env->breaked = 1;
-	env->continue_bp_finfo = NULL;
-	env->continue_bp_line = 0;
 	env->continue_signal = 0;
 	env->step_signal = 0;
+	env->runto_finfo = NULL;
+	env->runto_line = 0;
 
-	env->event_handle(L, PUSS_DEBUG_EVENT_BREAKED_BEGIN);
+	env->debug_event_handle(L, PUSS_DEBUG_EVENT_BREAKED_BEGIN);
 
-	while( env->event_handle && env->continue_signal==0 ) {
-		env->event_handle(L, PUSS_DEBUG_EVENT_BREAKED_UPDATE);
+	while( env->debug_event_handle && env->continue_signal==0 ) {
+		env->debug_event_handle(L, PUSS_DEBUG_EVENT_BREAKED_UPDATE);
 	}
 
-	if( env->event_handle ) {
-		env->event_handle(L, PUSS_DEBUG_EVENT_BREAKED_END);
+	if( env->debug_event_handle ) {
+		env->debug_event_handle(L, PUSS_DEBUG_EVENT_BREAKED_END);
 	}
 
 	env->breaked = 0;
@@ -148,7 +148,7 @@ static void debug_env_free(DebugEnv* env) {
 static void *_debug_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
 	DebugEnv* env = (DebugEnv*)ud;
 	MemHead* nptr;
-	if (nsize) {
+	if( nsize ) {
 		nsize += sizeof(MemHead);
 	}
 	if( ptr ) {
@@ -169,16 +169,15 @@ static void *_debug_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
 }
 
 static int script_line_hook(DebugEnv* env, lua_State* L, lua_Debug* ar) {
+	int need_break = 0;
 	MemHead* hdr;
-	LClosure* cl;
-	Proto* p;
-	CallInfo* ci = ar->i_ci;
-	if (!ttisLclosure(ci->func))
+
+	// c function, not need check break
+	if( !ttisLclosure(ar->i_ci->func) )
 		return 0;
 
-	cl = clLvalue(ci->func);
-	p = cl->p;
-	hdr = ((MemHead*)p) - 1;
+	// fetch lua fuction proto MemHead
+	hdr = ((MemHead*)(clLvalue(ar->i_ci->func)->p)) - 1;
 
 	lua_getinfo(L, "nSlf", ar);
 
@@ -187,21 +186,15 @@ static int script_line_hook(DebugEnv* env, lua_State* L, lua_Debug* ar) {
 			return 0;
 	}
 
-	// ar->what: the string "Lua" if the function is a Lua function, "C" if it is a C function, "main" if it is the main part of a chunk.
-	if( ar->what[0] == 'C' )
-		return 0;
+	if( env->step_signal ) {
+		need_break = 1;
+	} else if( env->runto_finfo==hdr->finfo && env->runto_line==ar->currentline ) {
+		need_break = 1;
+	} else if( file_info_bp_hit_test(env, hdr->finfo, ar->currentline) ) {
+		need_break = 1;
+	}
 
-	assert(lua_isfunction(L, -1));
-	if( env->step_signal )
-		return script_on_breaked(env, L, ar, hdr->finfo);
-
-	if( env->continue_bp_finfo==hdr->finfo && env->continue_bp_line==ar->currentline )
-		return script_on_breaked(env, L, ar, hdr->finfo);
-
-	if( file_info_bp_hit_test(env, hdr->finfo, ar->currentline) )
-		return script_on_breaked(env, L, ar, hdr->finfo);
-
-	return 0;
+	return need_break ? script_on_breaked(env, L, ar, hdr->finfo) : 0;
 }
 
 static inline DebugEnv* debug_env_fetch(lua_State* L) {
@@ -216,7 +209,7 @@ static void script_hook(lua_State* L, lua_Debug* ar) {
 	DebugEnv* env = debug_env_fetch(L);
 	assert( env );
 
-	if( !(env->event_handle) ) {
+	if( !(env->debug_event_handle) ) {
 		lua_sethook(L, NULL, 0, 0);
 		return;
 	}
@@ -230,7 +223,7 @@ static void script_hook(lua_State* L, lua_Debug* ar) {
 	case LUA_HOOKRET:
 		break;
 	case LUA_HOOKCOUNT:
-		env->event_handle(L, PUSS_DEBUG_EVENT_HOOK_COUNT);
+		env->debug_event_handle(L, PUSS_DEBUG_EVENT_HOOK_COUNT);
 		break;
 	default:
 		break;
@@ -243,57 +236,19 @@ static void script_hook(lua_State* L, lua_Debug* ar) {
 
 #define DEBUG_HOOK_MASK (LUA_MASKCALL | LUA_MASKRET | LUA_MASKLINE | LUA_MASKERROR)
 
-static void debug_env_sethook(DebugEnv* env, int enable, int enable_count) {
+static void debug_env_sethook(DebugEnv* env, int enable, int hook_count) {
 	lua_Hook hook = NULL;
 	int mask = 0;
 	int count = 0;
 	if( enable ) {
 		hook = script_hook;
 		mask = DEBUG_HOOK_MASK;
-		if( enable_count > 0 ) {
+		if( hook_count > 0 ) {
 			mask |= LUA_MASKCOUNT;
-			count = enable_count;
+			count = hook_count;
 		}
 	}
 	lua_sethook(env->main_state, hook, mask, count);
-}
-
-static int lua_debug_enable(lua_State* L) {
-	DebugEnv* env = debug_env_fetch(L);
-	int enable = lua_toboolean(L, 1);
-	int count = (int)luaL_optinteger(L, 2, 4096);
-	assert( env );
-	debug_env_sethook(env, enable, count);
-	return 0;
-}
-
-static luaL_Reg lua_debug_methods[] =
-	{ {"enable", lua_debug_enable}
-	, {NULL, NULL}
-	};
-
-static int debug_env_init(lua_State* L) {
-	lua_newtable(L);	// new debug
-	luaL_setfuncs(L, lua_debug_methods, 0);
-	lua_setfield(L, 1, "debug");	// ks.debug
-	return 0;
-}
-
-static void puss_debug_reset(lua_State* L, PussDebugEventHandle h) {
-	DebugEnv* env = debug_env_fetch(L);
-	if( !env )	return;
-	env->event_handle = h;
-}
-
-static lua_State* puss_debug_state(lua_State* L) {
-	DebugEnv* env = debug_env_fetch(L);
-	return env ? env->debug_state : NULL;
-}
-
-static void puss_debug_sethook(lua_State* L, int enable, int count) {
-	DebugEnv* env = debug_env_fetch(L);
-	if( !env )	return;
-	debug_env_sethook(env, enable, count);
 }
 
 static int debug_set_bp(DebugEnv* env, const char* fname, int line) {
@@ -327,40 +282,22 @@ static int debug_del_bp(DebugEnv* env, const char* fname, int line) {
 	return 0;
 }
 
-static int debug_invoke(DebugEnv* env, const char* key, const char* s, int n) {
-	lua_State* L = env->breaked_state;
-	int top = env->breaked_top;
-	assert( L );
-	lua_settop(L, top);
-	if( key ) {
-		if( puss_rawget_ex(L, key)==LUA_TFUNCTION ) {
-			if( s && n ) {
-				lua_pushlstring(L, s, n);
-			} else {
-				lua_pushnil(L);
-			}
-			lua_pcall(L, 1, LUA_MULTRET, 0);
-		} else {
-			lua_pop(L, 1);
-			lua_pushnil(L);
-		}
-	} else {
-		// TODO : dostring
-		lua_pushnil(L);
-	}
-	return lua_gettop(L) - top;
-}
-
-static int puss_debug_cmd(lua_State* L, PussDebugCmd cmd, const char* key, const char* s, int n) {
+static int puss_debug_command(lua_State* L, PussDebugCmd cmd, const void* p, int n) {
 	DebugEnv* env = debug_env_fetch(L);
 	if( !env )	return 0;
 
 	switch( cmd ) {
+	case PUSS_DEBUG_CMD_RESET:
+		env->debug_event_handle = (PussDebugEventHandle)p;
+		debug_env_sethook(env, p ? 1 : 0, n);
+		if( p ) { env->debug_event_handle(L, PUSS_DEBUG_EVENT_ATTACHED); }
+		break;
+
 	case PUSS_DEBUG_CMD_BP_SET:		// s=filename, n=line, return 0 if set failed
-		return debug_set_bp(env, s, n);
+		return debug_set_bp(env, (const char*)p, n);
 
 	case PUSS_DEBUG_CMD_BP_DEL:		// s=filename, n=line
-		return debug_del_bp(env, s, n);
+		return debug_del_bp(env, (const char*)p, n);
 
 	case PUSS_DEBUG_CMD_STEP_INTO:
 		env->step_signal = 1;
@@ -379,19 +316,19 @@ static int puss_debug_cmd(lua_State* L, PussDebugCmd cmd, const char* key, const
 		// TODO : 
 		break;
 
-	case PUSS_DEBUG_CMD_CONTINUE:	// s=filename or NULL, n=line
+	case PUSS_DEBUG_CMD_CONTINUE:
 		env->continue_signal = 1;
-		env->continue_bp_finfo = NULL;
-		env->continue_bp_line = 0;
-		if( s && (n > 0) ) {
-			env->continue_bp_finfo = file_info_fetch(env, s);
-			env->continue_bp_line = n;
-		}
+		env->runto_finfo = NULL;
+		env->runto_line = 0;
 		break;
-
-	case PUSS_DEBUG_CMD_INVOKE:		// key=funcname or NULL, s=packed_args, n=length, return num of retval on top of state
-		if( env->breaked && env->breaked_state ) {
-			return debug_invoke(env, key, s, n);
+		
+	case PUSS_DEBUG_CMD_RUNTO:	// s=filename or NULL, n=line
+		env->continue_signal = 1;
+		env->runto_finfo = NULL;
+		env->runto_line = 0;
+		if( p && (n > 0) ) {
+			env->runto_finfo = file_info_fetch(env, (const char*)p);
+			env->runto_line = n;
 		}
 		break;
 
@@ -401,4 +338,53 @@ static int puss_debug_cmd(lua_State* L, PussDebugCmd cmd, const char* key, const
 
 	return 0;
 }
+
+#define PUSS_BUILTIN_DEBUG_EVENT_HANDLE_NAME	"\x01PussDebugEventHandle\x01"
+
+static void builtin_debug_event_handle(lua_State* L, enum PussDebugEvent ev) {
+	
+}
+
+static int lua_debug_cmd_reset(lua_State* L) {
+	PussDebugEventHandle h = NULL;
+	int hook_count = 0;
+	if( lua_isnoneornil(L, 1) ) {
+		lua_pushnil(L);
+	} else {
+		luaL_checktype(L, 1, LUA_TFUNCTION);
+		lua_pushvalue(L, 1);
+		h = builtin_debug_event_handle;
+		hook_count = luaL_optinteger(L, 2, 0);
+	}
+	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_BUILTIN_DEBUG_EVENT_HANDLE_NAME);
+	puss_debug_command(L, PUSS_DEBUG_CMD_RESET, h, hook_count);
+	return 0;
+}
+
+static int lua_debug_cmd_bp_set(lua_State* L) {
+	const char* fname = luaL_checkstring(L, 1);
+	int line = luaL_checkinteger(L, 2);
+	puss_debug_command(L, PUSS_DEBUG_CMD_BP_SET, fname, line);
+	return 0;
+}
+
+static int lua_debug_cmd_bp_del(lua_State* L) {
+	const char* fname = luaL_checkstring(L, 1);
+	int line = luaL_checkinteger(L, 2);
+	puss_debug_command(L, PUSS_DEBUG_CMD_BP_DEL, fname, line);
+	return 0;
+}
+
+static int lua_debug_cmd_continue(lua_State* L) {
+	puss_debug_command(L, PUSS_DEBUG_CMD_CONTINUE, NULL, 0);
+	return 0;
+}
+
+static luaL_Reg lua_debug_methods[] =
+	{ {"reset", lua_debug_cmd_reset}
+	, {"bp_set", lua_debug_cmd_bp_set}
+	, {"bp_del", lua_debug_cmd_bp_del}
+	, {"continue", lua_debug_cmd_continue}
+	, {NULL, NULL}
+	};
 
