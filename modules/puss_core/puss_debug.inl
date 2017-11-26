@@ -290,7 +290,15 @@ static int puss_debug_command(lua_State* L, PussDebugCmd cmd, const void* p, int
 	case PUSS_DEBUG_CMD_RESET:
 		env->debug_event_handle = (PussDebugEventHandle)p;
 		debug_env_sethook(env, p ? 1 : 0, n);
-		if( p ) { env->debug_event_handle(L, PUSS_DEBUG_EVENT_ATTACHED); }
+		if( env->debug_event_handle ) {
+			env->debug_event_handle(L, PUSS_DEBUG_EVENT_ATTACHED);
+		}
+		break;
+
+	case PUSS_DEBUG_CMD_UPDATE:
+		if( env->debug_event_handle) {
+			env->debug_event_handle(L, PUSS_DEBUG_EVENT_UPDATE);
+		}
 		break;
 
 	case PUSS_DEBUG_CMD_BP_SET:		// s=filename, n=line, return 0 if set failed
@@ -339,10 +347,21 @@ static int puss_debug_command(lua_State* L, PussDebugCmd cmd, const void* p, int
 	return 0;
 }
 
-#define PUSS_BUILTIN_DEBUG_EVENT_HANDLE_NAME	"\x01PussDebugEventHandle\x01"
+#define PUSS_BUILTIN_DEBUG_EVENT_HANDLE_NAME	"[PussDebugEventHandle]"
 
 static void builtin_debug_event_handle(lua_State* L, enum PussDebugEvent ev) {
-	
+	DebugEnv* env = debug_env_fetch(L);
+	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_BUILTIN_DEBUG_EVENT_HANDLE_NAME)!=LUA_TFUNCTION ) {
+		lua_pop(L, 1);
+		env->debug_event_handle = NULL;
+		debug_env_sethook(env, 0, 0);
+	}
+
+	lua_pushinteger(L, ev);
+	if( puss_pcall_stacktrace(L, 1, 0) ) {
+		fprintf(stderr, "builtin_debug_event_handle error: %s\n", lua_tostring(L, -1));
+		lua_pop(L, 1);
+	}
 }
 
 static int lua_debug_cmd_reset(lua_State* L) {
@@ -352,12 +371,17 @@ static int lua_debug_cmd_reset(lua_State* L) {
 		lua_pushnil(L);
 	} else {
 		luaL_checktype(L, 1, LUA_TFUNCTION);
-		lua_pushvalue(L, 1);
 		h = builtin_debug_event_handle;
 		hook_count = luaL_optinteger(L, 2, 0);
+		lua_pushvalue(L, 1);
 	}
 	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_BUILTIN_DEBUG_EVENT_HANDLE_NAME);
 	puss_debug_command(L, PUSS_DEBUG_CMD_RESET, h, hook_count);
+	return 0;
+}
+
+static int lua_debug_cmd_update(lua_State* L) {
+	puss_debug_command(L, PUSS_DEBUG_CMD_UPDATE, NULL, 0);
 	return 0;
 }
 
@@ -375,6 +399,21 @@ static int lua_debug_cmd_bp_del(lua_State* L) {
 	return 0;
 }
 
+static int lua_debug_cmd_step_into(lua_State* L) {
+	puss_debug_command(L, PUSS_DEBUG_CMD_STEP_INTO, NULL, 0);
+	return 0;
+}
+
+static int lua_debug_cmd_step_over(lua_State* L) {
+	puss_debug_command(L, PUSS_DEBUG_CMD_STEP_OVER, NULL, 0);
+	return 0;
+}
+
+static int lua_debug_cmd_step_out(lua_State* L) {
+	puss_debug_command(L, PUSS_DEBUG_CMD_STEP_OUT, NULL, 0);
+	return 0;
+}
+
 static int lua_debug_cmd_continue(lua_State* L) {
 	puss_debug_command(L, PUSS_DEBUG_CMD_CONTINUE, NULL, 0);
 	return 0;
@@ -382,8 +421,12 @@ static int lua_debug_cmd_continue(lua_State* L) {
 
 static luaL_Reg lua_debug_methods[] =
 	{ {"reset", lua_debug_cmd_reset}
+	, {"update", lua_debug_cmd_update}
 	, {"bp_set", lua_debug_cmd_bp_set}
 	, {"bp_del", lua_debug_cmd_bp_del}
+	, {"step_into", lua_debug_cmd_step_into}
+	, {"step_over", lua_debug_cmd_step_over}
+	, {"step_out", lua_debug_cmd_step_out}
 	, {"continue", lua_debug_cmd_continue}
 	, {NULL, NULL}
 	};

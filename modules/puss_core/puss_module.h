@@ -34,6 +34,7 @@ PUSS_DECLS_BEGIN
 
 typedef enum PussDebugCmd
 	{ PUSS_DEBUG_CMD_RESET		// p=PussDebugEventHandle, n=count hook
+	, PUSS_DEBUG_CMD_UPDATE
 	, PUSS_DEBUG_CMD_BP_SET		// p=filename, n=line, return 0 if set failed
 	, PUSS_DEBUG_CMD_BP_DEL		// p=filename, n=line
 	, PUSS_DEBUG_CMD_STEP_INTO
@@ -45,6 +46,7 @@ typedef enum PussDebugCmd
 
 typedef enum PussDebugEvent
 	{ PUSS_DEBUG_EVENT_ATTACHED
+	, PUSS_DEBUG_EVENT_UPDATE
 	, PUSS_DEBUG_EVENT_HOOK_COUNT
 	, PUSS_DEBUG_EVENT_BREAKED_BEGIN
 	, PUSS_DEBUG_EVENT_BREAKED_UPDATE

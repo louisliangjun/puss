@@ -53,7 +53,7 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 
 #include "puss_debug.inl"
 
-#define PUSS_NAMESPACE(name)			"\x01" #name
+#define PUSS_NAMESPACE(name)			"[" #name "]"
 
 #define PUSS_NAMESPACE_PUSS				PUSS_NAMESPACE(puss)
 #define PUSS_NAMESPACE_MODULES_LOADED	PUSS_NAMESPACE(modules)
@@ -473,11 +473,12 @@ void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, con
 	// debugger
 	if( lua_getallocf(L, NULL)==_debug_alloc ) {
 		luaL_newlib(L, lua_debug_methods);
-		lua_setfield(L, 1, "debug");	// ks.debug
+		lua_setfield(L, 1, "debug");	// puss.debug
 
 		puss_push_const_table(L);
 	#define _reg(e)	lua_pushinteger(L, e);	lua_setfield(L, -2, #e)
 		_reg(PUSS_DEBUG_EVENT_ATTACHED);
+		_reg(PUSS_DEBUG_EVENT_UPDATE);
 		_reg(PUSS_DEBUG_EVENT_HOOK_COUNT);
 		_reg(PUSS_DEBUG_EVENT_BREAKED_BEGIN);
 		_reg(PUSS_DEBUG_EVENT_BREAKED_UPDATE);

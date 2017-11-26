@@ -17,12 +17,12 @@ static int puss_get_debug(int argc, char** argv) {
 	for( i=1; i<argc; ++i ) {
 		// --debug[=level]
 		const char* arg = argv[i];
-		if( strncmp(arg, "-debug", 6)==0 ) {
-			if( arg[6]=='\0' )
+		if( strncmp(arg, "--debug", 7)==0 ) {
+			if( arg[7]=='\0' )
 				return 1;
-			if( arg[6]!='=' )
+			if( arg[7]!='=' )
 				continue;
-			return (int)strtol(arg+7, NULL, 10);
+			return (int)strtol(arg+8, NULL, 10);
 		}
 	}
 	return 0;

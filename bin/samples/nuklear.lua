@@ -1,5 +1,3 @@
-puss.dofile('samples/utils.lua')
-
 function nuklear_demo_lua(ctx)
 	local LABEL = "LuaDemoWindow"
 	-- nk_window_set_size(ctx, LABEL, nk_vec2(w, h))
@@ -55,6 +53,6 @@ if not nk then
 	local nk = puss.require('puss_nuklear')
 	_ENV.nk = nk
 	setmetatable(_ENV, {__index=nk})
-	puss.dofile('samples/nuklear.lua')	-- for use nk symbols & enums
+	puss.dofile(puss._script)	-- for use nk symbols & enums
 end
 

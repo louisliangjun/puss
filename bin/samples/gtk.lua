@@ -48,6 +48,6 @@ if not glua then
 	local glua_symbols = glua._symbols
 	_ENV.glua = glua
 	setmetatable(_ENV, {__index=glua_symbols})
-	puss.dofile('samples/gtk.lua')	-- for use glib symbols & enums
+	puss.dofile(puss._script)	-- for use glib symbols & enums
 end
 

@@ -5,7 +5,9 @@ function __main__()
 	print()
 
 	local function run(script)
-		local cmd = string.format('%s/%s %s', puss._path, puss._self, script)
+		local debug_mode = puss.debug and '--debug' or ''
+		print('debug mode :', debug_mode)
+		local cmd = string.format('%s/%s %s %s', puss._path, puss._self, script, debug_mode)
 		print(cmd, os.execute(cmd))
 	end
 
@@ -13,6 +15,7 @@ function __main__()
 		{ 'samples/puss.lua'
 		, 'samples/const.lua'
 		, 'samples/nuklear.lua'
+		, 'samples/debug.lua'
 		-- , 'samples/glua.lua'
 		-- , 'samples/gtk.lua'
 		-- , 'source_editor/main.lua'
