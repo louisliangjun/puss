@@ -11,7 +11,7 @@ if puss._script~='tools/debugger.lua' then
 	local puss_socket = puss.require('puss_socket')
 
 	local current_debugger
-	local sock, addr = puss_socket.socket_udp_create(1*1024*1024, '127.0.0.1', 9999)
+	local sock, addr = puss_socket.socket_udp_create('127.0.0.1', 9999, 1*1024*1024)
 	print('host listen at:', addr)
 
 	local function host_debug_update()

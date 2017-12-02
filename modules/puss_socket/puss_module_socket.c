@@ -182,9 +182,9 @@ static const luaL_Reg socket_udp_methods[] =
 	};
 
 static int lua_socket_udp_create(lua_State* L) {
-	size_t rbuf_max = (size_t)luaL_checkinteger(L, 1);
-	const char* ip = luaL_optstring(L, 2, "0.0.0.0");
-	unsigned port = (unsigned)luaL_optinteger(L, 3, 0);
+	const char* ip = luaL_optstring(L, 1, "0.0.0.0");
+	unsigned port = (unsigned)luaL_optinteger(L, 2, 0);
+	size_t rbuf_max = (size_t)luaL_optinteger(L, 3, 256*1024);
 	struct sockaddr addr;
 	socklen_t addr_len = sizeof(struct sockaddr);
 	SOCKET fd = INVALID_SOCKET;

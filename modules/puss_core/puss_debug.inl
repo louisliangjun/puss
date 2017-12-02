@@ -123,7 +123,7 @@ static int script_on_breaked(DebugEnv* env, lua_State* L, lua_Debug* ar, const F
 	env->breaked = 0;
 	env->breaked_state = NULL;
 	lua_settop(L, env->breaked_top);
-	return 1;
+	return 0;
 }
 
 static DebugEnv* debug_env_new(lua_Alloc f, void* ud) {
@@ -197,6 +197,21 @@ static int script_line_hook(DebugEnv* env, lua_State* L, lua_Debug* ar) {
 	return need_break ? script_on_breaked(env, L, ar, hdr->finfo) : 0;
 }
 
+static int script_count_hook(DebugEnv* env, lua_State* L, lua_Debug* ar) {
+	env->breaked_finfo = NULL;
+	env->breaked_line = 0;
+	env->breaked_state = L;
+	env->breaked_top = lua_gettop(L);
+	env->breaked = 1;
+
+	env->debug_event_handle(L, PUSS_DEBUG_EVENT_HOOK_COUNT);
+
+	env->breaked = 0;
+	env->breaked_state = NULL;
+	lua_settop(L, env->breaked_top);
+	return 0;
+}
+
 static inline DebugEnv* debug_env_fetch(lua_State* L) {
 	DebugEnv* env = NULL;
 	if( lua_getallocf(L, (void**)&env) != _debug_alloc ) {
@@ -223,7 +238,7 @@ static void script_hook(lua_State* L, lua_Debug* ar) {
 	case LUA_HOOKRET:
 		break;
 	case LUA_HOOKCOUNT:
-		env->debug_event_handle(L, PUSS_DEBUG_EVENT_HOOK_COUNT);
+		script_count_hook(env, L, ar);
 		break;
 	default:
 		break;
@@ -282,6 +297,21 @@ static int debug_del_bp(DebugEnv* env, const char* fname, int line) {
 	return 0;
 }
 
+static void check_invoke_debug_event_handle(DebugEnv* env, lua_State* L, enum PussDebugEvent ev) {
+	if( env && env->debug_event_handle ) {
+		lua_Hook hook = lua_gethook(L);
+		int mask = lua_gethookmask(L);
+		int count = lua_gethookcount(L);
+		lua_sethook(L, NULL, 0, 0);
+
+		env->debug_event_handle(L, ev);
+
+		if( lua_gethook(L)==NULL ) {
+			lua_sethook(L, hook, mask, count);
+		}
+	}
+}
+
 static int puss_debug_command(lua_State* L, PussDebugCmd cmd, const void* p, int n) {
 	DebugEnv* env = debug_env_fetch(L);
 	if( !env )	return 0;
@@ -290,15 +320,11 @@ static int puss_debug_command(lua_State* L, PussDebugCmd cmd, const void* p, int
 	case PUSS_DEBUG_CMD_RESET:
 		env->debug_event_handle = (PussDebugEventHandle)p;
 		debug_env_sethook(env, p ? 1 : 0, n);
-		if( env->debug_event_handle ) {
-			env->debug_event_handle(L, PUSS_DEBUG_EVENT_ATTACHED);
-		}
+		check_invoke_debug_event_handle(env, L, PUSS_DEBUG_EVENT_ATTACHED);
 		break;
 
 	case PUSS_DEBUG_CMD_UPDATE:
-		if( env->debug_event_handle) {
-			env->debug_event_handle(L, PUSS_DEBUG_EVENT_UPDATE);
-		}
+		check_invoke_debug_event_handle(env, L, PUSS_DEBUG_EVENT_UPDATE);
 		break;
 
 	case PUSS_DEBUG_CMD_BP_SET:		// s=filename, n=line, return 0 if set failed
