@@ -141,7 +141,8 @@ vmake_target_add('puss_socket', function(target)
 	vmake('puss_core')
 	local objs = make_c2objs(path_concat('modules', target), nil, INCLUDES, '-fPIC', '-fvisibility=hidden')
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
-	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs)
+	local libs = vlua.OS=='windows' and '-lwsock32' or ''
+	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs, libs)
 end)
 
 -----------------------------

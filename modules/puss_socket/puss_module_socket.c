@@ -45,7 +45,7 @@
 
 static void socket_addr_build(lua_State* L, struct sockaddr* addr, const char* ip, unsigned port) {
 	struct sockaddr_in* ipv4_addr = (struct sockaddr_in*)addr;
-	uint32_t ip_addr;
+	unsigned ip_addr;
 	if( port > 0xFFFF )
 		luaL_error(L, "bad port: %u", port);
 
@@ -56,14 +56,14 @@ static void socket_addr_build(lua_State* L, struct sockaddr* addr, const char* i
 	memset( addr, 0, sizeof(struct sockaddr) );
 	ipv4_addr->sin_family = AF_INET;
 	ipv4_addr->sin_addr.s_addr = ip_addr;
-	ipv4_addr->sin_port = htons( (uint16_t)port );
+	ipv4_addr->sin_port = htons( (unsigned short)port );
 }
 
 static void socket_addr_push(lua_State* L, const struct sockaddr* addr) {
 	// IPv4
 	if( addr->sa_family==AF_INET ) {
 		struct sockaddr_in* ipv4 = (struct sockaddr_in*)addr;
-		uint32_t ip = ntohl(ipv4->sin_addr.s_addr);
+		unsigned ip = ntohl(ipv4->sin_addr.s_addr);
 		char saddr[32];
 		sprintf(saddr, "%u.%u.%u.%u:%u", (ip>>24)&0xFF, (ip>>16)&0xFF, (ip>>8)&0xFF, ip&0xFF, ntohs(ipv4->sin_port));
 		lua_pushstring(L, saddr);
@@ -231,12 +231,18 @@ static const luaL_Reg socket_lib_methods[] =
 
 PussInterface* __puss_iface__ = NULL;
 
+#ifdef _WIN32
+	static void wsa_cleanup(void) {
+		WSACleanup();
+	}
+#endif
+
 PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 	if( !__puss_iface__ ) {
 #ifdef _WIN32
 		WSADATA wsa_data;
 		WSAStartup(MAKEWORD(2,0),&wsa_data);
-		atexit(WSACleanup);
+		atexit(wsa_cleanup);
 #endif
 		__puss_iface__ = puss;
 	}
