@@ -132,11 +132,29 @@ function main()
 		f:close()
 	end
 
+	-- fix struct & function use same name
+	--[[
+	struct nk_vec2 {float x,y;};		NK_API struct nk_vec2 nk_vec2(float x, float y);
+	struct nk_vec2i {short x, y;};		NK_API struct nk_vec2 nk_vec2i(int x, int y);
+	struct nk_rect {float x,y,w,h;};	NK_API struct nk_rect nk_rect(float x, float y, float w, float h);
+	struct nk_recti {short x,y,w,h;};	NK_API struct nk_rect nk_recti(int x, int y, int w, int h);
+	--]]
+	local same_name_symbols = { 'nk_vec2', 'nk_vec2i', 'nk_rect', 'nk_recti' }
+	local rename_symbols = {}
+	for _, name in ipairs(same_name_symbols) do rename_symbols[name] = '__'..name end
+
 	generate_file(vlua.filename_format(out..'/'..'nuklear.h'), function(writeln)
 		writeln('/* NOTICE : generate by nuklearproxy.lua */')
 		writeln()
 		writeln(header)
 		writeln()
+		for _, name in ipairs(same_name_symbols) do
+			local rname = rename_symbols[name]
+			writeln(string.format('#ifndef %s', rname))
+			writeln(string.format('  #define %s		%s', rname, name))
+			writeln('#endif')
+			writeln()
+		end
 	end)
 
 	generate_file(vlua.filename_format(out..'/'..'nuklear_proxy.h'), function(writeln)
@@ -166,7 +184,9 @@ function main()
 			local seg, syms = table.unpack(segv)
 			for _,v in ipairs(syms) do
 				local ret, name, args = table.unpack(v)
-				writeln('	#define ' .. name .. '	__nuklear_proxy__(' .. name .. ')')
+				local rname = rename_symbols[name]
+				if rname then writeln(string.format('  #undef %s', rname)) end
+				writeln('	#define ' .. (rname or name) .. '	__nuklear_proxy__(' .. name .. ')')
 			end
 		end
 

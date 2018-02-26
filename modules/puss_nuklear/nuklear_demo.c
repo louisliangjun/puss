@@ -9,6 +9,15 @@ PussNuklearInterface* __puss_nuklear_iface__ = NULL;
 #define MAX(a,b) ((a) < (b) ? (b) : (a))
 #define LEN(a) (sizeof(a)/sizeof(a)[0])
 
+static void custom_draw_test(struct nk_context * ctx) {
+	struct nk_command_buffer *out = &(ctx->current->buffer);
+	struct nk_rect bounds;
+	float rounding = 3.0f;
+	struct nk_color background = { 0xff, 0xff, 0x00, 0x7f };
+	enum nk_widget_layout_states state = nk_widget(&bounds, ctx);
+	nk_fill_rect(out, bounds, rounding, background);
+}
+
 int nuklear_demo1(lua_State* L) {
 	struct nk_context * ctx;
 	if( !__puss_nuklear_iface__) {
@@ -49,6 +58,9 @@ int nuklear_demo1(lua_State* L) {
             background.a = (nk_byte)nk_propertyi(ctx, "#A:", 0, background.a, 255, 1,1);
             nk_combo_end(ctx);
         }
+
+        nk_layout_row_dynamic(ctx, 20, 1);
+        custom_draw_test(ctx);
     }
     nk_end(ctx);
     return 0;
