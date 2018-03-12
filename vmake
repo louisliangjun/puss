@@ -227,7 +227,6 @@ vmake_target_add('nuklear_scintilla', function(target)
 	return make_target(lib, all_objs, AR, lib, all_objs)
 end)
 
---[[
 vmake_target_add('puss_nuklear_scintilla', function(target)
 	vmake('scintilla_iface')
 	local slibs = vmake('nuklear_scintilla')
@@ -235,4 +234,3 @@ vmake_target_add('puss_nuklear_scintilla', function(target)
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
 	return make_target(output, {objs, slibs}, CXX, CFLAGS, CXXFLAGS, '-shared', cflags, '-o', output, objs, slibs)
 end)
---]]

@@ -44,14 +44,16 @@ function __main__()
 	end
 
 	while w1 or w2 do
-		w1 = run_once(w1, nuklear_demo1)
+		w1 = run_once(w1, sci.demo)
 		w2 = run_once(w2, nuklear_demo_lua)
 	end
 end
 
 if not nk then
 	local nk = puss.require('puss_nuklear')
+	local sci = puss.require('puss_nuklear_scintilla')
 	_ENV.nk = nk
+	_ENV.sci = sci
 	setmetatable(_ENV, {__index=nk})
 	puss.dofile(puss._script)	-- for use nk symbols & enums
 end

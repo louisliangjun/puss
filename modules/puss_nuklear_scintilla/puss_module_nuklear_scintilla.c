@@ -9,7 +9,9 @@
 #include <Scintilla.h>
 #include <SciLexer.h>
 
-#define _sci_send(editor, msg, u, s)	scintilla_send_message(SCINTILLA(editor), (msg), (uptr_t)(u), (sptr_t)(s))
+#define LUA_NK_SCI_LIB_NAME	"puss_nuklear_scintilla_lib"
+
+#define _sci_send(editor, msg, u, s)	(0)	// scintilla_send_message(SCINTILLA(editor), (msg), (uptr_t)(u), (sptr_t)(s))
 
 typedef enum _IFaceType
 	{ IFaceType_void			// void
@@ -67,6 +69,7 @@ typedef struct _IFaceVal {
 static int _lua__sci_send_wrap(lua_State* L) {
 	IFaceDecl* decl = (IFaceDecl*)lua_touserdata(L, lua_upvalueindex(1));
 	// TODO : ScintillaObject* editor = SCINTILLA(gobject_iface->gobject_check(L, 1));
+	void* editor = NULL;
 	int nret = 0;
 	uptr_t wparam = 0;
 	sptr_t lparam = 0;
@@ -134,13 +137,75 @@ static int _lua__sci_send_wrap(lua_State* L) {
 PussInterface* __puss_iface__ = NULL;
 PussNuklearInterface* __puss_nuklear_iface__ = NULL;
 
+static void custom_draw_test(struct nk_context * ctx) {
+	struct nk_command_buffer *out = &(ctx->current->buffer);
+	struct nk_rect bounds;
+	float rounding = 3.0f;
+	struct nk_color background = { 0xff, 0xff, 0x00, 0x7f };
+	enum nk_widget_layout_states state = nk_widget(&bounds, ctx);
+	nk_fill_rect(out, bounds, rounding, background);
+}
+
+int nuklear_scintilla_demo(lua_State* L) {
+	struct nk_context * ctx = __puss_nuklear_iface__->check_nk_context(L, 1);
+    if (nk_begin(ctx, "Demo", __nk_recti(50, 50, 230, 250),
+        NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
+        NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))
+    {
+        enum {EASY, HARD};
+        static int op = EASY;
+        static int property = 20;
+     	static struct nk_color background;
+        nk_layout_row_static(ctx, 30, 80, 1);
+        if (nk_button_label(ctx, "button"))
+            fprintf(stdout, "button pressed\n");
+
+        nk_layout_row_dynamic(ctx, 30, 2);
+        if (nk_option_label(ctx, "easy", op == EASY)) op = EASY;
+        if (nk_option_label(ctx, "hard", op == HARD)) op = HARD;
+
+        nk_layout_row_dynamic(ctx, 25, 1);
+        nk_property_int(ctx, "Compression:", 0, &property, 100, 10, 1);
+
+        nk_layout_row_dynamic(ctx, 20, 1);
+        nk_label(ctx, "background:", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 25, 1);
+        if (nk_combo_begin_color(ctx, background, __nk_vec2i(nk_widget_width(ctx),400))) {
+            nk_layout_row_dynamic(ctx, 120, 1);
+            background = nk_color_picker(ctx, background, NK_RGBA);
+            nk_layout_row_dynamic(ctx, 25, 1);
+            background.r = (nk_byte)nk_propertyi(ctx, "#R:", 0, background.r, 255, 1,1);
+            background.g = (nk_byte)nk_propertyi(ctx, "#G:", 0, background.g, 255, 1,1);
+            background.b = (nk_byte)nk_propertyi(ctx, "#B:", 0, background.b, 255, 1,1);
+            background.a = (nk_byte)nk_propertyi(ctx, "#A:", 0, background.a, 255, 1,1);
+            nk_combo_end(ctx);
+        }
+
+        nk_layout_row_dynamic(ctx, 20, 1);
+        custom_draw_test(ctx);
+    }
+    nk_end(ctx);
+    return 0;
+}
+
+/* debug:
+set breakpoint pending on
+b __puss_module_init__
+*/ 
 PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 	__puss_iface__ = puss;
 
 	puss_module_require(L, "puss_nuklear");
-	__puss_nuklear_iface__ = puss_interface_check(L, PussNuklearInterface);
 
-	// vals
+	if( !__puss_nuklear_iface__ ) {
+		__puss_nuklear_iface__ = puss_interface_check(L, PussNuklearInterface);
+	}
+
+	if( lua_getfield(L, LUA_REGISTRYINDEX, LUA_NK_SCI_LIB_NAME)==LUA_TTABLE )
+		return 1;
+	lua_pop(L, 1);
+
+	// const: vals
 	puss_push_const_table(L);
 	{
 		IFaceVal* p;
@@ -151,30 +216,23 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 	}
 	lua_pop(L, 1);
 
-// NOTICE : default, not register all sci functions into nk
-// 
-// #define _USE_GTK_SCINTILLA_REG_TO_NK
-
-	// fun/get/set
-	lua_newtable(L)
-	{
+	// metatable: fun/get/set
+	if( luaL_newmetatable(L, "ScintillaNK") ) {
 		IFaceDecl* p;
-#ifdef _USE_GTK_SCINTILLA_REG_TO_NK
-		char name[512];
-#endif
 		for( p=sci_functions; p->name; ++p ) {
 			lua_pushlightuserdata(L, p);
 			lua_pushcclosure(L, _lua__sci_send_wrap, 1);
-#ifdef _USE_GTK_SCINTILLA_REG_TO_NK
-			sprintf(buf, "scintilla_%s", name);
-			lua_pushvalue(L, -1);
-			lua_setfield(L, REG_SYMBOLS_INDEX, name);
-#endif
 			lua_setfield(L, -2, p->alias);	// use alias only
 		}
 	}
+	lua_pop(L, 1);
+
+	// module
+	lua_newtable(L);
+	lua_pushcfunction(L, nuklear_scintilla_demo);
+	lua_setfield(L, -2, "demo");
 	lua_pushvalue(L, -1);
-	lua_setfield(L, -3, "scintilla");
+	lua_setfield(L, LUA_REGISTRYINDEX, LUA_NK_SCI_LIB_NAME);
 	return 1;
 }
 

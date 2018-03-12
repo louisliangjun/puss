@@ -612,7 +612,10 @@ static PussNuklearInterface puss_nuklear_iface =
 	, lua_check_nk_font
 	};
 
-int nuklear_demo1(lua_State* L);
+static luaL_Reg nuklera_glfw3_lua_apis[] =
+	{ {"nk_glfw_window_create", nk_glfw_window_create_lua}
+	, {NULL, NULL}
+	};
 
 static int glfw_inited = 0;
 
@@ -628,28 +631,24 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	}
+		
 
 	if( !__puss_iface__ ) {
 		__puss_iface__= puss;
+
 		#define __NUKLEARPROXY_SYMBOL(f)	puss_nuklear_iface.nuklear_proxy.f = f;
 			#include "nuklear.symbols"
 		#undef __NUKLEARPROXY_SYMBOL
 
+		puss_interface_register(L, "PussNuklearInterface", &puss_nuklear_iface);
+	}
+
+	if( lua_new_nk_lib(L) ) {
 		puss_push_const_table(L);
 		#define __NUKLEARPROXY_ENUM(e)		lua_pushinteger(L, (lua_Integer)e);	lua_setfield(L, -2, #e);
 			#include "nuklear.enums"
 		#undef __NUKLEARPROXY_ENUM
 		lua_pop(L, 1);
-	}
-
-	puss_interface_register(L, "PussNuklearInterface", &puss_nuklear_iface);
-
-	if( lua_new_nk_lib(L) ) {
-		luaL_Reg nuklera_glfw3_lua_apis[] =
-			{ {"nk_glfw_window_create", nk_glfw_window_create_lua}
-			, {"nuklear_demo1", nuklear_demo1}
-			, {NULL, NULL}
-			};
 
 		luaL_setfuncs(L, nuklera_glfw3_lua_apis, 0);
 	}

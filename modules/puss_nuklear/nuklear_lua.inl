@@ -12,6 +12,8 @@
 
 //----------------------------------------------------------
 
+#define LUA_NK_LIB_NAME	"puss_nuklear_lib"
+
 // apis
 #define USE_LUA_NK_API_IMPLEMENT
 	#include "nuklear_lua_apis.inl"
@@ -26,14 +28,12 @@ static luaL_Reg nuklera_lua_apis[] = {
 };
 
 static int lua_new_nk_lib(lua_State* L) {
-	if( lua_getfield(L, LUA_REGISTRYINDEX, "puss_nulklear_lib")==LUA_TTABLE )
+	if( lua_getfield(L, LUA_REGISTRYINDEX, LUA_NK_LIB_NAME)==LUA_TTABLE )
 		return 0;
-
 	lua_pop(L, 1);
 
 	lua_newtable(L);
 	luaL_setfuncs(L, nuklera_lua_apis, 0);
-
 #define _lua_nk_reg_filter(filter)	lua_push_nk_plugin_filter(L, filter); lua_setfield(L, -2, #filter)
 	_lua_nk_reg_filter(nk_filter_default);
 	_lua_nk_reg_filter(nk_filter_ascii);
@@ -43,6 +43,8 @@ static int lua_new_nk_lib(lua_State* L) {
 	_lua_nk_reg_filter(nk_filter_oct);
 	_lua_nk_reg_filter(nk_filter_binary);
 #undef _lua_nk_reg_filter
+	lua_pushvalue(L, -1);
+	lua_setfield(L, LUA_REGISTRYINDEX, LUA_NK_LIB_NAME);
 	return 1;
 }
 
