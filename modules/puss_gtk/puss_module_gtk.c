@@ -943,6 +943,7 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 	}
 
 	puss_module_require(L, "puss_gobject");
+	lua_pop(L, 1);
 
 	gobject_iface = puss_interface_check(L, PussGObjectInterface);
 	gobject_iface->module_reg(L, glua_gdk_register);

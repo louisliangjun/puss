@@ -108,6 +108,7 @@ PussInterface* __puss_iface__ = NULL;
 PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 	__puss_iface__ = puss;
 	puss_module_require(L, "puss_gtk");
+	lua_pop(L, 1);
 	gobject_iface = puss_interface_check(L, PussGObjectInterface);
 	gobject_iface->module_reg(L, glua_gtksourceview_register);
 	gobject_iface->push_master_table(L);

@@ -6,12 +6,9 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include <Scintilla.h>
-#include <SciLexer.h>
+#include "scintilla_nk.h"
 
-#define LUA_NK_SCI_LIB_NAME	"puss_nuklear_scintilla_lib"
-
-#define _sci_send(editor, msg, u, s)	(0)	// scintilla_send_message(SCINTILLA(editor), (msg), (uptr_t)(u), (sptr_t)(s))
+#define LUA_NK_SCI_NAME      "ScintillaNK"
 
 typedef enum _IFaceType
 	{ IFaceType_void			// void
@@ -66,15 +63,48 @@ typedef struct _IFaceVal {
 	int					val;
 } IFaceVal;
 
+static int _lua_nk_scintilla_new(lua_State* L) {
+	ScintillaNK** ud;
+	ScintillaNK* sci = scintilla_nk_new();
+	if( !sci ) {
+		lua_pushnil(L);
+		return 0;
+	}
+
+	ud = (ScintillaNK**)lua_newuserdata(L, sizeof(ScintillaNK*));
+	*ud = sci;
+	luaL_setmetatable(L, LUA_NK_SCI_NAME);
+	return 1;
+}
+
+static int _lua_nk_scintilla_free(lua_State* L) {
+	ScintillaNK** ud = (ScintillaNK**)luaL_checkudata(L, 1, LUA_NK_SCI_NAME);
+	ScintillaNK* sci = *ud;
+	if( sci ) {
+		*ud = NULL;
+		scintilla_nk_free(sci);
+	}
+	return 0;
+}
+
+static int _lua_nk_scintilla_update(lua_State* L) {
+	struct nk_context* ctx = __puss_nuklear_iface__->check_nk_context(L, 1);
+	ScintillaNK** ud = (ScintillaNK**)luaL_checkudata(L, 2, LUA_NK_SCI_NAME);
+	ScintillaNK* sci = *ud;
+	if( sci && ctx ) {
+		scintilla_nk_update(sci, ctx);
+	}
+	return 0;
+}
+
 static int _lua__sci_send_wrap(lua_State* L) {
 	IFaceDecl* decl = (IFaceDecl*)lua_touserdata(L, lua_upvalueindex(1));
-	// TODO : ScintillaObject* editor = SCINTILLA(gobject_iface->gobject_check(L, 1));
-	void* editor = NULL;
+	ScintillaNK** ud = (ScintillaNK**)luaL_checkudata(L, 1, LUA_NK_SCI_NAME);
 	int nret = 0;
 	uptr_t wparam = 0;
 	sptr_t lparam = 0;
-	if( !editor )
-		return luaL_argerror(L, 1, "convert to type(SCINTILLA) failed!");
+	if( *ud )
+		return luaL_argerror(L, 1, "ScintillaNK already free!");
 
 	switch( decl->wparam ) {
 	case IFaceType_void:	break;
@@ -98,7 +128,7 @@ static int _lua__sci_send_wrap(lua_State* L) {
 	case IFaceType_string:	lparam = (sptr_t)luaL_checkstring(L, 3);	break;
 	case IFaceType_stringresult:
 		{
-			int len = (int)_sci_send(editor, decl->message, wparam, lparam);
+			int len = (int)scintilla_nk_send(*ud, decl->message, wparam, lparam);
 			if( len <= 0 )
 				return luaL_error(L, "lparam stringresult fetch length failed!");
 			wparam = (uptr_t)len;
@@ -111,7 +141,7 @@ static int _lua__sci_send_wrap(lua_State* L) {
 		return luaL_error(L, "not support lparam type(%d) system error!", decl->lparam);
 	}
 
-	sptr_t ret = _sci_send(editor, decl->message, wparam, lparam);
+	sptr_t ret = scintilla_nk_send(*ud, decl->message, wparam, lparam);
 	switch( decl->rtype ) {
 	case IFaceType_void:	break;
 	case IFaceType_bool:	lua_pushboolean(L, (int)ret);	++nret;	break;
@@ -142,11 +172,12 @@ static void custom_draw_test(struct nk_context * ctx) {
 	struct nk_rect bounds;
 	float rounding = 3.0f;
 	struct nk_color background = { 0xff, 0xff, 0x00, 0x7f };
-	enum nk_widget_layout_states state = nk_widget(&bounds, ctx);
+	// enum nk_widget_layout_states state = 
+	nk_widget(&bounds, ctx);
 	nk_fill_rect(out, bounds, rounding, background);
 }
 
-int nuklear_scintilla_demo(lua_State* L) {
+static int nk_scintilla_demo(lua_State* L) {
 	struct nk_context * ctx = __puss_nuklear_iface__->check_nk_context(L, 1);
     if (nk_begin(ctx, "Demo", __nk_recti(50, 50, 230, 250),
         NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
@@ -188,6 +219,14 @@ int nuklear_scintilla_demo(lua_State* L) {
     return 0;
 }
 
+static luaL_Reg nk_scintilla_lib_methods[] =
+	{ {"nk_scintilla_new", _lua_nk_scintilla_new}
+	, {"nk_scintilla_free", _lua_nk_scintilla_free}
+	, {"nk_scintilla_update", _lua_nk_scintilla_update}
+	, {"nk_scintilla_demo", nk_scintilla_demo}
+	, {NULL, NULL}
+	};
+
 /* debug:
 set breakpoint pending on
 b __puss_module_init__
@@ -195,14 +234,16 @@ b __puss_module_init__
 PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 	__puss_iface__ = puss;
 
-	puss_module_require(L, "puss_nuklear");
+	puss_module_require(L, "puss_nuklear");	// push nk
 
 	if( !__puss_nuklear_iface__ ) {
 		__puss_nuklear_iface__ = puss_interface_check(L, PussNuklearInterface);
 	}
 
-	if( lua_getfield(L, LUA_REGISTRYINDEX, LUA_NK_SCI_LIB_NAME)==LUA_TTABLE )
+	if( luaL_getmetatable(L, LUA_NK_SCI_NAME)==LUA_TTABLE ) {
+		lua_pop(L, 1);
 		return 1;
+	}
 	lua_pop(L, 1);
 
 	// const: vals
@@ -217,7 +258,7 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 	lua_pop(L, 1);
 
 	// metatable: fun/get/set
-	if( luaL_newmetatable(L, "ScintillaNK") ) {
+	if( luaL_newmetatable(L, LUA_NK_SCI_NAME) ) {
 		IFaceDecl* p;
 		for( p=sci_functions; p->name; ++p ) {
 			lua_pushlightuserdata(L, p);
@@ -225,14 +266,10 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 			lua_setfield(L, -2, p->alias);	// use alias only
 		}
 	}
-	lua_pop(L, 1);
+	lua_setfield(L, -1, "__index");
 
 	// module
-	lua_newtable(L);
-	lua_pushcfunction(L, nuklear_scintilla_demo);
-	lua_setfield(L, -2, "demo");
-	lua_pushvalue(L, -1);
-	lua_setfield(L, LUA_REGISTRYINDEX, LUA_NK_SCI_LIB_NAME);
+	luaL_setfuncs(L, nk_scintilla_lib_methods, 0);
 	return 1;
 }
 

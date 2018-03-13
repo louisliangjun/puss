@@ -210,7 +210,6 @@ static const char* lua_getfield_str(lua_State* L, const char* ns, const char* de
 static int module_init_wrapper(lua_State* L);
 
 static void puss_module_require(lua_State* L, const char* name) {
-	int top = lua_gettop(L);
 	if( !name ) {
 		luaL_error(L, "puss_module_require, module name MUST exist!");
 	}
@@ -219,9 +218,8 @@ static void puss_module_require(lua_State* L, const char* name) {
 		lua_pop(L, 1);
 		lua_pushstring(L, name);
 		lua_pushcclosure(L, module_init_wrapper, 1);
-		lua_call(L, 0, 0);
+		lua_call(L, 0, 1);
 	}
-	lua_settop(L, top);
 }
 
 static void puss_interface_register(lua_State* L, const char* name, void* iface) {

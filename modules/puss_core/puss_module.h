@@ -57,9 +57,9 @@ typedef void   (*PussDebugEventHandle)	(lua_State* L, enum PussDebugEvent ev);
 
 struct PussInterface {
 	// module
-	void		(*module_require)		(lua_State* L, const char* name);	// [-0,+0,e]
+	void		(*module_require)		(lua_State* L, const char* name);				// [-0,+1,e]
 	void		(*interface_register)	(lua_State* L, const char* name, void* iface);	// [-0,+0,e]
-	void*		(*interface_check)		(lua_State* L, const char* name);	// [-0,+0,e]
+	void*		(*interface_check)		(lua_State* L, const char* name);				// [-0,+0,e]
 
 	// consts
 	void        (*push_const_table)		(lua_State* L);	// [-0,+1,-]
