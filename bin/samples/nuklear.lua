@@ -1,6 +1,6 @@
-local sci = nil
+-- nuklear.lua
 
-function nuklear_demo_lua(ctx)
+function nuklear_demo_lua(ctx, sci)
 	local LABEL = "LuaDemoWindow"
 	-- nk_window_set_size(ctx, LABEL, nk_vec2(w, h))
 
@@ -15,7 +15,6 @@ function nuklear_demo_lua(ctx)
 		if nk_button_label(ctx, "button3") then
 			print('button pressed 3')
 		end
-		nk_scintilla_update(ctx, sci)
     end
 	nk_end(ctx)
 
@@ -27,31 +26,18 @@ function nuklear_demo_lua(ctx)
 		if nk_button_label(ctx, "button") then
 			print('LuaDemo2 button pressed')
 		end
+		nk_scintilla_update(ctx, sci)
     end
 	nk_end(ctx)
 end
 
 function __main__()
-	local w1 = nk_glfw_window_create("nuklear C api", 400, 300)
-	local w2 = nk_glfw_window_create("nuklear lua api", 400, 300)
-
-	sci = nk_scintilla_new()
-
-	local function run_once(w, update)
-		if w then
-			if w:update(update) then
-				w:destroy()
-			else
-				w:draw()
-				return w
-			end
-		end
+	local w = nk_glfw_window_create("nuklear lua api", 400, 300)
+	local sci = nk_scintilla_new()
+	while w:update(nuklear_demo_lua, 0.001, sci) do
+		w:draw()
 	end
-
-	while w1 or w2 do
-		w1 = run_once(w1, nk_scintilla_demo)
-		w2 = run_once(w2, nuklear_demo_lua)
-	end
+	w:destroy()
 end
 
 if not nk then

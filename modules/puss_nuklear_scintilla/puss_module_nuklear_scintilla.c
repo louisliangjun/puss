@@ -167,70 +167,13 @@ static int _lua__sci_send_wrap(lua_State* L) {
 PussInterface* __puss_iface__ = NULL;
 PussNuklearInterface* __puss_nuklear_iface__ = NULL;
 
-static void custom_draw_test(struct nk_context * ctx) {
-	struct nk_command_buffer *out = &(ctx->current->buffer);
-	struct nk_rect bounds;
-	float rounding = 3.0f;
-	struct nk_color background = { 0xff, 0xff, 0x00, 0x7f };
-	// enum nk_widget_layout_states state = 
-	nk_widget(&bounds, ctx);
-	nk_fill_rect(out, bounds, rounding, background);
-}
-
-static int nk_scintilla_demo(lua_State* L) {
-	struct nk_context * ctx = __puss_nuklear_iface__->check_nk_context(L, 1);
-    if (nk_begin(ctx, "Demo", __nk_recti(50, 50, 230, 250),
-        NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
-        NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))
-    {
-        enum {EASY, HARD};
-        static int op = EASY;
-        static int property = 20;
-     	static struct nk_color background;
-        nk_layout_row_static(ctx, 30, 80, 1);
-        if (nk_button_label(ctx, "button"))
-            fprintf(stdout, "button pressed\n");
-
-        nk_layout_row_dynamic(ctx, 30, 2);
-        if (nk_option_label(ctx, "easy", op == EASY)) op = EASY;
-        if (nk_option_label(ctx, "hard", op == HARD)) op = HARD;
-
-        nk_layout_row_dynamic(ctx, 25, 1);
-        nk_property_int(ctx, "Compression:", 0, &property, 100, 10, 1);
-
-        nk_layout_row_dynamic(ctx, 20, 1);
-        nk_label(ctx, "background:", NK_TEXT_LEFT);
-        nk_layout_row_dynamic(ctx, 25, 1);
-        if (nk_combo_begin_color(ctx, background, __nk_vec2i(nk_widget_width(ctx),400))) {
-            nk_layout_row_dynamic(ctx, 120, 1);
-            background = nk_color_picker(ctx, background, NK_RGBA);
-            nk_layout_row_dynamic(ctx, 25, 1);
-            background.r = (nk_byte)nk_propertyi(ctx, "#R:", 0, background.r, 255, 1,1);
-            background.g = (nk_byte)nk_propertyi(ctx, "#G:", 0, background.g, 255, 1,1);
-            background.b = (nk_byte)nk_propertyi(ctx, "#B:", 0, background.b, 255, 1,1);
-            background.a = (nk_byte)nk_propertyi(ctx, "#A:", 0, background.a, 255, 1,1);
-            nk_combo_end(ctx);
-        }
-
-        nk_layout_row_dynamic(ctx, 20, 1);
-        custom_draw_test(ctx);
-    }
-    nk_end(ctx);
-    return 0;
-}
-
 static luaL_Reg nk_scintilla_lib_methods[] =
 	{ {"nk_scintilla_new", _lua_nk_scintilla_new}
 	, {"nk_scintilla_free", _lua_nk_scintilla_free}
 	, {"nk_scintilla_update", _lua_nk_scintilla_update}
-	, {"nk_scintilla_demo", nk_scintilla_demo}
 	, {NULL, NULL}
 	};
 
-/* debug:
-set breakpoint pending on
-b __puss_module_init__
-*/ 
 PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 	__puss_iface__ = puss;
 

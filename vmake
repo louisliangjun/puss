@@ -211,7 +211,6 @@ end)
 -- scintilla nuklear
 
 vmake_target_add('nuklear_scintilla', function(target)
-	local cxxflags = { '-fPIC', '-DFOX', '-DSCI_LEXER', '-DNO_CXX11_REGEX' }
 	local incs =
 		{ SCINTILLA_INCLUDE_PATH
 		, path_concat(SCINTILLA_ROOT_PATH, 'src')
@@ -228,9 +227,14 @@ vmake_target_add('nuklear_scintilla', function(target)
 end)
 
 vmake_target_add('puss_nuklear_scintilla', function(target)
-	vmake('scintilla_iface', 'nuklear_scintilla', 'puss_nuklear')
-	local incs = array_pack(INCLUDES, SCINTILLA_INCLUDE_PATH)
+	vmake('scintilla_iface', 'puss_nuklear')
 	local slibs = vmake('nuklear_scintilla')
+	local incs = array_pack(
+		{ INCLUDES
+		, SCINTILLA_INCLUDE_PATH
+		, path_concat(SCINTILLA_ROOT_PATH, 'src')
+		, path_concat(SCINTILLA_ROOT_PATH, 'lexlib')
+		})
 	local srcpath = path_concat('modules', target)
 	local objs = make_c2objs(srcpath, nil, incs, '-fPIC', '-fvisibility=hidden')
 	local cppobjs = make_cpp2objs(srcpath, objpath, incs, '-fPIC', '-fvisibility=hidden')
