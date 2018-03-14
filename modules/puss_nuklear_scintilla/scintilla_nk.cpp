@@ -104,6 +104,7 @@ static struct nk_color g_color_white = {255,255,255,255};
 
 // SurfaceID is a cairo_t*
 class SurfaceImpl : public Surface {
+	bool inited;
 	struct nk_window* window;
 	struct nk_context* context;
 	int width;
@@ -118,6 +119,7 @@ private:
 		return (context && context->current) ? &(context->current->buffer) : NULL;
 	}
 	void DoClear() {
+		inited = false;
 		window = NULL;
 		context = NULL;
 		pen_color = g_color_black;
@@ -128,7 +130,8 @@ private:
 	}
 public:
 	SurfaceImpl()
-		: window(NULL)
+		: inited(false)
+		, window(NULL)
 		, context(NULL)
 		, width(100)
 		, height(100)
@@ -142,8 +145,12 @@ public:
 	~SurfaceImpl() override {
 		DoClear();
 	}
+	struct nk_color& BackgroundColor() {
+		return bg_color;
+	}
 	void Init(WindowID wid) override {
 		window = (struct nk_window*)wid;
+		inited = true;
 	}
 	void Init(SurfaceID sid, WindowID wid) override {
 		context = (struct nk_context*)sid;
@@ -158,7 +165,7 @@ public:
 		DoClear();
 	}
 	bool Initialised() override {
-		return window!=NULL;
+		return inited;
 	}
 	void PenColour(ColourDesired fore) override {
 		ColourDesired cdFore(fore.AsLong());
@@ -660,6 +667,15 @@ void Platform::DebugPrintf(const char *, ...) {
 }
 #endif
 
+bool Platform::ShowAssertionPopUps(bool assertionPopUps_) {
+	return true;
+}
+
+void Platform::Assert(const char *c, const char *file, int line) {
+	fprintf(stderr, "Assertion [%s] failed at %s %d\r\n", c, file, line);
+	abort();
+}
+
 class ScintillaNK : public ScintillaBase {
 	ScintillaNK(const ScintillaNK &) = delete;
 	ScintillaNK &operator=(const ScintillaNK &) = delete;
@@ -681,6 +697,24 @@ public:
 public: 	// Public for scintilla_send_message
 	sptr_t WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) override {
 		return 0;
+	}
+	void RenderNK(struct nk_context* ctx) {
+		struct nk_rect bounds;
+		nk_widget(&bounds, ctx);
+		PRectangle rc;
+		rc.left = bounds.x;
+		rc.top = bounds.y;
+		rc.right = bounds.x + bounds.w;
+		rc.bottom = bounds.y + bounds.y;
+
+		AutoSurface surfaceWindow(ctx, this);
+		if( surfaceWindow ) {
+			nk_fill_rect(&(ctx->current->buffer), bounds, 0.0f, g_color_white);
+			Paint(surfaceWindow, rc);
+			surfaceWindow->Release();
+		} else {
+			nk_fill_rect(&(ctx->current->buffer), bounds, 0.0f, g_color_black);
+		}
 	}
 private:
 	sptr_t DefWndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) override {
@@ -755,55 +789,6 @@ private:
 	}
 };
 
-static void custom_draw_test(struct nk_context * ctx) {
-	struct nk_command_buffer *out = &(ctx->current->buffer);
-	struct nk_rect bounds;
-	float rounding = 3.0f;
-	struct nk_color background = { 0xff, 0xff, 0x00, 0x7f };
-	nk_widget(&bounds, ctx);
-	nk_fill_rect(out, bounds, rounding, background);
-}
-
-static void nuklear_scintilla_demo(ScintillaNK* sci, struct nk_context* ctx) {
-    if (nk_begin(ctx, "Demo", __nk_recti(50, 50, 230, 250),
-        NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
-        NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))
-    {
-        enum {EASY, HARD};
-        static int op = EASY;
-        static int property = 20;
-     	static struct nk_color background;
-        nk_layout_row_static(ctx, 30, 80, 1);
-        if (nk_button_label(ctx, "button"))
-            fprintf(stdout, "button pressed\n");
-
-        nk_layout_row_dynamic(ctx, 30, 2);
-        if (nk_option_label(ctx, "easy", op == EASY)) op = EASY;
-        if (nk_option_label(ctx, "hard", op == HARD)) op = HARD;
-
-        nk_layout_row_dynamic(ctx, 25, 1);
-        nk_property_int(ctx, "Compression:", 0, &property, 100, 10, 1);
-
-        nk_layout_row_dynamic(ctx, 20, 1);
-        nk_label(ctx, "background:", NK_TEXT_LEFT);
-        nk_layout_row_dynamic(ctx, 25, 1);
-        if (nk_combo_begin_color(ctx, background, __nk_vec2i(nk_widget_width(ctx),400))) {
-            nk_layout_row_dynamic(ctx, 120, 1);
-            background = nk_color_picker(ctx, background, NK_RGBA);
-            nk_layout_row_dynamic(ctx, 25, 1);
-            background.r = (nk_byte)nk_propertyi(ctx, "#R:", 0, background.r, 255, 1,1);
-            background.g = (nk_byte)nk_propertyi(ctx, "#G:", 0, background.g, 255, 1,1);
-            background.b = (nk_byte)nk_propertyi(ctx, "#B:", 0, background.b, 255, 1,1);
-            background.a = (nk_byte)nk_propertyi(ctx, "#A:", 0, background.a, 255, 1,1);
-            nk_combo_end(ctx);
-        }
-
-        nk_layout_row_dynamic(ctx, 20, 1);
-        custom_draw_test(ctx);
-    }
-    nk_end(ctx);
-}
-
 extern "C" ScintillaNK* scintilla_nk_new(void) {
 	return new ScintillaNK;
 }
@@ -813,12 +798,16 @@ extern "C" void scintilla_nk_free(ScintillaNK* sci) {
 }
 
 extern "C" void scintilla_nk_update(ScintillaNK* sci, struct nk_context* ctx) {
-	// TODO : input events & draw
+	if( !(sci && ctx && ctx->current) )	return;
 
-	nuklear_scintilla_demo(sci, ctx);
+	// TODO : input events
+
+	// paint
+	nk_layout_row_dynamic(ctx, 200, 1);
+	sci->RenderNK(ctx);
 }
 
 extern "C" sptr_t scintilla_nk_send(ScintillaNK* sci, unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
-	return sci->WndProc(iMessage, wParam, lParam);
+	return sci ? sci->WndProc(iMessage, wParam, lParam) : NULL;
 }
 
