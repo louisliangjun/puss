@@ -503,7 +503,7 @@ void puss_lua_open_default(lua_State* L, const char* arg0, const char* module_su
 		pth[len] = '\0';
 	} else {
 		// try use argv[0]
-		len = strlen(arg0); 
+		len = (int)strlen(arg0); 
 		strcpy(pth, arg0);
 	}
 

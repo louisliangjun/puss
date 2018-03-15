@@ -11,7 +11,7 @@ CFLAGS  = {}
 CXX_CFLAGS = {}
 OBJPATH = path_concat('objs', 'r')
 
-PUSS_INCLUDE_PATH = path_concat('bin', 'include')
+PUSS_INCLUDE_PATH = 'include'
 GEN_INCLUDE_PATH = path_concat('objs', 'gen')
 PUSS_MODULE_SUFFIX = ''
 INCLUDES = { '3rd', PUSS_INCLUDE_PATH, GEN_INCLUDE_PATH }

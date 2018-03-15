@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup Label="UserMacros">
+    <PussRoot>$(MSBuildThisFileDirectory)</PussRoot>
+    <PussSuffix>$(Configuration.Replace('Debug','_d').Replace('Release',''))</PussSuffix>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OutDir>$(PussRoot)bin\modules\</OutDir>
+    <IntDir>$(SolutionDir)objs\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
+    <TargetExt>.so</TargetExt>
+    <TargetName>$(ProjectName)$(PussSuffix)</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(PussRoot)3rd\;$(PussRoot)include\;$(PussRoot)modules\;$(PussRoot)objs\gen\;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>PUSS_MODULE_SUFFIX=$(PussSuffix)</PreprocessorDefinitions>
+    </ClCompile>
+    <PreBuildEvent>
+      <Command>
+      </Command>
+    </PreBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <BuildMacro Include="PussRoot">
+      <Value>$(PussRoot)</Value>
+    </BuildMacro>
+    <BuildMacro Include="PussSuffix">
+      <Value>$(PussSuffix)</Value>
+    </BuildMacro>
+  </ItemGroup>
+</Project>

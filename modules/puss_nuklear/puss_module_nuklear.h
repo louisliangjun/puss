@@ -15,27 +15,26 @@
 
 #include "puss_module.h"
 
-typedef struct PussNuklearInterface	PussNuklearInterface;
-
-#ifdef _PUSS_NUKLEAR_MODULE_IMPLEMENT
-	#define _NUKLEARPROXY_NOT_USE_SYMBOL_MACROS
-#else
-	extern PussNuklearInterface* __puss_nuklear_iface__;
-
+#ifndef _PUSS_NUKLEAR_MODULE_IMPLEMENT
 	#define	__nuklear_proxy__(sym)		(*(__puss_nuklear_iface__->nuklear_proxy.sym))
+#else
+	#define _NUKLEARPROXY_NOT_USE_SYMBOL_MACROS
 #endif
 
 #include "nuklear_proxy.h"
 
 PUSS_DECLS_BEGIN
 
-struct PussNuklearInterface {
+typedef struct PussNuklearInterface {
 	struct nk_context*	(*check_nk_context)(lua_State* L, int arg);
 	struct nk_font*		(*check_nk_font)(lua_State* L, int arg);
 
 	NuklearProxy		nuklear_proxy;
-};
+} PussNuklearInterface;
 
+#ifndef _PUSS_NUKLEAR_MODULE_IMPLEMENT
+	extern PussNuklearInterface* __puss_nuklear_iface__;
+#endif
 
 PUSS_DECLS_END
 

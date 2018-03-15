@@ -113,14 +113,14 @@ static int lua_socket_udp_send(lua_State* L) {
 	SocketUDP* ud = lua_check_socket_udp(L, 1, 1);
 	size_t len = 0;
 	const char* msg = luaL_checklstring(L, 2, &len);
-	lua_pushinteger(L, send(ud->fd, msg, len, 0));
+	lua_pushinteger(L, send(ud->fd, msg, (int)len, 0));
 	ud->err = get_last_error();
 	return 1;
 }
 
 static int lua_socket_udp_recv(lua_State* L) {
 	SocketUDP* ud = lua_check_socket_udp(L, 1, 1);
-	int res = (int)recv(ud->fd, ud->rbuf, ud->rlen, 0);
+	int res = (int)recv(ud->fd, ud->rbuf, (int)(ud->rlen), 0);
 	ud->err = get_last_error();
 	lua_pushinteger(L, res);
 	if( res > 0 ) {
@@ -150,7 +150,7 @@ static int lua_socket_udp_recvfrom(lua_State* L) {
 	struct sockaddr addr;
 	socklen_t addr_len = sizeof(struct sockaddr);
 	memset(&addr, 0, sizeof(addr));
-	res = (int)recvfrom(ud->fd, ud->rbuf, ud->rlen, 0, &addr, &addr_len);
+	res = (int)recvfrom(ud->fd, ud->rbuf, (int)(ud->rlen), 0, &addr, &addr_len);
 	ud->err = get_last_error();
 	lua_pushinteger(L, res);
 	if( res > 0 ) {

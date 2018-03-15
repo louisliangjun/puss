@@ -318,13 +318,13 @@ LUA_NK_API( lua_push_nk_rect, nk_layout_widget_bounds, lua_check_nk_context(L,1)
 LUA_NK_API( lua_pushnumber, nk_layout_ratio_from_pixel, lua_check_nk_context(L,1), lua_check_nk_float(L,2) )
 
 // NK_API void nk_layout_row_dynamic(struct nk_context *ctx, float height, int cols);
-LUA_NK_API_NORET( nk_layout_row_dynamic, lua_check_nk_context(L,1), lua_check_nk_float(L,2), luaL_checkinteger(L,3) )
+LUA_NK_API_NORET( nk_layout_row_dynamic, lua_check_nk_context(L,1), lua_check_nk_float(L,2), lua_check_nk_int(L,3) )
 
 // NK_API void nk_layout_row_static(struct nk_context *ctx, float height, int item_width, int cols);
-LUA_NK_API_NORET( nk_layout_row_static, lua_check_nk_context(L,1), lua_check_nk_float(L,2), luaL_checkinteger(L,3), luaL_checkinteger(L,4) )
+LUA_NK_API_NORET( nk_layout_row_static, lua_check_nk_context(L,1), lua_check_nk_float(L,2), lua_check_nk_int(L,3), lua_check_nk_int(L,4) )
 
 // NK_API void nk_layout_row_begin(struct nk_context *ctx, enum nk_layout_format fmt, float row_height, int cols);
-LUA_NK_API_NORET( nk_layout_row_begin, lua_check_nk_context(L,1), lua_check_nk_enum(L,2,nk_layout_format), lua_check_nk_float(L,3), luaL_checkinteger(L,4) )
+LUA_NK_API_NORET( nk_layout_row_begin, lua_check_nk_context(L,1), lua_check_nk_enum(L,2,nk_layout_format), lua_check_nk_float(L,3), lua_check_nk_int(L,4) )
 
 // NK_API void nk_layout_row_push(struct nk_context*, float value);
 LUA_NK_API_NORET( nk_layout_row_push, lua_check_nk_context(L,1), lua_check_nk_float(L,2) )
@@ -1725,7 +1725,7 @@ LUA_NK_API_DEFINE( nk_float_array_new, {
 	v->len = n;
 	for( i=1; i<=n; ++i ) {
 		luaL_argcheck(L, lua_geti(L, 1, i)==LUA_TNUMBER, 1, "array element need number");
-		v->arr[i-1] = lua_tonumber(L, -1);
+		v->arr[i-1] = (float)lua_tonumber(L, -1);
 		lua_pop(L, 1);
 	}
 	return 1;
@@ -1740,10 +1740,10 @@ LUA_NK_API_DEFINE( nk_vec2_array_new, {
 	v->len = n;
 	for( i=0; i<n; ++i ) {
 		luaL_argcheck(L, lua_geti(L, 1, i*2+1)==LUA_TNUMBER, 1, "array element need number");
-		v->arr[i].x = lua_tonumber(L, -1);
+		v->arr[i].x = (float)lua_tonumber(L, -1);
 		lua_pop(L, 1);
 		luaL_argcheck(L, lua_geti(L, 1, i*2+2)==LUA_TNUMBER, 1, "array element need number");
-		v->arr[i].y = lua_tonumber(L, -1);
+		v->arr[i].y = (float)lua_tonumber(L, -1);
 		lua_pop(L, 1);
 	}
 	return 1;

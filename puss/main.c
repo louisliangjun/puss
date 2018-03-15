@@ -109,7 +109,7 @@ static int puss_init(lua_State* L) {
 	return 1;
 }
 
-int main(int argc, char * argv[]) {
+int main(int argc, char* argv[]) {
 	int res = 0;
 	lua_State* L = puss_lua_newstate(puss_get_debug(argc, argv), NULL, NULL);
 	luaL_openlibs(L);

@@ -83,6 +83,10 @@ static const int maxCoordinate = 32000;
 
 static const double kPi = 3.14159265358979323846;
 
+static inline XYPOSITION XYPositionMin(XYPOSITION a, XYPOSITION b) {
+	return a < b ? a : b;
+}
+
 Font::Font() : fid(0) {}
 
 Font::~Font() {}
@@ -210,7 +214,7 @@ public:
 	}
 	void RectangleDraw(PRectangle rc, ColourDesired fore, ColourDesired back) override {
 		struct nk_command_buffer* out = FetchCurrentCommandBuffer(); if( !out ) return;
-		struct nk_rect rect = __nk_rect(rc.left + 0.5, rc.top + 0.5, rc.Width() - 1.0f, rc.Height() - 1.0f);
+		struct nk_rect rect = __nk_rect(rc.left + 0.5f, rc.top + 0.5f, rc.Width() - 1.0f, rc.Height() - 1.0f);
 		PenColour(back);
 		nk_fill_rect(out, rect, 0.0f, pen_color);
 		PenColour(fore);
@@ -231,10 +235,14 @@ public:
 			// Currently assumes 8x8 pattern
 			int widthPat = 8;
 			int heightPat = 8;
-			for (int xTile = rc.left; xTile < rc.right; xTile += widthPat) {
-				int widthx = (xTile + widthPat > rc.right) ? rc.right - xTile : widthPat;
-				for (int yTile = rc.top; yTile < rc.bottom; yTile += heightPat) {
-					int heighty = (yTile + heightPat > rc.bottom) ? rc.bottom - yTile : heightPat;
+			int left = (int)rc.left;
+			int right = (int)rc.right;
+			int top = (int)rc.top;
+			int bottom = (int)rc.bottom;
+			for (int xTile = left; xTile < right; xTile += widthPat) {
+				int widthx = (xTile + widthPat > right) ? right - xTile : widthPat;
+				for (int yTile = top; yTile < bottom; yTile += heightPat) {
+					int heighty = (yTile + heightPat > bottom) ? bottom - yTile : heightPat;
 					// cairo_set_source_surface(context, surfi.psurf, xTile, yTile);
 					struct nk_rect rect = __nk_recti(xTile, yTile, widthx, heighty);
 					nk_fill_rect(out, rect, 0.0f, pen_color);
@@ -248,7 +256,7 @@ public:
 	}
 	void RoundedRectangle(PRectangle rc, ColourDesired fore, ColourDesired back) override {
 		struct nk_command_buffer* out = FetchCurrentCommandBuffer(); if( !out ) return;
-		struct nk_rect rect = __nk_rect(rc.left + 0.5, rc.top + 0.5, rc.Width() - 1.0f, rc.Height() - 1.0f);
+		struct nk_rect rect = __nk_rect(rc.left + 0.5f, rc.top + 0.5f, rc.Width() - 1.0f, rc.Height() - 1.0f);
 		PenColour(back);
 		nk_fill_rect(out, rect, 2.0f, pen_color);
 		PenColour(fore);
@@ -258,7 +266,7 @@ public:
 		ColourDesired outline, int alphaOutline, int flags) override
 	{
 		struct nk_command_buffer* out = FetchCurrentCommandBuffer(); if( !out ) return;
-		struct nk_rect rect = __nk_rect(rc.left + 0.5, rc.top + 0.5, rc.Width() - 1.0f, rc.Height() - 1.0f);
+		struct nk_rect rect = __nk_rect(rc.left + 0.5f, rc.top + 0.5f, rc.Width() - 1.0f, rc.Height() - 1.0f);
 		PenColour(fill);
 		pen_color.a = (nk_byte)alphaFill;
 		nk_fill_rect(out, rect, 0.0f, pen_color);
@@ -276,9 +284,9 @@ public:
 	void Ellipse(PRectangle rc, ColourDesired fore, ColourDesired back) override {
 		struct nk_command_buffer* out = FetchCurrentCommandBuffer(); if( !out ) return;
 		PenColour(back);
-		nk_fill_arc(out, (rc.left + rc.right) / 2, (rc.top + rc.bottom) / 2, std::min(rc.Width(), rc.Height()) / 2, 0, 2*kPi, pen_color);
+		nk_fill_arc(out, (rc.left + rc.right) / 2, (rc.top + rc.bottom) / 2, XYPositionMin(rc.Width(), rc.Height()) / 2, 0, (float)(2*kPi), pen_color);
 		PenColour(fore);
-		nk_stroke_arc(out, (rc.left + rc.right) / 2, (rc.top + rc.bottom) / 2, std::min(rc.Width(), rc.Height()) / 2, 0, 2*kPi, line_thickness, pen_color);
+		nk_stroke_arc(out, (rc.left + rc.right) / 2, (rc.top + rc.bottom) / 2, XYPositionMin(rc.Width(), rc.Height()) / 2, 0, (float)(2*kPi), line_thickness, pen_color);
 	}
 	void Copy(PRectangle rc, Point from, Surface &surfaceSource) override {
 		// SurfaceImpl &surfi = static_cast<SurfaceImpl &>(surfaceSource);
@@ -330,19 +338,19 @@ public:
 	}
 	XYPOSITION WidthText(Font &font_, const char *s, int len) override {
 		// TODO : now simple
-		return 16 * len;
+		return 16.0f * len;
 	}
 	XYPOSITION WidthChar(Font &font_, char ch) override {
-		return 16;
+		return 16.0f;
 	}
 	XYPOSITION Ascent(Font &font_) override {
-		return 0;		
+		return 0.0f;
 	}
 	XYPOSITION Descent(Font &font_) override {
-		return 24;
+		return 24.0f;
 	}
 	XYPOSITION InternalLeading(Font &font_) override {
-		return 0;
+		return 0.0f;
 	}
 	XYPOSITION Height(Font &font_) override {
 		return Ascent(font_) + Descent(font_);
@@ -403,8 +411,8 @@ void Window::SetPositionRelative(PRectangle rc, Window relativeTo) {
 	struct nk_window* w = (struct nk_window*)wid;
 	if( w ) {
 		struct nk_window* wndRelativeTo = (struct nk_window*)(relativeTo.wid);
-		int ox = wndRelativeTo ? wndRelativeTo->bounds.x : 0;
-		int oy = wndRelativeTo ? wndRelativeTo->bounds.y : 0;
+		XYPOSITION ox = wndRelativeTo ? wndRelativeTo->bounds.x : 0;
+		XYPOSITION oy = wndRelativeTo ? wndRelativeTo->bounds.y : 0;
 		PRectangle rcMonitor(0, 0, 1000, 1000);
 		ox += rc.left;
 		oy += rc.top;
@@ -416,8 +424,8 @@ void Window::SetPositionRelative(PRectangle rc, Window relativeTo) {
 		}
 
 		/* do some corrections to fit into screen */
-		int sizex = rc.right - rc.left;
-		int sizey = rc.bottom - rc.top;
+		XYPOSITION sizex = rc.Width();
+		XYPOSITION sizey = rc.Height();
 		if (sizex > rcMonitor.Width() || ox < rcMonitor.left)
 			ox = rcMonitor.left; /* the best we can do */
 		else if (ox + sizex > rcMonitor.left + rcMonitor.Width())
@@ -427,10 +435,7 @@ void Window::SetPositionRelative(PRectangle rc, Window relativeTo) {
 		else if (oy + sizey > rcMonitor.top + rcMonitor.Height())
 			oy = rcMonitor.top + rcMonitor.Height() - sizey;
 
-		w->bounds.x = ox;
-		w->bounds.y = oy;
-		w->bounds.w = sizex;
-		w->bounds.h = sizey;
+		w->bounds = __nk_rect(ox, oy, sizex, sizey);
 	}
 }
 
@@ -573,6 +578,14 @@ unsigned int Platform::DoubleClickTime() {
 
 void Platform::DebugDisplay(const char *s) {
 	fprintf(stderr, "%s", s);
+}
+
+DynamicLibrary* DynamicLibrary::Load(const char* modulePath) {
+	return NULL;
+}
+
+bool DynamicLibrary::IsValid() {
+	return false;
 }
 
 #ifdef _WIN32

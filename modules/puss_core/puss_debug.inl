@@ -398,7 +398,7 @@ static int lua_debug_cmd_reset(lua_State* L) {
 	} else {
 		luaL_checktype(L, 1, LUA_TFUNCTION);
 		h = builtin_debug_event_handle;
-		hook_count = luaL_optinteger(L, 2, 0);
+		hook_count = (int)luaL_optinteger(L, 2, 0);
 		lua_pushvalue(L, 1);
 	}
 	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_BUILTIN_DEBUG_EVENT_HANDLE_NAME);
@@ -413,14 +413,14 @@ static int lua_debug_cmd_update(lua_State* L) {
 
 static int lua_debug_cmd_bp_set(lua_State* L) {
 	const char* fname = luaL_checkstring(L, 1);
-	int line = luaL_checkinteger(L, 2);
+	int line = (int)luaL_checkinteger(L, 2);
 	puss_debug_command(L, PUSS_DEBUG_CMD_BP_SET, fname, line);
 	return 0;
 }
 
 static int lua_debug_cmd_bp_del(lua_State* L) {
 	const char* fname = luaL_checkstring(L, 1);
-	int line = luaL_checkinteger(L, 2);
+	int line = (int)luaL_checkinteger(L, 2);
 	puss_debug_command(L, PUSS_DEBUG_CMD_BP_DEL, fname, line);
 	return 0;
 }
