@@ -701,6 +701,7 @@ public:
 		: hasFocus(false)
 		, rectangularSelectionModifier(SCMOD_ALT)
 	{
+		widgetRect = __nk_rect(0.0f, 0.0f, 100.0f, 100.0f);
 		wMain = this;
 	}
 	virtual ~ScintillaNK() {
@@ -761,18 +762,15 @@ public: 	// Public for scintilla_send_message
 		}
 		return 0;
 	}
-	void RenderNK(struct nk_context* ctx) {
+	void Render(struct nk_context* ctx) {
 		struct nk_rect bounds;
 		nk_widget(&bounds, ctx);
-		PRectangle rc;
-		rc.left = bounds.x;
-		rc.top = bounds.y;
-		rc.right = bounds.x + bounds.w;
-		rc.bottom = bounds.y + bounds.y;
+		widgetRect = bounds;
+		PRectangle rc(bounds.x, bounds.y, bounds.x + bounds.w, bounds.y + bounds.h);
+		nk_stroke_rect(&(ctx->current->buffer), bounds, 0.0f, 1.0f, g_color_black);
 
 		std::unique_ptr<Surface> surfaceWindow(Surface::Allocate(SC_TECHNOLOGY_DEFAULT));
 		surfaceWindow->Init(ctx, this);
-		nk_stroke_rect(&(ctx->current->buffer), bounds, 0.0f, 1.0f, g_color_black);
 		Paint(surfaceWindow.get(), rc);
 		surfaceWindow->Release();
 	}
@@ -796,11 +794,14 @@ private:
 		return false;
 	}
 	bool PaintContains(PRectangle rc) override {
-		return false;
+		return true;
 	}
 	PRectangle GetClientRectangle() const override {
-		PRectangle rect;
-		return rect;
+		return PRectangle(widgetRect.x
+			, widgetRect.y
+			, widgetRect.x + widgetRect.w
+			, widgetRect.y + widgetRect.h
+		);
 	}
 	void ScrollText(Sci::Line linesToMove) override {
 	}
@@ -850,6 +851,7 @@ private:
 private:
 	bool hasFocus;
 	int rectangularSelectionModifier;
+	struct nk_rect widgetRect;
 };
 
 extern "C" ScintillaNK* scintilla_nk_new(void) {
@@ -865,9 +867,8 @@ extern "C" void scintilla_nk_update(ScintillaNK* sci, struct nk_context* ctx) {
 
 	// TODO : input events
 
-	// paint
 	nk_layout_row_dynamic(ctx, 200, 1);
-	sci->RenderNK(ctx);
+	sci->Render(ctx);
 }
 
 extern "C" sptr_t scintilla_nk_send(ScintillaNK* sci, unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
