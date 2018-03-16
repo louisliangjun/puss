@@ -76,8 +76,6 @@
 using namespace Scintilla;
 #endif
 
-enum encodingType { singleByte, UTF8, dbcs};
-
 // X has a 16 bit coordinate space, so stop drawing here to avoid wrapping
 static const int maxCoordinate = 32000;
 
@@ -109,7 +107,7 @@ static struct nk_color g_color_white = {255,255,255,255};
 // SurfaceID is a cairo_t*
 class SurfaceImpl : public Surface {
 	bool inited;
-	struct nk_window* window;
+	ScintillaNK* window;
 	struct nk_context* context;
 	int width;
 	int height;
@@ -153,7 +151,7 @@ public:
 		return bg_color;
 	}
 	void Init(WindowID wid) override {
-		window = (struct nk_window*)wid;
+		window = (ScintillaNK*)wid;
 		inited = true;
 	}
 	void Init(SurfaceID sid, WindowID wid) override {
@@ -161,9 +159,15 @@ public:
 		Init(wid);
 	}
 	void InitPixMap(int width_, int height_, Surface *surface_, WindowID wid) override {
+		struct nk_context* context_ = context;
+		PLATFORM_ASSERT(surface_);
+		Release();
+		SurfaceImpl *surfImpl = static_cast<SurfaceImpl *>(surface_);
+		PLATFORM_ASSERT(wid);
+		// TODO : image or glfw3 render target ?? 
 		width = width_;
 		height = height_;
-		Init(surface_, wid);
+		Init(context_, wid);
 	}
 	void Release() override {
 		DoClear();
@@ -693,7 +697,11 @@ class ScintillaNK : public ScintillaBase {
 	ScintillaNK(const ScintillaNK &) = delete;
 	ScintillaNK &operator=(const ScintillaNK &) = delete;
 public:
-	ScintillaNK() {
+	ScintillaNK()
+		: hasFocus(false)
+		, rectangularSelectionModifier(SCMOD_ALT)
+	{
+		wMain = this;
 	}
 	virtual ~ScintillaNK() {
 	}
@@ -707,8 +715,50 @@ public:
 	bool ValidCodePage(int codePage) const override {
 		return true;
 	}
+private:
+	static sptr_t DirectFunction(sptr_t ptr, unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
+		return reinterpret_cast<ScintillaNK*>(ptr)->WndProc(iMessage, wParam, lParam);
+	}
 public: 	// Public for scintilla_send_message
 	sptr_t WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) override {
+		try {
+			switch (iMessage) {
+			case SCI_GRABFOCUS:
+				hasFocus = TRUE;
+				break;
+			case SCI_GETDIRECTFUNCTION:
+				return reinterpret_cast<sptr_t>(DirectFunction);
+			case SCI_GETDIRECTPOINTER:
+				return reinterpret_cast<sptr_t>(this);
+	#ifdef SCI_LEXER
+			case SCI_LOADLEXERLIBRARY:
+				LexerManager::GetInstance()->Load(reinterpret_cast<const char*>(lParam));
+				break;
+	#endif
+			case SCI_TARGETASUTF8: {
+					// only support utf8
+					char *text = reinterpret_cast<char*>(lParam);
+					int targetLength = targetEnd - targetStart;
+					if( text ) {
+						pdoc->GetCharRange(text, targetStart, targetLength);
+					}
+					return targetLength;
+				}
+			case SCI_SETRECTANGULARSELECTIONMODIFIER:
+				rectangularSelectionModifier = (int)wParam;
+				break;
+
+			case SCI_GETRECTANGULARSELECTIONMODIFIER:
+				return rectangularSelectionModifier;
+
+			default:
+				return ScintillaBase::WndProc(iMessage, wParam, lParam);
+			}
+		} catch (std::bad_alloc&) {
+			errorStatus = SC_STATUS_BADALLOC;
+		} catch (...) {
+			errorStatus = SC_STATUS_FAILURE;
+		}
 		return 0;
 	}
 	void RenderNK(struct nk_context* ctx) {
@@ -720,14 +770,11 @@ public: 	// Public for scintilla_send_message
 		rc.right = bounds.x + bounds.w;
 		rc.bottom = bounds.y + bounds.y;
 
-		AutoSurface surfaceWindow(ctx, this);
-		if( surfaceWindow ) {
-			nk_fill_rect(&(ctx->current->buffer), bounds, 0.0f, g_color_white);
-			Paint(surfaceWindow, rc);
-			surfaceWindow->Release();
-		} else {
-			nk_fill_rect(&(ctx->current->buffer), bounds, 0.0f, g_color_black);
-		}
+		std::unique_ptr<Surface> surfaceWindow(Surface::Allocate(SC_TECHNOLOGY_DEFAULT));
+		surfaceWindow->Init(ctx, this);
+		nk_stroke_rect(&(ctx->current->buffer), bounds, 0.0f, 1.0f, g_color_black);
+		Paint(surfaceWindow.get(), rc);
+		surfaceWindow->Release();
 	}
 private:
 	sptr_t DefWndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) override {
@@ -800,6 +847,9 @@ private:
 	}
 	void ClaimSelection() override {
 	}
+private:
+	bool hasFocus;
+	int rectangularSelectionModifier;
 };
 
 extern "C" ScintillaNK* scintilla_nk_new(void) {

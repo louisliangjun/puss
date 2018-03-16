@@ -8,13 +8,12 @@
   <PropertyGroup>
     <OutDir>$(PussRoot)bin\modules\</OutDir>
     <IntDir>$(SolutionDir)objs\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
-    <TargetExt>.so</TargetExt>
     <TargetName>$(ProjectName)$(PussSuffix)</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>$(PussRoot)3rd\;$(PussRoot)include\;$(PussRoot)modules\;$(PussRoot)objs\gen\;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>PUSS_MODULE_SUFFIX=$(PussSuffix)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_PUSS_MODULE_SUFFIX="$(PussSuffix).dll"</PreprocessorDefinitions>
     </ClCompile>
     <PreBuildEvent>
       <Command>

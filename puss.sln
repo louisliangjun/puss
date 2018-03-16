@@ -25,8 +25,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "puss_nuklear_scintilla", "m
 		{0B22875A-0FAD-4859-9D67-99EA0AB8D3D2} = {0B22875A-0FAD-4859-9D67-99EA0AB8D3D2}
 	EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "3rd", "3rd", "{5EC508B0-55F5-42E8-B165-52E7970D3CAD}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64

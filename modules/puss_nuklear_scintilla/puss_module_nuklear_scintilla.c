@@ -100,10 +100,11 @@ static int _lua_nk_scintilla_update(lua_State* L) {
 static int _lua__sci_send_wrap(lua_State* L) {
 	IFaceDecl* decl = (IFaceDecl*)lua_touserdata(L, lua_upvalueindex(1));
 	ScintillaNK** ud = (ScintillaNK**)luaL_checkudata(L, 1, LUA_NK_SCI_NAME);
+	int lparam_index = (decl->wparam==IFaceType_void) ? 2 : 3;
 	int nret = 0;
 	uptr_t wparam = 0;
 	sptr_t lparam = 0;
-	if( *ud )
+	if( !(*ud) )
 		return luaL_argerror(L, 1, "ScintillaNK already free!");
 
 	switch( decl->wparam ) {
@@ -121,11 +122,11 @@ static int _lua__sci_send_wrap(lua_State* L) {
 
 	switch( decl->lparam ) {
 	case IFaceType_void:	break;
-	case IFaceType_bool:	lparam = (sptr_t)lua_toboolean(L, 3);		break;
+	case IFaceType_bool:	lparam = (sptr_t)lua_toboolean(L, lparam_index);	break;
 	case IFaceType_colour:
 	case IFaceType_position:
-	case IFaceType_int:		lparam = (sptr_t)luaL_checknumber(L, 3);	break;
-	case IFaceType_string:	lparam = (sptr_t)luaL_checkstring(L, 3);	break;
+	case IFaceType_int:		lparam = (sptr_t)luaL_checknumber(L, lparam_index);	break;
+	case IFaceType_string:	lparam = (sptr_t)luaL_checkstring(L, lparam_index);	break;
 	case IFaceType_stringresult:
 		{
 			int len = (int)scintilla_nk_send(*ud, decl->message, wparam, lparam);
@@ -206,7 +207,7 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 		for( p=sci_functions; p->name; ++p ) {
 			lua_pushlightuserdata(L, p);
 			lua_pushcclosure(L, _lua__sci_send_wrap, 1);
-			lua_setfield(L, -2, p->alias);	// use alias only
+			lua_setfield(L, -2, p->name);
 		}
 	}
 	lua_setfield(L, -1, "__index");

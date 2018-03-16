@@ -34,6 +34,7 @@ end
 function __main__()
 	local w = nk_glfw_window_create("nuklear lua api", 400, 300)
 	local sci = nk_scintilla_new()
+	sci:SetText("abcdefg")
 	while w:update(nuklear_demo_lua, 0.001, sci) do
 		w:draw()
 	end
