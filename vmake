@@ -217,9 +217,9 @@ vmake_target_add('nuklear_scintilla', function(target)
 		, path_concat(SCINTILLA_ROOT_PATH, 'lexlib')
 		}
 	local objpath = path_concat(OBJPATH, 'nk')
-	local srcobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'src'), objpath, incs, cxxflags)
-	local lexlibobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'lexlib'), objpath, incs, cxxflags)
-	local lexobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'lexers'), objpath, incs, cxxflags)
+	local srcobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'src'), objpath, incs, '-fPIC', '-fvisibility=hidden', '-DFOX')
+	local lexlibobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'lexlib'), objpath, incs, '-fPIC', '-fvisibility=hidden', '-DFOX')
+	local lexobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'lexers'), objpath, incs, '-fPIC', '-fvisibility=hidden', '-DFOX')
 	table.sort(lexobjs)
 	local all_objs = { srcobjs, lexlibobjs, lexobjs }
 	local lib = path_concat(OBJPATH, 'lib'..target..'.a')

@@ -104,44 +104,64 @@ void Font::Release() {
 static struct nk_color g_color_black = {0,0,0,255};
 static struct nk_color g_color_white = {255,255,255,255};
 
+#define SCI_PAINT_DEBUG
+
+#ifdef SCI_PAINT_DEBUG
+	static struct nk_color _debug_color = {255,0,0,255};
+	#define draw_debug_rect(rect)	nk_stroke_rect(out, rect, 0.0f, 1.0f, _debug_color);
+#else
+	#define	draw_debug_rect(rect)
+#endif
+
+class WindowNK {
+public:
+	WindowNK() : win(NULL) {
+		bounds.x = 0.0f;
+		bounds.y = 0.0f;
+		bounds.w = 400.0f;
+		bounds.h = 300.0f;
+	}
+public:
+	struct nk_window*	win;
+	struct nk_rect		bounds;
+};
+
 // SurfaceID is a cairo_t*
 class SurfaceImpl : public Surface {
 	bool inited;
-	ScintillaNK* window;
 	struct nk_context* context;
+	struct nk_rect bounds;
 	int width;
 	int height;
 	struct nk_color pen_color;
 	struct nk_color bg_color;
 	float line_thickness;
-	int move_to_x;
-	int move_to_y;
+	float move_to_x;
+	float move_to_y;
 private:
 	struct nk_command_buffer* FetchCurrentCommandBuffer() {
 		return (context && context->current) ? &(context->current->buffer) : NULL;
 	}
 	void DoClear() {
 		inited = false;
-		window = NULL;
 		context = NULL;
 		pen_color = g_color_black;
 		bg_color = g_color_white;
 		line_thickness = 1.0f;
-		move_to_x = 0;
-		move_to_y = 0;
+		move_to_x = 0.0f;
+		move_to_y = 0.0f;
 	}
 public:
 	SurfaceImpl()
 		: inited(false)
-		, window(NULL)
 		, context(NULL)
 		, width(100)
 		, height(100)
 		, pen_color(g_color_black)
 		, bg_color(g_color_white)
 		, line_thickness(1.0f)
-		, move_to_x(0)
-		, move_to_y(0)
+		, move_to_x(0.0f)
+		, move_to_y(0.0f)
 	{
 	}
 	~SurfaceImpl() override {
@@ -151,7 +171,9 @@ public:
 		return bg_color;
 	}
 	void Init(WindowID wid) override {
-		window = (ScintillaNK*)wid;
+		WindowNK* w = (WindowNK*)wid;
+		PLATFORM_ASSERT(w);
+		bounds = w->bounds;
 		inited = true;
 	}
 	void Init(SurfaceID sid, WindowID wid) override {
@@ -164,7 +186,7 @@ public:
 		Release();
 		SurfaceImpl *surfImpl = static_cast<SurfaceImpl *>(surface_);
 		PLATFORM_ASSERT(wid);
-		// TODO : image or glfw3 render target ?? 
+		// TODO : image or glfw3 render target ??
 		width = width_;
 		height = height_;
 		Init(context_, wid);
@@ -193,32 +215,37 @@ public:
 		return (points * logPix + logPix / 2) / 72;
 	}
 	void MoveTo(int x_, int y_) override {
-		move_to_x = x_;
-		move_to_y = y_;
+		move_to_x = (float)x_;
+		move_to_y = (float)y_;
 	}
 	void LineTo(int x_, int y_) override {
 		struct nk_command_buffer* out = FetchCurrentCommandBuffer(); if( !out ) return;
 		nk_stroke_line(out
-			, (float)(move_to_x + 0.5f), (float)(move_to_y + 0.5f)
-			, (float)(x_ + 0.5f), (float)(y_ + 0.5f)
+			, bounds.x + move_to_x + 0.5f, bounds.y + move_to_y + 0.5f
+			, bounds.x + x_ + 0.5f, bounds.y + y_ + 0.5f
 			, line_thickness
 			, pen_color
 			);
-		move_to_x = x_;
-		move_to_y = y_;
+		move_to_x = (float)x_;
+		move_to_y = (float)y_;
 	}
 	void Polygon(Point *pts, int npts, ColourDesired fore, ColourDesired back) override {
 		struct nk_command_buffer* out = FetchCurrentCommandBuffer(); if( !out ) return;
-		float* points = (float*)pts;
+		std::vector<float> points;
+		points.resize(npts*2);
 		assert( sizeof(Point)==(sizeof(float)*2) );
+		for( int i=0; i<npts; ++i ) {
+			points[i*2] = bounds.x + pts[i].x;
+			points[i*2+1] = bounds.y + pts[i].y;
+		}
 		PenColour(back);
-		nk_fill_polygon(out, points, npts, pen_color);
+		nk_fill_polygon(out, &points[0], npts, pen_color);
 		PenColour(fore);
-		nk_stroke_polygon(out, points, npts, line_thickness, pen_color);
+		nk_stroke_polygon(out, &points[0], npts, line_thickness, pen_color);
 	}
 	void RectangleDraw(PRectangle rc, ColourDesired fore, ColourDesired back) override {
 		struct nk_command_buffer* out = FetchCurrentCommandBuffer(); if( !out ) return;
-		struct nk_rect rect = __nk_rect(rc.left + 0.5f, rc.top + 0.5f, rc.Width() - 1.0f, rc.Height() - 1.0f);
+		struct nk_rect rect = __nk_rect(bounds.x + rc.left + 0.5f, bounds.y + rc.top + 0.5f, rc.Width() - 1.0f, rc.Height() - 1.0f);
 		PenColour(back);
 		nk_fill_rect(out, rect, 0.0f, pen_color);
 		PenColour(fore);
@@ -227,12 +254,13 @@ public:
 	void FillRectangle(PRectangle rc, ColourDesired back) override {
 		PenColour(back);
 		struct nk_command_buffer* out = FetchCurrentCommandBuffer(); if( !out ) return;
-		struct nk_rect rect = __nk_rect(rc.left, rc.top, rc.Width(), rc.Height());
+		struct nk_rect rect = __nk_rect(bounds.x + rc.left, bounds.y + rc.top, rc.Width(), rc.Height());
 		nk_fill_rect(out, rect, 0.0f, pen_color);
+		draw_debug_rect(rect);
 	}
 	void FillRectangle(PRectangle rc, Surface &surfacePattern) override {
 		// SurfaceImpl &surfi = static_cast<SurfaceImpl &>(surfacePattern);
-		bool canDraw = false; // TODO : surfi.psurf != NULL;	
+		bool canDraw = false; // TODO : surfi.psurf != NULL;
 		if( canDraw ) {
 			struct nk_command_buffer* out = FetchCurrentCommandBuffer(); if( !out ) return;
 			// Tile pattern over rectangle
@@ -248,8 +276,9 @@ public:
 				for (int yTile = top; yTile < bottom; yTile += heightPat) {
 					int heighty = (yTile + heightPat > bottom) ? bottom - yTile : heightPat;
 					// cairo_set_source_surface(context, surfi.psurf, xTile, yTile);
-					struct nk_rect rect = __nk_recti(xTile, yTile, widthx, heighty);
+					struct nk_rect rect = __nk_recti(bounds.x + xTile, bounds.y + yTile, widthx, heighty);
 					nk_fill_rect(out, rect, 0.0f, pen_color);
+					draw_debug_rect(rect);
 				}
 			}
 		} else {
@@ -260,7 +289,7 @@ public:
 	}
 	void RoundedRectangle(PRectangle rc, ColourDesired fore, ColourDesired back) override {
 		struct nk_command_buffer* out = FetchCurrentCommandBuffer(); if( !out ) return;
-		struct nk_rect rect = __nk_rect(rc.left + 0.5f, rc.top + 0.5f, rc.Width() - 1.0f, rc.Height() - 1.0f);
+		struct nk_rect rect = __nk_rect(bounds.x + rc.left + 0.5f, bounds.y + rc.top + 0.5f, rc.Width() - 1.0f, rc.Height() - 1.0f);
 		PenColour(back);
 		nk_fill_rect(out, rect, 2.0f, pen_color);
 		PenColour(fore);
@@ -270,7 +299,7 @@ public:
 		ColourDesired outline, int alphaOutline, int flags) override
 	{
 		struct nk_command_buffer* out = FetchCurrentCommandBuffer(); if( !out ) return;
-		struct nk_rect rect = __nk_rect(rc.left + 0.5f, rc.top + 0.5f, rc.Width() - 1.0f, rc.Height() - 1.0f);
+		struct nk_rect rect = __nk_rect(bounds.x + rc.left + 0.5f, bounds.y + rc.top + 0.5f, rc.Width() - 1.0f, rc.Height() - 1.0f);
 		PenColour(fill);
 		pen_color.a = (nk_byte)alphaFill;
 		nk_fill_rect(out, rect, 0.0f, pen_color);
@@ -280,21 +309,25 @@ public:
 	}
 	void DrawRGBAImage(PRectangle rc, int width, int height, const unsigned char *pixelsImage) override {
 		struct nk_command_buffer* out = FetchCurrentCommandBuffer(); if( !out ) return;
-		struct nk_rect rect = __nk_rect(rc.left, rc.top, rc.Width(), rc.Height());
+		struct nk_rect rect = __nk_rect(bounds.x + rc.left, bounds.y + rc.top, rc.Width(), rc.Height());
 		struct nk_color c = { 255, 0, 0, 255 };
 		// TODO : nk_draw_image();
 		nk_fill_rect(out, rect, 0.0f, c);
 	}
 	void Ellipse(PRectangle rc, ColourDesired fore, ColourDesired back) override {
 		struct nk_command_buffer* out = FetchCurrentCommandBuffer(); if( !out ) return;
+		float cx = bounds.x + (rc.left + rc.right) / 2;
+		float cy = bounds.y + (rc.top + rc.bottom) / 2;
+		float r = XYPositionMin(rc.Width(), rc.Height()) / 2;
+		
 		PenColour(back);
-		nk_fill_arc(out, (rc.left + rc.right) / 2, (rc.top + rc.bottom) / 2, XYPositionMin(rc.Width(), rc.Height()) / 2, 0, (float)(2*kPi), pen_color);
+		nk_fill_arc(out, cx, cy, r, 0.0f, (float)(2*kPi), pen_color);
 		PenColour(fore);
-		nk_stroke_arc(out, (rc.left + rc.right) / 2, (rc.top + rc.bottom) / 2, XYPositionMin(rc.Width(), rc.Height()) / 2, 0, (float)(2*kPi), line_thickness, pen_color);
+		nk_stroke_arc(out, cx, cy, r, 0.0f, (float)(2*kPi), line_thickness, pen_color);
 	}
 	void Copy(PRectangle rc, Point from, Surface &surfaceSource) override {
 		// SurfaceImpl &surfi = static_cast<SurfaceImpl &>(surfaceSource);
-		bool canDraw = false; // TODO : surfi.psurf != NULL;	
+		bool canDraw = false; // TODO : surfi.psurf != NULL;
 		if( canDraw ) {
 			struct nk_command_buffer* out = FetchCurrentCommandBuffer(); if( !out ) return;
 			struct nk_rect rect = __nk_rect(rc.left, rc.top, rc.Width(), rc.Height());
@@ -310,11 +343,11 @@ public:
 	void DrawTextBase(PRectangle rc, Font &font_, XYPOSITION ybase, const char *s, int len, ColourDesired fore) {
 		PenColour(fore);
 		struct nk_command_buffer* out = FetchCurrentCommandBuffer(); if( !out ) return;
-		struct nk_rect rect = __nk_rect(rc.left, rc.top, rc.Width(), rc.Height());
+		struct nk_rect rect = __nk_rect(bounds.x + rc.left, bounds.y + rc.top, rc.Width(), rc.Height());
 		// XYPOSITION xText = rc.left;
 		// TODO : use font
 		nk_draw_text(out, rect, s, len, context->style.font, pen_color, bg_color);
-	} 
+	}
 	void DrawTextNoClip(PRectangle rc, Font &font_, XYPOSITION ybase, const char *s, int len, ColourDesired fore, ColourDesired back) override {
 		FillRectangle(rc, back);
 		DrawTextBase(rc, font_, ybase, s, len, fore);
@@ -335,7 +368,7 @@ public:
 	void MeasureWidths(Font &font_, const char *s, int len, XYPOSITION *positions) override {
 		// TODO : now simple
 		XYPOSITION pos = 0;
-		for( int i=0; i<len; ++len ) {
+		for( int i=0; i<len; ++i ) {
 			positions[i] = pos;
 			pos += 16;
 		}
@@ -365,7 +398,7 @@ public:
 
 public:
 	void SetClip(PRectangle rc) override {
-		// TODO : nk_start_popup or nk_command_buffer_init 
+		// TODO : nk_start_popup or nk_command_buffer_init
 	}
 	void FlushCachedState() override {
 		// TODO :
@@ -390,41 +423,31 @@ void Window::Destroy() {
 }
 
 PRectangle Window::GetPosition() {
-	struct nk_window* w = (struct nk_window*)wid;
-	PRectangle rc(0, 0, 1000, 1000);
-	if( w ) {
-		rc.left = w->bounds.x;
-		rc.top = w->bounds.y;
-		rc.right = w->bounds.x + w->bounds.w;
-		rc.bottom = w->bounds.y + w->bounds.h;
-	}
+	WindowNK* w = (WindowNK*)wid;
+	PRectangle rc(w->bounds.x, w->bounds.y, w->bounds.x + w->bounds.w, w->bounds.y + w->bounds.h);
 	return rc;
 }
 
 void Window::SetPosition(PRectangle rc) {
-	struct nk_window* w = (struct nk_window*)wid;
-	if( w ) {
-		w->bounds.x = rc.left;
-		w->bounds.y = rc.top;
-		w->bounds.w = rc.Width();
-		w->bounds.h = rc.Height();
-	}
+	WindowNK* w = (WindowNK*)wid;
+	w->bounds = __nk_rect(rc.left, rc.top, rc.Width(), rc.Height());
 }
 
 void Window::SetPositionRelative(PRectangle rc, Window relativeTo) {
-	struct nk_window* w = (struct nk_window*)wid;
-	if( w ) {
-		struct nk_window* wndRelativeTo = (struct nk_window*)(relativeTo.wid);
-		XYPOSITION ox = wndRelativeTo ? wndRelativeTo->bounds.x : 0;
-		XYPOSITION oy = wndRelativeTo ? wndRelativeTo->bounds.y : 0;
-		PRectangle rcMonitor(0, 0, 1000, 1000);
+	WindowNK* w = (WindowNK*)wid;
+	if( w && w->win ) {
+		WindowNK* wndRelativeTo = (WindowNK*)(relativeTo.GetID());
+		struct nk_window* rwin = wndRelativeTo ? wndRelativeTo->win : NULL;
+		XYPOSITION ox = rwin ? rwin->bounds.x : 0;
+		XYPOSITION oy = rwin ? rwin->bounds.y : 0;
+		PRectangle rcMonitor(0, 0, 1920, 1080);
 		ox += rc.left;
 		oy += rc.top;
-		if( wndRelativeTo ) {
-			rcMonitor.left = wndRelativeTo->bounds.x;
-			rcMonitor.top = wndRelativeTo->bounds.y;
-			rcMonitor.right = wndRelativeTo->bounds.x + wndRelativeTo->bounds.w;
-			rcMonitor.bottom = wndRelativeTo->bounds.y + wndRelativeTo->bounds.h;
+		if( rwin ) {
+			rcMonitor.left = rwin->bounds.x;
+			rcMonitor.top = rwin->bounds.y;
+			rcMonitor.right = rwin->bounds.x + rwin->bounds.w;
+			rcMonitor.bottom = rwin->bounds.y + rwin->bounds.h;
 		}
 
 		/* do some corrections to fit into screen */
@@ -439,7 +462,7 @@ void Window::SetPositionRelative(PRectangle rc, Window relativeTo) {
 		else if (oy + sizey > rcMonitor.top + rcMonitor.Height())
 			oy = rcMonitor.top + rcMonitor.Height() - sizey;
 
-		w->bounds = __nk_rect(ox, oy, sizex, sizey);
+		w->win->bounds = __nk_rect(ox, oy, sizex, sizey);
 	}
 }
 
@@ -463,14 +486,7 @@ void Window::SetCursor(Cursor curs) {
 }
 
 PRectangle Window::GetMonitorRect(Point pt) {
-	PRectangle rcMonitor(0, 0, 1000, 1000);
-	struct nk_window* w = (struct nk_window*)wid;
-	if( w ) {
-		rcMonitor.left = w->bounds.x;
-		rcMonitor.top = w->bounds.y;
-		rcMonitor.right = w->bounds.x + w->bounds.w;
-		rcMonitor.bottom = w->bounds.y + w->bounds.h;
-	}
+	PRectangle rcMonitor(0, 0, 1920, 1080);
 	return rcMonitor;
 }
 
@@ -693,7 +709,7 @@ void Platform::Assert(const char *c, const char *file, int line) {
 	abort();
 }
 
-class ScintillaNK : public ScintillaBase {
+class ScintillaNK : public ScintillaBase, public WindowNK {
 	ScintillaNK(const ScintillaNK &) = delete;
 	ScintillaNK &operator=(const ScintillaNK &) = delete;
 public:
@@ -701,8 +717,9 @@ public:
 		: hasFocus(false)
 		, rectangularSelectionModifier(SCMOD_ALT)
 	{
-		widgetRect = __nk_rect(0.0f, 0.0f, 100.0f, 100.0f);
-		wMain = this;
+		WindowNK* w = this;
+		wMain = (WindowID)w;
+		view.bufferedDraw = false;
 	}
 	virtual ~ScintillaNK() {
 	}
@@ -725,7 +742,7 @@ public: 	// Public for scintilla_send_message
 		try {
 			switch (iMessage) {
 			case SCI_GRABFOCUS:
-				hasFocus = TRUE;
+				hasFocus = true;
 				break;
 			case SCI_GETDIRECTFUNCTION:
 				return reinterpret_cast<sptr_t>(DirectFunction);
@@ -762,15 +779,21 @@ public: 	// Public for scintilla_send_message
 		}
 		return 0;
 	}
-	void Render(struct nk_context* ctx) {
-		struct nk_rect bounds;
+	void Update(struct nk_context* ctx) {
+		win = ctx ? ctx->current : NULL;
+		if( !(ctx && win) ) return;
+
+		nk_layout_row_dynamic(ctx, 400, 1);
 		nk_widget(&bounds, ctx);
-		widgetRect = bounds;
-		PRectangle rc(bounds.x, bounds.y, bounds.x + bounds.w, bounds.y + bounds.h);
 		nk_stroke_rect(&(ctx->current->buffer), bounds, 0.0f, 1.0f, g_color_black);
 
+		// TODO : input events
+
+		// render
+		PRectangle rc(bounds.x, bounds.y, bounds.x + bounds.w, bounds.y + bounds.h);
+
 		std::unique_ptr<Surface> surfaceWindow(Surface::Allocate(SC_TECHNOLOGY_DEFAULT));
-		surfaceWindow->Init(ctx, this);
+		surfaceWindow->Init(ctx, wMain.GetID());
 		Paint(surfaceWindow.get(), rc);
 		surfaceWindow->Release();
 	}
@@ -797,11 +820,24 @@ private:
 		return true;
 	}
 	PRectangle GetClientRectangle() const override {
-		return PRectangle(widgetRect.x
-			, widgetRect.y
-			, widgetRect.x + widgetRect.w
-			, widgetRect.y + widgetRect.h
-		);
+		Window win = wMain;
+		PRectangle rc = win.GetClientPosition();
+		// if (verticalScrollBarVisible)
+		// 	rc.right -= verticalScrollBarWidth;
+		rc.right -= 24.0f;
+		// if (horizontalScrollBarVisible && !Wrapping())
+		// 	rc.bottom -= horizontalScrollBarHeight;
+		rc.bottom -= 24.0f;
+		// Move to origin
+		rc.right -= rc.left;
+		rc.bottom -= rc.top;
+		if (rc.bottom < 0)
+			rc.bottom = 0;
+		if (rc.right < 0)
+			rc.right = 0;
+		rc.left = 0;
+		rc.top = 0;
+		return rc;
 	}
 	void ScrollText(Sci::Line linesToMove) override {
 	}
@@ -851,7 +887,7 @@ private:
 private:
 	bool hasFocus;
 	int rectangularSelectionModifier;
-	struct nk_rect widgetRect;
+	WindowNK nullWindow;
 };
 
 extern "C" ScintillaNK* scintilla_nk_new(void) {
@@ -863,15 +899,11 @@ extern "C" void scintilla_nk_free(ScintillaNK* sci) {
 }
 
 extern "C" void scintilla_nk_update(ScintillaNK* sci, struct nk_context* ctx) {
-	if( !(sci && ctx && ctx->current) )	return;
-
-	// TODO : input events
-
-	nk_layout_row_dynamic(ctx, 200, 1);
-	sci->Render(ctx);
+	if( sci ) {
+		sci->Update(ctx);
+	}
 }
 
 extern "C" sptr_t scintilla_nk_send(ScintillaNK* sci, unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 	return sci ? sci->WndProc(iMessage, wParam, lParam) : NULL;
 }
-

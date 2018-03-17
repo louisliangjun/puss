@@ -11,3 +11,4 @@
 *.VC.db
 *.ipch
 *.suo
+.atom*
