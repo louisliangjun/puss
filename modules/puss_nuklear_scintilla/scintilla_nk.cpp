@@ -709,7 +709,7 @@ void Platform::Assert(const char *c, const char *file, int line) {
 	abort();
 }
 
-class ScintillaNK : public ScintillaBase, public WindowNK {
+class ScintillaNK : public ScintillaBase {
 	ScintillaNK(const ScintillaNK &) = delete;
 	ScintillaNK &operator=(const ScintillaNK &) = delete;
 public:
@@ -717,8 +717,8 @@ public:
 		: hasFocus(false)
 		, rectangularSelectionModifier(SCMOD_ALT)
 	{
-		WindowNK* w = this;
-		wMain = (WindowID)w;
+		wMain = (WindowID)&mainWindow;
+		wMargin = (WindowID)&marginWindow;
 		view.bufferedDraw = false;
 	}
 	virtual ~ScintillaNK() {
@@ -780,12 +780,18 @@ public: 	// Public for scintilla_send_message
 		return 0;
 	}
 	void Update(struct nk_context* ctx) {
-		win = ctx ? ctx->current : NULL;
-		if( !(ctx && win) ) return;
+		mainWindow.win = ctx ? ctx->current : NULL;
+		marginWindow.win = mainWindow.win;
+		if( !(ctx && mainWindow.win) ) return;
 
 		nk_layout_row_dynamic(ctx, 400, 1);
+		struct nk_rect& bounds = mainWindow.bounds;
 		nk_widget(&bounds, ctx);
 		nk_stroke_rect(&(ctx->current->buffer), bounds, 0.0f, 1.0f, g_color_black);
+		marginWindow.bounds = bounds;
+		marginWindow.bounds.w = 16;
+		bounds.x += 16;
+		bounds.w -= 16;
 
 		// TODO : input events
 
@@ -887,7 +893,8 @@ private:
 private:
 	bool hasFocus;
 	int rectangularSelectionModifier;
-	WindowNK nullWindow;
+	WindowNK mainWindow;
+	WindowNK marginWindow;
 };
 
 extern "C" ScintillaNK* scintilla_nk_new(void) {
