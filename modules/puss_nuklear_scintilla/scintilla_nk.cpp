@@ -104,7 +104,7 @@ void Font::Release() {
 static struct nk_color g_color_black = {0,0,0,255};
 static struct nk_color g_color_white = {255,255,255,255};
 
-#define SCI_PAINT_DEBUG
+// #define SCI_PAINT_DEBUG
 
 #ifdef SCI_PAINT_DEBUG
 	static struct nk_color _debug_color = {255,0,0,255};
@@ -346,7 +346,7 @@ public:
 		struct nk_rect rect = __nk_rect(bounds.x + rc.left, bounds.y + rc.top, rc.Width(), rc.Height());
 		// XYPOSITION xText = rc.left;
 		// TODO : use font
-		nk_draw_text(out, rect, s, len, context->style.font, pen_color, bg_color);
+		nk_draw_text(out, rect, s, len, context->style.font, bg_color, pen_color);
 	}
 	void DrawTextNoClip(PRectangle rc, Font &font_, XYPOSITION ybase, const char *s, int len, ColourDesired fore, ColourDesired back) override {
 		FillRectangle(rc, back);
@@ -796,7 +796,7 @@ public: 	// Public for scintilla_send_message
 		// TODO : input events
 
 		// render
-		PRectangle rc(bounds.x, bounds.y, bounds.x + bounds.w, bounds.y + bounds.h);
+		PRectangle rc(0, 0, bounds.w, bounds.h);
 
 		std::unique_ptr<Surface> surfaceWindow(Surface::Allocate(SC_TECHNOLOGY_DEFAULT));
 		surfaceWindow->Init(ctx, wMain.GetID());
@@ -830,10 +830,10 @@ private:
 		PRectangle rc = win.GetClientPosition();
 		// if (verticalScrollBarVisible)
 		// 	rc.right -= verticalScrollBarWidth;
-		rc.right -= 24.0f;
+		// rc.right -= 24.0f;
 		// if (horizontalScrollBarVisible && !Wrapping())
 		// 	rc.bottom -= horizontalScrollBarHeight;
-		rc.bottom -= 24.0f;
+		// rc.bottom -= 24.0f;
 		// Move to origin
 		rc.right -= rc.left;
 		rc.bottom -= rc.top;
