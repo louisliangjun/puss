@@ -264,8 +264,11 @@ public:
 		PenColour(back);
 		struct nk_command_buffer* out = FetchCurrentCommandBuffer(); if( !out ) return;
 		struct nk_rect rect = __nk_rect(bounds.x + rc.left, bounds.y + rc.top, rc.Width(), rc.Height());
-		nk_fill_rect(out, rect, 0.0f, pen_color);
+#ifdef SCI_PAINT_DEBUG
 		draw_debug_rect(rect);
+#else
+		nk_fill_rect(out, rect, 0.0f, pen_color);
+#endif
 	}
 	void FillRectangle(PRectangle rc, Surface &surfacePattern) override {
 		// SurfaceImpl &surfi = static_cast<SurfaceImpl &>(surfacePattern);
@@ -286,8 +289,11 @@ public:
 					int heighty = (yTile + heightPat > bottom) ? bottom - yTile : heightPat;
 					// cairo_set_source_surface(context, surfi.psurf, xTile, yTile);
 					struct nk_rect rect = __nk_rect(bounds.x + xTile, bounds.y + yTile, (float)widthx, (float)heighty);
-					nk_fill_rect(out, rect, 0.0f, pen_color);
+#ifdef SCI_PAINT_DEBUG
 					draw_debug_rect(rect);
+#else
+					nk_fill_rect(out, rect, 0.0f, pen_color);
+#endif
 				}
 			}
 		} else {
@@ -846,9 +852,42 @@ public: 	// Public for scintilla_send_message
 			ButtonMoveWithModifiers(pt, now, modifiers);
 		}
 	}
+	void DoKeyPressed(int k, int modifiers) {
+		int key = 0;
+		switch(k) {
+		case NK_KEY_DEL:				key=SCK_DELETE;	break;
+		case NK_KEY_TAB:				key=SCK_TAB;	break;
+		case NK_KEY_BACKSPACE:			key=SCK_BACK;	break;
+		case NK_KEY_UP:					key=SCK_UP;		break;
+		case NK_KEY_DOWN:				key=SCK_DOWN;	break;
+		case NK_KEY_LEFT:				key=SCK_LEFT;	break;
+		case NK_KEY_RIGHT:				key=SCK_RIGHT;	break;
+		case NK_KEY_TEXT_START:			key=SCK_HOME;	break;
+		case NK_KEY_TEXT_END:			key=SCK_END;	break;
+		case NK_KEY_TEXT_INSERT_MODE:	key=SCK_INSERT;	break;
+		case NK_KEY_TEXT_REPLACE_MODE:	key=SCK_INSERT;	break;
+		case NK_KEY_TEXT_RESET_MODE:	key=SCK_INSERT;	break;
+		case NK_KEY_SCROLL_START:		key=SCK_HOME;	break;
+		case NK_KEY_SCROLL_END:			key=SCK_END;	break;
+		case NK_KEY_SCROLL_DOWN:		key=SCK_PRIOR;	break;
+		case NK_KEY_SCROLL_UP:			key=SCK_NEXT;	break;
+		default:	break;
+		}
+		if( key ) {
+			bool consumed = false;
+			KeyDownWithModifiers(key, modifiers, &consumed);
+			//fprintf(stderr, "SK-key: %d %x %x\n",event->keyval, event->state, consumed);
+		}
+	}
 	void HandleKeyboardEvents(struct nk_input* in, struct nk_rect bounds, unsigned int now, int modifiers) {
         /* keyboard input */
-		// TODO
+        {
+        	for( int k=0; k<NK_KEY_MAX; ++k ) {
+        		if( nk_input_is_key_pressed(in, (nk_keys)k) ) {
+	        		DoKeyPressed(k, modifiers);
+        		}
+        	}
+        }
 
         /* text input */
 		if( in->keyboard.text_len ) {
