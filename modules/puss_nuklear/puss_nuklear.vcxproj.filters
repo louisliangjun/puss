@@ -13,6 +13,7 @@
     <ClInclude Include="glad\glad.h">
       <Filter>glad</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3rd\nuklear\nuklear.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="glad">

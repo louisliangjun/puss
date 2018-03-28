@@ -3,9 +3,18 @@
 #include "scintilla_nk.h"
 
 #if defined(__WIN32__) || defined(_MSC_VER)
-#include <windows.h>
+	#include <windows.h>
 #else
-#include <sys/time.h>
+	#include <sys/time.h>
+	unsigned int GetCurrentTime(void) {
+		struct timeval tv;
+		uint64_t ret;
+		gettimeofday(&tv, 0);
+		ret = tv.tv_sec;
+		ret *= 1000;
+		ret += (tv.tv_usec/1000);
+		return (unsigned int)ret;
+	}
 #endif
 
 #include <cstddef>
@@ -276,7 +285,7 @@ public:
 				for (int yTile = top; yTile < bottom; yTile += heightPat) {
 					int heighty = (yTile + heightPat > bottom) ? bottom - yTile : heightPat;
 					// cairo_set_source_surface(context, surfi.psurf, xTile, yTile);
-					struct nk_rect rect = __nk_recti(bounds.x + xTile, bounds.y + yTile, widthx, heighty);
+					struct nk_rect rect = __nk_rect(bounds.x + xTile, bounds.y + yTile, (float)widthx, (float)heighty);
 					nk_fill_rect(out, rect, 0.0f, pen_color);
 					draw_debug_rect(rect);
 				}
@@ -370,21 +379,21 @@ public:
 		XYPOSITION pos = 0;
 		for( int i=0; i<len; ++i ) {
 			positions[i] = pos;
-			pos += 16;
+			pos += 8.0f;
 		}
 	}
 	XYPOSITION WidthText(Font &font_, const char *s, int len) override {
 		// TODO : now simple
-		return 16.0f * len;
+		return 8.0f * len;
 	}
 	XYPOSITION WidthChar(Font &font_, char ch) override {
-		return 16.0f;
+		return 8.0f;
 	}
 	XYPOSITION Ascent(Font &font_) override {
 		return 0.0f;
 	}
 	XYPOSITION Descent(Font &font_) override {
-		return 24.0f;
+		return 16.0f;
 	}
 	XYPOSITION InternalLeading(Font &font_) override {
 		return 0.0f;
@@ -714,7 +723,9 @@ class ScintillaNK : public ScintillaBase {
 	ScintillaNK &operator=(const ScintillaNK &) = delete;
 public:
 	ScintillaNK()
-		: hasFocus(false)
+		: currentNKContext(NULL)
+		, hasFocus(false)
+		, capturedMouse(false)
 		, rectangularSelectionModifier(SCMOD_ALT)
 	{
 		wMain = (WindowID)&mainWindow;
@@ -779,11 +790,120 @@ public: 	// Public for scintilla_send_message
 		}
 		return 0;
 	}
+	void HandleMouseEvents(struct nk_input* in, struct nk_rect bounds, unsigned int now, int modifiers) {
+		struct nk_rect area = bounds;
+
+		PRectangle wRect = wMain.GetPosition();
+		struct nk_mouse_button* btn;
+
+        /* mouse click handler */
+        char is_hovered = (char)nk_input_is_mouse_hovering_rect(in, area);
+        if (!is_hovered)
+			return;
+
+		btn = &(in->mouse.buttons[NK_BUTTON_LEFT]);
+		if( btn->down ) {
+			if( btn->clicked) {
+				Point click_pos(btn->clicked_pos.x - wRect.left, btn->clicked_pos.y - wRect.top);
+				ButtonDownWithModifiers(click_pos, now, modifiers);
+			} else if ((in->mouse.delta.x != 0.0f || in->mouse.delta.y != 0.0f)) {
+				// TODO : drag
+			}
+		} else {
+			if (!HaveMouseCapture())
+				return;
+			Point pt(in->mouse.pos.x - wRect.left, in->mouse.pos.y - wRect.top);
+			//	sciThis,event->window,event->time, pt.x, pt.y);
+			// if (event->window != PWindow(sciThis->wMain))
+					// If mouse released on scroll bar then the position is relative to the
+					// scrollbar, not the drawing window so just repeat the most recent point.
+			//		pt = sciThis->ptMouseLast;
+			ButtonUpWithModifiers(pt, now, modifiers);
+		}
+
+		btn = &(in->mouse.buttons[NK_BUTTON_RIGHT]);
+		if( btn->down ) {
+			if( btn->clicked) {
+				Point pt(in->mouse.pos.x - wRect.left, in->mouse.pos.y - wRect.top);
+				if (!PointInSelection(pt))
+					SetEmptySelection(PositionFromLocation(pt));
+				if (ShouldDisplayPopup(pt)) {
+					// PopUp menu
+					// Convert to screen
+					int ox = 0;
+					int oy = 0;
+					// gdk_window_get_origin(PWindow(wMain), &ox, &oy);
+					ContextMenu(Point(pt.x + ox, pt.y + oy));
+				} else {
+					RightButtonDownWithModifiers(pt, now, modifiers);
+				}
+			}
+		}
+
+		// move
+		if ((in->mouse.delta.x != 0.0f || in->mouse.delta.y != 0.0f)) {
+			Point pt(in->mouse.pos.x - wRect.left, in->mouse.pos.y - wRect.top);
+			ButtonMoveWithModifiers(pt, now, modifiers);
+		}
+	}
+	void HandleKeyboardEvents(struct nk_input* in, struct nk_rect bounds, unsigned int now, int modifiers) {
+        /* keyboard input */
+		// TODO
+
+        /* text input */
+		if( in->keyboard.text_len ) {
+			ClearSelection();
+			const int inserted = pdoc->InsertString(CurrentPosition(), in->keyboard.text, in->keyboard.text_len);
+			if( inserted > 0 ) {
+				MovePositionTo(CurrentPosition() + inserted);
+			}
+            in->keyboard.text_len = 0;
+        }
+
+        /* enter key handler */
+        if (nk_input_is_key_pressed(in, NK_KEY_ENTER)) {
+			bool consumed = false;
+			bool added = KeyDownWithModifiers('\n', modifiers, &consumed) != 0;
+			if( !consumed )
+				consumed = added;
+			if( !consumed ) {
+				ClearSelection();
+				const int inserted = pdoc->InsertString(CurrentPosition(), "\n", 1);
+				if( inserted > 0 ) {
+					MovePositionTo(CurrentPosition() + inserted);
+				}
+			}
+        }
+
+        /* cut & copy handler */
+		if( nk_input_is_key_pressed(in, NK_KEY_COPY) ) {
+			Copy();
+		}
+		if( nk_input_is_key_pressed(in, NK_KEY_CUT) ) {
+			Cut();
+		}
+
+        /* paste handler */
+		if( nk_input_is_key_pressed(in, NK_KEY_PASTE) ) {
+			Paste();
+		}
+	}
+	void HandleInputEvents(struct nk_context* ctx, struct nk_rect bounds) {
+		struct nk_input* in = &(ctx->input);
+		unsigned int now = GetCurrentTime();
+        int shift = in->keyboard.keys[NK_KEY_SHIFT].down;
+        int ctrl = in->keyboard.keys[NK_KEY_CTRL].down;
+		int alt = in->keyboard.keys[NK_KEY_ALT].down;
+		int modifiers = ModifierFlags(shift, ctrl, alt);
+		HandleMouseEvents(in, bounds, now, modifiers);
+		HandleKeyboardEvents(in, bounds, now, modifiers);
+	}
 	void Update(struct nk_context* ctx) {
 		mainWindow.win = ctx ? ctx->current : NULL;
 		marginWindow.win = mainWindow.win;
 		if( !(ctx && mainWindow.win) ) return;
 
+		currentNKContext = ctx;
 		nk_layout_row_dynamic(ctx, 400, 1);
 		struct nk_rect& bounds = mainWindow.bounds;
 		nk_widget(&bounds, ctx);
@@ -793,7 +913,7 @@ public: 	// Public for scintilla_send_message
 		bounds.x += 16;
 		bounds.w -= 16;
 
-		// TODO : input events
+		HandleInputEvents(ctx, bounds);
 
 		// render
 		PRectangle rc(0, 0, bounds.w, bounds.h);
@@ -802,6 +922,7 @@ public: 	// Public for scintilla_send_message
 		surfaceWindow->Init(ctx, wMain.GetID());
 		Paint(surfaceWindow.get(), rc);
 		surfaceWindow->Release();
+		currentNKContext = NULL;
 	}
 private:
 	sptr_t DefWndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) override {
@@ -818,9 +939,10 @@ private:
 		return true;
 	}
 	void SetMouseCapture(bool on) override {
+		capturedMouse = on;
 	}
 	bool HaveMouseCapture() override {
-		return false;
+		return capturedMouse;
 	}
 	bool PaintContains(PRectangle rc) override {
 		return true;
@@ -876,10 +998,24 @@ private:
 		return 0;
 	}
 	void CopyToClipboard(const SelectionText &selectedText) override {
+		__puss_nuklear_iface__->clipbard_set_string(currentNKContext, selectedText.Data());
 	}
 	void Copy() override {
+		if (!sel.Empty()) {
+			SelectionText selectedText;
+			CopySelectionRange(&selectedText);
+			CopyToClipboard(selectedText);
+		}
 	}
 	void Paste() override {
+		const char* text = __puss_nuklear_iface__->clipbard_get_string(currentNKContext);
+		if( text ) {
+			ClearSelection();
+			const int inserted = pdoc->InsertString(CurrentPosition(), text, (Sci::Position)strlen(text));
+			if( inserted > 0 ) {
+				MovePositionTo(CurrentPosition() + inserted);
+			}
+		}
 	}
 	void CreateCallTipWindow(PRectangle rc) override {
 	}
@@ -891,10 +1027,12 @@ private:
 	void ClaimSelection() override {
 	}
 private:
-	bool hasFocus;
-	int rectangularSelectionModifier;
 	WindowNK mainWindow;
 	WindowNK marginWindow;
+	struct nk_context* currentNKContext;
+	bool hasFocus;
+	bool capturedMouse;
+	int rectangularSelectionModifier;
 };
 
 extern "C" ScintillaNK* scintilla_nk_new(void) {

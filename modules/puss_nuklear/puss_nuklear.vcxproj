@@ -19,6 +19,7 @@
     <None Include="nuklear_lua_apis.inl" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\3rd\nuklear\nuklear.h" />
     <ClInclude Include="glad\glad.h" />
     <ClInclude Include="puss_module_nuklear.h" />
   </ItemGroup>

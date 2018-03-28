@@ -420,6 +420,8 @@ nk_glfw3_new_frame(struct nk_glfw* glfw)
     nk_input_key(ctx, NK_KEY_SCROLL_UP, glfwGetKey(win, GLFW_KEY_PAGE_UP) == GLFW_PRESS);
     nk_input_key(ctx, NK_KEY_SHIFT, glfwGetKey(win, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS||
                                     glfwGetKey(win, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_ALT, glfwGetKey(win, GLFW_KEY_LEFT_ALT) == GLFW_PRESS||
+                                    glfwGetKey(win, GLFW_KEY_RIGHT_ALT) == GLFW_PRESS);
 
     if (glfwGetKey(win, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
         glfwGetKey(win, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) {
@@ -600,11 +602,25 @@ static int nk_glfw_window_create_lua(lua_State* L) {
     return 1;
 }
 
+static void clipbard_set_string(struct nk_context* ctx, const char* text) {
+	struct nk_glfw* glfw = ctx ? (struct nk_glfw*)(ctx->clip.userdata.ptr) : NULL;
+	if( glfw ) {
+		glfwSetClipboardString(glfw->win, text);
+	}
+}
+
+static const char* clipbard_get_string(struct nk_context* ctx) {
+	struct nk_glfw* glfw = ctx ? (struct nk_glfw*)(ctx->clip.userdata.ptr) : NULL;
+	return glfw ? glfwGetClipboardString(glfw->win) : NULL;
+}
+
 PussInterface* __puss_iface__ = NULL;
 
 static PussNuklearInterface puss_nuklear_iface =
 	{ lua_check_nk_context
 	, lua_check_nk_font
+	, clipbard_set_string
+	, clipbard_get_string
 	};
 
 static luaL_Reg nuklera_glfw3_lua_apis[] =

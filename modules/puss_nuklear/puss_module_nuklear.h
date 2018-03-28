@@ -29,6 +29,9 @@ typedef struct PussNuklearInterface {
 	struct nk_context*	(*check_nk_context)(lua_State* L, int arg);
 	struct nk_font*		(*check_nk_font)(lua_State* L, int arg);
 
+	void				(*clipbard_set_string)(struct nk_context* ctx, const char* text);
+	const char*			(*clipbard_get_string)(struct nk_context* ctx);
+
 	NuklearProxy		nuklear_proxy;
 } PussNuklearInterface;
 
