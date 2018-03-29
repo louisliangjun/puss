@@ -90,6 +90,8 @@ static const int maxCoordinate = 32000;
 
 static const double kPi = 3.14159265358979323846;
 
+static const XYPOSITION kDefaultNKFontSize = 7.0f;
+
 static inline XYPOSITION XYPositionMin(XYPOSITION a, XYPOSITION b) {
 	return a < b ? a : b;
 }
@@ -113,10 +115,10 @@ void Font::Release() {
 static struct nk_color g_color_black = {0,0,0,255};
 static struct nk_color g_color_white = {255,255,255,255};
 
-// #define SCI_PAINT_DEBUG
+#define SCI_PAINT_DEBUG
 
 #ifdef SCI_PAINT_DEBUG
-	static struct nk_color _debug_color = {255,0,0,255};
+	static struct nk_color _debug_color = {255,0,0,64};
 	#define draw_debug_rect(rect)	nk_stroke_rect(out, rect, 0.0f, 1.0f, _debug_color);
 #else
 	#define	draw_debug_rect(rect)
@@ -264,11 +266,8 @@ public:
 		PenColour(back);
 		struct nk_command_buffer* out = FetchCurrentCommandBuffer(); if( !out ) return;
 		struct nk_rect rect = __nk_rect(bounds.x + rc.left, bounds.y + rc.top, rc.Width(), rc.Height());
-#ifdef SCI_PAINT_DEBUG
-		draw_debug_rect(rect);
-#else
 		nk_fill_rect(out, rect, 0.0f, pen_color);
-#endif
+		draw_debug_rect(rect);
 	}
 	void FillRectangle(PRectangle rc, Surface &surfacePattern) override {
 		// SurfaceImpl &surfi = static_cast<SurfaceImpl &>(surfacePattern);
@@ -289,11 +288,8 @@ public:
 					int heighty = (yTile + heightPat > bottom) ? bottom - yTile : heightPat;
 					// cairo_set_source_surface(context, surfi.psurf, xTile, yTile);
 					struct nk_rect rect = __nk_rect(bounds.x + xTile, bounds.y + yTile, (float)widthx, (float)heighty);
-#ifdef SCI_PAINT_DEBUG
-					draw_debug_rect(rect);
-#else
 					nk_fill_rect(out, rect, 0.0f, pen_color);
-#endif
+					draw_debug_rect(rect);
 				}
 			}
 		} else {
@@ -380,20 +376,42 @@ public:
 			}
 		}
 	}
+	// TODO : need implements Font, now simple 
 	void MeasureWidths(Font &font_, const char *s, int len, XYPOSITION *positions) override {
-		// TODO : now simple
-		XYPOSITION pos = 0;
-		for( int i=0; i<len; ++i ) {
-			positions[i] = pos;
-			pos += 8.0f;
+		const struct nk_user_font* ufont = context ? context->style.font : NULL;
+		struct nk_font *font = ufont ? (struct nk_font *)(ufont->userdata.ptr) : NULL;
+		if( font ) {
+			nk_rune unicode = NK_UTF_INVALID;
+			const struct nk_font_glyph *g;
+			float w = 0.0f;
+			float scale = 1.0f;
+			while( len > 0 ) {
+				int glyph_len = nk_utf_decode(s, &unicode, len);
+				if( glyph_len==0 )
+					break;
+				if (unicode == NK_UTF_INVALID)
+					break;
+				g = nk_font_find_glyph(font, unicode);
+				w += g->xadvance * scale;
+				for(int i=0; i<glyph_len; ++i)
+					*positions++ = w;
+				s += glyph_len;
+				len -= glyph_len;
+			}
+		} else {
+			XYPOSITION pos = kDefaultNKFontSize;
+			for( int i=0; i<len; ++i ) {
+				positions[i] = pos;
+				pos += kDefaultNKFontSize;
+			}
 		}
 	}
 	XYPOSITION WidthText(Font &font_, const char *s, int len) override {
-		// TODO : now simple
-		return 8.0f * len;
+		const struct nk_user_font* font = context ? context->style.font : NULL;
+		return font ? font->width(font->userdata, font->height, s, len) : (kDefaultNKFontSize * len);
 	}
 	XYPOSITION WidthChar(Font &font_, char ch) override {
-		return 8.0f;
+		return WidthText(font_, &ch, 1);
 	}
 	XYPOSITION Ascent(Font &font_) override {
 		return 0.0f;
@@ -730,7 +748,6 @@ class ScintillaNK : public ScintillaBase {
 public:
 	ScintillaNK()
 		: currentNKContext(NULL)
-		, hasFocus(false)
 		, capturedMouse(false)
 		, rectangularSelectionModifier(SCMOD_ALT)
 	{
@@ -759,7 +776,7 @@ public: 	// Public for scintilla_send_message
 		try {
 			switch (iMessage) {
 			case SCI_GRABFOCUS:
-				hasFocus = true;
+				SetFocusState(true);
 				break;
 			case SCI_GETDIRECTFUNCTION:
 				return reinterpret_cast<sptr_t>(DirectFunction);
@@ -804,52 +821,57 @@ public: 	// Public for scintilla_send_message
 
         /* mouse click handler */
         char is_hovered = (char)nk_input_is_mouse_hovering_rect(in, area);
-        if (!is_hovered)
-			return;
-
-		btn = &(in->mouse.buttons[NK_BUTTON_LEFT]);
-		if( btn->down ) {
-			if( btn->clicked) {
-				Point click_pos(btn->clicked_pos.x - wRect.left, btn->clicked_pos.y - wRect.top);
-				ButtonDownWithModifiers(click_pos, now, modifiers);
-			} else if ((in->mouse.delta.x != 0.0f || in->mouse.delta.y != 0.0f)) {
-				// TODO : drag
+		if( is_hovered ) {
+			btn = &(in->mouse.buttons[NK_BUTTON_LEFT]);
+			if( btn->down ) {
+				SetFocusState(true);
+				if( btn->clicked ) {
+					Point click_pos(btn->clicked_pos.x - wRect.left, btn->clicked_pos.y - wRect.top);
+					ButtonDownWithModifiers(click_pos, now, modifiers);
+				} else if ((in->mouse.delta.x != 0.0f || in->mouse.delta.y != 0.0f)) {
+					// TODO : drag
+				}
+			} else if( btn->clicked ) {
+				SetFocusState(true);
+				if (!HaveMouseCapture())
+					return;
+				Point pt(in->mouse.pos.x - wRect.left, in->mouse.pos.y - wRect.top);
+				//	sciThis,event->window,event->time, pt.x, pt.y);
+				// if (event->window != PWindow(sciThis->wMain))
+						// If mouse released on scroll bar then the position is relative to the
+						// scrollbar, not the drawing window so just repeat the most recent point.
+				//		pt = sciThis->ptMouseLast;
+				ButtonUpWithModifiers(pt, now, modifiers);
 			}
-		} else {
-			if (!HaveMouseCapture())
-				return;
-			Point pt(in->mouse.pos.x - wRect.left, in->mouse.pos.y - wRect.top);
-			//	sciThis,event->window,event->time, pt.x, pt.y);
-			// if (event->window != PWindow(sciThis->wMain))
-					// If mouse released on scroll bar then the position is relative to the
-					// scrollbar, not the drawing window so just repeat the most recent point.
-			//		pt = sciThis->ptMouseLast;
-			ButtonUpWithModifiers(pt, now, modifiers);
 		}
 
-		btn = &(in->mouse.buttons[NK_BUTTON_RIGHT]);
-		if( btn->down ) {
-			if( btn->clicked) {
-				Point pt(in->mouse.pos.x - wRect.left, in->mouse.pos.y - wRect.top);
-				if (!PointInSelection(pt))
-					SetEmptySelection(PositionFromLocation(pt));
-				if (ShouldDisplayPopup(pt)) {
-					// PopUp menu
-					// Convert to screen
-					int ox = 0;
-					int oy = 0;
-					// gdk_window_get_origin(PWindow(wMain), &ox, &oy);
-					ContextMenu(Point(pt.x + ox, pt.y + oy));
-				} else {
-					RightButtonDownWithModifiers(pt, now, modifiers);
+		if( is_hovered ) {
+			btn = &(in->mouse.buttons[NK_BUTTON_RIGHT]);
+			if( btn->down ) {
+				if( btn->clicked ) {
+					Point pt(in->mouse.pos.x - wRect.left, in->mouse.pos.y - wRect.top);
+					if (!PointInSelection(pt))
+						SetEmptySelection(PositionFromLocation(pt));
+					if (ShouldDisplayPopup(pt)) {
+						// PopUp menu
+						// Convert to screen
+						int ox = 0;
+						int oy = 0;
+						// gdk_window_get_origin(PWindow(wMain), &ox, &oy);
+						ContextMenu(Point(pt.x + ox, pt.y + oy));
+					} else {
+						RightButtonDownWithModifiers(pt, now, modifiers);
+					}
 				}
 			}
 		}
 
 		// move
-		if ((in->mouse.delta.x != 0.0f || in->mouse.delta.y != 0.0f)) {
-			Point pt(in->mouse.pos.x - wRect.left, in->mouse.pos.y - wRect.top);
-			ButtonMoveWithModifiers(pt, now, modifiers);
+		if( is_hovered || capturedMouse ) {
+			if ((in->mouse.delta.x != 0.0f || in->mouse.delta.y != 0.0f)) {
+				Point pt(in->mouse.pos.x - wRect.left, in->mouse.pos.y - wRect.top);
+				ButtonMoveWithModifiers(pt, now, modifiers);
+			}
 		}
 	}
 	void DoKeyPressed(int k, int modifiers) {
@@ -943,7 +965,7 @@ public: 	// Public for scintilla_send_message
 		if( !(ctx && mainWindow.win) ) return;
 
 		currentNKContext = ctx;
-		nk_layout_row_dynamic(ctx, 400, 1);
+		nk_layout_row_dynamic(ctx, 200, 1);
 		struct nk_rect& bounds = mainWindow.bounds;
 		nk_widget(&bounds, ctx);
 		nk_stroke_rect(&(ctx->current->buffer), bounds, 0.0f, 1.0f, g_color_black);
@@ -983,9 +1005,6 @@ private:
 	bool HaveMouseCapture() override {
 		return capturedMouse;
 	}
-	bool PaintContains(PRectangle rc) override {
-		return true;
-	}
 	PRectangle GetClientRectangle() const override {
 		Window win = wMain;
 		PRectangle rc = win.GetClientPosition();
@@ -1006,8 +1025,6 @@ private:
 		rc.top = 0;
 		return rc;
 	}
-	void ScrollText(Sci::Line linesToMove) override {
-	}
 	void SetVerticalScrollPos() override {
 	}
 	void SetHorizontalScrollPos() override {
@@ -1015,26 +1032,9 @@ private:
 	bool ModifyScrollBars(Sci::Line nMax, Sci::Line nPage) override {
 		return false;
 	}
-	void ReconfigureScrollBars() override {
-	}
 	void NotifyChange() override {
 	}
-	void NotifyFocus(bool focus) override {
-	}
 	void NotifyParent(SCNotification scn) override {
-	}
-	void NotifyKey(int key, int modifiers) {
-	}
-	void NotifyURIDropped(const char *list) {
-	}
-	CaseFolder *CaseFolderForEncoding() override {
-		return 0;
-	}
-	std::string CaseMapString(const std::string &s, int caseMapping) override {
-		return "";
-	}
-	int KeyDefault(int key, int modifiers) override {
-		return 0;
 	}
 	void CopyToClipboard(const SelectionText &selectedText) override {
 		__puss_nuklear_iface__->clipbard_set_string(currentNKContext, selectedText.Data());
@@ -1060,16 +1060,12 @@ private:
 	}
 	void AddToPopUp(const char *label, int cmd = 0, bool enabled = true) override {
 	}
-	bool OwnPrimarySelection() {
-		return false;
-	}
 	void ClaimSelection() override {
 	}
 private:
 	WindowNK mainWindow;
 	WindowNK marginWindow;
 	struct nk_context* currentNKContext;
-	bool hasFocus;
 	bool capturedMouse;
 	int rectangularSelectionModifier;
 };

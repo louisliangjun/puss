@@ -61,12 +61,13 @@ struct nk_glfw {
     struct nk_context ctx;
     struct nk_font_atlas atlas;
     struct nk_vec2 fb_scale;
-    unsigned int text[NK_GLFW_TEXT_MAX];
-    int text_len;
     struct nk_vec2 scroll;
     double last_button_click;
     int is_double_click_down;
     struct nk_vec2 double_click_pos;
+    int text_len;
+    unsigned int text[NK_GLFW_TEXT_MAX];
+	char repeat_keys[NK_KEY_MAX];
 };
 
 #ifdef __APPLE__
@@ -284,7 +285,7 @@ nk_glfw3_render(struct nk_glfw* glfw, enum nk_anti_aliasing AA, int max_vertex_b
     glDisable(GL_SCISSOR_TEST);
 }
 
-NK_API void
+NK_INTERN void
 nk_glfw3_char_callback(GLFWwindow *win, unsigned int codepoint)
 {
 	struct nk_glfw* glfw = (struct nk_glfw*)glfwGetWindowUserPointer(win);
@@ -292,7 +293,7 @@ nk_glfw3_char_callback(GLFWwindow *win, unsigned int codepoint)
         glfw->text[glfw->text_len++] = codepoint;
 }
 
-NK_API void
+NK_INTERN void
 nk_gflw3_scroll_callback(GLFWwindow *win, double xoff, double yoff)
 {
 	struct nk_glfw* glfw = (struct nk_glfw*)glfwGetWindowUserPointer(win);
@@ -300,7 +301,7 @@ nk_gflw3_scroll_callback(GLFWwindow *win, double xoff, double yoff)
 	glfw->scroll.y += (float)yoff;
 }
 
-NK_API void
+NK_INTERN void
 nk_glfw3_mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
 	struct nk_glfw* glfw = (struct nk_glfw*)glfwGetWindowUserPointer(window);
@@ -318,6 +319,28 @@ nk_glfw3_mouse_button_callback(GLFWwindow* window, int button, int action, int m
 }
 
 NK_INTERN void
+nk_glfw3_key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+	struct nk_glfw* glfw = (struct nk_glfw*)glfwGetWindowUserPointer(window);
+	if( action==GLFW_REPEAT ) {
+		switch( key ) {
+		case GLFW_KEY_ENTER:		glfw->repeat_keys[NK_KEY_ENTER] = 1;			break;
+		case GLFW_KEY_TAB:			glfw->repeat_keys[NK_KEY_TAB] = 1;				break;
+		case GLFW_KEY_BACKSPACE:	glfw->repeat_keys[NK_KEY_BACKSPACE] = 1;		break;
+		case GLFW_KEY_UP:			glfw->repeat_keys[NK_KEY_UP] = 1;				break;
+		case GLFW_KEY_DOWN:			glfw->repeat_keys[NK_KEY_DOWN] = 1;				break;
+		case GLFW_KEY_LEFT:			glfw->repeat_keys[NK_KEY_LEFT] = 1;				break;
+		case GLFW_KEY_RIGHT:		glfw->repeat_keys[NK_KEY_RIGHT] = 1;			break;
+		case GLFW_KEY_DELETE:		glfw->repeat_keys[NK_KEY_DEL] = 1;				break;
+		case GLFW_KEY_HOME:			glfw->repeat_keys[NK_KEY_TEXT_START] = 1;		break;
+		case GLFW_KEY_END:			glfw->repeat_keys[NK_KEY_TEXT_END] = 1;			break;
+		case GLFW_KEY_PAGE_UP:		glfw->repeat_keys[NK_KEY_SCROLL_UP] = 1;		break;
+		case GLFW_KEY_PAGE_DOWN:	glfw->repeat_keys[NK_KEY_SCROLL_DOWN] = 1;		break;
+			break;
+		}
+	}
+}
+
 nk_glfw3_clipbard_paste(nk_handle usr, struct nk_text_edit *edit)
 {
 	struct nk_glfw* glfw = (struct nk_glfw*)usr.ptr;
@@ -342,12 +365,14 @@ nk_glfw3_clipbard_copy(nk_handle usr, const char *text, int len)
 NK_API struct nk_context*
 nk_glfw3_init(struct nk_glfw* glfw, GLFWwindow *win, enum nk_glfw_init_state init_state)
 {
+	memset(glfw, 0, sizeof(struct nk_glfw));
     glfw->win = win;
     glfwSetWindowUserPointer(win, glfw);
     if (init_state == NK_GLFW3_INSTALL_CALLBACKS) {
         glfwSetScrollCallback(win, nk_gflw3_scroll_callback);
         glfwSetCharCallback(win, nk_glfw3_char_callback);
         glfwSetMouseButtonCallback(win, nk_glfw3_mouse_button_callback);
+		glfwSetKeyCallback(win, nk_glfw3_key_callback);
     }
     nk_init_default(&glfw->ctx, 0);
     glfw->ctx.clip.copy = nk_glfw3_clipbard_copy;
@@ -405,19 +430,25 @@ nk_glfw3_new_frame(struct nk_glfw* glfw)
     else if (ctx->input.mouse.ungrab)
         glfwSetInputMode(glfw->win, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 #endif
+	
+#define nk_input_key_repeat(key, glfw_key) \
+    nk_input_key(ctx, key, glfw->repeat_keys[key] ? 0 : (glfwGetKey(win, glfw_key) == GLFW_PRESS))
 
-    nk_input_key(ctx, NK_KEY_DEL, glfwGetKey(win, GLFW_KEY_DELETE) == GLFW_PRESS);
-    nk_input_key(ctx, NK_KEY_ENTER, glfwGetKey(win, GLFW_KEY_ENTER) == GLFW_PRESS);
-    nk_input_key(ctx, NK_KEY_TAB, glfwGetKey(win, GLFW_KEY_TAB) == GLFW_PRESS);
-    nk_input_key(ctx, NK_KEY_BACKSPACE, glfwGetKey(win, GLFW_KEY_BACKSPACE) == GLFW_PRESS);
-    nk_input_key(ctx, NK_KEY_UP, glfwGetKey(win, GLFW_KEY_UP) == GLFW_PRESS);
-    nk_input_key(ctx, NK_KEY_DOWN, glfwGetKey(win, GLFW_KEY_DOWN) == GLFW_PRESS);
-    nk_input_key(ctx, NK_KEY_TEXT_START, glfwGetKey(win, GLFW_KEY_HOME) == GLFW_PRESS);
-    nk_input_key(ctx, NK_KEY_TEXT_END, glfwGetKey(win, GLFW_KEY_END) == GLFW_PRESS);
-    nk_input_key(ctx, NK_KEY_SCROLL_START, glfwGetKey(win, GLFW_KEY_HOME) == GLFW_PRESS);
-    nk_input_key(ctx, NK_KEY_SCROLL_END, glfwGetKey(win, GLFW_KEY_END) == GLFW_PRESS);
-    nk_input_key(ctx, NK_KEY_SCROLL_DOWN, glfwGetKey(win, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS);
-    nk_input_key(ctx, NK_KEY_SCROLL_UP, glfwGetKey(win, GLFW_KEY_PAGE_UP) == GLFW_PRESS);
+    nk_input_key_repeat(NK_KEY_ENTER,			GLFW_KEY_ENTER);
+    nk_input_key_repeat(NK_KEY_DEL,				GLFW_KEY_DELETE);
+    nk_input_key_repeat(NK_KEY_ENTER,			GLFW_KEY_ENTER);
+    nk_input_key_repeat(NK_KEY_TAB,				GLFW_KEY_TAB);
+    nk_input_key_repeat(NK_KEY_BACKSPACE,		GLFW_KEY_BACKSPACE);
+    nk_input_key_repeat(NK_KEY_UP,				GLFW_KEY_UP);
+    nk_input_key_repeat(NK_KEY_DOWN,			GLFW_KEY_DOWN);
+    nk_input_key_repeat(NK_KEY_TEXT_START,		GLFW_KEY_HOME);
+    nk_input_key_repeat(NK_KEY_TEXT_END,		GLFW_KEY_END);
+    nk_input_key_repeat(NK_KEY_SCROLL_START,	GLFW_KEY_HOME);
+    nk_input_key_repeat(NK_KEY_SCROLL_END,		GLFW_KEY_END);
+    nk_input_key_repeat(NK_KEY_SCROLL_DOWN,		GLFW_KEY_PAGE_DOWN);
+    nk_input_key_repeat(NK_KEY_SCROLL_UP,		GLFW_KEY_PAGE_UP);
+	memset(glfw->repeat_keys, 0, sizeof(glfw->repeat_keys));
+
     nk_input_key(ctx, NK_KEY_SHIFT, glfwGetKey(win, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS||
                                     glfwGetKey(win, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
     nk_input_key(ctx, NK_KEY_ALT, glfwGetKey(win, GLFW_KEY_LEFT_ALT) == GLFW_PRESS||
