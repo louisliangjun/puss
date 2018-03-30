@@ -35,7 +35,10 @@ function nuklear_demo_lua(ctx, sci)
 end
 
 function __main__()
-	local w = nk_glfw_window_create("nuklear lua api", 800, 600)
+	local w = glfw_nk_window_create("nuklear lua api", 800, 600, function(env)
+		-- env.nk_font_atlas_add_from_file(puss._path .. '/fonts/msyahei_mono.ttf', 13, "chinese")
+	end)
+
 	local sci = nk_scintilla_new()
 	sci:SetText("abcde中文fg")
 	while w:update(nuklear_demo_lua, 0.001, sci) do

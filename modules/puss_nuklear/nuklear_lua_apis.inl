@@ -1058,13 +1058,13 @@ LUA_NK_API_NORET( nk_style_from_table, lua_check_nk_context(L,1), lua_check_nk_c
 LUA_NK_API_NORET( nk_style_load_cursor, lua_check_nk_context(L,1), lua_check_nk_enum(L,2,nk_style_cursor), lua_check_nk_cursor(L,3) )
 
 // NK_API void nk_style_load_all_cursors(struct nk_context*, struct nk_cursor*);
-LUA_NK_API_NORET( nk_style_load_all_cursors, lua_check_nk_context(L,1), lua_check_nk_cursor(L,2) )
+// LUA_NK_API_NORET( nk_style_load_all_cursors, lua_check_nk_context(L,1), lua_check_nk_cursor(L,2) )
 
 // NK_API const char* nk_style_get_color_by_name(enum nk_style_colors);
 LUA_NK_API( lua_pushstring, nk_style_get_color_by_name, lua_check_nk_enum(L,1,nk_style_colors) )
 
 // NK_API void nk_style_set_font(struct nk_context*, const struct nk_user_font*);
-LUA_NK_API_NORET( nk_style_set_font, lua_check_nk_context(L,1), lua_check_nk_user_font(L,2) )
+// LUA_NK_API_NORET( nk_style_set_font, lua_check_nk_context(L,1), lua_check_nk_user_font(L,2) )
 
 // NK_API int nk_style_set_cursor(struct nk_context*, enum nk_style_cursor);
 LUA_NK_API( lua_pushboolean, nk_style_set_cursor, lua_check_nk_context(L,1), lua_check_nk_enum(L,2,nk_style_cursor) )
@@ -1302,22 +1302,22 @@ LUA_NK_API( lua_push_nk_vec2, nk_rect_size, *lua_check_nk_rect(L,1) )
 // NK_API void nk_font_atlas_init_custom(struct nk_font_atlas*, struct nk_allocator *persistent, struct nk_allocator *transient);
 
 // NK_API void nk_font_atlas_begin(struct nk_font_atlas*);
-LUA_NK_API_NORET( nk_font_atlas_begin, lua_check_nk_font_atlas(L,1) )
+// LUA_NK_API_NORET( nk_font_atlas_begin, lua_check_nk_font_atlas(L,1) )
 
 // NK_API struct nk_font_config nk_font_config(float pixel_height);
 
 // NK_API struct nk_font *nk_font_atlas_add(struct nk_font_atlas*, const struct nk_font_config*);
-LUA_NK_API(lua_push_nk_font_ptr, nk_font_atlas_add, lua_check_nk_font_atlas(L,1), lua_check_nk_font_config(L,2) )
+// LUA_NK_API(lua_push_nk_font_ptr, nk_font_atlas_add, lua_check_nk_font_atlas(L,1), lua_check_nk_font_config(L,2) )
 
 #ifdef NK_INCLUDE_DEFAULT_FONT
 // NK_API struct nk_font* nk_font_atlas_add_default(struct nk_font_atlas*, float height, const struct nk_font_config*);
-LUA_NK_API(lua_push_nk_font_ptr, nk_font_atlas_add_default, lua_check_nk_font_atlas(L,1), lua_check_nk_float(L,2), lua_check_nk_font_config(L,3) )
+// LUA_NK_API(lua_push_nk_font_ptr, nk_font_atlas_add_default, lua_check_nk_font_atlas(L,1), lua_check_nk_float(L,2), lua_check_nk_font_config(L,3) )
 
 #endif
 // NK_API struct nk_font* nk_font_atlas_add_from_memory(struct nk_font_atlas *atlas, void *memory, nk_size size, float height, const struct nk_font_config *config);
 #ifdef NK_INCLUDE_STANDARD_IO
 // NK_API struct nk_font* nk_font_atlas_add_from_file(struct nk_font_atlas *atlas, const char *file_path, float height, const struct nk_font_config*);
-LUA_NK_API(lua_push_nk_font_ptr, nk_font_atlas_add_from_file, lua_check_nk_font_atlas(L,1), luaL_checkstring(L,2), lua_check_nk_float(L,3), lua_check_nk_font_config(L,4) )
+// LUA_NK_API(lua_push_nk_font_ptr, nk_font_atlas_add_from_file, lua_check_nk_font_atlas(L,1), luaL_checkstring(L,2), lua_check_nk_float(L,3), lua_check_nk_font_config(L,4) )
 
 #endif
 // NK_API struct nk_font *nk_font_atlas_add_compressed(struct nk_font_atlas*, void *memory, nk_size size, float height, const struct nk_font_config*);
@@ -1326,10 +1326,10 @@ LUA_NK_API(lua_push_nk_font_ptr, nk_font_atlas_add_from_file, lua_check_nk_font_
 // NK_API void nk_font_atlas_end(struct nk_font_atlas*, nk_handle tex, struct nk_draw_null_texture*);
 // NK_API const struct nk_font_glyph* nk_font_find_glyph(struct nk_font*, nk_rune unicode);
 // NK_API void nk_font_atlas_cleanup(struct nk_font_atlas *atlas);
-LUA_NK_API_NORET( nk_font_atlas_cleanup, lua_check_nk_font_atlas(L,1) )
+// LUA_NK_API_NORET( nk_font_atlas_cleanup, lua_check_nk_font_atlas(L,1) )
 
 // NK_API void nk_font_atlas_clear(struct nk_font_atlas*);
-LUA_NK_API_NORET( nk_font_atlas_clear, lua_check_nk_font_atlas(L,1) )
+// LUA_NK_API_NORET( nk_font_atlas_clear, lua_check_nk_font_atlas(L,1) )
 
 
 #endif

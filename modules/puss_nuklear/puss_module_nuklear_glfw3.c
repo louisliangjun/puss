@@ -447,7 +447,6 @@ nk_glfw3_new_frame(struct nk_glfw* glfw)
     nk_input_key_repeat(NK_KEY_SCROLL_END,		GLFW_KEY_END);
     nk_input_key_repeat(NK_KEY_SCROLL_DOWN,		GLFW_KEY_PAGE_DOWN);
     nk_input_key_repeat(NK_KEY_SCROLL_UP,		GLFW_KEY_PAGE_UP);
-	memset(glfw->repeat_keys, 0, sizeof(glfw->repeat_keys));
 
     nk_input_key(ctx, NK_KEY_SHIFT, glfwGetKey(win, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS||
                                     glfwGetKey(win, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
@@ -466,13 +465,14 @@ nk_glfw3_new_frame(struct nk_glfw* glfw)
         nk_input_key(ctx, NK_KEY_TEXT_LINE_START, glfwGetKey(win, GLFW_KEY_B) == GLFW_PRESS);
         nk_input_key(ctx, NK_KEY_TEXT_LINE_END, glfwGetKey(win, GLFW_KEY_E) == GLFW_PRESS);
     } else {
-        nk_input_key(ctx, NK_KEY_LEFT, glfwGetKey(win, GLFW_KEY_LEFT) == GLFW_PRESS);
-        nk_input_key(ctx, NK_KEY_RIGHT, glfwGetKey(win, GLFW_KEY_RIGHT) == GLFW_PRESS);
+        nk_input_key_repeat(NK_KEY_LEFT, GLFW_KEY_LEFT);
+        nk_input_key_repeat(NK_KEY_RIGHT, GLFW_KEY_RIGHT);
         nk_input_key(ctx, NK_KEY_COPY, 0);
         nk_input_key(ctx, NK_KEY_PASTE, 0);
         nk_input_key(ctx, NK_KEY_CUT, 0);
         nk_input_key(ctx, NK_KEY_SHIFT, 0);
     }
+	memset(glfw->repeat_keys, 0, sizeof(glfw->repeat_keys));
 
     glfwGetCursorPos(win, &x, &y);
     nk_input_motion(ctx, (int)x, (int)y);
@@ -493,13 +493,8 @@ nk_glfw3_new_frame(struct nk_glfw* glfw)
     glfw->scroll = nk_vec2(0,0);
 }
 
-
-
-
 #define MAX_VERTEX_BUFFER 1 * 1024 * 1024
 #define MAX_ELEMENT_BUFFER 512 * 1024
-
-struct nk_font_atlas glfw_atlas;
 
 static void error_callback(int e, const char *d) {
 	fprintf(stderr, "[GFLW] error %d: %s\n", e, d);
@@ -566,13 +561,59 @@ static int nk_glfw_draw_lua(lua_State* L) {
 
 static int glad_inited = 0;
 
-static int nk_glfw_window_create_lua(lua_State* L) {
+static int push_font_and_set_language_ranges(lua_State* L, struct nk_font* font, const char* lang) {
+	if( font ) {
+		if( lang && *lang ) {
+			if( strcmp(lang, "chinese")==0 ) {
+				font->config->range = nk_font_chinese_glyph_ranges();
+			} else if( strcmp(lang, "cyrillic")==0 ) {
+				font->config->range = nk_font_cyrillic_glyph_ranges();
+			} else if( strcmp(lang, "korean")==0 ) {
+				font->config->range = nk_font_korean_glyph_ranges();
+			}
+		}
+		lua_push_nk_font_ptr(L, font);
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+static int nk_font_atlas_add_from_file_lua(lua_State* L) {
+	struct nk_font_atlas* atlas = *((struct nk_font_atlas**)lua_touserdata(L, lua_upvalueindex(1)));
+	const char* font_filename = luaL_checkstring(L, 1);
+	float height = (float)luaL_optnumber(L, 2, 16.0);
+	const char* lang = luaL_optstring(L, 3, NULL);
+	struct nk_font* font;
+	if( !atlas )
+		return luaL_error(L, "only used when window create!");
+
+	font = nk_font_atlas_add_from_file(atlas, font_filename, height, NULL);
+	return push_font_and_set_language_ranges(L, font, lang);
+}
+
+static int nk_font_atlas_add_from_memory_lua(lua_State* L) {
+	struct nk_font_atlas* atlas = *((struct nk_font_atlas**)lua_touserdata(L, lua_upvalueindex(1)));
+	size_t n = 0;
+	const char* s = luaL_checklstring(L, 1, &n);
+	float height = (float)luaL_optnumber(L, 2, 16.0);
+	const char* lang = luaL_optstring(L, 3, NULL);
+	struct nk_font* font;
+	if( !atlas )
+		return luaL_error(L, "only used when window create!");
+
+	font = nk_font_atlas_add_from_memory(atlas, (void*)s, (nk_size)n, height, NULL);
+	return push_font_and_set_language_ranges(L, font, lang);
+}
+
+static int glfw_nk_window_create_lua(lua_State* L) {
 	const char* title = luaL_optstring(L, 1, "nuklear glfw window");
 	int width = (int)luaL_optinteger(L, 2, 1024);
 	int height = (int)luaL_optinteger(L, 3, 768);
+	struct nk_glfw* glfw = (struct nk_glfw*)lua_newuserdata(L, sizeof(struct nk_glfw));
+	int err = 0;
     GLFWwindow *win;
     struct nk_font_atlas *atlas;
-	struct nk_glfw* glfw = (struct nk_glfw*)lua_newuserdata(L, sizeof(struct nk_glfw));
 	if( luaL_newmetatable(L, "nk_glfw") ) {
 		static luaL_Reg methods[] =
 			{ {"__index", NULL}
@@ -610,27 +651,65 @@ static int nk_glfw_window_create_lua(lua_State* L) {
 
     nk_glfw3_init(glfw, win, NK_GLFW3_INSTALL_CALLBACKS);
     /* Load Fonts: if none of these are loaded a default font will be used  */
+
 	nk_glfw3_font_stash_begin(glfw, &atlas);
-	{
+	if( lua_isfunction(L, 4) ) {
+		atlas->default_font = nk_font_atlas_add_default(atlas, 13.0f, 0);
+
 		/*struct nk_font *droid = nk_font_atlas_add_from_file(atlas, "../../../extra_font/DroidSans.ttf", 14, 0);*/
 		/*struct nk_font *roboto = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Roboto-Regular.ttf", 14, 0);*/
 		/*struct nk_font *future = nk_font_atlas_add_from_file(atlas, "../../../extra_font/kenvector_future_thin.ttf", 13, 0);*/
 		/*struct nk_font *clean = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyClean.ttf", 12, 0);*/
 		/*struct nk_font *tiny = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyTiny.ttf", 10, 0);*/
 		/*struct nk_font *cousine = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Cousine-Regular.ttf", 13, 0);*/
+
+		static luaL_Reg methods[] =
+			{ {"nk_font_atlas_add_from_file", nk_font_atlas_add_from_file_lua}
+			, {"nk_font_atlas_add_from_memory", nk_font_atlas_add_from_memory_lua}
+			, {NULL, NULL}
+			};
+		struct nk_font_atlas* tmp_atlas = atlas;
+		lua_pushvalue(L, 4);
+		lua_newtable(L);
+		lua_pushlightuserdata(L, &tmp_atlas);
+		lua_getuservalue(L, -4);
+		luaL_setfuncs(L, methods, 2);
+		err = puss_pcall_stacktrace(L, 1, 0);
+		tmp_atlas = 0;
+
     }
 	nk_glfw3_font_stash_end(glfw);
 
+	if( atlas->fonts && (atlas->fonts != atlas->default_font) ) {
+        nk_style_set_font(&glfw->ctx, &atlas->fonts->handle);
+	}
+
     /* Load Cursor: if you uncomment cursor loading please hide the cursor */
-    /*nk_style_load_all_cursors(ctx, atlas->cursors);*/
-    /*nk_style_set_font(ctx, &droid->handle);*/
+    nk_style_load_all_cursors(&(glfw->ctx), atlas->cursors);
+    /* nk_style_set_font(ctx, &droid->handle); */
 
     /* style.c */
     /*set_style(ctx, THEME_WHITE);*/
     /*set_style(ctx, THEME_RED);*/
     /*set_style(ctx, THEME_BLUE);*/
     /*set_style(ctx, THEME_DARK);*/
-    return 1;
+    return err ? lua_error(L) : 1;
+}
+
+static int glfw_nk_style_set_font_lua(lua_State* L) {
+	struct nk_glfw* glfw = lua_check_nk_struct(L, 1, nk_glfw);
+	struct nk_font* font = lua_check_nk_font(L, 2);
+	if( glfw && font ) {
+		struct nk_font* it = glfw->atlas.fonts;
+		for( ; it; it=it->next ) {
+			if( font==it ) {
+				nk_style_set_font(&(glfw->ctx), &(font->handle));
+				lua_pushboolean(L, 1);
+				return 1;
+			}
+		}
+	}
+	return 0;
 }
 
 static void clipbard_set_string(struct nk_context* ctx, const char* text) {
@@ -655,7 +734,8 @@ static PussNuklearInterface puss_nuklear_iface =
 	};
 
 static luaL_Reg nuklera_glfw3_lua_apis[] =
-	{ {"nk_glfw_window_create", nk_glfw_window_create_lua}
+	{ {"glfw_nk_window_create", glfw_nk_window_create_lua}
+	, {"glfw_nk_style_set_font", glfw_nk_style_set_font_lua}
 	, {NULL, NULL}
 	};
 
