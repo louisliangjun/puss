@@ -598,6 +598,7 @@ static int imgui_update_lua(lua_State* L) {
 		static bool show_another_window = true;
 		static bool show_demo_window = true;
 		static ScintillaIM* sci = scintilla_imgui_new();
+		static sptr_t first = scintilla_imgui_send(sci, SCI_SETTEXT, (uptr_t)20, (sptr_t)"abcdefg\n lk\nfj	alsjdfs\n !sdfsdfjk	sdf\nsdjf	hsk	fh");
 
 		// 1. Show a simple window.
         // Tip: if we don't call ImGui::Begin()/ImGui::End() the widgets automatically appears in a window called "Debug".

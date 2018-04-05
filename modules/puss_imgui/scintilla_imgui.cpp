@@ -216,19 +216,18 @@ public:
 	void RectangleDraw(PRectangle rc, ColourDesired fore, ColourDesired back) override {
 		ImDrawList* canvas = ImGui::GetWindowDrawList();
 		ImVec2 a(bounds.left + rc.left + 0.5f, bounds.top + rc.top + 0.5f);
-		ImVec2 b(bounds.left + rc.Width() - 1.0f, bounds.top + rc.Height() - 1.0f);
-		PenColour(back);
-		canvas->AddRectFilled(a, b, pen_color);
-		PenColour(fore);
+		ImVec2 b(bounds.left + rc.right - 1.0f, bounds.top + rc.bottom - 1.0f);
+		canvas->AddRectFilled(a, b, IM_COL32(back.GetRed(),  back.GetGreen(), back.GetBlue(), 255));
+		pen_color = IM_COL32(fore.GetRed(),  fore.GetGreen(), fore.GetBlue(), 255);
 		canvas->PathRect(a, b);
 		canvas->PathStroke(pen_color, true, line_thickness);
 	}
 	void FillRectangle(PRectangle rc, ColourDesired back) override {
 		ImDrawList* canvas = ImGui::GetWindowDrawList();
-		ImVec2 a(bounds.left + rc.left + 0.5f, bounds.top + rc.top + 0.5f);
-		ImVec2 b(bounds.left + rc.Width() - 1.0f, bounds.top + rc.Height() - 1.0f);
-		PenColour(back);
-		canvas->AddRectFilled(a, b, pen_color);
+		ImVec2 a(bounds.left + rc.left, bounds.top + rc.top);
+		ImVec2 b(bounds.left + rc.right, bounds.top + rc.bottom);
+		ImU32 alpha = 255;	// 32;	// for debug
+		canvas->AddRectFilled(a, b, IM_COL32(back.GetRed(),  back.GetGreen(), back.GetBlue(), alpha));
 	}
 	void FillRectangle(PRectangle rc, Surface &surfacePattern) override {
 		// SurfaceImpl &surfi = static_cast<SurfaceImpl &>(surfacePattern);
@@ -256,44 +255,76 @@ public:
 		} else {
 			// Something is wrong so try to show anyway
 			// Shows up black because colour not allocated
-			FillRectangle(rc, ColourDesired(0));
+			FillRectangle(rc, 0);
+		}
+	}
+	inline void DoRectangleDraw(PRectangle rc, float rounding, int cornerFlags, ColourDesired fill, int alphaFill, ColourDesired outline, int alphaOutline) {
+		ImDrawList* canvas = ImGui::GetWindowDrawList();
+		ImVec2 a(bounds.left + rc.left + 0.5f, bounds.top + rc.top + 0.5f);
+		ImVec2 b(bounds.left + rc.right - 1.0f, bounds.top + rc.bottom - 1.0f);
+		if( alphaFill ) {
+			pen_color = IM_COL32(fill.GetRed(),  fill.GetGreen(), fill.GetBlue(), alphaFill);
+			canvas->AddRectFilled(a, b, pen_color, rounding, cornerFlags);
+		}
+		if( alphaOutline ) {
+			pen_color = IM_COL32(outline.GetRed(),  outline.GetGreen(), outline.GetBlue(), alphaOutline);
+			canvas->PathRect(a, b, rounding, cornerFlags);
+			canvas->PathStroke(pen_color, true, line_thickness);
 		}
 	}
 	void RoundedRectangle(PRectangle rc, ColourDesired fore, ColourDesired back) override {
-		ImDrawList* canvas = ImGui::GetWindowDrawList();
-		float rounding = 2.0f;
-		ImVec2 a(bounds.left + rc.left + 0.5f, bounds.top + rc.top + 0.5f);
-		ImVec2 b(bounds.left + rc.Width() - 1.0f, bounds.top + rc.Height() - 1.0f);
-		PenColour(back);
-		canvas->AddRectFilled(a, b, pen_color, rounding);
-		PenColour(fore);
-		canvas->PathRect(a, b, rounding);
-		canvas->PathStroke(pen_color, true, line_thickness);
+		if (((rc.right - rc.left) > 4) && ((rc.bottom - rc.top) > 4)) {
+			// Approximate a round rect with some cut off corners
+			Point pts[] = {
+							  Point(rc.left + 2, rc.top),
+							  Point(rc.right - 2, rc.top),
+							  Point(rc.right, rc.top + 2),
+							  Point(rc.right, rc.bottom - 2),
+							  Point(rc.right - 2, rc.bottom),
+							  Point(rc.left + 2, rc.bottom),
+							  Point(rc.left, rc.bottom - 2),
+							  Point(rc.left, rc.top + 2),
+						  };
+			Polygon(pts, ELEMENTS(pts), fore, back);
+		} else {
+			RectangleDraw(rc, fore, back);
+		}
 	}
 	void AlphaRectangle(PRectangle rc, int cornerSize, ColourDesired fill, int alphaFill,
 		ColourDesired outline, int alphaOutline, int flags) override
 	{
-		ImDrawList* canvas = ImGui::GetWindowDrawList();
-		ImVec2 a(bounds.left + rc.left + 0.5f, bounds.top + rc.top + 0.5f);
-		ImVec2 b(bounds.left + rc.Width() - 1.0f, bounds.top + rc.Height() - 1.0f);
-		pen_color = IM_COL32(fill.GetRed(),  fill.GetGreen(), fill.GetBlue(), alphaFill);
-		canvas->AddRectFilled(a, b, pen_color);
-		pen_color = IM_COL32(outline.GetRed(),  outline.GetGreen(), outline.GetBlue(), alphaFill);
-		canvas->PathRect(a, b);
-		canvas->PathStroke(pen_color, true, line_thickness);
+		if (rc.Width() > 0) {
+			ImDrawList* canvas = ImGui::GetWindowDrawList();
+			ImVec2 a(bounds.left + rc.left + 1.0f, bounds.top + rc.top + 1.0f);
+			ImVec2 b(bounds.left + rc.right - 2.0f, bounds.top + rc.bottom - 2.0f);
+			pen_color = IM_COL32(fill.GetRed(),  fill.GetGreen(), fill.GetBlue(), alphaFill);
+			canvas->AddRectFilled(a, b, pen_color, (float)cornerSize, flags);
+			
+			pen_color = IM_COL32(outline.GetRed(),  outline.GetGreen(), outline.GetBlue(), alphaOutline);
+			a.x -= 0.5f;	a.y -= 0.5f;
+			b.x += 1.0f;	b.y += 1.0f;
+			canvas->PathRect(a, b, (float)cornerSize, flags);
+			canvas->PathStroke(pen_color, true, line_thickness);
+			canvas->PathStroke(pen_color, true, line_thickness);
+		}
 	}
 	void DrawRGBAImage(PRectangle rc, int width, int height, const unsigned char *pixelsImage) override {
 		// TODO : nk_draw_image();
 	}
 	void Ellipse(PRectangle rc, ColourDesired fore, ColourDesired back) override {
-		//float cx = bounds.x + (rc.left + rc.right) / 2;
-		//float cy = bounds.y + (rc.top + rc.bottom) / 2;
-		//float r = XYPositionMin(rc.Width(), rc.Height()) / 2;
-		//
-		//PenColour(back);
-		//nk_fill_arc(out, cx, cy, r, 0.0f, (float)(2*kPi), pen_color);
-		//PenColour(fore);
-		//nk_stroke_arc(out, cx, cy, r, 0.0f, (float)(2*kPi), line_thickness, pen_color);
+		ImDrawList* canvas = ImGui::GetWindowDrawList();
+		float cx = bounds.left + (rc.left + rc.right) / 2;
+		float cy = bounds.top + (rc.top + rc.bottom) / 2;
+		float w = rc.Width();
+		float h = rc.Height();
+		float r = (w < h) ? w : h;
+		float a_min = 0.0f;
+		float a_max = (float)(2*kPi);
+		PenColour(back);
+		canvas->PathFillConvex(pen_color);
+		PenColour(fore);
+		canvas->PathArcTo(ImVec2(cx, cy), r, 0.0f, (float)(2*kPi), pen_color);
+		canvas->PathStroke(pen_color, true, line_thickness);
 	}
 	void Copy(PRectangle rc, Point from, Surface &surfaceSource) override {
 		//// SurfaceImpl &surfi = static_cast<SurfaceImpl &>(surfaceSource);
@@ -704,7 +735,7 @@ class ScintillaIM : public ScintillaBase {
 public:
 	ScintillaIM()
 		: imguiEnv(NULL)
-		, capturedMouse(false)
+		, captureMouse(false)
 		, rectangularSelectionModifier(SCMOD_ALT)
 	{
 		mainWindow.win = &wMain;
@@ -781,185 +812,168 @@ public: 	// Public for scintilla_send_message
 		}
 		return 0;
 	}
-	//void HandleMouseEvents(struct nk_input* in, struct nk_rect bounds, unsigned int now, int modifiers) {
-	//	struct nk_rect area = bounds;
-
-	//	PRectangle wRect = wMain.GetPosition();
-	//	struct nk_mouse_button* btn;
-
- //       /* mouse click handler */
- //       char is_hovered = (char)nk_input_is_mouse_hovering_rect(in, area);
-	//	if( is_hovered ) {
-	//		btn = &(in->mouse.buttons[NK_BUTTON_LEFT]);
-	//		if( btn->down ) {
-	//			SetFocusState(true);
-	//			if( btn->clicked ) {
-	//				Point click_pos(btn->clicked_pos.x - wRect.left, btn->clicked_pos.y - wRect.top);
-	//				ButtonDownWithModifiers(click_pos, now, modifiers);
-	//			} else if ((in->mouse.delta.x != 0.0f || in->mouse.delta.y != 0.0f)) {
-	//				// TODO : drag
-	//			}
-	//		} else if( btn->clicked ) {
-	//			SetFocusState(true);
-	//			if (!HaveMouseCapture())
-	//				return;
-	//			Point pt(in->mouse.pos.x - wRect.left, in->mouse.pos.y - wRect.top);
-	//			//	sciThis,event->window,event->time, pt.x, pt.y);
-	//			// if (event->window != PWindow(sciThis->wMain))
-	//					// If mouse released on scroll bar then the position is relative to the
-	//					// scrollbar, not the drawing window so just repeat the most recent point.
-	//			//		pt = sciThis->ptMouseLast;
-	//			ButtonUpWithModifiers(pt, now, modifiers);
-	//		}
-	//	}
-
-	//	if( is_hovered ) {
-	//		btn = &(in->mouse.buttons[NK_BUTTON_RIGHT]);
-	//		if( btn->down ) {
-	//			if( btn->clicked ) {
-	//				Point pt(in->mouse.pos.x - wRect.left, in->mouse.pos.y - wRect.top);
-	//				if (!PointInSelection(pt))
-	//					SetEmptySelection(PositionFromLocation(pt));
-	//				if (ShouldDisplayPopup(pt)) {
-	//					// PopUp menu
-	//					// Convert to screen
-	//					int ox = 0;
-	//					int oy = 0;
-	//					// gdk_window_get_origin(PWindow(wMain), &ox, &oy);
-	//					ContextMenu(Point(pt.x + ox, pt.y + oy));
-	//				} else {
-	//					RightButtonDownWithModifiers(pt, now, modifiers);
-	//				}
-	//			}
-	//		}
-	//	}
-
-	//	// move
-	//	if( is_hovered || capturedMouse ) {
-	//		if ((in->mouse.delta.x != 0.0f || in->mouse.delta.y != 0.0f)) {
-	//			Point pt(in->mouse.pos.x - wRect.left, in->mouse.pos.y - wRect.top);
-	//			ButtonMoveWithModifiers(pt, now, modifiers);
-	//		}
-	//	}
-	//}
-	//void DoKeyPressed(int k, int modifiers) {
-	//	int key = 0;
-	//	switch(k) {
-	//	case NK_KEY_DEL:				key=SCK_DELETE;	break;
-	//	case NK_KEY_TAB:				key=SCK_TAB;	break;
-	//	case NK_KEY_BACKSPACE:			key=SCK_BACK;	break;
-	//	case NK_KEY_UP:					key=SCK_UP;		break;
-	//	case NK_KEY_DOWN:				key=SCK_DOWN;	break;
-	//	case NK_KEY_LEFT:				key=SCK_LEFT;	break;
-	//	case NK_KEY_RIGHT:				key=SCK_RIGHT;	break;
-	//	case NK_KEY_TEXT_START:			key=SCK_HOME;	break;
-	//	case NK_KEY_TEXT_END:			key=SCK_END;	break;
-	//	case NK_KEY_TEXT_INSERT_MODE:	key=SCK_INSERT;	break;
-	//	case NK_KEY_TEXT_REPLACE_MODE:	key=SCK_INSERT;	break;
-	//	case NK_KEY_TEXT_RESET_MODE:	key=SCK_INSERT;	break;
-	//	case NK_KEY_SCROLL_START:		key=SCK_HOME;	break;
-	//	case NK_KEY_SCROLL_END:			key=SCK_END;	break;
-	//	case NK_KEY_SCROLL_DOWN:		key=SCK_PRIOR;	break;
-	//	case NK_KEY_SCROLL_UP:			key=SCK_NEXT;	break;
-	//	default:	break;
-	//	}
-	//	if( key ) {
-	//		bool consumed = false;
-	//		KeyDownWithModifiers(key, modifiers, &consumed);
-	//		//fprintf(stderr, "SK-key: %d %x %x\n",event->keyval, event->state, consumed);
-	//	}
-	//}
-	//void HandleKeyboardEvents(struct nk_input* in, struct nk_rect bounds, unsigned int now, int modifiers) {
- //       /* keyboard input */
- //       {
- //       	for( int k=0; k<NK_KEY_MAX; ++k ) {
- //       		if( nk_input_is_key_pressed(in, (nk_keys)k) ) {
-	//        		DoKeyPressed(k, modifiers);
- //       		}
- //       	}
- //       }
-
- //       /* text input */
-	//	if( in->keyboard.text_len ) {
-	//		ClearSelection();
-	//		const int inserted = pdoc->InsertString(CurrentPosition(), in->keyboard.text, in->keyboard.text_len);
-	//		if( inserted > 0 ) {
-	//			MovePositionTo(CurrentPosition() + inserted);
-	//		}
- //           in->keyboard.text_len = 0;
- //       }
-
- //       /* enter key handler */
- //       if (nk_input_is_key_pressed(in, NK_KEY_ENTER)) {
-	//		bool consumed = false;
-	//		bool added = KeyDownWithModifiers('\n', modifiers, &consumed) != 0;
-	//		if( !consumed )
-	//			consumed = added;
-	//		if( !consumed ) {
-	//			ClearSelection();
-	//			const int inserted = pdoc->InsertString(CurrentPosition(), "\n", 1);
-	//			if( inserted > 0 ) {
-	//				MovePositionTo(CurrentPosition() + inserted);
-	//			}
-	//		}
- //       }
-
- //       /* cut & copy handler */
-	//	if( nk_input_is_key_pressed(in, NK_KEY_COPY) ) {
-	//		Copy();
-	//	}
-	//	if( nk_input_is_key_pressed(in, NK_KEY_CUT) ) {
-	//		Cut();
-	//	}
-
- //       /* paste handler */
-	//	if( nk_input_is_key_pressed(in, NK_KEY_PASTE) ) {
-	//		Paste();
-	//	}
-	//}
-	//void HandleInputEvents() {
-	//	struct nk_input* in = &(ctx->input);
-	//	unsigned int now = GetCurrentTime();
- //       int shift = in->keyboard.keys[NK_KEY_SHIFT].down;
- //       int ctrl = in->keyboard.keys[NK_KEY_CTRL].down;
-	//	int alt = in->keyboard.keys[NK_KEY_ALT].down;
-	//	int modifiers = ModifierFlags(shift, ctrl, alt);
-	//	HandleMouseEvents(in, bounds, now, modifiers);
-	//	HandleKeyboardEvents(in, bounds, now, modifiers);
-	//}
-	void Update(ImguiEnv* env) {
-		if( !env ) return;
-		imguiEnv = env;
-
+	void HandleMouseEvents(ImGuiIO& io, ImGuiID id, bool hovered, const PRectangle& wRect, unsigned int now, int modifiers) {
 		ImGuiWindow* window = ImGui::GetCurrentWindow();
+		const bool focus_requested = ImGui::FocusableItemRegister(window, id);
+		const bool focus_requested_by_code = focus_requested && (window->FocusIdxAllCounter == window->FocusIdxAllRequestCurrent);
+		const bool focus_requested_by_tab = focus_requested && !focus_requested_by_code;
+		const bool user_clicked = hovered && io.MouseClicked[0];
+		const bool user_scrolled = hovered && (io.MouseWheel != 0.0f || io.MouseWheelH != 0.0f);
+
+	    if( focus_requested || user_clicked || user_scrolled ) {
+			// fprintf(stderr, "grab focus!\n");
+			SetFocusState(true);
+			ImGui::SetActiveID(id, window);
+			ImGui::SetFocusID(id, window);
+			ImGui::FocusWindow(window);
+		} else if( ImGui::GetActiveID()==id ){
+			ImGui::ClearActiveID();
+		}
+
+		/* mouse click handler */
+		if( hovered ) {
+			ImGuiWindow* window = ImGui::GetCurrentWindow();
+			if( ImGui::IsMouseDown(0) ) {
+				if( ImGui::IsMouseClicked(0) ) {
+					Point click_pos(io.MousePos.x - wRect.left, io.MousePos.y - wRect.top);
+					ButtonDownWithModifiers(click_pos, now, modifiers);
+					fprintf(stderr, "mouse down\n");
+				} else if((io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f)) {
+					// TODO : drag
+				}
+			}
+		}
+		if( ImGui::IsMouseReleased(0) ) {
+			// fprintf(stderr, "mouse up\n");
+			Point pt(io.MousePos.x - wRect.left, io.MousePos.y - wRect.top);
+			ButtonUpWithModifiers(pt, now, modifiers);
+		}
+		if( hovered && ImGui::IsMouseClicked(1) ) {
+			Point pt(io.MousePos.x - wRect.left, io.MousePos.y - wRect.top);
+			if(!PointInSelection(pt))
+				SetEmptySelection(PositionFromLocation(pt));
+			if(ShouldDisplayPopup(pt)) {
+				// PopUp menu
+				// Convert to screen
+				int ox = 0;
+				int oy = 0;
+				// gdk_window_get_origin(PWindow(wMain), &ox, &oy);
+				ContextMenu(Point(pt.x + ox, pt.y + oy));
+			} else {
+				RightButtonDownWithModifiers(pt, now, modifiers);
+			}
+		}
+
+		// move
+		if((io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f)) {
+			Point pt(io.MousePos.x - wRect.left, io.MousePos.y - wRect.top);
+			ButtonMoveWithModifiers(pt, now, modifiers);
+		}
+	}
+	static bool IsKeyPressedMap(ImGuiKey key, bool repeat = true) {
+		const int key_index = GImGui->IO.KeyMap[key];
+		return (key_index >= 0) ? ImGui::IsKeyPressed(key_index, repeat) : false;
+	}
+	void TryKeyDownWithModifiers(ImGuiKey key, int sci_key, int sci_modifiers) {
+		if( IsKeyPressedMap(key) ) {
+			bool consumed = false;
+			KeyDownWithModifiers(sci_key, sci_modifiers, &consumed);
+		}
+	}
+	void HandleKeyboardEvents(ImGuiIO& io, unsigned int now, int modifiers) {
+		/* text input */
+		if( io.InputCharacters[0] ) {
+            // Process text input (before we check for Return because using some IME will effectively send a Return?)
+            // We ignore CTRL inputs, but need to allow ALT+CTRL as some keyboards (e.g. German) use AltGR (which _is_ Alt+Ctrl) to input certain characters.
+            if( !(io.KeyCtrl && !io.KeyAlt) && (!pdoc->IsReadOnly()) ) {
+				char utf8[IM_ARRAYSIZE(io.InputCharacters)*6+8];
+				ImWchar* text_end = io.InputCharacters;
+                for (int n = 0; n < IM_ARRAYSIZE(io.InputCharacters) && io.InputCharacters[n]; n++) {
+					++text_end;
+				}
+				int len = ImTextStrToUtf8(utf8, IM_ARRAYSIZE(io.InputCharacters)*6, io.InputCharacters, text_end);
+				ClearSelection();
+				const int inserted = pdoc->InsertString(CurrentPosition(), utf8, len);
+				if(inserted > 0) {
+					MovePositionTo(CurrentPosition() + inserted);
+				}
+			}
+            // Consume characters
+            memset(io.InputCharacters, 0, sizeof(io.InputCharacters));
+		}
+
+        // Handle key-presses
+        const bool is_shortcut_key_only = (io.OptMacOSXBehaviors ? (io.KeySuper && !io.KeyCtrl) : (io.KeyCtrl && !io.KeySuper)) && !io.KeyAlt && !io.KeyShift; // OS X style: Shortcuts using Cmd/Super instead of Ctrl
+        const bool is_ctrl_key_only = io.KeyCtrl && !io.KeyShift && !io.KeyAlt && !io.KeySuper;
+        const bool is_shift_key_only = io.KeyShift && !io.KeyCtrl && !io.KeyAlt && !io.KeySuper;
+
+		TryKeyDownWithModifiers(ImGuiKey_LeftArrow, SCK_LEFT, modifiers);
+		TryKeyDownWithModifiers(ImGuiKey_RightArrow, SCK_RIGHT, modifiers);
+		TryKeyDownWithModifiers(ImGuiKey_UpArrow, SCK_UP, modifiers);
+		TryKeyDownWithModifiers(ImGuiKey_DownArrow, SCK_DOWN, modifiers);
+		TryKeyDownWithModifiers(ImGuiKey_Home, SCK_HOME, modifiers);
+		TryKeyDownWithModifiers(ImGuiKey_End, SCK_END, modifiers);
+		TryKeyDownWithModifiers(ImGuiKey_Delete, SCK_DELETE, modifiers);
+		TryKeyDownWithModifiers(ImGuiKey_Backspace, SCK_BACK, modifiers);
+		TryKeyDownWithModifiers(ImGuiKey_Tab, SCK_TAB, modifiers);
+		TryKeyDownWithModifiers(ImGuiKey_Enter, SCK_RETURN, modifiers);
+		TryKeyDownWithModifiers(ImGuiKey_Escape, SCK_ESCAPE, modifiers);
+
+		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_A)) ) {
+			SelectAll();
+		}
+		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_X)) || (is_shift_key_only && IsKeyPressedMap(ImGuiKey_Delete)) ) {
+			Cut();
+		}
+        if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_C)) || (is_ctrl_key_only  && IsKeyPressedMap(ImGuiKey_Insert)) ) {
+			Copy();
+		}
+        if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_V)) || (is_shift_key_only && IsKeyPressedMap(ImGuiKey_Insert)) ) {
+			Paste();
+		}
+    }
+	void HandleInputEvents(ImGuiID id, const ImRect& bb) {
+		ImGuiIO& io = ImGui::GetIO();
+		unsigned int now = GetCurrentTime();
+		int modifiers = ModifierFlags(io.KeyShift, io.KeyCtrl, io.KeyAlt, io.KeySuper);
+		PRectangle wRect = wMain.GetPosition();
+		bool hovered = ImGui::IsMouseHoveringRect(bb.Min, bb.Max);// ItemHoverable(bb, id);
+		if( hovered || HaveMouseCapture() ) {
+			HandleMouseEvents(io, id, hovered, wRect, now, modifiers);
+		}
+		HandleKeyboardEvents(io, now, modifiers);
+	}
+	void DoUpdate() {
+		ImGuiWindow* window = ImGui::GetCurrentWindow();
+		ImGuiID id = window->GetID(this);
 		ImRect bb(window->DC.CursorPos, window->DC.CursorPos);
 		bb.Max.x += 400.0f;
 		bb.Max.y += 300.0f;
-        if( !ImGui::ItemAdd(bb, 0) )
+        if( !ImGui::ItemAdd(bb, id) )
 			return;
-		if( !ImGui::BeginChildFrame(ImGui::GetID("Sci"), bb.GetSize())) {
-            ImGui::EndChildFrame();
-            return;
-        }
-        // size.x -= window->ScrollbarSizes.x;
-		// const bool hovered = ItemHoverable(frame_bb, id);
-		// if (hovered)
-		// 	g.MouseCursor = ImGuiMouseCursor_TextInput;
+		if( ImGui::BeginChildFrame(id, bb.GetSize())) {
+			mainWindow.rc.left = bb.Min.x;
+			mainWindow.rc.top = bb.Min.y;
+			mainWindow.rc.right = bb.Max.x;
+			mainWindow.rc.bottom = bb.Max.y;
+			PRectangle rc(0.0f, 0.0f, bb.GetWidth(), bb.GetHeight());
 
-		mainWindow.rc.left = bb.Min.x;
-		mainWindow.rc.top = bb.Min.y;
-		mainWindow.rc.right = bb.Max.x;
-		mainWindow.rc.bottom = bb.Max.y;
-		PRectangle rc(0.0f, 0.0f, bb.GetWidth(), bb.GetHeight());
+			HandleInputEvents(id, bb);
 
-		// HandleInputEvents();
-
-		// render
-		std::unique_ptr<Surface> surfaceWindow(Surface::Allocate(SC_TECHNOLOGY_DEFAULT));
-		surfaceWindow->Init(imguiEnv, wMain.GetID());
-		Paint(surfaceWindow.get(), rc);
-		surfaceWindow->Release();
+			// render
+			std::unique_ptr<Surface> surfaceWindow(Surface::Allocate(SC_TECHNOLOGY_DEFAULT));
+			surfaceWindow->Init(imguiEnv, wMain.GetID());
+			Paint(surfaceWindow.get(), rc);
+			surfaceWindow->Release();
+		}
 		ImGui::EndChildFrame();
+	}
+	void Update(ImguiEnv* env) {
+		if( !env ) return;
+		imguiEnv = env;
+		ImGui::BeginGroup();
+		DoUpdate();
+		ImGui::EndGroup();
 	}
 private:
 	sptr_t DefWndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) override {
@@ -976,10 +990,10 @@ private:
 		return true;
 	}
 	void SetMouseCapture(bool on) override {
-		capturedMouse = on;
+		captureMouse = on;
 	}
 	bool HaveMouseCapture() override {
-		return capturedMouse;
+		return captureMouse;
 	}
 	PRectangle GetClientRectangle() const override {
 		Window win = wMain;
@@ -1013,7 +1027,7 @@ private:
 	void NotifyParent(SCNotification scn) override {
 	}
 	void CopyToClipboard(const SelectionText &selectedText) override {
-		// __puss_nuklear_iface__->clipbard_set_string(currentNKContext, selectedText.Data());
+		ImGui::SetClipboardText(selectedText.Data());
 	}
 	void Copy() override {
 		if (!sel.Empty()) {
@@ -1023,7 +1037,7 @@ private:
 		}
 	}
 	void Paste() override {
-		const char* text = NULL; // __puss_nuklear_iface__->clipbard_get_string(currentNKContext);
+		const char* text = ImGui::GetClipboardText();
 		if( text ) {
 			ClearSelection();
 			const int inserted = pdoc->InsertString(CurrentPosition(), text, (Sci::Position)strlen(text));
@@ -1042,7 +1056,7 @@ private:
 	ImguiEnv* imguiEnv;
 	WindowIM mainWindow;
 	WindowIM marginWindow;
-	bool capturedMouse;
+	bool captureMouse;
 	int rectangularSelectionModifier;
 };
 

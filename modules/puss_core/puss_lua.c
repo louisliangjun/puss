@@ -107,94 +107,6 @@ not_found:
 	return tp;
 }
 
-static int puss_simple_userdata_new(lua_State* L) {
-	luaL_checktype(L, 1, LUA_TTABLE);
-	if( lua_isnoneornil(L, 2) ) {
-		lua_newuserdata(L, 0);
-	} else {
-		lua_newuserdata(L, 0);
-		lua_pushvalue(L, 2);
-		lua_setuservalue(L, -2);
-	}
-	lua_pushvalue(L, 1);
-	lua_setmetatable(L, -2);
-	return 1;
-}
-
-static int puss_simple_userdata_set(lua_State* L) {
-	luaL_checktype(L, 1, LUA_TUSERDATA);
-	lua_setuservalue(L, 1);
-	return 0;
-}
-
-static int puss_simple_userdata_get(lua_State* L) {
-	if( lua_type(L, 1)==LUA_TUSERDATA )
-		lua_getuservalue(L, 1);
-	else
-		lua_pushnil(L);
-	return 1;
-}
-
-static int wrapper_callk(lua_State *L, int status, lua_KContext ctx) {
-	if( status==LUA_OK || status==LUA_YIELD )
-		return lua_gettop(L) - (int)ctx;
-	return lua_error(L);
-}
-
-static int function_except_wrapper(lua_State* L) {
-	int status;
-	int n = lua_gettop(L);
-	lua_pushvalue(L, lua_upvalueindex(2));	// error handle
-	lua_pushvalue(L, lua_upvalueindex(1));	// function
-	lua_rotate(L, 1, 2);
-	status = lua_pcallk(L, n, LUA_MULTRET, 1, (lua_KContext)1, wrapper_callk);
-	return wrapper_callk(L, status, (lua_KContext)1);
-}
-
-static int puss_function_except_wrap(lua_State* L) {
-	luaL_checktype(L, 1, LUA_TFUNCTION);	// function
-	luaL_checktype(L, 2, LUA_TFUNCTION);	// error handle
-	lua_settop(L, 2);
-	lua_pushcclosure(L, function_except_wrapper, 2);
-	return 1;
-}
-
-static int function_wrapper(lua_State* L) {
-	int n = lua_gettop(L);
-	lua_pushvalue(L, lua_upvalueindex(1));
-	lua_insert(L, 1);
-	lua_callk(L, n, LUA_MULTRET, 0, wrapper_callk);
-	return lua_gettop(L);
-}
-
-static int puss_function_wrap(lua_State* L) {
-	if( lua_isnoneornil(L, 2) ) {
-		// create wrap
-		luaL_checktype(L, 1, LUA_TFUNCTION);	// function
-		lua_settop(L, 1);
-		lua_pushcclosure(L, function_wrapper, 1);
-		return 1;
-	}
-
-	luaL_checktype(L, 2, LUA_TFUNCTION);	// wrapper
-	luaL_argcheck(L, (lua_tocfunction(L, 2)==function_wrapper), 2, "need wrapper");
-
-	if( lua_isnoneornil(L, 1) ) {
-		// fetch raw function
-		if( !lua_getupvalue(L, 2, 1) ) {
-			return luaL_error(L, "fetch function from wrap failed!");
-		}
-	} else {
-		// modify exist wrap
-		luaL_checktype(L, 1, LUA_TFUNCTION);	// function
-		lua_pushvalue(L, 1);
-		if( !lua_setupvalue(L, 2, 1) ) {
-			return luaL_error(L, "modify wrapper failed!");
-		}
-	}
-	return 1;
-}
-
 static const char* lua_getfield_str(lua_State* L, const char* ns, const char* def) {
 	const char* str = def;
 	if( lua_getfield(L, LUA_REGISTRYINDEX, ns)==LUA_TSTRING ) {
@@ -441,21 +353,8 @@ void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, con
 	lua_pushlightuserdata(L, NULL);
 	lua_setfield(L, -2, "NULL");
 
-	// puss.simple_userdata
-	lua_pushcfunction(L, puss_simple_userdata_new);	lua_setfield(L, -2, "simple_userdata_new");
-	lua_pushcfunction(L, puss_simple_userdata_set);	lua_setfield(L, -2, "simple_userdata_set");
-	lua_pushcfunction(L, puss_simple_userdata_get);	lua_setfield(L, -2, "simple_userdata_get");
-
-	// function wrappers
-	lua_pushcfunction(L, puss_function_except_wrap);
-	lua_setfield(L, -2, "function_except_wrap");
-	lua_pushcfunction(L, puss_function_wrap);
-	lua_setfield(L, -2, "function_wrap");
-
-	// puss.require = _G.require = puss_lua_module_require
+	// puss.require = puss_lua_module_require
 	lua_pushcfunction(L, puss_lua_module_require);
-	lua_pushvalue(L, -1);
-	lua_setglobal(L, "require");
 	lua_setfield(L, -2, "require");
 
 	// setup builtins

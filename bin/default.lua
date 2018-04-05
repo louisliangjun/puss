@@ -14,11 +14,8 @@ function __main__()
 	local samples =
 		{ 'samples/puss.lua'
 		, 'samples/const.lua'
-		, 'samples/nuklear.lua'
+		, 'samples/imgui.lua'
 		, 'samples/debug.lua'
-		-- , 'samples/glua.lua'
-		-- , 'samples/gtk.lua'
-		-- , 'source_editor/main.lua'
 		}
 
 	while true do
