@@ -740,6 +740,10 @@ static int imgui_create_lua(lua_State* L) {
     //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
     //IM_ASSERT(font != NULL);
 
+	// char pth[4096];
+	// sprintf(pth, "%s/fonts/wqy-micro-hei.ttf", puss_app_path(L));
+	// io.Fonts->AddFontFromFileTTF(pth, 18.0f, 0, io.Fonts->GetGlyphRangesChinese());
+
 	return err ? lua_error(L) : 1;
 }
 

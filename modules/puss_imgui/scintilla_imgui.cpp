@@ -367,28 +367,24 @@ public:
 	}
 	// TODO : need implements Font, now simple 
 	void MeasureWidths(Font &font_, const char *s, int len, XYPOSITION *positions) override {
-		// const struct nk_user_font* ufont = context ? context->style.font : NULL;
-		// struct nk_font *font = ufont ? (struct nk_font *)(ufont->userdata.ptr) : NULL;
-		if( false ) {
-			/*
-			nk_rune unicode = NK_UTF_INVALID;
-			const struct nk_font_glyph *g;
+		ImFont* font = ImGui::GetFont();
+		if( font ) {
+			unsigned int wch = 0;
 			float w = 0.0f;
 			float scale = 1.0f;
-			while( len > 0 ) {
-				int glyph_len = nk_utf_decode(s, &unicode, len);
+			const char *e = s + len;
+			while( s < e ) {
+				int glyph_len = ImTextCharFromUtf8(&wch, s, e);
 				if( glyph_len==0 )
 					break;
-				if (unicode == NK_UTF_INVALID)
+				if( !wch )
 					break;
-				g = nk_font_find_glyph(font, unicode);
-				w += g->xadvance * scale;
+				const ImFontGlyph* g = font->FindGlyph((ImWchar)wch);
+				w += g->AdvanceX * scale;
 				for(int i=0; i<glyph_len; ++i)
 					*positions++ = w;
 				s += glyph_len;
-				len -= glyph_len;
 			}
-			*/
 		} else {
 			XYPOSITION pos = kDefaultFontSize;
 			for( int i=0; i<len; ++i ) {
@@ -398,9 +394,26 @@ public:
 		}
 	}
 	XYPOSITION WidthText(Font &font_, const char *s, int len) override {
-		// const struct nk_user_font* font = context ? context->style.font : NULL;
-		// return font ? font->width(font->userdata, font->height, s, len) : (kDefaultFontSize * len);
-		return kDefaultFontSize * len;
+		ImFont* font = ImGui::GetFont();
+		if( font ) {
+			unsigned int wch = 0;
+			float w = 0.0f;
+			float scale = 1.0f;
+			const char *e = s + len;
+			while( s < e ) {
+				int glyph_len = ImTextCharFromUtf8(&wch, s, e);
+				if( glyph_len==0 )
+					break;
+				if( !wch )
+					break;
+				const ImFontGlyph* g = font->FindGlyph((ImWchar)wch);
+				w += g->AdvanceX * scale;
+				s += glyph_len;
+			}
+			return w;
+		} else {
+			return kDefaultFontSize * len;
+		}
 	}
 	XYPOSITION WidthChar(Font &font_, char ch) override {
 		return WidthText(font_, &ch, 1);
@@ -826,23 +839,25 @@ public: 	// Public for scintilla_send_message
 			ImGui::SetActiveID(id, window);
 			ImGui::SetFocusID(id, window);
 			ImGui::FocusWindow(window);
-		} else if( ImGui::GetActiveID()==id ){
+		} else if( ImGui::GetActiveID()==id ) {
 			ImGui::ClearActiveID();
 		}
 
 		/* mouse click handler */
 		if( hovered ) {
 			ImGuiWindow* window = ImGui::GetCurrentWindow();
+			ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
 			if( ImGui::IsMouseDown(0) ) {
 				if( ImGui::IsMouseClicked(0) ) {
 					Point click_pos(io.MousePos.x - wRect.left, io.MousePos.y - wRect.top);
 					ButtonDownWithModifiers(click_pos, now, modifiers);
-					fprintf(stderr, "mouse down\n");
+					// fprintf(stderr, "mouse down\n");
 				} else if((io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f)) {
 					// TODO : drag
 				}
 			}
 		}
+
 		if( ImGui::IsMouseReleased(0) ) {
 			// fprintf(stderr, "mouse up\n");
 			Point pt(io.MousePos.x - wRect.left, io.MousePos.y - wRect.top);
@@ -919,29 +934,27 @@ public: 	// Public for scintilla_send_message
 		TryKeyDownWithModifiers(ImGuiKey_Enter, SCK_RETURN, modifiers);
 		TryKeyDownWithModifiers(ImGuiKey_Escape, SCK_ESCAPE, modifiers);
 
-		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_A)) ) {
-			SelectAll();
-		}
-		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_X)) || (is_shift_key_only && IsKeyPressedMap(ImGuiKey_Delete)) ) {
-			Cut();
-		}
-        if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_C)) || (is_ctrl_key_only  && IsKeyPressedMap(ImGuiKey_Insert)) ) {
-			Copy();
-		}
-        if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_V)) || (is_shift_key_only && IsKeyPressedMap(ImGuiKey_Insert)) ) {
-			Paste();
-		}
+		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_A)) ) { SelectAll(); }
+		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_Z)) ) { Undo(); }
+		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_Y)) || (io.KeyCtrl && io.KeyShift && !io.KeyAlt && !io.KeySuper && IsKeyPressedMap(ImGuiKey_Z)) ) { Redo(); }
+		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_X)) || (is_shift_key_only && IsKeyPressedMap(ImGuiKey_Delete)) ) { Cut(); }
+        if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_C)) || (is_ctrl_key_only  && IsKeyPressedMap(ImGuiKey_Insert)) ) { Copy(); }
+        if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_V)) || (is_shift_key_only && IsKeyPressedMap(ImGuiKey_Insert)) ) { Paste(); }
     }
 	void HandleInputEvents(ImGuiID id, const ImRect& bb) {
 		ImGuiIO& io = ImGui::GetIO();
 		unsigned int now = GetCurrentTime();
 		int modifiers = ModifierFlags(io.KeyShift, io.KeyCtrl, io.KeyAlt, io.KeySuper);
 		PRectangle wRect = wMain.GetPosition();
-		bool hovered = ImGui::IsMouseHoveringRect(bb.Min, bb.Max);// ItemHoverable(bb, id);
+		bool hovered = ImGui::ItemHoverable(bb, id);
 		if( hovered || HaveMouseCapture() ) {
 			HandleMouseEvents(io, id, hovered, wRect, now, modifiers);
+		} else if( hasFocus && ImGui::IsAnyMouseDown() ) {
+			SetFocusState(false);
 		}
-		HandleKeyboardEvents(io, now, modifiers);
+		if( hasFocus ) {
+			HandleKeyboardEvents(io, now, modifiers);
+		}
 	}
 	void DoUpdate() {
 		ImGuiWindow* window = ImGui::GetCurrentWindow();
