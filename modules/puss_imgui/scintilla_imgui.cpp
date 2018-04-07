@@ -103,17 +103,14 @@ Font::~Font() {}
 
 void Font::Create(const FontParameters &fp) {
 	Release();
-	fid = 0;	// nk_font CreateNewFont(fp);
+	fid = ImGui::GetFont();
 }
 
 void Font::Release() {
 	if( fid ) {
 		fid = 0;
-		// delete static_cast<FontHandle *>(fid);
 	}
 }
-
-#define SCI_PAINT_DEBUG
 
 class WindowIM {
 public:
@@ -182,8 +179,12 @@ public:
 	bool Initialised() override {
 		return inited;
 	}
+	inline ImU32 SetPenColour(ColourDesired rgb, ImU32 a=255) {
+		pen_color = IM_COL32(rgb.GetRed(), rgb.GetGreen(), rgb.GetBlue(), a);
+		return pen_color;
+	}
 	void PenColour(ColourDesired fore) override {
-		pen_color = IM_COL32(fore.GetRed(),  fore.GetGreen(), fore.GetBlue(), 255);
+		pen_color = IM_COL32(fore.GetRed(), fore.GetGreen(), fore.GetBlue(), 255);
 	}
 	int LogPixelsY() override {
 		return 72;
@@ -208,10 +209,8 @@ public:
 		for( int i=0; i<npts; ++i ) {
 			canvas->PathLineTo(ImVec2(bounds.left + pts[i].x, bounds.top + pts[i].y));
 		}
-		PenColour(back);
-		canvas->AddConvexPolyFilled(canvas->_Path.Data, canvas->_Path.Size,pen_color);
-		PenColour(fore);
-		canvas->PathStroke(pen_color, true, line_thickness);
+		canvas->AddConvexPolyFilled(canvas->_Path.Data, canvas->_Path.Size, SetPenColour(back));
+		canvas->PathStroke(SetPenColour(fore), true, line_thickness);
 	}
 	void RectangleDraw(PRectangle rc, ColourDesired fore, ColourDesired back) override {
 		ImDrawList* canvas = ImGui::GetWindowDrawList();
@@ -320,11 +319,9 @@ public:
 		float r = (w < h) ? w : h;
 		float a_min = 0.0f;
 		float a_max = (float)(2*kPi);
-		PenColour(back);
-		canvas->PathFillConvex(pen_color);
-		PenColour(fore);
-		canvas->PathArcTo(ImVec2(cx, cy), r, 0.0f, (float)(2*kPi), pen_color);
-		canvas->PathStroke(pen_color, true, line_thickness);
+		canvas->PathFillConvex(SetPenColour(back));
+		canvas->PathArcTo(ImVec2(cx, cy), r, 0.0f, (float)(2*kPi));
+		canvas->PathStroke(SetPenColour(fore), true, line_thickness);
 	}
 	void Copy(PRectangle rc, Point from, Surface &surfaceSource) override {
 		//// SurfaceImpl &surfi = static_cast<SurfaceImpl &>(surfaceSource);
@@ -344,9 +341,9 @@ public:
 	void DrawTextBase(PRectangle rc, Font &font_, XYPOSITION ybase, const char *s, int len, ColourDesired fore) {
 		ImDrawList* canvas = ImGui::GetWindowDrawList();
 		ImVec2 pos(bounds.left + rc.left, bounds.top + rc.top);
-		PenColour(fore);
-		// TODO : use font & clip
-		canvas->AddText(pos, pen_color, s, s+len);
+		ImVec4 rect(pos.x, pos.y, pos.x + rc.right, pos.y + rc.bottom);
+		ImFont* font = (ImFont*)(font_.fid);
+		canvas->AddText(font, font->FontSize, pos, SetPenColour(fore), s, s+len, 0.0f, &rect);
 	}
 	void DrawTextNoClip(PRectangle rc, Font &font_, XYPOSITION ybase, const char *s, int len, ColourDesired fore, ColourDesired back) override {
 		FillRectangle(rc, back);
@@ -365,70 +362,56 @@ public:
 			}
 		}
 	}
-	// TODO : need implements Font, now simple 
-	void MeasureWidths(Font &font_, const char *s, int len, XYPOSITION *positions) override {
-		ImFont* font = ImGui::GetFont();
-		if( font ) {
-			unsigned int wch = 0;
-			float w = 0.0f;
-			float scale = 1.0f;
-			const char *e = s + len;
-			while( s < e ) {
-				int glyph_len = ImTextCharFromUtf8(&wch, s, e);
-				if( glyph_len==0 )
-					break;
-				if( !wch )
-					break;
+	static XYPOSITION DoMeasureWidths(Font &font_, const char *s, int len, XYPOSITION *positions) {
+		ImFont* font = (ImFont*)(font_.fid);
+		XYPOSITION w = 0.0f;
+		unsigned int wch = 0;
+		float scale = font ? font->Scale : 1.0f;
+		const char *e = s + len;
+		while( s < e ) {
+			int glyph_len = ImTextCharFromUtf8(&wch, s, e);
+			if( glyph_len==0 )
+				break;
+			if( !wch )
+				break;
+			if( font ) {
 				const ImFontGlyph* g = font->FindGlyph((ImWchar)wch);
 				w += g->AdvanceX * scale;
-				for(int i=0; i<glyph_len; ++i)
+			} else {
+				w += kDefaultFontSize;
+			}
+			if( positions ) {
+				for(int i=0; i<glyph_len; ++i) {
 					*positions++ = w;
-				s += glyph_len;
+				}
 			}
-		} else {
-			XYPOSITION pos = kDefaultFontSize;
-			for( int i=0; i<len; ++i ) {
-				positions[i] = pos;
-				pos += kDefaultFontSize;
-			}
+			s += glyph_len;
 		}
+		return w;
+	}
+	void MeasureWidths(Font &font_, const char *s, int len, XYPOSITION *positions) override {
+		DoMeasureWidths(font_, s, len, positions);
 	}
 	XYPOSITION WidthText(Font &font_, const char *s, int len) override {
-		ImFont* font = ImGui::GetFont();
-		if( font ) {
-			unsigned int wch = 0;
-			float w = 0.0f;
-			float scale = 1.0f;
-			const char *e = s + len;
-			while( s < e ) {
-				int glyph_len = ImTextCharFromUtf8(&wch, s, e);
-				if( glyph_len==0 )
-					break;
-				if( !wch )
-					break;
-				const ImFontGlyph* g = font->FindGlyph((ImWchar)wch);
-				w += g->AdvanceX * scale;
-				s += glyph_len;
-			}
-			return w;
-		} else {
-			return kDefaultFontSize * len;
-		}
+		return DoMeasureWidths(font_, s, len, NULL);
 	}
 	XYPOSITION WidthChar(Font &font_, char ch) override {
-		return WidthText(font_, &ch, 1);
+		return DoMeasureWidths(font_, &ch, 1, NULL);
 	}
 	XYPOSITION Ascent(Font &font_) override {
-		return 0.0f;
+		ImFont* font = (ImFont*)(font_.fid);
+		return font ? font->Ascent : 1.0f;
 	}
 	XYPOSITION Descent(Font &font_) override {
-		return 16.0f;
+		ImFont* font = (ImFont*)(font_.fid);
+		return font ? -(font->Descent) : 1.0f;
 	}
 	XYPOSITION InternalLeading(Font &font_) override {
 		return 0.0f;
 	}
 	XYPOSITION Height(Font &font_) override {
-		return Ascent(font_) + Descent(font_);
+		ImFont* font = (ImFont*)(font_.fid);
+		return font ? font->FontSize : 18.0f;
 	}
 	XYPOSITION AverageCharWidth(Font &font_) override {
 		return WidthChar(font_, 'n');
