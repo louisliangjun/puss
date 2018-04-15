@@ -1,12 +1,34 @@
 -- imgui_wrap.lua
 
+local function parse_arg(arg, brackets)
+	-- try fmt: type name[arr]
+	local atype, name, arr = arg:match('^(.-)%s+([_%w]+)%s*(%b[])$')
+	if atype then return atype, name, arr end
+
+	-- try fmt: type (*func)(arg)
+	local tp, ni, ai = arg:match('^(.-)@(%d+)%s*@(%d+)$')
+	if tp then
+		-- print(tp, ni, ai)
+		local t = brackets[tonumber(ni)]
+		return tp .. ' ' .. t .. brackets[tonumber(ai)], t:match('[_%w]+')
+	end
+
+	-- try fmt: type name
+	atype, name = arg:match('^(.-)%s+([_%w]+)$')
+	if atype then return atype, name end
+
+	-- try fmt: ...
+	if arg:match('%.%.%.') then return nil, '...' end
+
+	-- try fmt: type
+	return arg
+end
+
 local function parse_args(args)
 	local r = {}
 	args = args:match('^%s*%(%s*(.-)%s*%)%s*$') -- remove ()
 	if args=='' then return r end	-- no args
-	if args:match('%.%.%.') then return end -- not support ...
 	args = args .. ','	-- append ','
-	local noname_arg = 0
 	local brackets = {}
 	args = args:gsub('%b()', function(v)
 		table.insert(brackets, v)
@@ -15,26 +37,9 @@ local function parse_args(args)
 	for v in args:gmatch('%s*(.-)%s*,') do
 		if v=='' then break end
 		local arg, def = v:match('^(.-)%s*=%s*(.-)%s*$')
-		arg = arg or v
-		local type, name, arr = arg:match('^(.-)%s+([_%w]+)%s*(%b[])$')	-- fmt: type name[arr]
-		if not type then	-- fmt: type (*func)(arg)
-			local tp, ni, ai = arg:match('^(.-)@(%d+)%s*@(%d+)$')
-			if tp then
-				print(tp, ni, ai)
-				local t = brackets[tonumber(ni)]
-				type = tp .. ' ' .. t .. brackets[tonumber(ai)]
-				name = t:match('[_%w]+')
-			end
-		end
-		if not type then	-- fmt: type name
-			type, name = arg:match('^(.-)%s+([_%w]+)$')
-		end
-		if not type then	-- fmt: type
-			noname_arg = noname_arg + 1
-			type, name = arg, string.format('__noname_param_%d', noname_arg)
-		end
+		local atype, name, arr = parse_arg(arg or v, brackets)
 		def = def and def:gsub('@(%d+)', function(v) return brackets[tonumber(v)] or v end)
-		table.insert(r, {type, name, arr, def})
+		table.insert(r, {atype=atype, name=name, arr=arr, def=def})
 	end
 	return r
 end
@@ -134,20 +139,11 @@ function main()
 	end)
 
 	generate_file(vlua.filename_format(out..'/'..'imgui_lua.inl'), function(writeln)
-		local function gen_param(tp, name, def)
-			
-		end
-
 		local function gen_function(ret, name, args)
-			writeln(string.format('  %s %s%s;', ret, name, args))
+			writeln(string.format('// [declare]  %s %s%s;', ret, name, args))
 			args = parse_args(args)
-			if not args then
-				writeln('  // args not support')
-			else
-				for _, a in ipairs(args) do
-					local tp, name, arr, def = table.unpack(a)
-					writeln(string.format('  // type(%s) name(%s) arr(%s) def(%s)', tp, name, arr or '', def or ''))
-				end
+			for _, a in ipairs(args) do
+				writeln(string.format('  // [param] type(%s) name(%s) arr(%s) def(%s)', a.atype, a.name, a.arr or '', a.def or ''))
 			end
 		end
 
