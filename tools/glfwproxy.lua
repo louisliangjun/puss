@@ -1,15 +1,12 @@
 -- glfwproxy.lua
 
-local table_insert = table.insert
-local table_concat = table.concat
-
 local function pasre_header(apis, enums, fname)
 	local expose = nil
 
 	local function parse_line(line)
 		local enum = line:match('^%s*#%s*define%s+(GLFW_[_%w]+)%s+.+$')
 		if enum then
-			table_insert(enums, {expose, enum})
+			table.insert(enums, {expose, enum})
 			return
 		end
 
@@ -33,7 +30,7 @@ local function pasre_header(apis, enums, fname)
 
 		local ret, name, args = line:match('^%s*GLFWAPI%s+(.+)%s+([_%w]+)%s*%(%s*(.*)%s*%)%s*;%s*$')
 		if ret then
-			table_insert(apis, {expose, ret, name, args})
+			table.insert(apis, {expose, ret, name, args})
 			return
 		end
 	end
@@ -56,14 +53,14 @@ function main()
 		local output_lines = {}
 
 		local function writeln(...)
-			local line = table_concat({...})
-			table_insert(output_lines, line)
+			local line = table.concat({...})
+			table.insert(output_lines, line)
 		end
 
 		cb(writeln)
 
 		local f = io.open(filename, 'w')
-		f:write( table_concat(output_lines, '\n') )
+		f:write( table.concat(output_lines, '\n') )
 		f:close()
 	end
 
