@@ -670,7 +670,7 @@ static int imgui_render_lua(lua_State* L) {
 	return 0;
 }
 
-static int imgui_create_lua(lua_State* L) {
+static int glfw_imgui_create(lua_State* L) {
 	const char* title = luaL_optstring(L, 1, "imgui window");
 	int width = (int)luaL_optinteger(L, 2, 1024);
 	int height = (int)luaL_optinteger(L, 3, 768);
@@ -747,8 +747,15 @@ static int imgui_create_lua(lua_State* L) {
 	return err ? lua_error(L) : 1;
 }
 
+#include "imgui_lua.inl"
+
 static luaL_Reg imgui_lua_apis[] =
-	{ {"imgui_create", imgui_create_lua}
+	{ {"glfw_imgui_create", glfw_imgui_create}
+
+#define __REG_WRAP(w)	, { #w, wrap_ ## w }
+#include "imgui_wraps.inl"
+#undef __REG_WRAP
+
 	, {NULL, NULL}
 	};
 
@@ -781,8 +788,13 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 		return 1;
 	lua_pop(L, 1);
 
-	puss_push_const_table(L);
 	// enums
+	puss_push_const_table(L);
+	{
+#define __REG_ENUM(e)	lua_pushinteger(L, e);	lua_setfield(L, -2, #e);
+#include "imgui_enums.inl"
+#undef __REG_ENUM
+	}
 	lua_pop(L, 1);
 
 	luaL_newlib(L, imgui_lua_apis);

@@ -1,10 +1,18 @@
 -- nuklear.lua
 
-local function imgui_demo_lua(imgui)
+local show_lua_window = true
+local function imgui_demo_lua(ctx)
+	if not show_lua_window then return end
+	ok, show_lua_window = imgui.Begin("Lua Window", show_lua_window)
+	imgui.Text("Hello from lua window!")
+	if imgui.Button("close") then
+		show_lua_window = false
+	end
+	imgui.End()
 end
 
 function __main__()
-	local w = imgui_create("imgui lua api", 1024, 768)
+	local w = imgui.glfw_imgui_create("imgui lua api", 1024, 768)
 
 	-- local sci = nk_scintilla_new()
 	-- sci:SetText("abcde中文fg")
@@ -15,8 +23,6 @@ function __main__()
 end
 
 if not imgui then
-	local imgui = puss.require('puss_imgui')
-	_ENV.imgui = imgui
-	setmetatable(_ENV, {__index=imgui})
+	_ENV.imgui = puss.require('puss_imgui')
 	puss.dofile(puss._script)	-- for use nk symbols & enums
 end
