@@ -20,7 +20,6 @@ typedef struct PussInterface	PussInterface;
 	#define puss_push_const_table		(*(__puss_iface__->push_const_table))
 	#define puss_app_path				(*(__puss_iface__->app_path))
 	#define puss_rawget_ex				(*(__puss_iface__->rawget_ex))
-	#define puss_pcall_stacktrace		(*(__puss_iface__->pcall_stacktrace))
 	#define puss_debug_command			(*(__puss_iface__->debug_command))
 
 	#define	__lua_proxy__(sym)			(*(__puss_iface__->luaproxy.sym))
@@ -67,7 +66,6 @@ struct PussInterface {
 	// misc
 	const char*	(*app_path)				(lua_State* L);	// [-0,+0,-]
 	int			(*rawget_ex)			(lua_State* L, const char* name);	// [-0,+1,-]
-	int			(*pcall_stacktrace)		(lua_State* L, int n, int r);		// [-0,+1,-]
 
 	// debug
 	int			(*debug_command)		(lua_State* L, PussDebugCmd cmd, const void* p, int n);

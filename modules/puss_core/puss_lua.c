@@ -65,7 +65,7 @@ static int traceback(lua_State* L) {
 	return 1;
 }
 
-int puss_pcall_stacktrace(lua_State* L, int narg, int nres) {
+int puss_trace_pcall(lua_State* L, int narg, int nres) {
 	int status;
 	int base = lua_gettop(L) - narg;  /* function index */
 	lua_pushcfunction(L, traceback);
@@ -187,7 +187,6 @@ static PussInterface puss_iface =
 
 	, puss_app_path
 	, puss_rawget_ex
-	, puss_pcall_stacktrace
 
 	, puss_debug_command
 

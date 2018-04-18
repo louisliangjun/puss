@@ -563,7 +563,6 @@ void ImguiEnv::ImGui_ImplGlfwGL3_NewFrame()
 #include "puss_module_imgui.h"
 #include "scintilla_imgui.h"
 
-#define IMGUI_MT_NAME	"ImguiEnv"
 #define IMGUI_LIB_NAME	"ImguiLib"
 
 static int imgui_destroy_lua(lua_State* L) {
@@ -593,55 +592,8 @@ static int imgui_update_lua(lua_State* L) {
 	glfwPollEvents();
 	env->ImGui_ImplGlfwGL3_NewFrame();
 
-	{
-		static float clear_color[4] = { 1.0f, 1.0f, 0.0f, 1.0f };
-		static bool show_another_window = true;
-		static bool show_demo_window = true;
-		static ScintillaIM* sci = scintilla_imgui_new();
-		static sptr_t first = scintilla_imgui_send(sci, SCI_SETTEXT, (uptr_t)20, (sptr_t)"abcdefg\n lk\nfj	alsjdfs\n !sdfsdfjk	sdf\nsdjf	hsk	fh");
-
-		// 1. Show a simple window.
-        // Tip: if we don't call ImGui::Begin()/ImGui::End() the widgets automatically appears in a window called "Debug".
-        {
-            static float f = 0.0f;
-            static int counter = 0;
-            ImGui::Text("Hello, world!");                           // Display some text (you can use a format string too)
-            ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f    
-            ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
-
-            ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our windows open/close state
-            ImGui::Checkbox("Another Window", &show_another_window);
-
-            if (ImGui::Button("Button"))                            // Buttons return true when clicked (NB: most widgets return true when edited/activated)
-                counter++;
-            ImGui::SameLine();
-            ImGui::Text("counter = %d", counter);
-
-            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-
-			scintilla_imgui_update(sci, env);
-		}
-
-        // 2. Show another simple window. In most cases you will use an explicit Begin/End pair to name your windows.
-        if (show_another_window)
-        {
-            ImGui::Begin("Another Window", &show_another_window);
-            ImGui::Text("Hello from another window!");
-            if (ImGui::Button("Close Me"))
-                show_another_window = false;
-            ImGui::End();
-        }
-
-        // 3. Show the ImGui demo window. Most of the sample code is in ImGui::ShowDemoWindow(). Read its code to learn more about Dear ImGui!
-        if (show_demo_window)
-        {
-            ImGui::SetNextWindowPos(ImVec2(650, 20), ImGuiCond_FirstUseEver); // Normally user code doesn't need/want to call this because positions are saved in .ini file anyway. Here we just want to make the demo initial state a bit more friendly!
-            ImGui::ShowDemoWindow(&show_demo_window);
-        }
-	}
-
 	// GUI
-	lua_getuservalue(L, 1);	// use ctx replace timeout
+	lua_pushvalue(L, 1);	// use ctx replace timeout
 	lua_replace(L, 3);
 	lua_pushboolean(L, 1);	// use true replace w
 	lua_replace(L, 1);
@@ -666,6 +618,8 @@ static int imgui_render_lua(lua_State* L) {
 
 	ImGui::Render();
 	env->ImGui_ImplGlfwGL3_RenderDrawData(ImGui::GetDrawData());
+	ImGui::EndFrame();
+
 	glfwSwapBuffers(win);
 	return 0;
 }
@@ -694,11 +648,6 @@ static int glfw_imgui_create(lua_State* L) {
 		lua_setfield(L, -2, "__index");
 	}
 	lua_setmetatable(L, -2);
-
-	// uv save ctx pointer
-	// TODO : lua_push_nk_context_ptr(L, &glfw->ctx);
-	lua_pushnil(L);
-	lua_setuservalue(L, -2);
 
     win = glfwCreateWindow(width, height, title, NULL, NULL);
     if( !win ) return luaL_error(L, "glfw window create failed!");
@@ -732,7 +681,6 @@ static int glfw_imgui_create(lua_State* L) {
     // - The fonts will be rasterized at a given size (w/ oversampling) and stored into a texture when calling ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame below will call.
     // - Read 'misc/fonts/README.txt' for more instructions and details.
     // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
-    //io.Fonts->AddFontDefault();
     //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
     //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
     //io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
@@ -744,10 +692,19 @@ static int glfw_imgui_create(lua_State* L) {
 	// sprintf(pth, "%s/fonts/wqy-micro-hei.ttf", puss_app_path(L));
 	// io.Fonts->AddFontFromFileTTF(pth, 18.0f, 0, io.Fonts->GetGlyphRangesChinese());
 
-	return err ? lua_error(L) : 1;
+	if( err ) {
+		return lua_error(L);
+	}
+
+	env->ImGui_ImplGlfwGL3_NewFrame();
+	ImGui::EndFrame();
+	return 1;
 }
 
 #include "imgui_lua.inl"
+
+#include "scintilla_imgui_lua.inl"
+#include "scintilla.iface.inl"
 
 static luaL_Reg imgui_lua_apis[] =
 	{ {"glfw_imgui_create", glfw_imgui_create}
@@ -758,6 +715,10 @@ static luaL_Reg imgui_lua_apis[] =
 #define __REG_WRAP(w)	, { #w, wrap_ ## w }
 #include "imgui_wraps.inl"
 #undef __REG_WRAP
+
+	, {"scintilla_new", im_scintilla_new}
+	, {"scintilla_update", im_scintilla_update}
+	, {"scintilla_free", im_scintilla_free}
 
 	, {NULL, NULL}
 	};
@@ -791,7 +752,8 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 		return 1;
 	lua_pop(L, 1);
 
-	// enums
+	// imgui
+
 	puss_push_const_table(L);
 	{
 #define __REG_ENUM(e)	lua_pushinteger(L, e);	lua_setfield(L, -2, #e);
@@ -803,6 +765,27 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 	luaL_newlib(L, imgui_lua_apis);
 	lua_pushvalue(L, -1);
 	lua_setfield(L, LUA_REGISTRYINDEX, IMGUI_LIB_NAME);
+
+	// scintilla
+	{
+		IFaceVal* p;
+		for( p=sci_values; p->name; ++p ) {
+			lua_pushinteger(L, p->val);
+			lua_setfield(L, -2, p->name);
+		}
+	}
+
+	// metatable: fun/get/set
+	if( luaL_newmetatable(L, LUA_IM_SCI_NAME) ) {
+		IFaceDecl* p;
+		for( p=sci_functions; p->name; ++p ) {
+			lua_pushlightuserdata(L, p);
+			lua_pushcclosure(L, _lua__sci_send_wrap, 1);
+			lua_setfield(L, -2, p->name);
+		}
+	}
+	lua_setfield(L, -1, "__index");
+
 	return 1;
 }
 

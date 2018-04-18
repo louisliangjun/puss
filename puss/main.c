@@ -115,17 +115,18 @@ int main(int argc, char* argv[]) {
 	luaL_openlibs(L);
 	puss_lua_open_default(L, argv[0], _PUSS_MODULE_SUFFIX);
 
+	puss_rawget_ex(L, "puss.trace_pcall");
 	lua_pushcfunction(L, puss_init);
 	lua_pushinteger(L, argc);
 	lua_pushlightuserdata(L, argv);
-	if( puss_pcall_stacktrace(L, 2, 1) ) {
-		fprintf(stderr, "<puss_init> error: %s\n", lua_tostring(L, -1));
+	lua_call(L, 3, 2);
+	res = lua_toboolean(L, -1) ? 0 : 1;
+	if( res==0 ) {
+		puss_rawget_ex(L, "puss.trace_pcall");
+		lua_replace(L, -3);
+		lua_call(L, 1, 1);
+		res = lua_toboolean(L, -1) ? 0 : 2;
 		lua_pop(L, 1);
-		res = 1;
-	} else if( puss_pcall_stacktrace(L, 0, 0) ) {
-		fprintf(stderr, "<puss_main> error: %s\n", lua_tostring(L, -1));
-		lua_pop(L, 1);
-		res = 2;
 	}
 	lua_close(L);
 	return res;

@@ -25,10 +25,6 @@ void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, con
 // 
 void puss_lua_open_default(lua_State* L, const char* arg0, const char* module_suffix);
 
-void puss_lua_close(lua_State* L);
-
-int  puss_pcall_stacktrace(lua_State* L, int n, int r);
-
 // for example : puss_rawget_ex(L, "system.test.foo")
 // 
 int  puss_rawget_ex(lua_State* L, const char* name);

@@ -7,6 +7,8 @@
 
 #include "puss_module.h"
 
+#define IMGUI_MT_NAME	"ImguiEnv"
+
 PUSS_DECLS_BEGIN
 
 PUSS_DECLS_END

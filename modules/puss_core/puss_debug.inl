@@ -377,6 +377,7 @@ static int puss_debug_command(lua_State* L, PussDebugCmd cmd, const void* p, int
 
 static void builtin_debug_event_handle(lua_State* L, enum PussDebugEvent ev) {
 	DebugEnv* env = debug_env_fetch(L);
+	puss_rawget_ex(L, "puss.trace_pcall");
 	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_BUILTIN_DEBUG_EVENT_HANDLE_NAME)!=LUA_TFUNCTION ) {
 		lua_pop(L, 1);
 		env->debug_event_handle = NULL;
@@ -384,7 +385,7 @@ static void builtin_debug_event_handle(lua_State* L, enum PussDebugEvent ev) {
 	}
 
 	lua_pushinteger(L, ev);
-	if( puss_pcall_stacktrace(L, 1, 0) ) {
+	if( lua_pcall(L, 2, 0, 0) ) {
 		fprintf(stderr, "builtin_debug_event_handle error: %s\n", lua_tostring(L, -1));
 		lua_pop(L, 1);
 	}
