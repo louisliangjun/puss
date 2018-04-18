@@ -751,6 +751,9 @@ static int glfw_imgui_create(lua_State* L) {
 
 static luaL_Reg imgui_lua_apis[] =
 	{ {"glfw_imgui_create", glfw_imgui_create}
+	
+	, {"byte_array_create", byte_array_create}
+	, {"float_array_create", float_array_create}
 
 #define __REG_WRAP(w)	, { #w, wrap_ ## w }
 #include "imgui_wraps.inl"

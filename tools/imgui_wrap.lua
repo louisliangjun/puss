@@ -44,30 +44,16 @@ local function parse_args(args)
 	return r
 end
 
-local ignore_apis =
-	{ NewFrame = true
-	, Render = true
-	, Shutdown = true
-	, EndFrame = true
-	, SetAllocatorFunctions = true
-	, MemAlloc = true
-	, MemFree = true
-	}
-
 local function pasre_apis(apis, src)
 	for namespace_block in src:gmatch('namespace%s+ImGui%s*(%b{})') do
 		-- print('NAMESPACE BLOCK:', namespace_block)
 		for ret, name, args in namespace_block:gmatch('IMGUI_API%s+([_%w%s%*&]-)%s*([_%w]+)%s*(%b()).-;') do
 			-- print('API', ret, name, args)
-			if not ignore_apis[name] then
-				table.insert(apis, {ret, name, args})
-			end
+			table.insert(apis, {ret, name, args})
 		end
 		for ret, name, args in namespace_block:gmatch('static%s+inline%s+([_%w%s%*&]-)%s*([_%w]+)%s*(%b())%s*%b{}') do
 			-- print('API', ret, name, args)
-			if not ignore_apis[name] then
-				table.insert(apis, {ret, name, args})
-			end
+			table.insert(apis, {ret, name, args})
 		end
 	end
 end
@@ -101,6 +87,313 @@ local function parse_inttypes(types, src)
 		types[enumtype] = 'int'
 	end
 end
+
+local buffer_implements = [[
+#define BYTE_ARRAY_NAME	"PussImguiByteArray"
+
+typedef struct _ByteArrayLua {
+	int				cap;
+	int				len;
+	unsigned char	buf[1];
+} ByteArrayLua;
+
+static int byte_array_tostring(lua_State* L) {
+	ByteArrayLua* ud = (ByteArrayLua*)luaL_checkudata(L, 1, BYTE_ARRAY_NAME);
+	lua_pushfstring(L, "Byte[%d/%d] %p", ud->len, ud->cap, ud);
+	return 1;
+}
+
+static int byte_array_len(lua_State* L) {
+	ByteArrayLua* ud = (ByteArrayLua*)luaL_checkudata(L, 1, BYTE_ARRAY_NAME);
+	lua_pushinteger(L, ud->len);
+	return 1;
+}
+
+static int byte_array_sub(lua_State* L) {
+	ByteArrayLua* ud = (ByteArrayLua*)luaL_checkudata(L, 1, BYTE_ARRAY_NAME);
+	int from = (int)luaL_optinteger(L, 2, 1);
+	int to = (int)luaL_optinteger(L, 3, -1);
+	if( from < 0 ) { from += ud->len; }
+	from = (from < 1) ? 0 : (from - 1);
+	if( to < 0 ) { to += ud->len; }
+	to = (to > ud->len) ? ud->len : to;
+	if( from < to ) {
+		lua_pushlstring(L, (const char*)(ud->buf + from), (to - from));
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+static int byte_array_reset(lua_State* L) {
+	ByteArrayLua* ud = (ByteArrayLua*)luaL_checkudata(L, 1, BYTE_ARRAY_NAME);
+	size_t len = 0;
+	const char* buf = luaL_optlstring(L, 2, "", &len);
+	if( len > (size_t)(ud->cap) ) { len = (size_t)(ud->cap); }
+	memcpy(ud->buf, buf, len);
+	ud->len = (int)len;
+	return 0;
+}
+
+static luaL_Reg byte_array_methods[] =
+	{ {"__tostring", byte_array_tostring}
+	, {"__len", byte_array_len}
+	, {"sub", byte_array_sub}
+	, {"reset", byte_array_reset}
+	, {NULL, NULL}
+	};
+
+static int byte_array_create(lua_State* L) {
+	int cap = (int)luaL_checkinteger(L, 1);
+	size_t len = 0;
+	const char* buf = luaL_optlstring(L, 2, "", &len);
+	ByteArrayLua* ud;
+	cap =  (cap < (int)len) ? (int)len : cap;
+	ud = (ByteArrayLua*)lua_newuserdata(L, sizeof(ByteArrayLua) + cap);
+	ud->cap = cap;
+	ud->len = (int)len;
+	memcpy(ud->buf, buf, len+1);
+	if( luaL_newmetatable(L, BYTE_ARRAY_NAME) ) {
+		luaL_setfuncs(L, byte_array_methods, 0);
+		lua_pushvalue(L, -1);
+		lua_setfield(L, -2, "__index");
+	}
+	lua_setmetatable(L, -2);
+	return 1;
+}
+
+#define FLOAT_ARRAY_NAME	"PussImguiFloatArray"
+
+typedef struct _FloatArrayLua {
+	int		cap;
+	int		len;
+	float	buf[0];
+} FloatArrayLua;
+
+static int float_array_tostring(lua_State* L) {
+	FloatArrayLua* ud = (FloatArrayLua*)luaL_checkudata(L, 1, FLOAT_ARRAY_NAME);
+	lua_pushfstring(L, "Float[%d/%d] %p", ud->len, ud->cap, ud);
+	return 1;
+}
+
+static int float_array_len(lua_State* L) {
+	FloatArrayLua* ud = (FloatArrayLua*)luaL_checkudata(L, 1, FLOAT_ARRAY_NAME);
+	lua_pushinteger(L, ud->len);
+	return 1;
+}
+
+static int float_array_resize(lua_State* L) {
+	FloatArrayLua* ud = (FloatArrayLua*)luaL_checkudata(L, 1, FLOAT_ARRAY_NAME);
+	int size = (int)luaL_checkinteger(L, 2);
+	if( (size >= 0) && (size <= ud->cap) )
+		ud->len = size;
+	lua_pushinteger(L, ud->len);
+	return 1;
+}
+
+static int float_array_get(lua_State* L) {
+	FloatArrayLua* ud = (FloatArrayLua*)luaL_checkudata(L, 1, FLOAT_ARRAY_NAME);
+	int index = (int)luaL_checkinteger(L, 2);
+	if( index > 0 ) {
+		if( index <= ud->len ) {
+			lua_pushnumber(L, ud->buf[index-1]);
+			return 1;
+		}
+	} else if( index < 0 ) {
+		if( (-index) <= ud->len ) {
+			lua_pushnumber(L, ud->buf[ud->len+index]);
+			return 1;
+		}
+	}
+	lua_pushnil(L);
+	return 1;
+}
+
+static int float_array_set(lua_State* L) {
+	FloatArrayLua* ud = (FloatArrayLua*)luaL_checkudata(L, 1, FLOAT_ARRAY_NAME);
+	int index = (int)luaL_checkinteger(L, 2);
+	float value = (float)luaL_checknumber(L, 3);
+	int ok = 0;
+	if( index > 0 ) {
+		if( index <= ud->cap ) {
+			ud->buf[index-1] = value;
+			ok = 1;
+		}
+	} else if( index < 0 ) {
+		if( (-index) <= ud->cap ) {
+			ud->buf[index-1] = value;
+			ok = 1;
+		}
+	}
+	lua_pushboolean(L, ok);
+	return 1;
+}
+
+static int float_array_push(lua_State* L) {
+	FloatArrayLua* ud = (FloatArrayLua*)luaL_checkudata(L, 1, FLOAT_ARRAY_NAME);
+	float value = (float)luaL_checknumber(L, 2);
+	lua_assert( ud->cap );
+	if( ud->len < ud->cap ) {
+		ud->buf[ud->len] = value;
+		ud->len++;
+	} else {
+		float* a = ud->buf;
+		int i = 0;
+		for( i=1; i<ud->len; ++i ) {
+			a[i-1] = a[i];
+		}
+		a[i] = value;
+	}
+	return 0;
+}
+
+static luaL_Reg float_array_methods[] =
+	{ {"__tostring", float_array_tostring}
+	, {"__len", float_array_len}
+	, {"resize", float_array_resize}
+	, {"get", float_array_get}
+	, {"set", float_array_set}
+	, {"push", float_array_push}
+	, {NULL, NULL}
+	};
+
+static int float_array_create(lua_State* L) {
+	int cap = (int)luaL_checkinteger(L, 1);
+	size_t sz;
+	FloatArrayLua* ud;
+	luaL_argcheck(L, cap > 0, 1, "bad range");
+	sz = sizeof(FloatArrayLua) + sizeof(float) * cap;
+	ud = (FloatArrayLua*)lua_newuserdata(L, sz);
+	memset(ud, 0, sz);
+	ud->cap = cap;
+	if( luaL_newmetatable(L, FLOAT_ARRAY_NAME) ) {
+		luaL_setfuncs(L, float_array_methods, 0);
+		lua_pushvalue(L, -1);
+		lua_setfield(L, -2, "__index");
+	}
+	lua_setmetatable(L, -2);
+	return 1;
+}
+
+]]
+
+local ignore_apis =
+	{ Shutdown = true
+	, Render = true
+	, SetAllocatorFunctions = true
+	, MemAlloc = true
+	, MemFree = true
+	, NewFrame = true
+	, EndFrame = true
+	, PushFont = true
+	, PopFont = true
+	}
+
+local implements = {}
+
+implements.InputText = [[	bool InputText(const char* label, char* buf, size_t buf_size, ImGuiInputTextFlags flags = 0, ImGuiTextEditCallback callback = NULL, void* user_data = NULL);
+	const char* label = luaL_checkstring(L, 1);
+	ByteArrayLua* arr = (ByteArrayLua*)luaL_checkudata(L, 2, BYTE_ARRAY_NAME);
+	ImGuiInputTextFlags flags = (ImGuiInputTextFlags)luaL_optinteger(L, 3, 0);
+	lua_pushboolean(L, ImGui::InputText(label, (char*)arr->buf, (size_t)arr->len, flags) ? 1 : 0);
+	return 1;]]
+
+implements.InputTextMultiline = [[	bool InputTextMultiline(const char* label, char* buf, size_t buf_size, const ImVec2& size = ImVec2(0,0), ImGuiInputTextFlags flags = 0, ImGuiTextEditCallback callback = NULL, void* user_data = NULL);
+	const char* label = luaL_checkstring(L, 1);
+	ByteArrayLua* arr = (ByteArrayLua*)luaL_checkudata(L, 2, BYTE_ARRAY_NAME);
+	ImVec2 size( (float)luaL_optnumber(L, 3, 0.0), (float)luaL_optnumber(L, 4, 0.0) ); 
+	ImGuiInputTextFlags flags = (ImGuiInputTextFlags)luaL_optinteger(L, 5, 0);
+	lua_pushboolean(L, ImGui::InputTextMultiline(label, (char*)arr->buf, (size_t)arr->len, size, flags) ? 1 : 0);
+	return 1;]]
+
+implements.PlotLines = [[	// void PlotLines(const char* label, const float* values, int values_count, int values_offset = 0, const char* overlay_text = NULL, float scale_min = FLT_MAX, float scale_max = FLT_MAX, ImVec2 graph_size = ImVec2(0,0), int stride = sizeof(float));
+	int nargs = lua_gettop(L);
+	const char* label = luaL_checkstring(L, 1);
+	FloatArrayLua* arr = (FloatArrayLua*)luaL_checkudata(L, 2, FLOAT_ARRAY_NAME);
+	const float* values = arr->buf;
+	int values_count = (int)luaL_optinteger(L, 3, arr->len);
+	int values_offset = (int)(luaL_optinteger(L, 4, 1) - 1);
+	const char* overlay_text = luaL_optstring(L, 5, NULL);
+	float scale_min = (float)((nargs<6) ? FLT_MAX : luaL_checknumber(L, 6));
+	float scale_max = (float)((nargs<7) ? FLT_MAX : luaL_checknumber(L, 7));
+	ImVec2 graph_size = ImVec2((float)luaL_optnumber(L, 8, 0.0), (float)luaL_optnumber(L, 9, 0.0));
+	if( values_offset < 0 ) { values_offset = 0; }
+	if( (values_offset + values_count) > arr->len ) { values_count = (arr->len - values_offset); }
+	if( values_count < 0 ) { values_count = 0; }
+	ImGui::PlotLines(label, values, values_count, values_offset, overlay_text, scale_min, scale_max, graph_size);
+	return 0;]]
+
+implements.PlotHistogram = [[	// void PlotHistogram(const char* label, const float* values, int values_count, int values_offset = 0, const char* overlay_text = NULL, float scale_min = FLT_MAX, float scale_max = FLT_MAX, ImVec2 graph_size = ImVec2(0,0), int stride = sizeof(float));
+	int nargs = lua_gettop(L);
+	const char* label = luaL_checkstring(L, 1);
+	FloatArrayLua* arr = (FloatArrayLua*)luaL_checkudata(L, 2, FLOAT_ARRAY_NAME);
+	const float* values = arr->buf;
+	int values_count = (int)luaL_optinteger(L, 3, arr->len);
+	int values_offset = (int)(luaL_optinteger(L, 4, 1) - 1);
+	const char* overlay_text = luaL_optstring(L, 5, NULL);
+	float scale_min = (float)((nargs<6) ? FLT_MAX : luaL_checknumber(L, 6));
+	float scale_max = (float)((nargs<7) ? FLT_MAX : luaL_checknumber(L, 7));
+	ImVec2 graph_size = ImVec2((float)luaL_optnumber(L, 8, 0.0), (float)luaL_optnumber(L, 9, 0.0));
+	if( values_offset < 0 ) { values_offset = 0; }
+	if( (values_offset + values_count) > arr->len ) { values_count = (arr->len - values_offset); }
+	if( values_count < 0 ) { values_count = 0; }
+	ImGui::PlotHistogram(label, values, values_count, values_offset, overlay_text, scale_min, scale_max, graph_size);
+	return 0;]]
+
+implements.IsMousePosValid = [[	//	bool IsMousePosValid(const ImVec2* mouse_pos = NULL);
+	ImVec2 pos;
+	const ImVec2* mouse_pos = (lua_gettop(L) < 2) ? NULL : &pos;
+	if( mouse_pos ) {
+		pos.x = (float)luaL_checknumber(L, 1);
+		pos.y = (float)luaL_checknumber(L, 2);
+	}
+	lua_pushboolean(L, ImGui::IsMousePosValid(mouse_pos) ? 1 : 0);
+	return 1;]]
+
+implements.ColorPicker4 = [[	//	bool ColorPicker4(const char* label, float col[4], ImGuiColorEditFlags flags = 0, const float* ref_col = NULL);
+	const char* label = luaL_checkstring(L, 1);
+	float col[4] = { (float)luaL_checknumber(L,2), (float)luaL_checknumber(L,3), (float)luaL_checknumber(L,4), (float)luaL_checknumber(L,5) };
+	ImGuiColorEditFlags flags = (ImGuiColorEditFlags)luaL_optinteger(L, 6, 0);
+	float _ref_col[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+	const float* ref_col = (lua_gettop(L) > 6) ? _ref_col : NULL;
+	if( ref_col ) {
+		_ref_col[0] = (float)luaL_optnumber(L, 7, 0.0);
+		_ref_col[1] = (float)luaL_optnumber(L, 8, 0.0);
+		_ref_col[2] = (float)luaL_optnumber(L, 9, 0.0);
+		_ref_col[3] = (float)luaL_optnumber(L, 10, 1.0);
+	}
+	lua_pushboolean(L, ImGui::ColorPicker4(label, col, flags, ref_col) ? 1 : 0);
+	lua_pushnumber(L, col[0]);
+	lua_pushnumber(L, col[1]);
+	lua_pushnumber(L, col[2]);
+	lua_pushnumber(L, col[3]);
+	return 5;]]
+
+implements.SetDragDropPayload = [[	//	bool SetDragDropPayload(const char* type, const void* data, size_t size, ImGuiCond cond = 0);
+	const char* type = luaL_checkstring(L, 1);
+	size_t size = 0;
+	const char* data = luaL_checklstring(L, 2, &size);
+	ImGuiCond cond = (ImGuiCond)luaL_optinteger(L, 3, 0);
+	lua_pushboolean(L, ImGui::SetDragDropPayload(type, data, size, cond) ? 1 : 0);
+	return 1;]]
+
+implements.AcceptDragDropPayload = [[	//	const ImGuiPayload* AcceptDragDropPayload(const char* type, ImGuiDragDropFlags flags = 0);
+	const char* type = luaL_optstring(L, 1, NULL);
+	ImGuiDragDropFlags flags = (ImGuiCond)luaL_optinteger(L, 2, 0);
+	const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(type, flags);
+	if( payload ) {
+		lua_createtable(L, 0, 7);
+		lua_pushlstring(L, (const char*)payload->Data, payload->DataSize);	lua_setfield(L, -2, "Data");
+		lua_pushinteger(L, payload->SourceId);			lua_setfield(L, -2, "SourceId");
+		lua_pushinteger(L, payload->SourceParentId);	lua_setfield(L, -2, "SourceParentId");
+		lua_pushinteger(L, payload->DataFrameCount);	lua_setfield(L, -2, "DataFrameCount");
+		lua_pushstring(L, payload->DataType);			lua_setfield(L, -2, "DataType");
+		lua_pushboolean(L, payload->Preview);			lua_setfield(L, -2, "Preview");
+		lua_pushboolean(L, payload->Delivery);			lua_setfield(L, -2, "Delivery");
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;]]
 
 function main()
 	local out = vlua.match_arg('^%-out=(.+)$') or '.'
@@ -140,7 +433,8 @@ function main()
 			return pos
 		end
 		mt.__len = function(self) return #output_lines end
-		mt.remove = function(self, line) return table.remove(output_lines, line) end
+		mt.insert = function(self, ...) return table.insert(output_lines, ...) end
+		mt.remove = function(self, ...) return table.remove(output_lines, ...) end
 		mt.revert = function(self, mark)
 			if not mark then return #output_lines end
 			while #output_lines > mark do
@@ -198,28 +492,22 @@ function main()
 		local RE_RIMVEC4 = '^ImVec4%s*%&$'			-- ImVec4&
 		local RE_CIMVEC4 = '^const%s+ImVec4%s*%&$'	-- const ImVec4&
 
-		local function gen_lua_wrap(w, ret, name, args)
-			dst:writeln(string.format('static int wrap_%s(lua_State* L) {', w))
-			local narg_pos, narg_use = dst:writeln('	int __narg__ = lua_gettop(L);'), false
-			local iarg_pos, iarg_use = dst:writeln('	int __iarg__ = 0;'), false
-
-			-- ret decl
-			do
-				local atype, aname = ret, '__ret__'
-				if atype=='void' then
-					-- ignore
-				elseif inttypes[atype] or atype=='float' or atype=='double' or atype=='bool' or atype:match(RE_UINT) or atype:match(RE_CSTR) or atype:match(RE_CVOID) then
-					dst:writeln('	', atype, ' ', aname, ';')
-				elseif atype=='ImVec2' or atype:match(RE_CIMVEC2) then
-					dst:writeln('	ImVec2 ', aname, ';')
-				elseif atype=='ImVec4' or atype:match(RE_CIMVEC4) then
-					dst:writeln('	ImVec4 ', aname, ';')
-				else
-					error(string.format('[NotSupport]	ret type(%s)', atype))
-				end
+		local function gen_ret_decl(ret)
+			local atype, aname = ret, '__ret__'
+			if atype=='void' then
+				-- ignore
+			elseif inttypes[atype] or atype=='float' or atype=='double' or atype=='bool' or atype:match(RE_UINT) or atype:match(RE_CSTR) or atype:match(RE_CVOID) then
+				dst:writeln('	', atype, ' ', aname, ';')
+			elseif atype=='ImVec2' or atype:match(RE_CIMVEC2) then
+				dst:writeln('	ImVec2 ', aname, ';')
+			elseif atype=='ImVec4' or atype:match(RE_CIMVEC4) then
+				dst:writeln('	ImVec4 ', aname, ';')
+			else
+				error(string.format('[NotSupport]	ret type(%s)', atype))
 			end
+		end
 
-			-- args decl
+		local function gen_args_decl(args)
 			for i, a in ipairs(args) do
 				local atype, aname, attr = a.atype, a.name or string.format('__arg_%d', i), a.attr
 				if attr then
@@ -266,8 +554,10 @@ function main()
 					end
 				end
 			end
+		end
 
-			-- args fetch
+		local function gen_args_fetch(args)
+			local iarg_use, narg_use = false, false
 			for i, a in ipairs(args) do
 				local atype, aname, attr = a.atype, a.name or string.format('__arg_%d', i), a.attr
 				if attr then
@@ -350,30 +640,30 @@ function main()
 					error(string.format('[NotSupport]	arg type(%s)', atype))
 				end
 			end
+			return iarg_use, narg_use
+		end
 
-			-- invoke
-			do
-				local prefix = ret=='void' and '	' or '	__ret__ = '
-				local ts = { prefix, 'ImGui::', name, '(' }
-				if #args > 0 then
-					for i, a in ipairs(args) do
-						if a.attr=='...' then
-							assert( args[i-1].atype:match(RE_CSTR), 'bad logic' )
-							table.insert(ts, #ts-1, '"%s",')
-						else
-							table.insert(ts, a.name or string.format('__arg_%d', i))
-							table.insert(ts, ',')
-						end
+		local function gen_api_invoke(ret, name, args)
+			local prefix = ret=='void' and '	' or '	__ret__ = '
+			local ts = { prefix, 'ImGui::', name, '(' }
+			if #args > 0 then
+				for i, a in ipairs(args) do
+					if a.attr=='...' then
+						assert( args[i-1].atype:match(RE_CSTR), 'bad logic' )
+						table.insert(ts, #ts-1, '"%s",')
+					else
+						table.insert(ts, a.name or string.format('__arg_%d', i))
+						table.insert(ts, ',')
 					end
-					table.remove(ts)
 				end
-				table.insert(ts, ');')
-				dst:writeln(table.concat(ts, ''))
+				table.remove(ts)
 			end
+			table.insert(ts, ');')
+			dst:writeln(table.concat(ts, ''))
+		end
 
+		local function gen_ret_push(ret, args)
 			local nret = 0
-
-			-- push ret
 			do
 				local atype, aname = ret, '__ret__'
 				if atype=='void' then
@@ -445,11 +735,22 @@ function main()
 					dst:writeln('	lua_pushnumber(L, ', aname, '.w);')
 				end
 			end
-			dst:writeln('	return ', nret, ';')
-			dst:writeln('}')
+			return nret
+		end
 
+		local function gen_lua_wrap(w, ret, name, args)
+			dst:writeln(string.format('static int wrap_%s(lua_State* L) {', w))
+			local narg_pos = dst:writeln('	int __narg__ = lua_gettop(L);')
+			local iarg_pos = dst:writeln('	int __iarg__ = 0;')
+			gen_ret_decl(ret)
+			gen_args_decl(args)
+			local iarg_use, narg_use = gen_args_fetch(args)
+			gen_api_invoke(ret, name, args)
+			local nret = gen_ret_push(ret, args)
 			if not iarg_use then dst:remove(iarg_pos) end
 			if not narg_use then dst:remove(narg_pos) end
+			dst:writeln('	return ', nret, ';')
+			dst:writeln('}')
 		end
 
 		local function gen_function(ret, name, args)
@@ -459,21 +760,43 @@ function main()
 			for _, a in ipairs(args) do
 				dst:writeln(string.format('//   [Param] type(%s) name(%s) attr(%s) def(%s)', a.atype, a.name, a.attr or '', a.def or ''))
 			end
-			local w = gen_wrapname(name)
-			local mark = #dst
-			local ok, err = pcall(gen_lua_wrap, w, ret, name, args)
-			if ok then
-				table.insert(wraps, w)
+			if implements[name] then
+				dst:writeln(string.format('// [Implement]') )
+			elseif ignore_apis[name] then
+				dst:writeln(string.format('// [Ignore]') )
 			else
-				dst:revert(mark)
-				dst:writeln('// ', err)
+				local w = gen_wrapname(name)
+				local mark = #dst
+				local ok, err = pcall(gen_lua_wrap, w, ret, name, args)
+				if ok then
+					table.insert(wraps, w)
+				else
+					dst:revert(mark)
+					dst:writeln('// ', err)
+				end
 			end
 		end
 
 		dst:writeln('// lua imgui wrappers')
 		dst:writeln()
+		dst:insert(buffer_implements)
+
 		for _, v in ipairs(apis) do
 			gen_function(table.unpack(v))
+		end
+		do
+			local t = {}
+			for k in pairs(implements) do table.insert(t, k) end
+			table.sort(t)
+			for _, name in ipairs(t) do
+				local w = gen_wrapname(name)
+				local impl = implements[name]
+				dst:writeln(string.format('static int wrap_%s(lua_State* L) {', w))
+				dst:insert(impl)
+				dst:writeln('}')
+				table.insert(wraps, w)
+				dst:writeln()
+			end
 		end
 		dst:writeln()
 	end)
@@ -486,4 +809,3 @@ function main()
 	end)
 
 end
-
