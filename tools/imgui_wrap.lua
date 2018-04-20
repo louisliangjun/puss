@@ -502,6 +502,8 @@ function main()
 				dst:writeln('	ImVec2 ', aname, ';')
 			elseif atype=='ImVec4' or atype:match(RE_CIMVEC4) then
 				dst:writeln('	ImVec4 ', aname, ';')
+			elseif atype=='ImTextureID' then
+				dst:writeln('	ImTextureID ', aname, ';')
 			else
 				error(string.format('[NotSupport]	ret type(%s)', atype))
 			end
@@ -540,6 +542,8 @@ function main()
 					dst:writeln('	ImVec2 ', aname, ';')
 				elseif atype=='ImVec4' or atype:match(RE_RIMVEC4) or atype:match(RE_CIMVEC4) then
 					dst:writeln('	ImVec4 ', aname, ';')
+				elseif atype=='ImTextureID' then
+					dst:writeln('	ImTextureID ', aname, ';')
 				elseif inttypes[atype] then
 					dst:writeln('	', atype, ' ', aname, ';')
 				elseif atype:match(RE_RFLOAT) then
@@ -636,6 +640,9 @@ function main()
 					dst:writeln('	', aname, '.y = ', a.def and '(float)luaL_optnumber(L, ++__iarg__, '..aname..'.y)' or '(float)luaL_checknumber(L, ++__iarg__)', ';')
 					dst:writeln('	', aname, '.z = ', a.def and '(float)luaL_optnumber(L, ++__iarg__, '..aname..'.z)' or '(float)luaL_checknumber(L, ++__iarg__)', ';')
 					dst:writeln('	', aname, '.w = ', a.def and '(float)luaL_optnumber(L, ++__iarg__, '..aname..'.w)' or '(float)luaL_checknumber(L, ++__iarg__)', ';')
+				elseif atype=='ImTextureID' then
+					iarg_use = true
+					dst:writeln('	', aname, ' = ('..atype..')lua_topointer(L, ++__iarg__);')
 				else
 					error(string.format('[NotSupport]	arg type(%s)', atype))
 				end
@@ -690,6 +697,9 @@ function main()
 					dst:writeln('	lua_pushnumber(L, ', aname, '.y);')
 					dst:writeln('	lua_pushnumber(L, ', aname, '.z);')
 					dst:writeln('	lua_pushnumber(L, ', aname, '.w);')
+				elseif atype=='ImTextureID' then
+					nret = nret + 1
+					dst:writeln('	lua_pushlightuserdata(L, ', aname, ');')
 				else
 					error(string.format('ret type(%s)', atype))
 				end
@@ -714,6 +724,9 @@ function main()
 					end
 				elseif not atype then
 					error(string.format('not support ('..tostring(aname)..')'))
+				elseif atype=='ImTextureID' then
+					nret = nret + 1
+					dst:writeln('	lua_pushlightuserdata(L, ', aname, ');')
 				elseif atype:match(RE_PBOOL) then
 					nret = nret + 1
 					dst:writeln('	if(', aname, ') lua_pushboolean(L, ', '(*', aname, ') ? 1 : 0); else lua_pushnil(L);')

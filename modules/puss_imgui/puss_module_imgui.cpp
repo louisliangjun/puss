@@ -580,7 +580,6 @@ static int imgui_destroy_lua(lua_State* L) {
 static int imgui_update_lua(lua_State* L) {
 	ImguiEnv* env = (ImguiEnv*)luaL_checkudata(L, 1, IMGUI_MT_NAME);
 	GLFWwindow* win = env->g_Window;
-	double wait_timeout = luaL_optnumber(L, 3, 0.0);
 	luaL_argcheck(L, lua_type(L, 2)==LUA_TFUNCTION, 2, "need function!");
 
 	if( !win ) { return 0; }
@@ -593,8 +592,6 @@ static int imgui_update_lua(lua_State* L) {
 	env->ImGui_ImplGlfwGL3_NewFrame();
 
 	// GUI
-	lua_pushvalue(L, 1);	// use ctx replace timeout
-	lua_replace(L, 3);
 	lua_pushboolean(L, 1);	// use true replace w
 	lua_replace(L, 1);
 	lua_call(L, lua_gettop(L)-2, LUA_MULTRET);

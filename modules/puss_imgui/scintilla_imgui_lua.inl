@@ -81,10 +81,7 @@ static int im_scintilla_free(lua_State* L) {
 
 static int im_scintilla_update(lua_State* L) {
 	ScintillaIM** ud = (ScintillaIM**)luaL_checkudata(L, 1, LUA_IM_SCI_NAME);
-	ImguiEnv* env = (ImguiEnv*)luaL_checkudata(L, 2, IMGUI_MT_NAME);
-	if( *ud && env ) {
-		scintilla_imgui_update(*ud, env);
-	}
+	scintilla_imgui_update(*ud);
 	return 0;
 }
 

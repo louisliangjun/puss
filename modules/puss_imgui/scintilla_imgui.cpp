@@ -34,8 +34,8 @@
 #include <algorithm>
 #include <memory>
 
-#include "imgui/imgui.h"
-#include "imgui/imgui_internal.h"
+#include "imgui.h"
+#include "imgui_internal.h"
 
 #include "Platform.h"
 
@@ -120,7 +120,6 @@ public:
 
 class SurfaceImpl : public Surface {
 	bool inited;
-	ImguiEnv* env;
 	PRectangle bounds;
 	ImU32 pen_color;
 	ImU32 bg_color;
@@ -129,7 +128,6 @@ class SurfaceImpl : public Surface {
 private:
 	void DoClear() {
 		inited = false;
-		env = NULL;
 		bounds = PRectangle(0.0f, 0.0f, 100.0f, 100.0f);
 		pen_color = IM_COL32_BLACK;
 		bg_color = IM_COL32_WHITE;
@@ -139,7 +137,6 @@ private:
 public:
 	SurfaceImpl()
 		: inited(false)
-		, env(NULL)
 		, bounds(0.0f, 0.0f, 100.0f, 100.0f)
 		, pen_color(IM_COL32_BLACK)
 		, bg_color(IM_COL32_WHITE)
@@ -157,11 +154,9 @@ public:
 		inited = true;
 	}
 	void Init(SurfaceID sid, WindowID wid) override {
-		env = (ImguiEnv*)sid;
 		Init(wid);
 	}
 	void InitPixMap(int width_, int height_, Surface *surface_, WindowID wid) override {
-		ImguiEnv* env_ = env;
 		PLATFORM_ASSERT(surface_);
 		Release();
 		SurfaceImpl *surfImpl = static_cast<SurfaceImpl *>(surface_);
@@ -171,7 +166,7 @@ public:
 		bounds.top = 0.0f;
 		bounds.right = (XYPOSITION)width_;
 		bounds.bottom = (XYPOSITION)height_;
-		Init(env_, wid);
+		Init(0, wid);
 	}
 	void Release() override {
 		DoClear();
@@ -419,12 +414,13 @@ public:
 
 public:
 	void SetClip(PRectangle rc) override {
-		// TODO : nk_start_popup or nk_command_buffer_init
+		ImVec2 vmin(bounds.left + rc.left, bounds.top + rc.top);
+		ImVec2 vmax(bounds.left + rc.right, bounds.top + rc.bottom);
+		ImGui::PushClipRect(vmin, vmax, true);
 	}
 	void FlushCachedState() override {
 		// TODO :
 	}
-
 	void SetUnicodeMode(bool unicodeMode_) override {
 		// only utf-8 support
 	}
@@ -730,8 +726,7 @@ class ScintillaIM : public ScintillaBase {
 	ScintillaIM &operator=(const ScintillaIM &) = delete;
 public:
 	ScintillaIM()
-		: imguiEnv(NULL)
-		, captureMouse(false)
+		: captureMouse(false)
 		, rectangularSelectionModifier(SCMOD_ALT)
 	{
 		mainWindow.win = &wMain;
@@ -939,15 +934,14 @@ public: 	// Public for scintilla_send_message
 			HandleKeyboardEvents(io, now, modifiers);
 		}
 	}
-	void DoUpdate() {
+	void Update() {
+		ImGuiStyle& style = ImGui::GetStyle();
 		ImGuiWindow* window = ImGui::GetCurrentWindow();
 		ImGuiID id = window->GetID(this);
-		ImRect bb(window->DC.CursorPos, window->DC.CursorPos);
-		bb.Max.x += 400.0f;
-		bb.Max.y += 300.0f;
+		ImRect bb(window->DC.CursorPos, ImVec2(window->Pos.x + window->Size.x - style.ScrollbarSize, window->Pos.y + window->Size.y - style.ScrollbarSize));
         if( !ImGui::ItemAdd(bb, id) )
 			return;
-		if( ImGui::BeginChildFrame(id, bb.GetSize())) {
+		if( ImGui::BeginChildFrame(id, bb.GetSize(), ImGuiWindowFlags_HorizontalScrollbar|ImGuiWindowFlags_AlwaysHorizontalScrollbar|ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
 			mainWindow.rc.left = bb.Min.x;
 			mainWindow.rc.top = bb.Min.y;
 			mainWindow.rc.right = bb.Max.x;
@@ -958,18 +952,11 @@ public: 	// Public for scintilla_send_message
 
 			// render
 			std::unique_ptr<Surface> surfaceWindow(Surface::Allocate(SC_TECHNOLOGY_DEFAULT));
-			surfaceWindow->Init(imguiEnv, wMain.GetID());
+			surfaceWindow->Init(0, wMain.GetID());
 			Paint(surfaceWindow.get(), rc);
 			surfaceWindow->Release();
 		}
 		ImGui::EndChildFrame();
-	}
-	void Update(ImguiEnv* env) {
-		if( !env ) return;
-		imguiEnv = env;
-		ImGui::BeginGroup();
-		DoUpdate();
-		ImGui::EndGroup();
 	}
 private:
 	sptr_t DefWndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) override {
@@ -1049,7 +1036,6 @@ private:
 	void ClaimSelection() override {
 	}
 private:
-	ImguiEnv* imguiEnv;
 	WindowIM mainWindow;
 	WindowIM marginWindow;
 	bool captureMouse;
@@ -1064,10 +1050,8 @@ void scintilla_imgui_free(ScintillaIM* sci) {
 	delete sci;
 }
 
-void scintilla_imgui_update(ScintillaIM* sci, ImguiEnv* env) {
-	if( sci ) {
-		sci->Update(env);
-	}
+void scintilla_imgui_update(ScintillaIM* sci) {
+	if( sci ) { sci->Update(); }
 }
 
 sptr_t scintilla_imgui_send(ScintillaIM* sci, unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
