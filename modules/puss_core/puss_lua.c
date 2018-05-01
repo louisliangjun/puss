@@ -75,7 +75,7 @@ int puss_trace_pcall(lua_State* L, int narg, int nres) {
 	return status;
 }
 
-int puss_rawget_ex(lua_State* L, const char* name) {
+int puss_get_value(lua_State* L, const char* name) {
 	int top = lua_gettop(L);
 	const char* ps = name;
 	const char* pe = ps;
@@ -186,7 +186,7 @@ static PussInterface puss_iface =
 	, puss_push_const_table
 
 	, puss_app_path
-	, puss_rawget_ex
+	, puss_get_value
 
 	, puss_debug_command
 
@@ -201,7 +201,7 @@ static int module_init_wrapper(lua_State* L) {
 
 	// local f, err = package.loadlib(module_filename, '__puss_module_init__')
 	// 
-	puss_rawget_ex(L, "package.loadlib");
+	puss_get_value(L, "package.loadlib");
 	{
 		luaL_Buffer B;
 		luaL_buffinit(L, &B);

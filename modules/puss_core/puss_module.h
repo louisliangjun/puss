@@ -19,7 +19,7 @@ typedef struct PussInterface	PussInterface;
 	#define puss_interface_check(L, I)	((I*)((*(__puss_iface__->interface_check))((L), #I)))
 	#define puss_push_const_table		(*(__puss_iface__->push_const_table))
 	#define puss_app_path				(*(__puss_iface__->app_path))
-	#define puss_rawget_ex				(*(__puss_iface__->rawget_ex))
+	#define puss_get_value				(*(__puss_iface__->get_value))
 	#define puss_debug_command			(*(__puss_iface__->debug_command))
 
 	#define	__lua_proxy__(sym)			(*(__puss_iface__->luaproxy.sym))

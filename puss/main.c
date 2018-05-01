@@ -95,7 +95,7 @@ static int puss_init(lua_State* L) {
 	lua_setfield(L, -2, "_script");			// puss._script
 
 	if( is_script_file ) {
-		puss_rawget_ex(L, "puss.dofile");
+		puss_get_value(L, "puss.dofile");
 		lua_pushstring(L, script);
 		lua_call(L, 1, 0);
 		if( lua_getglobal(L, "__main__")!=LUA_TFUNCTION ) {
@@ -115,14 +115,17 @@ int main(int argc, char* argv[]) {
 	luaL_openlibs(L);
 	puss_lua_open_default(L, argv[0], _PUSS_MODULE_SUFFIX);
 
-	puss_rawget_ex(L, "puss.trace_pcall");
+	puss_get_value(L, "puss.trace_pcall");
 	lua_pushcfunction(L, puss_init);
 	lua_pushinteger(L, argc);
 	lua_pushlightuserdata(L, argv);
 	lua_call(L, 3, 2);
 	res = lua_toboolean(L, -1) ? 0 : 1;
-	if( res==0 ) {
-		puss_rawget_ex(L, "puss.trace_pcall");
+	if( res ) {
+		fprintf(stderr, "puss_init() failed: %s\n", lua_tostring(L, -1));
+		lua_pop(L, 2);
+	} else {
+		puss_get_value(L, "puss.trace_pcall");
 		lua_replace(L, -3);
 		lua_call(L, 1, 1);
 		res = lua_toboolean(L, -1) ? 0 : 2;

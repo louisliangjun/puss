@@ -25,9 +25,9 @@ void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, con
 // 
 void puss_lua_open_default(lua_State* L, const char* arg0, const char* module_suffix);
 
-// for example : puss_rawget_ex(L, "system.test.foo")
+// for example : puss_get_value(L, "system.test.foo")
 // 
-int  puss_rawget_ex(lua_State* L, const char* name);
+int  puss_get_value(lua_State* L, const char* name);
 
 PUSS_DECLS_END
 
