@@ -750,14 +750,15 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 	lua_pop(L, 1);
 
 	// imgui
-
-	puss_push_const_table(L);
 	{
+		puss_push_const_table(L);
+		{
 #define __REG_ENUM(e)	lua_pushinteger(L, e);	lua_setfield(L, -2, #e);
 #include "imgui_enums.inl"
 #undef __REG_ENUM
+		}
+		lua_pop(L, 1);
 	}
-	lua_pop(L, 1);
 
 	luaL_newlib(L, imgui_lua_apis);
 	lua_pushvalue(L, -1);
@@ -765,11 +766,13 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 
 	// scintilla
 	{
+		puss_push_const_table(L);
 		IFaceVal* p;
 		for( p=sci_values; p->name; ++p ) {
 			lua_pushinteger(L, p->val);
 			lua_setfield(L, -2, p->name);
 		}
+		lua_pop(L, 1);
 	}
 
 	// metatable: fun/get/set
