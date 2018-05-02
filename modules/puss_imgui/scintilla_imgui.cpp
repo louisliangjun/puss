@@ -35,6 +35,7 @@
 #include <memory>
 
 #include "imgui.h"
+#define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui_internal.h"
 
 #include "Platform.h"
@@ -939,24 +940,15 @@ public: 	// Public for scintilla_send_message
 	void Update() {
 		ImGuiStyle& style = ImGui::GetStyle();
 		ImGuiWindow* window = ImGui::GetCurrentWindow();
-		ImGuiWindowFlags flags = 0;
-		ImRect frame_bb(window->DC.CursorPos, ImVec2(window->Pos.x + window->Size.x - style.ScrollbarSize, window->Pos.y + window->Size.y - style.ScrollbarSize));
-		float totalHeight = (float)(pdoc->LinesTotal() * vs.lineHeight);
+		ImVec2 total_sz = window->Pos + window->Size - window->DC.CursorPos - (window->WindowPadding * 2.0f);
+		ImRect frame_bb(window->DC.CursorPos, (window->DC.CursorPos + total_sz));
+		float totalHeight = (float)((pdoc->LinesTotal() + 1) * vs.lineHeight);
 		float totalWidth = (float)(scrollWidth * vs.aveCharWidth);
-		ImVec2 frame_sz = frame_bb.GetSize();
-		ImVec2 total_sz = frame_sz;
+		ImVec2 frame_sz = total_sz;
 		horizontalScrollBarVisible = (totalWidth > frame_sz.x);
 		verticalScrollBarVisible = (totalHeight > frame_sz.y);
-		if( horizontalScrollBarVisible ) {
-			total_sz.x = totalWidth;
-			flags |= ImGuiWindowFlags_HorizontalScrollbar;
-		}
-		if( verticalScrollBarVisible ) {
-			total_sz.y = totalHeight;
-			flags |= ImGuiWindowFlags_AlwaysVerticalScrollbar;
-		}
 		ImGuiID id = window->GetID(this);
-		if( ImGui::BeginChildFrame(id, frame_sz, flags)) {
+		if( ImGui::BeginChildFrame(id, frame_sz, ImGuiWindowFlags_HorizontalScrollbar)) {
 			window = ImGui::GetCurrentWindow();
 			mainWindow.win = window;
 
@@ -964,10 +956,15 @@ public: 	// Public for scintilla_send_message
 			HandleInputEvents(id, frame_bb);
 
 			// scrollbar
-			if( lastScrollPos.x!=window->Scroll.x || lastScrollPos.y!=window->Scroll.y ) {
-				SetXYScroll(XYScrollPosition(window->Scroll.x / vs.aveCharWidth, window->Scroll.y / vs.lineHeight)); 
-				lastScrollPos = window->Scroll;
+			if( horizontalScrollBarVisible ) {
+				total_sz.x = totalWidth;
+				total_sz.y -= (window->ScrollbarSizes.y + (window->WindowPadding.y * 2.0f));
 			}
+			if( verticalScrollBarVisible ) {
+				total_sz.x -= (window->ScrollbarSizes.x + (window->WindowPadding.x * 2.0f));
+				total_sz.y = totalHeight;
+			}
+			SetXYScroll(XYScrollPosition(window->Scroll.x / vs.aveCharWidth, window->Scroll.y / vs.lineHeight));
 			// fprintf(stderr, "scroll pos: %d, %d\n", xOffset, topLine);
 			if( verticalScrollBarVisible || horizontalScrollBarVisible ) {
 				ImGui::Dummy(total_sz);
@@ -1076,7 +1073,6 @@ private:
 	bool captureMouse;
 	int rectangularSelectionModifier;
 	WindowIM mainWindow;
-	ImVec2 lastScrollPos;
 };
 
 ScintillaIM* scintilla_imgui_new() {
