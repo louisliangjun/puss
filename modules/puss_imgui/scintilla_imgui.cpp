@@ -152,8 +152,7 @@ public:
 		WindowIM* w = (WindowIM*)wid;
 		PLATFORM_ASSERT(w);
 		if( w->win ) {
-			offset.x = w->win->Pos.x - w->win->Scroll.x;
-			offset.y = w->win->Pos.y - w->win->Scroll.y;
+			offset = w->win->Pos;
 		}
 		inited = true;
 	}
@@ -221,7 +220,12 @@ public:
 		ImVec2 a(offset.x + rc.left, offset.y + rc.top);
 		ImVec2 b(offset.x + rc.right, offset.y + rc.bottom);
 		ImU32 alpha = 255;	// 32;	// for debug
+#if 1
 		canvas->AddRectFilled(a, b, IM_COL32(back.GetRed(),  back.GetGreen(), back.GetBlue(), alpha));
+#else
+		canvas->PathRect(a, b);
+		canvas->PathStroke(IM_COL32(255,  0, 0, 32), true, line_thickness);
+#endif
 	}
 	void FillRectangle(PRectangle rc, Surface &surfacePattern) override {
 		// SurfaceImpl &surfi = static_cast<SurfaceImpl &>(surfacePattern);
@@ -250,20 +254,6 @@ public:
 			// Something is wrong so try to show anyway
 			// Shows up black because colour not allocated
 			FillRectangle(rc, 0);
-		}
-	}
-	inline void DoRectangleDraw(PRectangle rc, float rounding, int cornerFlags, ColourDesired fill, int alphaFill, ColourDesired outline, int alphaOutline) {
-		ImDrawList* canvas = ImGui::GetWindowDrawList();
-		ImVec2 a(offset.x + rc.left + 0.5f, offset.y + rc.top + 0.5f);
-		ImVec2 b(offset.x + rc.right - 1.0f, offset.y + rc.bottom - 1.0f);
-		if( alphaFill ) {
-			pen_color = IM_COL32(fill.GetRed(),  fill.GetGreen(), fill.GetBlue(), alphaFill);
-			canvas->AddRectFilled(a, b, pen_color, rounding, cornerFlags);
-		}
-		if( alphaOutline ) {
-			pen_color = IM_COL32(outline.GetRed(),  outline.GetGreen(), outline.GetBlue(), alphaOutline);
-			canvas->PathRect(a, b, rounding, cornerFlags);
-			canvas->PathStroke(pen_color, true, line_thickness);
 		}
 	}
 	void RoundedRectangle(PRectangle rc, ColourDesired fore, ColourDesired back) override {
@@ -336,11 +326,15 @@ public:
 	void DrawTextBase(PRectangle rc, Font &font_, XYPOSITION ybase, const char *s, int len, ColourDesired fore) {
 		ImDrawList* canvas = ImGui::GetWindowDrawList();
 		ImVec2 pos(offset.x + rc.left, offset.y + rc.top);
-		ImVec4 rect(pos.x, pos.y, pos.x + rc.right, pos.y + rc.bottom);
+		ImVec4 rect(pos.x, pos.y, offset.x + rc.right, offset.y + rc.bottom);
 		ImFont* font = (ImFont*)(font_.fid);
 		if( font ) {
 			canvas->AddText(font, font->FontSize, pos, SetPenColour(fore), s, s+len, 0.0f, &rect);
 		}
+#if 0
+		canvas->PathRect(ImVec2(rect.x, rect.y), ImVec2(rect.z, rect.w));
+		canvas->PathStroke(IM_COL32(0, 255, 0, 32), true, line_thickness);
+#endif
 	}
 	void DrawTextNoClip(PRectangle rc, Font &font_, XYPOSITION ybase, const char *s, int len, ColourDesired fore, ColourDesired back) override {
 		FillRectangle(rc, back);
@@ -832,7 +826,6 @@ public: 	// Public for scintilla_send_message
 
 		/* mouse click handler */
 		if( hovered ) {
-			ImGuiWindow* window = ImGui::GetCurrentWindow();
 			ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
 			if( ImGui::IsMouseDown(0) ) {
 				if( ImGui::IsMouseClicked(0) ) {
@@ -949,43 +942,46 @@ public: 	// Public for scintilla_send_message
 		ImGuiWindowFlags flags = 0;
 		ImRect frame_bb(window->DC.CursorPos, ImVec2(window->Pos.x + window->Size.x - style.ScrollbarSize, window->Pos.y + window->Size.y - style.ScrollbarSize));
 		float totalHeight = (float)(pdoc->LinesTotal() * vs.lineHeight);
-		ImVec2 size = frame_bb.GetSize();
-		horizontalScrollBarVisible = (view.lineWidthMaxSeen > size.x);
-		verticalScrollBarVisible = (totalHeight > size.y);
+		float totalWidth = (float)(scrollWidth * vs.aveCharWidth);
+		ImVec2 frame_sz = frame_bb.GetSize();
+		ImVec2 total_sz = frame_sz;
+		horizontalScrollBarVisible = (totalWidth > frame_sz.x);
+		verticalScrollBarVisible = (totalHeight > frame_sz.y);
 		if( horizontalScrollBarVisible ) {
-			size.x = view.lineWidthMaxSeen;
+			total_sz.x = totalWidth;
 			flags |= ImGuiWindowFlags_HorizontalScrollbar;
 		}
 		if( verticalScrollBarVisible ) {
-			size.y = totalHeight;
+			total_sz.y = totalHeight;
 			flags |= ImGuiWindowFlags_AlwaysVerticalScrollbar;
 		}
 		ImGuiID id = window->GetID(this);
-		if( ImGui::BeginChildFrame(id, frame_bb.GetSize(), flags)) {
+		if( ImGui::BeginChildFrame(id, frame_sz, flags)) {
 			window = ImGui::GetCurrentWindow();
 			mainWindow.win = window;
 
-			// scrollbar
-			if( verticalScrollBarVisible || horizontalScrollBarVisible ) {
-				ImGui::Dummy(size);
-			}
-			//xOffset = window->Scroll.x;
-			//topLine = window->Scroll.y / vs.lineHeight;
-
 			// input
 			HandleInputEvents(id, frame_bb);
+
+			// scrollbar
+			if( lastScrollPos.x!=window->Scroll.x || lastScrollPos.y!=window->Scroll.y ) {
+				SetXYScroll(XYScrollPosition(window->Scroll.x / vs.aveCharWidth, window->Scroll.y / vs.lineHeight)); 
+				lastScrollPos = window->Scroll;
+			}
+			// fprintf(stderr, "scroll pos: %d, %d\n", xOffset, topLine);
+			if( verticalScrollBarVisible || horizontalScrollBarVisible ) {
+				ImGui::Dummy(total_sz);
+			}
 
 			// render
 			std::unique_ptr<Surface> surfaceWindow(Surface::Allocate(SC_TECHNOLOGY_DEFAULT));
 			surfaceWindow->Init(0, wMain.GetID());
 
-			PRectangle rc(0.0f, 0.0f, frame_bb.GetWidth(), frame_bb.GetHeight());
-			rc.left += window->Scroll.x;
-			rc.right += window->Scroll.x;
-			rc.top += window->Scroll.y;
-			rc.bottom += window->Scroll.y;
+			PRectangle rc(0.0f, 0.0f, frame_sz.x, frame_sz.y);
 			Paint(surfaceWindow.get(), rc);
 			surfaceWindow->Release();
+
+			mainWindow.win = NULL;
 		}
 
 		ImGui::EndChildFrame();
@@ -1013,12 +1009,11 @@ private:
 	PRectangle GetClientRectangle() const override {
 		Window win = wMain;
 		PRectangle rc = win.GetClientPosition();
-		//if (verticalScrollBarVisible)
-		//	rc.right -= verticalScrollBarWidth;
-		// rc.right -= 24.0f;
-		// if (horizontalScrollBarVisible && !Wrapping())
-		// 	rc.bottom -= horizontalScrollBarHeight;
-		// rc.bottom -= 24.0f;
+		ImGuiStyle& style = ImGui::GetStyle();
+		if (verticalScrollBarVisible)
+			rc.right -= style.ScrollbarSize;
+		if (horizontalScrollBarVisible && !Wrapping())
+			rc.bottom -= style.ScrollbarSize;
 		// Move to origin
 		rc.right -= rc.left;
 		rc.bottom -= rc.top;
@@ -1031,10 +1026,20 @@ private:
 		return rc;
 	}
 	void SetVerticalScrollPos() override {
+		if( mainWindow.win ) {
+			mainWindow.win->Scroll.y = topLine * vs.lineHeight;
+		}
 	}
 	void SetHorizontalScrollPos() override {
+		if( mainWindow.win ) {
+			mainWindow.win->Scroll.x = xOffset * vs.aveCharWidth;
+		}
 	}
 	bool ModifyScrollBars(Sci::Line nMax, Sci::Line nPage) override {
+		if( mainWindow.win ) {
+			mainWindow.win->Scroll.y = topLine * vs.lineHeight;
+			mainWindow.win->Scroll.x = xOffset * vs.aveCharWidth;
+		}
 		return false;
 	}
 	void NotifyChange() override {
@@ -1071,6 +1076,7 @@ private:
 	bool captureMouse;
 	int rectangularSelectionModifier;
 	WindowIM mainWindow;
+	ImVec2 lastScrollPos;
 };
 
 ScintillaIM* scintilla_imgui_new() {
