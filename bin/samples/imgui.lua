@@ -19,11 +19,6 @@ function __main__()
 	local w = imgui.glfw_imgui_create("imgui lua api", 1024, 768)
 	local sci = imgui.scintilla_new()
 	do
-		local fname = puss._path .. '/samples/imgui.lua'
-		local f = io.open(fname)
-		local t = f:read('*a')
-		f:close()
-		sci:SetText(t)
 		sci:SetTabWidth(4)
 		sci:SetLexerLanguage('lua')
 		local luaKeywords = [[
@@ -57,6 +52,14 @@ function __main__()
 		sci:StyleSetFore(SCE_LUA_WORD7, 0x00FF0000)
 		sci:StyleSetFore(SCE_LUA_WORD8, 0x00FF0000)
 		sci:StyleSetFore(SCE_LUA_LABEL, 0x0000FF00)
+	end
+	do
+		local fname = puss._path .. '/samples/imgui.lua'
+		local f = io.open(fname)
+		local t = f:read('*a')
+		f:close()
+		sci:SetText(t)
+		sci:EmptyUndoBuffer()
 	end
 	while w:update(imgui_demo_lua, sci) do
 		w:render()

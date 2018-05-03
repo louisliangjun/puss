@@ -59,22 +59,6 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 #define PUSS_NAMESPACE_APP_NAME			PUSS_NAMESPACE(app_name)
 #define PUSS_NAMESPACE_MODULE_SUFFIX	PUSS_NAMESPACE(module_suffix)
 
-static int traceback(lua_State* L) {
-	const char *msg = lua_tostring(L, 1);
-	luaL_traceback(L, L, msg?msg:"(unknown error)", 1);
-	return 1;
-}
-
-int puss_trace_pcall(lua_State* L, int narg, int nres) {
-	int status;
-	int base = lua_gettop(L) - narg;  /* function index */
-	lua_pushcfunction(L, traceback);
-	lua_insert(L, base);  /* put it under chunk and args */
-	status = lua_pcall(L, narg, nres, base);
-	lua_remove(L, base);  /* remove traceback function */
-	return status;
-}
-
 int puss_get_value(lua_State* L, const char* name) {
 	int top = lua_gettop(L);
 	const char* ps = name;
@@ -382,7 +366,6 @@ void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, con
 
 	lua_pop(L, 1);
 }
-
 
 void puss_lua_open_default(lua_State* L, const char* arg0, const char* module_suffix) {
 	char pth[4096];

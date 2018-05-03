@@ -96,12 +96,12 @@ static int file_info_bp_hit_test(DebugEnv* env, FileInfo* finfo, int line){
 	return 0;
 }
 
-static int script_on_breaked(DebugEnv* env, lua_State* L, lua_Debug* ar, const FileInfo* finfo) {
+static int script_on_breaked(DebugEnv* env, lua_State* L, int currentline, const FileInfo* finfo) {
 	if( env->breaked ) return 0;
 	if( !(env->debug_event_handle) ) return 0;
 
 	env->breaked_finfo = finfo;
-	env->breaked_line = ar->currentline;
+	env->breaked_line = currentline;
 	env->breaked_state = L;
 	env->breaked_top = lua_gettop(L);
 	env->breaked = 1;
@@ -179,7 +179,7 @@ static int script_line_hook(DebugEnv* env, lua_State* L, lua_Debug* ar) {
 	// fetch lua fuction proto MemHead
 	hdr = ((MemHead*)(clLvalue(ar->i_ci->func)->p)) - 1;
 
-	lua_getinfo(L, "nSlf", ar);
+	lua_getinfo(L, "Sl", ar);
 
 	if( !(hdr->finfo) ) {
 		if( (hdr->finfo = file_info_fetch(env, ar->source))==NULL )
@@ -194,7 +194,7 @@ static int script_line_hook(DebugEnv* env, lua_State* L, lua_Debug* ar) {
 		need_break = 1;
 	}
 
-	return need_break ? script_on_breaked(env, L, ar, hdr->finfo) : 0;
+	return need_break ? script_on_breaked(env, L, ar->currentline, hdr->finfo) : 0;
 }
 
 static int script_count_hook(DebugEnv* env, lua_State* L, lua_Debug* ar) {
