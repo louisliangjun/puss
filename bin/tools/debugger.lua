@@ -2,8 +2,9 @@
 
 print('debugger', puss._script)
 
+-- host debug server
+-- 
 if puss._script~='tools/debugger.lua' then
-	-- host debug server
 	if not puss.debug then
 		return print('ERROR : need run application with --debug')
 	end
@@ -54,49 +55,104 @@ if puss._script~='tools/debugger.lua' then
 	end
 
 	puss.debug.reset(function(ev) event_callbacks[ev]() end, 512)
-else
-	local sock
+	return
+end
 
-	function puss_debug_ui(ctx)
-		local LABEL = "PussDebuggerWindow"
-		-- nk_window_set_size(ctx, LABEL, nk_vec2(w, h))
+-- debugger boot
+-- 
+if not imgui then
+	local imgui = puss.require('puss_imgui')
+	_ENV.imgui = imgui
+	setmetatable(_ENV, {__index=imgui})
+	puss.dofile(puss._script, _ENV)
+	return
+end
 
-		if nk_begin(ctx, LABEL, nk_rect(0, 0, 800, 600), NK_WINDOW_BACKGROUND) then
-			nk_layout_row_static(ctx, 30, 80, 1);
-			if nk_button_label(ctx, "connect") then
-				sock:connect('127.0.0.1', 9999)
-			end
-			if nk_button_label(ctx, "step_into") then
-				sock:send('step_into')
-			end
-			if nk_button_label(ctx, "continue") then
-				sock:send('continue')
-			end
-		end
-		nk_end(ctx)
+local source_view_create
+do
+	local lua_keywords = [[
+     and       break     do        else      elseif    end
+     false     for       function  goto      if        in
+     local     nil       not       or        repeat    return
+     then      true      until     while
+     self     _ENV
+	]]
+
+	source_view_create = function()
+		local sv = scintilla_new()
+
+		sv:SetTabWidth(4)
+		sv:SetLexerLanguage('lua')
+		sv:SetKeyWords(0, lua_keywords)
+
+		sv:StyleSetFore(SCE_LUA_DEFAULT, 0x00000000)
+		sv:StyleSetFore(SCE_LUA_COMMENT, 0x00808080)
+		sv:StyleSetFore(SCE_LUA_COMMENTLINE, 0x00008000)
+		sv:StyleSetFore(SCE_LUA_COMMENTDOC, 0x00008000)
+		sv:StyleSetFore(SCE_LUA_NUMBER, 0x07008000)
+		sv:StyleSetFore(SCE_LUA_WORD, 0x00FF0000)
+		sv:StyleSetFore(SCE_LUA_STRING, 0x001515A3)
+		sv:StyleSetFore(SCE_LUA_CHARACTER, 0x001515A3)
+		sv:StyleSetFore(SCE_LUA_LITERALSTRING, 0x001515A3)
+		sv:StyleSetFore(SCE_LUA_PREPROCESSOR, 0x00808080)
+		sv:StyleSetFore(SCE_LUA_OPERATOR, 0x7F007F00)
+		sv:StyleSetFore(SCE_LUA_IDENTIFIER, 0x00000000)
+		sv:StyleSetFore(SCE_LUA_STRINGEOL, 0x001515A3)
+		sv:StyleSetFore(SCE_LUA_WORD2, 0x00FF0000)
+		sv:StyleSetFore(SCE_LUA_WORD3, 0x00FF0000)
+		sv:StyleSetFore(SCE_LUA_WORD4, 0x00FF0000)
+		sv:StyleSetFore(SCE_LUA_WORD5, 0x00FF0000)
+		sv:StyleSetFore(SCE_LUA_WORD6, 0x00FF0000)
+		sv:StyleSetFore(SCE_LUA_WORD7, 0x00FF0000)
+		sv:StyleSetFore(SCE_LUA_WORD8, 0x00FF0000)
+		sv:StyleSetFore(SCE_LUA_LABEL, 0x0000FF00)
+
+		return sv
+	end
+end
+
+local function source_view_set_file(source_view, fname)
+	local pth = puss._path .. '/' .. fname
+	local f = io.open(pth)
+	if not f then return end
+
+	local t = f:read('*a')
+	f:close()
+
+	source_view:SetText(t)
+	source_view:EmptyUndoBuffer()
+end
+
+-- debugger client
+-- 
+function puss_debugger_ui(sock, source_view)
+	-- ShowUserGuide()
+	-- ShowDemoWindow()
+
+	Begin("Puss Debugger")
+	if Button("connect") then
+		sock:connect('127.0.0.1', 9999)
+	end
+	if Button("step_into") then
+		sock:send('step_into')
+	end
+	if Button("continue") then
+		sock:send('continue')
+	end
+	scintilla_update(source_view)
+	End()
+end
+
+function __main__()
+	local puss_socket = puss.require('puss_socket')
+	local sock = puss_socket.socket_udp_create()
+	local main_window = glfw_imgui_create("puss debugger", 1024, 768)
+	local source_view = source_view_create()
+
+	while main_window:update(puss_debugger_ui, sock, source_view) do
+		main_window:render()
 	end
 
-	function __main__()
-		local puss_socket = puss.require('puss_socket')
-		local w = nk_glfw_window_create("puss debugger", 800, 600)
-		sock = puss_socket.socket_udp_create(1*1024*1024)
-
-		while w do
-			if w:update(puss_debug_ui) then
-				w:destroy()
-				w = nil
-			else
-				w:draw()
-			end
-		end
-	end
-
-	-- debugger
-	if not nk then
-		local nk = puss.require('puss_nuklear')
-		_ENV.nk = nk
-		setmetatable(_ENV, {__index=nk})
-		puss.dofile(puss._script)	-- for use nk symbols & enums
-	end
+	main_window:destroy()
 end
 

@@ -100,17 +100,21 @@ static int script_on_breaked(DebugEnv* env, lua_State* L, int currentline, const
 	if( env->breaked ) return 0;
 	if( !(env->debug_event_handle) ) return 0;
 
+	// reset breaked infos
 	env->breaked_finfo = finfo;
 	env->breaked_line = currentline;
 	env->breaked_state = L;
 	env->breaked_top = lua_gettop(L);
 	env->breaked = 1;
+
 	env->continue_signal = 0;
 	env->step_signal = 0;
 	env->runto_finfo = NULL;
 	env->runto_line = 0;
 
-	env->debug_event_handle(L, PUSS_DEBUG_EVENT_BREAKED_BEGIN);
+	if( env->debug_event_handle ) {
+		env->debug_event_handle(L, PUSS_DEBUG_EVENT_BREAKED_BEGIN);
+	}
 
 	while( env->debug_event_handle && env->continue_signal==0 ) {
 		env->debug_event_handle(L, PUSS_DEBUG_EVENT_BREAKED_UPDATE);
@@ -120,9 +124,13 @@ static int script_on_breaked(DebugEnv* env, lua_State* L, int currentline, const
 		env->debug_event_handle(L, PUSS_DEBUG_EVENT_BREAKED_END);
 	}
 
-	env->breaked = 0;
-	env->breaked_state = NULL;
+	// clear breaked infos
 	lua_settop(L, env->breaked_top);
+	env->breaked = 0;
+	env->breaked_top = 0;
+	env->breaked_state = NULL;
+	env->breaked_line = 0;
+	env->breaked_finfo = NULL;
 	return 0;
 }
 
@@ -391,6 +399,21 @@ static void builtin_debug_event_handle(lua_State* L, enum PussDebugEvent ev) {
 	}
 }
 
+static int lua_debug_cmd_start(lua_State* L) {
+	DebugEnv* env = debug_env_fetch(L);
+	const char* debugger_fname = luaL_optstring(L, 1, "tools/debugger.lua");
+	BOOL wait = lua_toboolean(L, 2);
+
+	puss_get_value(L, "puss.trace_dofile");
+	lua_pushstring(L, "tools/debugger.lua");
+	lua_call(L, 1, 0);
+
+	if( wait ) {
+		script_on_breaked(env, L, -1, NULL);
+	}
+	return 0;
+}
+
 static int lua_debug_cmd_reset(lua_State* L) {
 	PussDebugEventHandle h = NULL;
 	int hook_count = 0;
@@ -447,7 +470,8 @@ static int lua_debug_cmd_continue(lua_State* L) {
 }
 
 static luaL_Reg lua_debug_methods[] =
-	{ {"reset", lua_debug_cmd_reset}
+	{ {"start", lua_debug_cmd_start}
+	, {"reset", lua_debug_cmd_reset}
 	, {"update", lua_debug_cmd_update}
 	, {"bp_set", lua_debug_cmd_bp_set}
 	, {"bp_del", lua_debug_cmd_bp_del}

@@ -8,6 +8,9 @@ local function imgui_demo_lua(sci)
 	if not show_lua_window then return end
 	ok, show_lua_window = imgui.Begin("Lua Window", show_lua_window)
 	imgui.Text("Hello from lua window!")
+	if puss.debug and imgui.Button("start debugger") then
+		puss.debug.start(nil, true)
+	end
 	if imgui.Button("close") then
 		show_lua_window = false
 	end

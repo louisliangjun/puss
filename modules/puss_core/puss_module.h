@@ -65,7 +65,7 @@ struct PussInterface {
 
 	// misc
 	const char*	(*app_path)				(lua_State* L);	// [-0,+0,-]
-	int			(*rawget_ex)			(lua_State* L, const char* name);	// [-0,+1,-]
+	int			(*get_value)			(lua_State* L, const char* name);	// [-0,+1,-]
 
 	// debug
 	int			(*debug_command)		(lua_State* L, PussDebugCmd cmd, const void* p, int n);
