@@ -1,69 +1,57 @@
 -- debugger.lua
 
-print('debugger', puss._script)
-
 -- host debug server
 -- 
-if puss._script~='tools/debugger.lua' then
-	if not puss.debug then
-		return print('ERROR : need run application with --debug')
+if __puss_debug__ then
+	local puss_debug = __puss_debug__
+	local puss_socket = puss.require('puss_socket')
+	local listen_sock = puss_socket.socket_create()
+	print('puss_socket.socket_create()', listen_sock)
+	print('debug bind:', listen_sock:bind(nil, 9999))
+	print('debug listen:', listen_sock:listen())
+
+	puss_debug:reset(function(...)
+		print('event handle:', ...)
+	end, 8192)
+
+	local sock, addr = listen_sock:accept()
+	print('debug accept:', sock, addr)
+
+	if not sock then
+		print('accept failed:', sock, addr)
+		return
 	end
 
-	local puss_socket = puss.require('puss_socket')
+	print('attached:', sock, addr)
 
-	local current_debugger
-	local sock, addr = puss_socket.socket_udp_create('127.0.0.1', 9999, 1*1024*1024)
-	print('host listen at:', addr)
-
-	local function host_debug_update()
-		local res, msg, from = sock:recvfrom()
-		if not msg then return end
-		current_debugger = from
-		print( msg )
-		if msg=='step_into' then
-			puss.debug.step_into()
-		elseif msg=='continue' then
-			puss.debug.continue()
+	while sock do
+		local res, msg = sock:recv()
+		if res < 0 then
+			print('recv error:', res, msg)
+		elseif res==0 then
+			break	-- disconnected
+		else
+			print( 'recv result:', res, msg )
+			if msg=='step_into' then
+				puss_debug:step_into()
+			elseif msg=='continue' then
+				puss_debug:continue()
+			end
 		end
 	end
 
-	local event_callbacks = {}
-
-	event_callbacks[PUSS_DEBUG_EVENT_ATTACHED] = function()
-		print('attached')
-	end
-
-	event_callbacks[PUSS_DEBUG_EVENT_UPDATE] = function()
-		host_debug_update()
-	end
-
-	event_callbacks[PUSS_DEBUG_EVENT_HOOK_COUNT] = function()
-		-- print('count')
-		host_debug_update()
-	end
-
-	event_callbacks[PUSS_DEBUG_EVENT_BREAKED_BEGIN] = function()
-		print('breaked begin')
-	end
-
-	event_callbacks[PUSS_DEBUG_EVENT_BREAKED_UPDATE] = function()
-		host_debug_update()
-	end
-
-	event_callbacks[PUSS_DEBUG_EVENT_BREAKED_END] = function()
-		print('breaked end')
-	end
-
-	puss.debug.reset(function(ev) event_callbacks[ev]() end, 512)
+	print('detach:', sock, addr)
 	return
 end
 
 -- debugger boot
 -- 
-if not imgui then
-	local imgui = puss.require('puss_imgui')
-	_ENV.imgui = imgui
-	setmetatable(_ENV, {__index=imgui})
+if not puss_imgui then
+	local puss_imgui = puss.require('puss_imgui')
+	local puss_socket = puss.require('puss_socket')
+	_ENV.puss_imgui = puss_imgui
+	_ENV.puss_socket = puss_socket
+	setmetatable(_ENV, {__index=puss_imgui})
 	puss.dofile(puss._script, _ENV)
 	return
 end
@@ -125,12 +113,14 @@ end
 
 -- debugger client
 -- 
-function puss_debugger_ui(sock, source_view)
+function puss_debugger_ui(source_view)
 	-- ShowUserGuide()
 	-- ShowDemoWindow()
 
 	Begin("Puss Debugger")
 	if Button("connect") then
+		if sock then sock:close() end
+		sock = puss_socket.socket_create()
 		sock:connect('127.0.0.1', 9999)
 	end
 	if Button("step_into") then
@@ -144,12 +134,10 @@ function puss_debugger_ui(sock, source_view)
 end
 
 function __main__()
-	local puss_socket = puss.require('puss_socket')
-	local sock = puss_socket.socket_udp_create()
 	local main_window = glfw_imgui_create("puss debugger", 1024, 768)
 	local source_view = source_view_create()
 
-	while main_window:update(puss_debugger_ui, sock, source_view) do
+	while main_window:update(puss_debugger_ui, source_view) do
 		main_window:render()
 	end
 

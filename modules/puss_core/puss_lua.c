@@ -166,14 +166,9 @@ static PussInterface puss_iface =
 	{ puss_module_require
 	, puss_interface_register
 	, puss_interface_check
-
 	, puss_push_const_table
-
 	, puss_app_path
 	, puss_get_value
-
-	, puss_debug_command
-
 	};
 
 static int module_init_wrapper(lua_State* L) {
@@ -294,18 +289,7 @@ lua_State* puss_lua_newstate(int debug, lua_Alloc f, void* ud) {
 	return L;
 }
 
-void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, const char* module_suffix) {
-	// check already open
-	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_PUSS)==LUA_TTABLE ) {
-		lua_setglobal(L, "puss");
-		return;
-	}
-	lua_pop(L, 1);
-
-	#define __LUAPROXY_SYMBOL(sym)	puss_iface.luaproxy.sym = sym;
-		#include "luaproxy.symbols"
-	#undef __LUAPROXY_SYMBOL
-
+static void puss_lua_init(lua_State* L, const char* app_path, const char* app_name, const char* module_suffix) {
 	// puss namespace init
 	lua_newtable(L);	// puss
 	lua_pushvalue(L, -1);
@@ -346,22 +330,36 @@ void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, con
 	}
 	lua_pushstring(L, PATH_SEP);
 	lua_call(L, 1, 0);
+}
+
+static int _lua_proxy_inited = 0;
+
+void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, const char* module_suffix) {
+	DebugEnv* env;
+
+	// check already open
+	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_PUSS)==LUA_TTABLE ) {
+		lua_setglobal(L, "puss");
+		return;
+	}
+	lua_pop(L, 1);
+
+	if( !_lua_proxy_inited ) {
+		_lua_proxy_inited = 1;
+	#define __LUAPROXY_SYMBOL(sym)	puss_iface.luaproxy.sym = sym;
+		#include "luaproxy.symbols"
+	#undef __LUAPROXY_SYMBOL
+	}
+
+	puss_lua_init(L, app_path, app_name, module_suffix);
 
 	// debugger
-	if( lua_getallocf(L, NULL)==_debug_alloc ) {
-		luaL_newlib(L, lua_debug_methods);
-		lua_setfield(L, 1, "debug");	// puss.debug
+	env = debug_env_fetch(L);
+	if( env ) {
+		puss_lua_init(env->debug_state, app_path, app_name, module_suffix);
 
-		puss_push_const_table(L);
-	#define _reg(e)	lua_pushinteger(L, e);	lua_setfield(L, -2, #e)
-		_reg(PUSS_DEBUG_EVENT_ATTACHED);
-		_reg(PUSS_DEBUG_EVENT_UPDATE);
-		_reg(PUSS_DEBUG_EVENT_HOOK_COUNT);
-		_reg(PUSS_DEBUG_EVENT_BREAKED_BEGIN);
-		_reg(PUSS_DEBUG_EVENT_BREAKED_UPDATE);
-		_reg(PUSS_DEBUG_EVENT_BREAKED_END);
-	#undef _reg
-		lua_pop(L, 1);
+		lua_pushcfunction(L, lua_debugger_run);
+		lua_setfield(L, 1, "debug");	// puss.debug
 	}
 
 	lua_pop(L, 1);
