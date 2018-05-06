@@ -26,7 +26,7 @@ typedef struct _MemHead {
 
 typedef struct _DebugEnv {
 	lua_Alloc				frealloc;
-	void*					ud;
+	void*					frealloc_ud;
 	lua_State*				debug_state;
 	int						debug_handle;
 
@@ -65,8 +65,6 @@ static FileInfo* file_info_fetch(DebugEnv* env, const char* fname) {
 	const char* name;
 	if( !fname )
 		return NULL;
-	if( *fname=='@' || *fname=='=' )
-		++fname;
 	if( lua_getfield(L, LUA_REGISTRYINDEX, fname)==LUA_TUSERDATA ) {
 		finfo = (FileInfo*)lua_touserdata(L, -1);
 		return finfo;
@@ -141,7 +139,7 @@ static void debug_env_free(DebugEnv* env) {
 	}
 }
 
-static void *_debug_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
+static void *_debug_alloc(void *ud, void *ptr, size_t osize, size_t nsize) {
 	DebugEnv* env = (DebugEnv*)ud;
 	MemHead* nptr;
 	if( nsize ) {
@@ -151,7 +149,7 @@ static void *_debug_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
 		ptr = (void*)( ((MemHead*)ptr) - 1 );
 		osize += sizeof(MemHead);
 	}
-	nptr = (MemHead*)(*(env->frealloc))(ud, ptr, osize, nsize);
+	nptr = (MemHead*)(*(env->frealloc))(env->frealloc_ud, ptr, osize, nsize);
 	if( nptr ) {
 		memset(nptr, 0, sizeof(MemHead));
 		if( (env->main_addr==NULL) && (osize==LUA_TTHREAD) ) {
@@ -327,6 +325,18 @@ static int lua_debug_run_to(lua_State* L) {
 	return 0;
 }
 
+static int lua_debug_host_invoke(lua_State* L) {
+	DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
+	lua_State* hostL = env->main_state;
+	return 0;
+}
+
+static int lua_debug_breaked_invoke(lua_State* L) {
+	DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
+	lua_State* hostL = env->breaked_state;
+	return 0;
+}
+
 static luaL_Reg puss_debug_methods[] =
 	{ {"__index", NULL}
 	, {"reset", lua_debug_reset}
@@ -337,6 +347,8 @@ static luaL_Reg puss_debug_methods[] =
 	, {"step_over", lua_debug_step_over}
 	, {"step_out", lua_debug_step_out}
 	, {"run_to", lua_debug_run_to}
+	, {"host_invoke", lua_debug_host_invoke}
+	, {"breaked_invoke", lua_debug_breaked_invoke}
 	, {NULL, NULL}
 	};
 
@@ -346,7 +358,7 @@ static DebugEnv* debug_env_new(lua_Alloc f, void* ud) {
 	if( !env ) return NULL;
 	memset(env, 0, sizeof(DebugEnv));
 	env->frealloc = f;
-	env->ud = ud;
+	env->frealloc_ud = ud;
 	L = luaL_newstate();
 	env->debug_state = L;
 	env->debug_handle = LUA_NOREF;
@@ -380,7 +392,6 @@ static int lua_debugger_run(lua_State* hostL) {
 	if( lua_pcall(L, 1, 0, 0) ) {
 		lua_pop(L, 1);
 	}
-	lua_gc(L, LUA_GCCOLLECT, 0);
 	return 0;
 }
 
