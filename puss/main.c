@@ -1,5 +1,10 @@
 // main.c
 
+#ifdef _WIN32
+	#define WIN32_LEAN_AND_MEAN
+	#include <windows.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,20 +17,19 @@
 
 #define PUSS_DEFAULT_SCRIPT_FILE "default.lua"
 
-static int puss_get_debug(int argc, char** argv) {
+static const char* puss_args_lookup(int argc, char** argv, const char* key) {
+	size_t len = strlen(key);
 	int i;
 	for( i=1; i<argc; ++i ) {
-		// --debug[=level]
 		const char* arg = argv[i];
-		if( strncmp(arg, "--debug", 7)==0 ) {
-			if( arg[7]=='\0' )
-				return 1;
-			if( arg[7]!='=' )
-				continue;
-			return (int)strtol(arg+8, NULL, 10);
-		}
+		if( strncmp(arg, key, len)!=0 )
+			continue;
+		if( arg[len]=='\0' )
+			return arg+len;
+		if( arg[len]=='=' )
+			return arg+len+1;
 	}
-	return 0;
+	return NULL;
 }
 
 static const char* puss_push_parse_args(lua_State* L, int* is_script_file, int argc, const char** argv) {
@@ -111,7 +115,14 @@ static int puss_init(lua_State* L) {
 
 int main(int argc, char* argv[]) {
 	int res = 0;
-	lua_State* L = puss_lua_newstate(puss_get_debug(argc, argv), NULL, NULL);
+	lua_State* L;
+	const char* debug_level = puss_args_lookup(argc, argv, "--debug");
+#ifdef _WIN32
+	if( puss_args_lookup(argc, argv, "--gui") ) {
+		ShowWindow( GetConsoleWindow(), SW_HIDE );
+	}
+#endif
+	L = puss_lua_newstate((debug_level==NULL) ? 0 : (*debug_level=='\0' ? 1 : (int)strtol(debug_level, NULL, 10)), NULL, NULL);
 	luaL_openlibs(L);
 	puss_lua_open_default(L, argv[0], _PUSS_MODULE_SUFFIX);
 
