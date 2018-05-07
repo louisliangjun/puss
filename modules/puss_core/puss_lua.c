@@ -425,7 +425,6 @@ void* puss_pickle_pack(size_t* plen, lua_State* L, int start, int end) {
 	if( start <= end )
 		_lua_pickle_pack(pac, start, end);
 
-	assert( pac->mb.len );
 	*plen = pac->mb.len;
 	return pac->mb.buf;
 }

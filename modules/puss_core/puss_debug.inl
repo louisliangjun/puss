@@ -326,7 +326,6 @@ static int lua_debug_run_to(lua_State* L) {
 }
 
 typedef struct _HostInvokeUD {
-	DebugEnv*	env;
 	const char*	func;
 	size_t		size;
 	void*		args;
@@ -348,7 +347,7 @@ static int lua_debug_host_pcall(lua_State* L) {
 	int top = lua_gettop(hostL);
 	size_t len = 0;
 	void* buf = puss_pickle_pack(&len, L, 3, -1);
-	HostInvokeUD ud = { env, func, len, buf };
+	HostInvokeUD ud = { func, len, buf };
 	if( !lua_checkstack(hostL, 8) )
 		return luaL_error(L, "host stack overflow");
 

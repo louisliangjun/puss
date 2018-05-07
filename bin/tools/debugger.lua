@@ -31,11 +31,14 @@ if __puss_debug__ then
 		elseif res==0 then
 			break	-- disconnected
 		else
-			print( 'recv result:', res, msg )
-			if msg=='step_into' then
+			local cmd, a1, a2, a3 = puss.pickle_unpack(msg)
+			print( 'recv result:', res, cmd, a1, a2, a3 )
+			if cmd=='step_into' then
 				puss_debug:step_into()
-			elseif msg=='continue' then
+			elseif cmd=='continue' then
 				puss_debug:continue()
+			elseif cmd=='host_pcall' then
+				puss_debug:host_pcall(a1, a2, a3)
 			end
 		end
 	end
@@ -124,10 +127,16 @@ function puss_debugger_ui(source_view)
 		sock:connect('127.0.0.1', 9999)
 	end
 	if Button("step_into") then
-		sock:send('step_into')
+		sock:send(puss.pickle_pack('step_into'))
 	end
 	if Button("continue") then
-		sock:send('continue')
+		sock:send(puss.pickle_pack('continue'))
+	end
+	if Button("host_pcall") then
+		local n, s = source_view:GetText(source_view:GetTextLength())
+		local src = puss.pickle_pack('host_pcall', 'print', s)
+		print(puss.pickle_unpack(src))
+		sock:send(puss.pickle_pack('host_pcall', 'print', s))
 	end
 	scintilla_update(source_view)
 	End()

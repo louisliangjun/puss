@@ -100,7 +100,7 @@ static int _lua__sci_send_wrap(lua_State* L) {
 	case IFaceType_bool:	wparam = (uptr_t)lua_toboolean(L, 2);		break;
 	case IFaceType_colour:
 	case IFaceType_position:
-	case IFaceType_int:		wparam = (uptr_t)luaL_checknumber(L, 2);	break;
+	case IFaceType_int:		wparam = (uptr_t)luaL_checkinteger(L, 2);	break;
 	case IFaceType_string:	wparam = (uptr_t)luaL_checkstring(L, 2);	break;
 	default:
 		if( decl->wparam < IFaceTypeMax )
@@ -113,7 +113,7 @@ static int _lua__sci_send_wrap(lua_State* L) {
 	case IFaceType_bool:	lparam = (sptr_t)lua_toboolean(L, lparam_index);	break;
 	case IFaceType_colour:
 	case IFaceType_position:
-	case IFaceType_int:		lparam = (sptr_t)luaL_checknumber(L, lparam_index);	break;
+	case IFaceType_int:		lparam = (sptr_t)luaL_checkinteger(L, lparam_index);	break;
 	case IFaceType_string:	lparam = (sptr_t)luaL_checkstring(L, lparam_index);	break;
 	case IFaceType_stringresult:
 		{
@@ -136,7 +136,7 @@ static int _lua__sci_send_wrap(lua_State* L) {
 	case IFaceType_bool:	lua_pushboolean(L, (int)ret);	++nret;	break;
 	case IFaceType_colour:
 	case IFaceType_position:
-	case IFaceType_int:		lua_pushnumber(L, (lua_Number)ret);	++nret;	break;
+	case IFaceType_int:		lua_pushinteger(L, (lua_Integer)ret);	++nret;	break;
 	default:
 		if( decl->rtype < IFaceTypeMax )
 			return luaL_error(L, "not support return type(%s)", iface_type_name[decl->rtype]);
