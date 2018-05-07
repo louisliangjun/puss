@@ -29,6 +29,9 @@ void puss_lua_open_default(lua_State* L, const char* arg0, const char* module_su
 // 
 int  puss_get_value(lua_State* L, const char* name);
 
+void* puss_pickle_pack(size_t* plen, lua_State* L, int start, int end);
+int puss_pickle_unpack(lua_State* L, const void* pkt, size_t len);
+
 PUSS_DECLS_END
 
 #endif//_INC_PUSS_LUA_H_

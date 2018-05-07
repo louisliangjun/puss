@@ -20,6 +20,8 @@ typedef struct PussInterface	PussInterface;
 	#define puss_push_const_table		(*(__puss_iface__->push_const_table))
 	#define puss_app_path				(*(__puss_iface__->app_path))
 	#define puss_get_value				(*(__puss_iface__->get_value))
+	#define puss_pickle_pack			(*(__puss_iface__->pickle_pack))
+	#define puss_pickle_unpack			(*(__puss_iface__->pickle_unpack))
 
 	#define	__lua_proxy__(sym)			(*(__puss_iface__->luaproxy.sym))
 #endif
@@ -42,6 +44,10 @@ struct PussInterface {
 	// misc
 	const char*	(*app_path)				(lua_State* L);	// [-0,+0,-]
 	int			(*get_value)			(lua_State* L, const char* name);	// [-0,+1,-]
+
+	// simple pickle
+	void*		(*pickle_pack)			(size_t* plen, lua_State* L, int start, int end);
+	int			(*pickle_unpack)		(lua_State* L, const void* pkt, size_t len);
 
 	// luaproxy
 	LuaProxy	luaproxy;

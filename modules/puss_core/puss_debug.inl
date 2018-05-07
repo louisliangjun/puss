@@ -325,16 +325,42 @@ static int lua_debug_run_to(lua_State* L) {
 	return 0;
 }
 
-static int lua_debug_host_invoke(lua_State* L) {
-	DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
-	lua_State* hostL = env->main_state;
-	return 0;
+typedef struct _HostInvokeUD {
+	DebugEnv*	env;
+	const char*	func;
+	size_t		size;
+	void*		args;
+} HostInvokeUD;
+
+static int do_host_invoke(lua_State* L) {
+	HostInvokeUD* ud = lua_touserdata(L, 1);
+	lua_settop(L, 0);
+	puss_get_value(L, ud->func);
+	puss_pickle_unpack(L, ud->args, ud->size);
+	lua_call(L, lua_gettop(L)-1, LUA_MULTRET);
+	return lua_gettop(L);
 }
 
-static int lua_debug_breaked_invoke(lua_State* L) {
+static int lua_debug_host_pcall(lua_State* L) {
 	DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
-	lua_State* hostL = env->breaked_state;
-	return 0;
+	lua_State* hostL = env->breaked_state ? env->breaked_state : env->main_state;
+	const char* func = luaL_checkstring(L, 2);
+	int top = lua_gettop(hostL);
+	size_t len = 0;
+	void* buf = puss_pickle_pack(&len, L, 3, -1);
+	HostInvokeUD ud = { env, func, len, buf };
+	if( !lua_checkstack(hostL, 8) )
+		return luaL_error(L, "host stack overflow");
+
+	lua_pushcfunction(hostL, do_host_invoke);
+	lua_pushlightuserdata(hostL, &ud);
+	lua_pcall(hostL, 1, LUA_MULTRET, 0);
+	buf = puss_pickle_pack(&len, hostL, top, -1);
+	lua_settop(hostL, top);
+
+	lua_settop(L, 0);
+	puss_pickle_unpack(L, buf, len);
+	return lua_gettop(L);
 }
 
 static luaL_Reg puss_debug_methods[] =
@@ -347,8 +373,7 @@ static luaL_Reg puss_debug_methods[] =
 	, {"step_over", lua_debug_step_over}
 	, {"step_out", lua_debug_step_out}
 	, {"run_to", lua_debug_run_to}
-	, {"host_invoke", lua_debug_host_invoke}
-	, {"breaked_invoke", lua_debug_breaked_invoke}
+	, {"host_pcall", lua_debug_host_pcall}
 	, {NULL, NULL}
 	};
 
