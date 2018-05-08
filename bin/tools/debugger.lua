@@ -3,7 +3,26 @@
 -- host debug server
 -- 
 if __puss_debug__ then
+
 	local puss_debug = __puss_debug__
+
+	local MT = getmetatable(puss_debug)
+
+	MT.dostring = function(self, script)
+		local f, e = load(script, '<debug-host-dostring>')
+		if not f then error(e) end
+		return f()
+	end
+
+	local function dispatch(cmd, ...)
+		-- print( 'recv result:', cmd, ... )
+		local handle = puss_debug[cmd]
+		if not handle then
+			error('unknown cmd('..tostring(cmd)..')')
+		end
+		return handle(puss_debug, ...)
+	end
+
 	local puss_socket = puss.require('puss_socket')
 	local listen_sock = puss_socket.socket_create()
 	print('puss_socket.socket_create()', listen_sock)
@@ -31,15 +50,7 @@ if __puss_debug__ then
 		elseif res==0 then
 			break	-- disconnected
 		else
-			local cmd, a1, a2, a3 = puss.pickle_unpack(msg)
-			print( 'recv result:', res, cmd, a1, a2, a3 )
-			if cmd=='step_into' then
-				puss_debug:step_into()
-			elseif cmd=='continue' then
-				puss_debug:continue()
-			elseif cmd=='host_pcall' then
-				puss_debug:host_pcall(a1, a2, a3)
-			end
+			dispatch(puss.pickle_unpack(msg))
 		end
 	end
 
@@ -132,11 +143,11 @@ function puss_debugger_ui(source_view)
 	if Button("continue") then
 		sock:send(puss.pickle_pack('continue'))
 	end
-	if Button("host_pcall") then
+	if Button("dostring") then
 		local n, s = source_view:GetText(source_view:GetTextLength())
-		local src = puss.pickle_pack('host_pcall', 'print', s)
-		print(puss.pickle_unpack(src))
-		sock:send(puss.pickle_pack('host_pcall', 'print', s))
+		local src = puss.pickle_pack('host_pcall', 'puss.trace_dostring', s)
+		-- print(puss.pickle_unpack(src))
+		sock:send(src)
 	end
 	scintilla_update(source_view)
 	End()
@@ -145,6 +156,7 @@ end
 function __main__()
 	local main_window = glfw_imgui_create("puss debugger", 1024, 768)
 	local source_view = source_view_create()
+	source_view:SetText([[print('hello', imgui)]])
 
 	while main_window:update(puss_debugger_ui, source_view) do
 		main_window:render()
