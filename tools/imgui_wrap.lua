@@ -412,7 +412,7 @@ function main()
 	local apis = {}
 	local enums = {}
 	local inttypes = {}
-	local wraps = {}
+	local wraps, begins, ends = {}, {}, {}
 	pasre_apis(apis, src)
 	parse_enums(enums, src)
 	parse_inttypes(inttypes, src)
@@ -751,6 +751,54 @@ function main()
 			return nret
 		end
 
+		local end_overrides =
+			{ ['PopupModal'] = 'EndPopup'
+			, ['PopupContextItem'] = 'EndPopup'
+			, ['PopupContextWindow'] = 'EndPopup'
+			, ['PopupContextVoid'] = 'EndPopup'
+			}
+
+		local stack_types = {}
+
+		local function fetch_stack_type(tp)
+			for i,k in ipairs(stack_types) do
+				if k==tp then return i end
+			end
+			local n = #stack_types + 1
+			stack_types[n] = tp
+			return n
+		end
+
+		local function gen_begin_wraps(name, ret)
+			local tp = name:match('^Begin(.*)$')
+			if tp then
+				tp = end_overrides[tp] or 'End'..tp
+			elseif name=='TreeNode' or name=='TreePush' then
+				tp = 'TreePop'
+			elseif name=='PushStyleVar' then
+				tp = 'PopStyleVar'
+			end
+			if not tp then return end
+			if ret=='bool' then
+				dst:writeln('	if(__ret__) { __IMGUI_STACK_BEGIN(', fetch_stack_type(tp), ') }')
+			else
+				dst:writeln('	__IMGUI_STACK_BEGIN(', fetch_stack_type(tp), ')')
+			end
+		end
+
+		local function gen_end_wraps(name)
+			local tp = name:match('^End(.*)$')
+			if tp then
+				tp = end_overrides[tp] or 'End'..tp
+			elseif name=='TreePop' then
+				tp = 'TreePop'
+			elseif name=='PopStyleVar' then
+				tp = 'PopStyleVar'
+			end
+			if not tp then return end
+			dst:writeln('	__IMGUI_STACK_END(', fetch_stack_type(tp), ')')
+		end
+
 		local function gen_lua_wrap(w, ret, name, args)
 			dst:writeln(string.format('static int wrap_%s(lua_State* L) {', w))
 			local narg_pos = dst:writeln('	int __narg__ = lua_gettop(L);')
@@ -758,7 +806,9 @@ function main()
 			gen_ret_decl(ret)
 			gen_args_decl(args)
 			local iarg_use, narg_use = gen_args_fetch(args)
+			gen_end_wraps(name)
 			gen_api_invoke(ret, name, args)
+			gen_begin_wraps(name, ret)
 			local nret = gen_ret_push(ret, args)
 			if not iarg_use then dst:remove(iarg_pos) end
 			if not narg_use then dst:remove(narg_pos) end
@@ -792,11 +842,19 @@ function main()
 
 		dst:writeln('// lua imgui wrappers')
 		dst:writeln()
+		dst:writeln('#ifndef __IMGUI_STACK_BEGIN')
+		dst:writeln('	#define __IMGUI_STACK_BEGIN(tp)')
+		dst:writeln('#endif//__IMGUI_STACK_BEGIN')
+		dst:writeln('#ifndef __IMGUI_STACK_END')
+		dst:writeln('	#define __IMGUI_STACK_END(tp)')
+		dst:writeln('#endif//__IMGUI_STACK_END')
+		dst:writeln()
 		dst:insert(buffer_implements)
 
 		for _, v in ipairs(apis) do
 			gen_function(table.unpack(v))
 		end
+
 		do
 			local t = {}
 			for k in pairs(implements) do table.insert(t, k) end
@@ -811,6 +869,14 @@ function main()
 				dst:writeln()
 			end
 		end
+		dst:writeln()
+		dst:writeln('#define IMGUI_STACK_POP(tp) \\')
+		dst:writeln('	switch(tp) { \\')
+		for i, v in ipairs(stack_types) do
+			dst:writeln('	case ', i, ':	ImGui::', v, '();	break; \\')
+		end
+		dst:writeln('	default:	break; \\')
+		dst:writeln('	}')
 		dst:writeln()
 	end)
 

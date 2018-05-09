@@ -563,6 +563,15 @@ void ImguiEnv::ImGui_ImplGlfwGL3_NewFrame()
 #include "puss_module_imgui.h"
 #include "scintilla_imgui.h"
 
+static char __imgui_stack[1024];
+static int  __imgui_top = 0;
+
+#define __IMGUI_STACK_BEGIN(tp)	__imgui_stack[__imgui_top++] = tp;
+#define __IMGUI_STACK_END(tp)	__imgui_top--;
+#include "imgui_lua.inl"
+#undef __IMGUI_STACK_BEGIN
+#undef __IMGUI_STACK_END
+
 #define IMGUI_LIB_NAME	"ImguiLib"
 
 static int imgui_destroy_lua(lua_State* L) {
@@ -582,8 +591,8 @@ static int imgui_update_lua(lua_State* L) {
 	GLFWwindow* win = env->g_Window;
 	luaL_argcheck(L, lua_type(L, 2)==LUA_TFUNCTION, 2, "need function!");
 
-	if( !win ) { return 0; }
-    if( glfwWindowShouldClose(win) ) { return 0; }
+	if( !win ) return 0;
+    if( glfwWindowShouldClose(win) ) return 0;
 
 	ImGui::SetCurrentContext(env->g_Context);
 
@@ -592,16 +601,19 @@ static int imgui_update_lua(lua_State* L) {
 	env->ImGui_ImplGlfwGL3_NewFrame();
 
 	// GUI
-	lua_pushboolean(L, 1);	// use true replace w
-	lua_replace(L, 1);
-	lua_call(L, lua_gettop(L)-2, LUA_MULTRET);
-	return lua_gettop(L);
+	lua_call(L, lua_gettop(L)-2, 0);
+	lua_pushboolean(L, 1);
+	return 1;
 }
 
 static int imgui_render_lua(lua_State* L) {
 	ImguiEnv* env = (ImguiEnv*)luaL_checkudata(L, 1, IMGUI_MT_NAME);
 	GLFWwindow* win = env->g_Window;
 	if( !win ) return 0;
+
+	while( __imgui_top > 0 ) {
+		IMGUI_STACK_POP( __imgui_stack[--__imgui_top] );
+	}
 
 	ImGui::SetCurrentContext(env->g_Context);
 	glfwMakeContextCurrent(win);
@@ -621,7 +633,7 @@ static int imgui_render_lua(lua_State* L) {
 	return 0;
 }
 
-static int glfw_imgui_create(lua_State* L) {
+static int imgui_create_glfw_lua(lua_State* L) {
 	const char* title = luaL_optstring(L, 1, "imgui window");
 	int width = (int)luaL_optinteger(L, 2, 1024);
 	int height = (int)luaL_optinteger(L, 3, 768);
@@ -634,10 +646,6 @@ static int glfw_imgui_create(lua_State* L) {
 		static luaL_Reg methods[] =
 			{ {"__index", NULL}
 			, {"__gc", imgui_destroy_lua}
-			, {"destroy", imgui_destroy_lua}
-			, {"update", imgui_update_lua}
-			, {"render", imgui_render_lua}
-			// TODO : callbacks( resize/... )
 			, {NULL, NULL}
 			};
 		luaL_setfuncs(L, methods, 0);
@@ -689,33 +697,33 @@ static int glfw_imgui_create(lua_State* L) {
 	// sprintf(pth, "%s/fonts/wqy-micro-hei.ttf", puss_app_path(L));
 	// io.Fonts->AddFontFromFileTTF(pth, 18.0f, 0, io.Fonts->GetGlyphRangesChinese());
 
-	if( err ) {
+	if( err )
 		return lua_error(L);
-	}
 
 	env->ImGui_ImplGlfwGL3_NewFrame();
 	ImGui::EndFrame();
 	return 1;
 }
 
-#include "imgui_lua.inl"
-
 #include "scintilla_imgui_lua.inl"
 #include "scintilla.iface.inl"
 
 static luaL_Reg imgui_lua_apis[] =
-	{ {"glfw_imgui_create", glfw_imgui_create}
+	{ {"ImGuiCreateGLFW", imgui_create_glfw_lua}
+	, {"ImGuiDestroy", imgui_destroy_lua}
+	, {"ImGuiUpdate", imgui_update_lua}
+	, {"ImGuiRender", imgui_render_lua}
 	
-	, {"byte_array_create", byte_array_create}
-	, {"float_array_create", float_array_create}
+	, {"ByteArrayCreate", byte_array_create}
+	, {"FloatArrayCreate", float_array_create}
 
 #define __REG_WRAP(w)	, { #w, wrap_ ## w }
-#include "imgui_wraps.inl"
+	#include "imgui_wraps.inl"
 #undef __REG_WRAP
 
-	, {"scintilla_new", im_scintilla_new}
-	, {"scintilla_update", im_scintilla_update}
-	, {"scintilla_free", im_scintilla_free}
+	, {"ScintillaNew", im_scintilla_new}
+	, {"ScintillaUpdate", im_scintilla_update}
+	, {"ScintillaFree", im_scintilla_free}
 
 	, {NULL, NULL}
 	};
@@ -750,15 +758,13 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 	lua_pop(L, 1);
 
 	// imgui
+	puss_push_const_table(L);
 	{
-		puss_push_const_table(L);
-		{
 #define __REG_ENUM(e)	lua_pushinteger(L, e);	lua_setfield(L, -2, #e);
-#include "imgui_enums.inl"
+	#include "imgui_enums.inl"
 #undef __REG_ENUM
-		}
-		lua_pop(L, 1);
 	}
+	lua_pop(L, 1);
 
 	luaL_newlib(L, imgui_lua_apis);
 	lua_pushvalue(L, -1);

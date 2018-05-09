@@ -2,10 +2,9 @@
 
 -- host debug server
 -- 
-if __puss_debug__ then
+local puss_debug = __puss_debug__
 
-	local puss_debug = __puss_debug__
-
+if puss_debug then
 	local MT = getmetatable(puss_debug)
 
 	MT.dostring = function(self, script)
@@ -81,7 +80,7 @@ do
 	]]
 
 	source_view_create = function()
-		local sv = scintilla_new()
+		local sv = ScintillaNew()
 
 		sv:SetTabWidth(4)
 		sv:SetLexerLanguage('lua')
@@ -132,36 +131,52 @@ function puss_debugger_ui(source_view)
 	-- ShowDemoWindow()
 
 	Begin("Puss Debugger")
+	if puss.debug then
+		if Button("show_debugger") then
+			os.execute('start /B ' .. puss._path .. '/' .. puss._self .. ' tools/debugger.lua')
+		end
+		SameLine()
+		if Button("start_debug_self") then
+			puss.debug()
+		end
+	end
+
 	if Button("connect") then
 		if sock then sock:close() end
 		sock = puss_socket.socket_create()
 		sock:connect('127.0.0.1', 9999)
 	end
+	SameLine()
 	if Button("step_into") then
 		sock:send(puss.pickle_pack('step_into'))
 	end
+	SameLine()
 	if Button("continue") then
 		sock:send(puss.pickle_pack('continue'))
 	end
+	SameLine()
 	if Button("dostring") then
 		local n, s = source_view:GetText(source_view:GetTextLength())
 		local src = puss.pickle_pack('host_pcall', 'puss.trace_dostring', s)
 		-- print(puss.pickle_unpack(src))
 		sock:send(src)
 	end
-	scintilla_update(source_view)
+	ScintillaUpdate(source_view)
 	End()
 end
 
 function __main__()
-	local main_window = glfw_imgui_create("puss debugger", 1024, 768)
+	local main_window = ImGuiCreateGLFW("puss debugger", 400, 300)
 	local source_view = source_view_create()
-	source_view:SetText([[print('hello', imgui)]])
+	source_view:SetText([[print('hello', puss_imgui)]])
 
-	while main_window:update(puss_debugger_ui, source_view) do
-		main_window:render()
+	while true do
+		local ok, running = puss.trace_pcall(ImGuiUpdate, main_window, puss_debugger_ui, source_view)
+		if ok and (not running) then break end
+		ImGuiRender(main_window)
 	end
 
-	main_window:destroy()
+	ScintillaFree(source_view)
+	ImGuiDestroy(main_window)
 end
 

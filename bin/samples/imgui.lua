@@ -14,13 +14,13 @@ local function imgui_demo_lua(sci)
 	if imgui.Button("close") then
 		show_lua_window = false
 	end
-	imgui.scintilla_update(sci)
+	imgui.ScintillaUpdate(sci)
 	imgui.End()
 end
 
 function __main__()
-	local w = imgui.glfw_imgui_create("imgui lua api", 1024, 768)
-	local sci = imgui.scintilla_new()
+	local w = imgui.ImGuiCreateGLFW("imgui lua api", 1024, 768)
+	local sci = imgui.ScintillaNew()
 	do
 		sci:SetTabWidth(4)
 		sci:SetLexerLanguage('lua')
@@ -64,10 +64,10 @@ function __main__()
 		sci:SetText(t)
 		sci:EmptyUndoBuffer()
 	end
-	while w:update(imgui_demo_lua, sci) do
-		w:render()
+	while ImGuiUpdate(w, imgui_demo_lua, sci) do
+		ImGuiRender(w)
 	end
-	w:destroy()
+	ImGuiDestroy(w)
 end
 
 if not imgui then
