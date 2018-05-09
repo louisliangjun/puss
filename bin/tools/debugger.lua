@@ -7,20 +7,40 @@ local puss_debug = __puss_debug__
 if puss_debug then
 	local MT = getmetatable(puss_debug)
 
-	MT.dostring = function(self, script)
-		local f, e = load(script, '<debug-host-dostring>')
-		if not f then error(e) end
-		return f()
+	-- inject debug utils into host
+	puss_debug:host_pcall('puss.trace_dostring', [[
+puss._debug = {}
+puss._debug.fetch_stack = function()
+	local infos = {}
+	for level=1,256 do
+		local info = debug.getinfo(level, 'Slut')
+		if not info then break end
+		info.level = level
+		table.insert(infos, info)
 	end
-
-	local function dispatch(cmd, ...)
-		-- print( 'recv result:', cmd, ... )
-		local handle = puss_debug[cmd]
-		if not handle then
-			error('unknown cmd('..tostring(cmd)..')')
-		end
-		return handle(puss_debug, ...)
+	return infos
+end
+puss._debug.fetch_vars = function(level)
+	local locals, ups, varargs = {}, {}, {}
+	local info = debug.getinfo(level, 'uf')
+	for i=1,255 do
+		local v = debug.getlocal(level, i)
+		if not v then break end
+		table.insert(locals, v)
 	end
+	for i=1,255 do
+		local v = debug.getupvalue(info.func, i)
+		if not v then break end
+		table.insert(ups, v)
+	end
+	for i=-1,-255,-1 do
+		local v = debug.getlocal(level, i)
+		if not v then break end
+		table.insert(varargs, v)
+	end
+	return locals, ups, varargs
+end
+	]], '<DebugInject>')
 
 	local puss_socket = puss.require('puss_socket')
 	local listen_sock = puss_socket.socket_create()
@@ -38,6 +58,19 @@ if puss_debug then
 	if not sock then
 		print('accept failed:', sock, addr)
 		return
+	end
+
+	local function response(cmd, ...)
+		sock:send(puss.pickle_pack(cmd, ...))
+	end
+
+	local function dispatch(cmd, ...)
+		-- print( 'recv result:', cmd, ... )
+		local handle = puss_debug[cmd]
+		if not handle then
+			error('unknown cmd('..tostring(cmd)..')')
+		end
+		return response(cmd, handle(puss_debug, ...))
 	end
 
 	print('attached:', sock, addr)
@@ -126,6 +159,18 @@ end
 
 -- debugger client
 -- 
+local function debug_call(cmd, ...)
+	sock:send(puss.pickle_pack(cmd, ...))
+	local res, msg = sock:recv()
+	if res < 0 then
+		print('debugger recv error:', res, msg)
+	elseif res==0 then
+		print('debugger disconnected')
+	else
+		print('debugger recv:', puss.pickle_unpack(msg))
+	end
+end
+
 function puss_debugger_ui(source_view)
 	-- ShowUserGuide()
 	-- ShowDemoWindow()
@@ -148,18 +193,21 @@ function puss_debugger_ui(source_view)
 	end
 	SameLine()
 	if Button("step_into") then
-		sock:send(puss.pickle_pack('step_into'))
+		debug_call('step_into')
 	end
 	SameLine()
 	if Button("continue") then
-		sock:send(puss.pickle_pack('continue'))
+		debug_call('continue')
 	end
 	SameLine()
 	if Button("dostring") then
 		local n, s = source_view:GetText(source_view:GetTextLength())
-		local src = puss.pickle_pack('host_pcall', 'puss.trace_dostring', s)
-		-- print(puss.pickle_unpack(src))
-		sock:send(src)
+		debug_call('host_pcall', 'puss.trace_dostring', s)
+	end
+	SameLine()
+	if Button("stack") then
+		local n, s = source_view:GetText(source_view:GetTextLength())
+		debug_call('host_pcall', 'puss._debug.fetch_stack')
 	end
 	ScintillaUpdate(source_view)
 	End()
@@ -168,7 +216,21 @@ end
 function __main__()
 	local main_window = ImGuiCreateGLFW("puss debugger", 400, 300)
 	local source_view = source_view_create()
-	source_view:SetText([[print('hello', puss_imgui)]])
+
+	source_view:SetText([[print('===')
+for lv=6,1000 do
+	local info = debug.getinfo(lv, 'Slut')
+	if not info then break end
+	print('	LV:', lv)
+	for k,v in pairs(info) do print('	', k,v) end
+end
+print(debug.getlocal(6, 1))
+print(debug.getlocal(9, -1))
+do
+	local info = debug.getinfo(9, 'f')
+	print(debug.getupvalue(info.func, 2))
+end
+]])
 
 	while true do
 		local ok, running = puss.trace_pcall(ImGuiUpdate, main_window, puss_debugger_ui, source_view)
