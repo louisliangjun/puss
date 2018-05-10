@@ -248,7 +248,8 @@ static int lua_socket_set_nonblock(lua_State* L) {
 }
 
 static const luaL_Reg socket_methods[] =
-	{ {"__gc",			lua_socket_close}
+	{ {"__index",		NULL}
+	, {"__gc",			lua_socket_close}
 	, {"close",			lua_socket_close}
 	, {"bind",			lua_socket_bind}
 	, {"listen",		lua_socket_listen}
