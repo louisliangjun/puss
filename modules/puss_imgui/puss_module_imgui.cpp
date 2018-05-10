@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <deque>
 
 
 // ImGui GLFW binding with OpenGL3 + shaders
@@ -56,28 +57,30 @@
 #include <GLFW/glfw3native.h>
 #endif
 
-static char         g_GlslVersion[32] = "#version 150";
+static char				g_GlslVersion[32] = "#version 150";
 
 struct ImguiEnv {
 	// GLFW data
-	GLFWwindow*		g_Window;
-	ImGuiContext*	g_Context;
-	double			g_Time;
-	bool			g_MouseJustPressed[3];
-	GLFWcursor*		g_MouseCursors[ImGuiMouseCursor_COUNT];
+	GLFWwindow*			g_Window;
+	ImGuiContext*		g_Context;
+	double				g_Time;
+	bool				g_MouseJustPressed[3];
+	GLFWcursor*			g_MouseCursors[ImGuiMouseCursor_COUNT];
 
 	// OpenGL3 data
-	GLuint			g_FontTexture;
-	int				g_ShaderHandle;
-	int				g_VertHandle;
-	int				g_FragHandle;
-	int				g_AttribLocationTex;
-	int				g_AttribLocationProjMtx;
-	int				g_AttribLocationPosition;
-	int				g_AttribLocationUV;
-	int				g_AttribLocationColor;
-	unsigned int	g_VboHandle;
-	unsigned int	g_ElementsHandle;
+	GLuint				g_FontTexture;
+	int					g_ShaderHandle;
+	int					g_VertHandle;
+	int					g_FragHandle;
+	int					g_AttribLocationTex;
+	int					g_AttribLocationProjMtx;
+	int					g_AttribLocationPosition;
+	int					g_AttribLocationUV;
+	int					g_AttribLocationColor;
+	unsigned int		g_VboHandle;
+	unsigned int		g_ElementsHandle;
+	std::deque<char>	g_Stack;
+
 
 	bool ImGui_ImplGlfwGL3_Init(GLFWwindow* window, bool install_callbacks, const char* glsl_version=NULL);
 	void ImGui_ImplGlfwGL3_RenderDrawData(ImDrawData* draw_data);
@@ -563,14 +566,11 @@ void ImguiEnv::ImGui_ImplGlfwGL3_NewFrame()
 #include "puss_module_imgui.h"
 #include "scintilla_imgui.h"
 
-static char __imgui_stack[1024];
-static int  __imgui_top = 0;
-
-#define __IMGUI_STACK_BEGIN(tp)	__imgui_stack[__imgui_top++] = tp;
-#define __IMGUI_STACK_END(tp)	__imgui_top--;
+#define IMGUI_LUA_WRAP_STACK_BEGIN(tp)	{ ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData); env->g_Stack.push_back(tp); }
+#define IMGUI_LUA_WRAP_STACK_END(tp)	{ ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData); if(!env->g_Stack.empty()) { env->g_Stack.pop_back(); } }
 #include "imgui_lua.inl"
-#undef __IMGUI_STACK_BEGIN
-#undef __IMGUI_STACK_END
+#undef IMGUI_LUA_WRAP_STACK_BEGIN
+#undef IMGUI_LUA_WRAP_STACK_END
 
 #define IMGUI_LIB_NAME	"ImguiLib"
 
@@ -611,8 +611,9 @@ static int imgui_render_lua(lua_State* L) {
 	GLFWwindow* win = env->g_Window;
 	if( !win ) return 0;
 
-	while( __imgui_top > 0 ) {
-		IMGUI_STACK_POP( __imgui_stack[--__imgui_top] );
+	while( !env->g_Stack.empty() ) {
+		IMGUI_LUA_WRAP_STACK_POP(env->g_Stack.back());
+		env->g_Stack.pop_back();
 	}
 
 	ImGui::SetCurrentContext(env->g_Context);
@@ -671,6 +672,7 @@ static int imgui_create_glfw_lua(lua_State* L) {
     // Setup ImGui binding
     env->g_Context = ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO();
+	io.UserData = env;
     //io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
     //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;   // Enable Gamepad Controls
     env->ImGui_ImplGlfwGL3_Init(win, true, NULL);

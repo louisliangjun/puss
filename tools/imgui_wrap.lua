@@ -780,9 +780,9 @@ function main()
 			end
 			if not tp then return end
 			if ret=='bool' then
-				dst:writeln('	if(__ret__) { __IMGUI_STACK_BEGIN(', fetch_stack_type(tp), ') }')
+				dst:writeln('	if(__ret__) { IMGUI_LUA_WRAP_STACK_BEGIN(', fetch_stack_type(tp), ') }')
 			else
-				dst:writeln('	__IMGUI_STACK_BEGIN(', fetch_stack_type(tp), ')')
+				dst:writeln('	IMGUI_LUA_WRAP_STACK_BEGIN(', fetch_stack_type(tp), ')')
 			end
 		end
 
@@ -796,7 +796,7 @@ function main()
 				tp = 'PopStyleVar'
 			end
 			if not tp then return end
-			dst:writeln('	__IMGUI_STACK_END(', fetch_stack_type(tp), ')')
+			dst:writeln('	IMGUI_LUA_WRAP_STACK_END(', fetch_stack_type(tp), ')')
 		end
 
 		local function gen_lua_wrap(w, ret, name, args)
@@ -842,12 +842,12 @@ function main()
 
 		dst:writeln('// lua imgui wrappers')
 		dst:writeln()
-		dst:writeln('#ifndef __IMGUI_STACK_BEGIN')
-		dst:writeln('	#define __IMGUI_STACK_BEGIN(tp)')
-		dst:writeln('#endif//__IMGUI_STACK_BEGIN')
-		dst:writeln('#ifndef __IMGUI_STACK_END')
-		dst:writeln('	#define __IMGUI_STACK_END(tp)')
-		dst:writeln('#endif//__IMGUI_STACK_END')
+		dst:writeln('#ifndef IMGUI_LUA_WRAP_STACK_BEGIN')
+		dst:writeln('	#define IMGUI_LUA_WRAP_STACK_BEGIN(tp)')
+		dst:writeln('#endif//IMGUI_LUA_WRAP_STACK_BEGIN')
+		dst:writeln('#ifndef IMGUI_LUA_WRAP_STACK_END')
+		dst:writeln('	#define IMGUI_LUA_WRAP_STACK_END(tp)')
+		dst:writeln('#endif//IMGUI_LUA_WRAP_STACK_END')
 		dst:writeln()
 		dst:insert(buffer_implements)
 
@@ -870,7 +870,7 @@ function main()
 			end
 		end
 		dst:writeln()
-		dst:writeln('#define IMGUI_STACK_POP(tp) \\')
+		dst:writeln('#define IMGUI_LUA_WRAP_STACK_POP(tp) \\')
 		dst:writeln('	switch(tp) { \\')
 		for i, v in ipairs(stack_types) do
 			dst:writeln('	case ', i, ':	ImGui::', v, '();	break; \\')
