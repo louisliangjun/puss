@@ -148,8 +148,10 @@ end)
 
 -----------------------------
 -- imgui lua wrapper
+
 vmake_target_add('imgui_wrap', function(target)
 	local src = path_concat('modules', 'puss_imgui', 'imgui')
+	make_copy('imconfig.h', PUSS_INCLUDE_PATH, src)
 	make_copy('imgui.h', PUSS_INCLUDE_PATH, src)
 	local imgui_wrap = path_concat('tools', 'imgui_wrap.lua')
 	local imgui_hdr = path_concat(PUSS_INCLUDE_PATH, 'imgui.h')
@@ -169,23 +171,6 @@ vmake_target_add('imgui_wrap', function(target)
 		, '-src='..imgui_hdr
 		, '-out='..GEN_INCLUDE_PATH
 		)
-end)
-
------------------------------
--- puss imgui
-
-vmake_target_add('puss_imgui', function(target)
-	vmake('imgui_lua')
-	local use_static = (vlua.OS=='windows')
-	local src = path_concat('modules', target)
-	make_copy('puss_module_imgui.h', PUSS_INCLUDE_PATH, src)
-	local incs = array_pack(INCLUDES, src)
-	local cflags = use_static and {'-static', shell('pkg-config --static --cflags glfw3')} or shell('pkg-config --cflags glfw3')
-	local libs = use_static and shell('pkg-config --static --libs glfw3') or shell('pkg-config --libs glfw3')
-	local objs = make_c2objs(src, nil, incs, '-fPIC', '-fvisibility=hidden')
-	local cppobjs = make_cpp2objs(src, nil, incs, '-fPIC', '-fvisibility=hidden')
-	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
-	return make_target(output, objs, CC, CFLAGS, cflags, '-shared', '-o', output, objs, libs)
 end)
 
 -----------------------------
@@ -212,9 +197,9 @@ vmake_target_add('scintilla_iface', function(target)
 end)
 
 -----------------------------
--- scintilla nuklear
---[[
-vmake_target_add('nuklear_scintilla', function(target)
+-- scintilla
+
+vmake_target_add('scintilla_lib', function(target)
 	local incs =
 		{ SCINTILLA_INCLUDE_PATH
 		, path_concat(SCINTILLA_ROOT_PATH, 'src')
@@ -230,20 +215,28 @@ vmake_target_add('nuklear_scintilla', function(target)
 	return make_target(lib, all_objs, AR, lib, all_objs)
 end)
 
-vmake_target_add('puss_nuklear_scintilla', function(target)
-	vmake('scintilla_iface', 'puss_nuklear')
-	local slibs = vmake('nuklear_scintilla')
+-----------------------------
+-- puss imgui
+
+vmake_target_add('puss_imgui', function(target)
+	vmake('imgui_wrap', 'scintilla_iface')
+	local slibs = vmake('scintilla_lib')
+	local src = path_concat('modules', target)
 	local incs = array_pack(
 		{ INCLUDES
 		, SCINTILLA_INCLUDE_PATH
 		, path_concat(SCINTILLA_ROOT_PATH, 'src')
 		, path_concat(SCINTILLA_ROOT_PATH, 'lexlib')
+		, src
+		, path_concat(src, 'gl3w')
+		, path_concat(src, 'imgui')
 		})
-	local srcpath = path_concat('modules', target)
-	local objs = make_c2objs(srcpath, nil, incs, '-fPIC', '-fvisibility=hidden')
-	local cppobjs = make_cpp2objs(srcpath, objpath, incs, '-fPIC', '-fvisibility=hidden')
+	make_copy('puss_module_imgui.h', PUSS_INCLUDE_PATH, src)
+	local cflags = shell('pkg-config --static --cflags glfw3')
+	local libs = shell('pkg-config --static --libs glfw3')
+	local objs = make_c2objs(src, nil, incs, '-fPIC', '-fvisibility=hidden')
+	local cppobjs = make_cpp2objs(src, nil, incs, '-fPIC', '-fvisibility=hidden')
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
-	return make_target(output, {objs, cppobjs, slibs}, CXX, CFLAGS, CXXFLAGS, '-shared', cflags, '-o', output, cppobjs, objs, slibs)
+	return make_target(output, {objs, cppobjs, slibs}, CXX, CFLAGS, cflags, '-shared', '-o', output, objs, cppobjs, slibs, libs, '-lGL')
 end)
---]]
 

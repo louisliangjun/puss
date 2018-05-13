@@ -163,7 +163,7 @@ public:
 	void InitPixMap(int width_, int height_, Surface *surface_, WindowID wid) override {
 		PLATFORM_ASSERT(surface_);
 		Release();
-		SurfaceImpl *surfImpl = static_cast<SurfaceImpl *>(surface_);
+		//SurfaceImpl *surfImpl = static_cast<SurfaceImpl *>(surface_);
 		PLATFORM_ASSERT(wid);
 		// TODO : image or glfw3 render target ??
 		Init(0, wid);
@@ -303,8 +303,6 @@ public:
 		float w = rc.Width();
 		float h = rc.Height();
 		float r = (w < h) ? w : h;
-		float a_min = 0.0f;
-		float a_max = (float)(2*kPi);
 		canvas->PathFillConvex(SetPenColour(back));
 		canvas->PathArcTo(ImVec2(cx, cy), r, 0.0f, (float)(2*kPi));
 		canvas->PathStroke(SetPenColour(fore), true, line_thickness);
@@ -810,8 +808,8 @@ public: 	// Public for scintilla_send_message
 	void HandleMouseEvents(ImGuiIO& io, ImGuiID id, bool hovered, const PRectangle& wRect, unsigned int now, int modifiers) {
 		ImGuiWindow* window = ImGui::GetCurrentWindow();
 		const bool focus_requested = ImGui::FocusableItemRegister(window, id);
-		const bool focus_requested_by_code = focus_requested && (window->FocusIdxAllCounter == window->FocusIdxAllRequestCurrent);
-		const bool focus_requested_by_tab = focus_requested && !focus_requested_by_code;
+		// const bool focus_requested_by_code = focus_requested && (window->FocusIdxAllCounter == window->FocusIdxAllRequestCurrent);
+		// const bool focus_requested_by_tab = focus_requested && !focus_requested_by_code;
 		const bool user_clicked = hovered && io.MouseClicked[0];
 		const bool user_scrolled = hovered && (io.MouseWheel != 0.0f || io.MouseWheelH != 0.0f);
 
@@ -938,7 +936,6 @@ public: 	// Public for scintilla_send_message
 		}
 	}
 	void Update() {
-		ImGuiStyle& style = ImGui::GetStyle();
 		ImGuiWindow* window = ImGui::GetCurrentWindow();
 		ImVec2 total_sz = window->Pos + window->Size - window->DC.CursorPos - (window->WindowPadding * 2.0f);
 		ImRect frame_bb(window->DC.CursorPos, (window->DC.CursorPos + total_sz));

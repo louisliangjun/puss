@@ -4,7 +4,6 @@
 #include <string.h>
 #include <stdio.h>
 
-
 // ImGui GLFW binding with OpenGL3 + shaders
 // (GLFW is a cross-platform general purpose library for handling windows, inputs, OpenGL/Vulkan graphics context creation, etc.)
 // (GL3W is a helper library to access OpenGL functions since there is no standard header to access modern OpenGL functions easily. Alternatives are GLEW, Glad, etc.)
@@ -56,9 +55,12 @@
 #include <GLFW/glfw3native.h>
 #endif
 
+#include <new>
+
 static char				g_GlslVersion[32] = "#version 150";
 
-struct ImguiEnv {
+class ImguiEnv {
+public:
 	// GLFW data
 	GLFWwindow*			g_Window;
 	ImGuiContext*		g_Context;
@@ -80,6 +82,30 @@ struct ImguiEnv {
 	unsigned int		g_ElementsHandle;
 	ImVector<char>		g_Stack;
 
+public:
+	ImguiEnv()
+		: g_Window(NULL)
+		, g_Context(NULL)
+		, g_Time(0.0)
+		, g_FontTexture(0)
+		, g_ShaderHandle(0)
+		, g_VertHandle(0)
+		, g_FragHandle(0)
+		, g_AttribLocationTex(0)
+		, g_AttribLocationProjMtx(0)
+		, g_AttribLocationPosition(0)
+		, g_AttribLocationUV(0)
+		, g_AttribLocationColor(0)
+		, g_VboHandle(0)
+		, g_ElementsHandle(0)
+	{
+		for( int i=0; i<3; ++i ) {
+			g_MouseJustPressed[0] = false;
+		}
+		for( int i=0; i<ImGuiMouseCursor_COUNT; ++i ) {
+			g_MouseCursors[i] = 0;
+		}
+	}
 
 	bool ImGui_ImplGlfwGL3_Init(GLFWwindow* window, bool install_callbacks, const char* glsl_version=NULL);
 	void ImGui_ImplGlfwGL3_RenderDrawData(ImDrawData* draw_data);
@@ -638,10 +664,9 @@ static int imgui_create_glfw_lua(lua_State* L) {
 	const char* title = luaL_optstring(L, 1, "imgui window");
 	int width = (int)luaL_optinteger(L, 2, 1024);
 	int height = (int)luaL_optinteger(L, 3, 768);
-	ImguiEnv* env = (ImguiEnv*)lua_newuserdata(L, sizeof(ImguiEnv));
+	ImguiEnv* env = new (lua_newuserdata(L, sizeof(ImguiEnv))) ImguiEnv;
 	GLFWwindow* win = NULL;
 	int err = 0;
-	memset(env, 0, sizeof(ImguiEnv));
 
 	if( luaL_newmetatable(L, IMGUI_MT_NAME) ) {
 		static luaL_Reg methods[] =
@@ -736,7 +761,7 @@ static void error_callback(int e, const char *d) {
 	fprintf(stderr, "[GFLW] error %d: %s\n", e, d);
 }
 
-static BOOL glfw_inited = FALSE;
+static int glfw_inited = 0;
 
 PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
     if( !glfw_inited ) {

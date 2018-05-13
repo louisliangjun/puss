@@ -32,8 +32,7 @@
 		if( nonblock ) {
 			flags |= O_NONBLOCK;
 		} else {
-			block = O_NONBLOCK;
-			flags &= ~block;
+			flags &= ~O_NONBLOCK;
 		}
 		return fcntl(fd, F_SETFL, flags);
 	}
@@ -123,8 +122,6 @@ static int lua_socket_bind(lua_State* L) {
 static int lua_socket_listen(lua_State* L) {
 	Socket* ud = lua_check_socket(L, 1, 1);
 	int backlog = (int)luaL_optinteger(L, 2, 5);
-	struct sockaddr addr;
-	socklen_t addr_len = sizeof(addr);
 	int res = listen(ud->fd, backlog);
 	lua_pushinteger(L, res);
 	if( res < 0 ) {

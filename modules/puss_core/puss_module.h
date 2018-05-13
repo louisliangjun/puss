@@ -56,13 +56,13 @@ struct PussInterface {
 #ifdef __cplusplus
 	#define PUSS_EXTERN_C	extern "C"
 #else
-	#define PUSS_EXTERN_C
+	#define PUSS_EXTERN_C	extern
 #endif
 
 #ifdef _WIN32
 	#define PUSS_MODULE_EXPORT	PUSS_EXTERN_C __declspec(dllexport)
 #else
-	#define PUSS_MODULE_EXPORT	PUSS_EXTERN_C extern __attribute__ ((visibility("default"))) 
+	#define PUSS_MODULE_EXPORT	PUSS_EXTERN_C __attribute__ ((visibility("default"))) 
 #endif
 
 // puss module usage :

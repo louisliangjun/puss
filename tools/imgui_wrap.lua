@@ -221,7 +221,7 @@ static int float_array_set(lua_State* L) {
 		}
 	} else if( index < 0 ) {
 		if( (-index) <= ud->cap ) {
-			ud->buf[index-1] = value;
+			ud->buf[ud->cap+index] = value;
 			ok = 1;
 		}
 	}

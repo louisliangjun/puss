@@ -3,8 +3,6 @@
 #ifndef _INC_PUSS_MODULE_IMGUI_H_
 #define _INC_PUSS_MODULE_IMGUI_H_
 
-#include "imgui/imgui.h"
-
 #include "puss_module.h"
 
 #define IMGUI_MT_NAME	"ImguiEnv"

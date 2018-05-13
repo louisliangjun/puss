@@ -178,7 +178,11 @@ function puss_debugger_ui(source_view)
 	Begin("Puss Debugger")
 	if puss.debug then
 		if Button("show_debugger") then
-			os.execute('start /B ' .. puss._path .. '/' .. puss._self .. ' tools/debugger.lua')
+			if os.getenv('OS')=='Windows_NT' then
+				os.execute('start /B ' .. puss._path .. '/' .. puss._self .. ' tools/debugger.lua')
+			else
+				os.execute(puss._path .. '/' .. puss._self .. ' tools/debugger.lua &')
+			end
 		end
 		SameLine()
 		if Button("start_debug_self") then
