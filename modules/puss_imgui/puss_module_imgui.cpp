@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <deque>
 
 
 // ImGui GLFW binding with OpenGL3 + shaders
@@ -79,7 +78,7 @@ struct ImguiEnv {
 	int					g_AttribLocationColor;
 	unsigned int		g_VboHandle;
 	unsigned int		g_ElementsHandle;
-	std::deque<char>	g_Stack;
+	ImVector<char>		g_Stack;
 
 
 	bool ImGui_ImplGlfwGL3_Init(GLFWwindow* window, bool install_callbacks, const char* glsl_version=NULL);
@@ -612,8 +611,9 @@ static int imgui_render_lua(lua_State* L) {
 	if( !win ) return 0;
 
 	while( !env->g_Stack.empty() ) {
-		IMGUI_LUA_WRAP_STACK_POP(env->g_Stack.back());
+		int tp = env->g_Stack.back();
 		env->g_Stack.pop_back();
+		IMGUI_LUA_WRAP_STACK_POP(tp);
 	}
 
 	ImGui::SetCurrentContext(env->g_Context);
