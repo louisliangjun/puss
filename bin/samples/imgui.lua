@@ -64,10 +64,10 @@ function __main__()
 		sci:SetText(t)
 		sci:EmptyUndoBuffer()
 	end
-	while ImGuiUpdate(w, imgui_demo_lua, sci) do
-		ImGuiRender(w)
+	while imgui.ImGuiUpdate(w, imgui_demo_lua, sci) do
+		imgui.ImGuiRender(w)
 	end
-	ImGuiDestroy(w)
+	imgui.ImGuiDestroy(w)
 end
 
 if not imgui then

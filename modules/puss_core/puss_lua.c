@@ -464,29 +464,6 @@ int puss_pickle_unpack(lua_State* L, const void* pkt, size_t len) {
 	return _pickle_unpack(&upac);
 }
 
-static int puss_lua_pickle_pack(lua_State* L) {
-	size_t len = 0;
-	void* buf = puss_pickle_pack(&len, L, 1, -1);
-	lua_pushlstring(L, (const char*)buf, len);
-	return 1;
-}
-
-static int puss_lua_pickle_unpack(lua_State* L) {
-	LUnPacker upac;
-	size_t len = 0;
-	upac.L = L;
-	upac.start = "";
-	upac.end = upac.start;
-	upac.depth = 1;
-
-	if( lua_type(L, 1)==LUA_TSTRING ) {
-		upac.start = lua_tolstring(L, 1, &len);
-		upac.end = upac.start + len;
-	}
-
-	return _pickle_unpack(&upac);
-}
-
 static PussInterface puss_iface =
 	{ puss_module_require
 	, puss_interface_register
@@ -553,6 +530,101 @@ static int puss_lua_module_require(lua_State* L) {
 	lua_call(L, 0, 1);
 	return 1;
 }
+
+static int puss_lua_pickle_pack(lua_State* L) {
+	size_t len = 0;
+	void* buf = puss_pickle_pack(&len, L, 1, -1);
+	lua_pushlstring(L, (const char*)buf, len);
+	return 1;
+}
+
+static int puss_lua_pickle_unpack(lua_State* L) {
+	LUnPacker upac;
+	size_t len = 0;
+	upac.L = L;
+	upac.start = "";
+	upac.end = upac.start;
+	upac.depth = 1;
+
+	if( lua_type(L, 1)==LUA_TSTRING ) {
+		upac.start = lua_tolstring(L, 1, &len);
+		upac.end = upac.start + len;
+	}
+
+	return _pickle_unpack(&upac);
+}
+
+#ifdef _WIN32
+	static int _lua_mbcs2wch(lua_State* L, int stridx, UINT code_page, const char* code_page_name) {
+		size_t len = 0;
+		const char* str = luaL_checklstring(L, stridx, &len);
+		int wlen = MultiByteToWideChar(code_page, 0, str, (int)len, NULL, 0);
+		if( wlen > 0 ) {
+			luaL_Buffer B;
+			wchar_t* wstr = (wchar_t*)luaL_buffinitsize(L, &B, (size_t)(wlen<<1));
+			MultiByteToWideChar(code_page, 0, str, (int)len, wstr, wlen);
+			luaL_addsize(&B, (size_t)(wlen<<1));
+			luaL_pushresult(&B);
+		} else if( wlen==0 ) {
+			lua_pushliteral(L, "");
+		} else {
+			luaL_error(L, "%s to utf16 convert failed!", code_page_name);
+		}
+		return 1;
+	}
+
+	static int _lua_wch2mbcs(lua_State* L, int stridx, UINT code_page, const char* code_page_name) {
+		size_t wlen = 0;
+		const wchar_t* wstr = (const wchar_t*)luaL_checklstring(L, stridx, &wlen);
+		int len;
+		wlen >>= 1;
+		len = WideCharToMultiByte(code_page, 0, wstr, (int)wlen, NULL, 0, NULL, NULL);
+		if( len > 0 ) {
+			luaL_Buffer B;
+			char* str = luaL_buffinitsize(L, &B, (size_t)len);
+			WideCharToMultiByte(code_page, 0, wstr, (int)wlen, str, len, NULL, NULL);
+			luaL_addsize(&B, len);
+			luaL_pushresult(&B);
+		} else if( len==0 ) {
+			lua_pushliteral(L, "");
+		} else {
+			luaL_error(L, "utf16 to %s convert failed!", code_page_name);
+		}
+		return 1;
+	}
+
+	static int puss_lua_local_to_utf8(lua_State* L) {
+		_lua_mbcs2wch(L, 1, 0, "utf8");
+		return _lua_wch2mbcs(L, -1, CP_UTF8, "local");
+	}
+
+	static int puss_lua_utf8_to_local(lua_State* L) {
+		_lua_mbcs2wch(L, 1, CP_UTF8, "utf8");
+		return _lua_wch2mbcs(L, -1, 0, "local");
+	}
+#else
+	static int puss_lua_local_to_utf8(lua_State* L) {
+		// TODO if need, now locale==UTF8 
+		luaL_checkstring(L, 1);
+		lua_settop(L, 1);
+		return 1;
+	}
+
+	static int puss_lua_utf8_to_locale(lua_State* L) {
+		// TODO if need, now locale==UTF8 
+		luaL_checkstring(L, 1);
+		lua_settop(L, 1);
+		return 1;
+	}
+#endif//_WIN32
+
+static luaL_Reg puss_methods[] =
+	{ { "require",			puss_lua_module_require }
+	, { "pickle_pack",		puss_lua_pickle_pack }
+	, { "pickle_unpack",	puss_lua_pickle_unpack }
+	, { "local_to_utf8",	puss_lua_local_to_utf8 }
+	, { "utf8_to_local",	puss_lua_utf8_to_local }
+	};
 
 static void puss_module_setup(lua_State* L, const char* app_path, const char* app_name, const char* module_suffix) {
 	// fprintf(stderr, "!!!puss_module_setup %s %s %s\n", app_path, app_name, module_suffix);
@@ -647,15 +719,7 @@ static void puss_lua_init(lua_State* L, const char* app_path, const char* app_na
 	lua_pushlightuserdata(L, NULL);
 	lua_setfield(L, -2, "NULL");
 
-	// puss.require = puss_lua_module_require
-	lua_pushcfunction(L, puss_lua_module_require);
-	lua_setfield(L, -2, "require");
-
-	lua_pushcfunction(L, puss_lua_pickle_pack);
-	lua_setfield(L, -2, "pickle_pack");
-
-	lua_pushcfunction(L, puss_lua_pickle_unpack);
-	lua_setfield(L, -2, "pickle_unpack");
+	luaL_setfuncs(L, puss_methods, 0);
 
 	// setup builtins
 	if( luaL_loadbuffer(L, builtin_scripts, sizeof(builtin_scripts)-1, "@puss_builtin.lua") ) {

@@ -15,4 +15,5 @@
 *.vcxproj.user
 *.lib
 *.ttf
+*.ini
 .atom*

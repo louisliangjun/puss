@@ -16,6 +16,8 @@ function __main__()
 		, 'samples/const.lua'
 		, 'samples/imgui.lua'
 		, 'samples/debug.lua'
+		, 'tools/debugger.lua'
+		, 'source_editor/main.lua'
 		}
 
 	while true do

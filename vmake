@@ -7,7 +7,7 @@ CXX = 'g++'
 AR  = 'ar -rc'
 DLL_SUFFIX = '.so'
 EXE_SUFFIX = vlua.OS=='windows' and '.exe' or ''
-CFLAGS  = {}
+CFLAGS  = {'-Wall'}
 CXX_CFLAGS = {}
 OBJPATH = path_concat('objs', 'r')
 
@@ -32,8 +32,6 @@ do
 		PUSS_MODULE_SUFFIX = PUSS_MODULE_SUFFIX .. '_asan'
 	end
 end
-
-array_push(CFLAGS, '-Wall')
 
 -----------------------------
 -- common utils
@@ -160,7 +158,7 @@ vmake_target_add('imgui_wrap', function(target)
 		, imgui_hdr
 		}
 	if check_deps(path_concat(GEN_INCLUDE_PATH, 'imgui_enums.inl'), deps)
-		and check_deps(path_concat(GEN_INCLUDE_PATH, 'imgui_proxy.inl'), deps)
+		and check_deps(path_concat(GEN_INCLUDE_PATH, 'imgui_wraps.inl'), deps)
 		and check_deps(path_concat(GEN_INCLUDE_PATH, 'imgui_lua.inl'), deps)
 	then
 		return
@@ -200,15 +198,15 @@ end)
 -- scintilla
 
 vmake_target_add('scintilla_lib', function(target)
+	local cflags = array_pack(CFLAGS, '-fPIC', '-fvisibility=hidden', '-DFOX', '-DSCI_LEXER')
 	local incs =
 		{ SCINTILLA_INCLUDE_PATH
 		, path_concat(SCINTILLA_ROOT_PATH, 'src')
 		, path_concat(SCINTILLA_ROOT_PATH, 'lexlib')
 		}
-	local objpath = path_concat(OBJPATH, 'nk')
-	local srcobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'src'), objpath, incs, '-fPIC', '-fvisibility=hidden', '-DFOX')
-	local lexlibobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'lexlib'), objpath, incs, '-fPIC', '-fvisibility=hidden', '-DFOX')
-	local lexobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'lexers'), objpath, incs, '-fPIC', '-fvisibility=hidden', '-DFOX')
+	local srcobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'src'), OBJPATH, incs, cflags)
+	local lexlibobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'lexlib'), OBJPATH, incs, cflags)
+	local lexobjs = make_cpp2objs(path_concat(SCINTILLA_ROOT_PATH, 'lexers'), OBJPATH, incs, cflags)
 	table.sort(lexobjs)
 	local all_objs = { srcobjs, lexlibobjs, lexobjs }
 	local lib = path_concat(OBJPATH, 'lib'..target..'.a')
@@ -232,11 +230,16 @@ vmake_target_add('puss_imgui', function(target)
 		, path_concat(src, 'imgui')
 		})
 	make_copy('puss_module_imgui.h', PUSS_INCLUDE_PATH, src)
-	local cflags = shell('pkg-config --static --cflags glfw3')
+	local cflags = array_pack(CFLAGS, '-DSCI_LEXER', shell('pkg-config --static --cflags glfw3'))
 	local libs = shell('pkg-config --static --libs glfw3')
+	if vlua.OS=='windows' then
+		libs = array_pack(libs, '-lopengl32')
+	else
+		libs = array_pack(libs, '-lGL')
+	end
 	local objs = make_c2objs(src, nil, incs, '-fPIC', '-fvisibility=hidden')
 	local cppobjs = make_cpp2objs(src, nil, incs, '-fPIC', '-fvisibility=hidden')
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
-	return make_target(output, {objs, cppobjs, slibs}, CXX, CFLAGS, cflags, '-shared', '-o', output, objs, cppobjs, slibs, libs, '-lGL')
+	return make_target(output, {objs, cppobjs, slibs}, CXX, cflags, '-shared', '-o', output, objs, cppobjs, slibs, libs)
 end)
 
