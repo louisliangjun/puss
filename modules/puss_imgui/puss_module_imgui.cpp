@@ -660,6 +660,19 @@ static int imgui_render_lua(lua_State* L) {
 	return 0;
 }
 
+static int imgui_getio_display_size_lua(lua_State* L) {
+	ImGuiIO& io = ImGui::GetIO();
+	lua_pushnumber(L, io.DisplaySize.x);
+	lua_pushnumber(L, io.DisplaySize.y);
+	return 2;
+}
+
+static int imgui_getio_delta_time_lua(lua_State* L) {
+	ImGuiIO& io = ImGui::GetIO();
+	lua_pushnumber(L, io.DeltaTime);
+	return 1;
+}
+
 static int imgui_create_glfw_lua(lua_State* L) {
 	const char* title = luaL_optstring(L, 1, "imgui window");
 	int width = (int)luaL_optinteger(L, 2, 1024);
@@ -740,11 +753,13 @@ static luaL_Reg imgui_lua_apis[] =
 	, {"ImGuiDestroy", imgui_destroy_lua}
 	, {"ImGuiUpdate", imgui_update_lua}
 	, {"ImGuiRender", imgui_render_lua}
-	
+	, {"GetIODisplaySize", imgui_getio_display_size_lua}
+	, {"GetIODeltaTime", imgui_getio_delta_time_lua}
+
 	, {"ByteArrayCreate", byte_array_create}
 	, {"FloatArrayCreate", float_array_create}
 
-#define __REG_WRAP(w)	, { #w, wrap_ ## w }
+#define __REG_WRAP(w,f)	, { #w, f }
 	#include "imgui_wraps.inl"
 #undef __REG_WRAP
 

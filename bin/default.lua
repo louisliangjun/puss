@@ -7,7 +7,7 @@ function __main__()
 	local function run(script)
 		local debug_mode = puss.debug and '--debug' or ''
 		print('debug mode :', debug_mode)
-		local cmd = string.format('%s/%s %s %s', puss._path, puss._self, script, debug_mode)
+		local cmd = string.format('%s/%s %s %s', puss._path, puss._self, script, debug_mode, '--console')
 		print(cmd, os.execute(cmd))
 	end
 

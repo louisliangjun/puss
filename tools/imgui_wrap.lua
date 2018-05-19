@@ -419,22 +419,22 @@ function main()
 
 	local function generate_file(filename, cb)
 		local output_lines = {}
-
-		local mt = {}
-		mt.__index = mt
-		mt.writeln = function(self, ...)
+		local function concat(pos, ...)
 			local ok, line = pcall(table.concat, {...})
 			if not ok then
 				print('concat(', ..., ')')
 				error(line)
 			end
-			local pos = #output_lines + 1
 			output_lines[pos] = line
 			return pos
 		end
+		local mt = {}
+		mt.__index = mt
 		mt.__len = function(self) return #output_lines end
+		mt.writeln = function(self, ...) return concat(#output_lines+1, ...) end
 		mt.insert = function(self, ...) return table.insert(output_lines, ...) end
 		mt.remove = function(self, ...) return table.remove(output_lines, ...) end
+		mt.replace = function(self, pos, ...) return concat(pos, ...) end
 		mt.revert = function(self, mark)
 			if not mark then return #output_lines end
 			while #output_lines > mark do
@@ -466,17 +466,6 @@ function main()
 
 	generate_file(vlua.filename_format(out..'/'..'imgui_lua.inl'), function(dst)
 		local functions = {}
-
-		local function gen_wrapname(name)
-			local w = string.format('%s', name)
-			local n = 0
-			while functions[w] do
-				n = n + 1
-				w = string.format('%s_%d', name, n)
-			end
-			functions[w] = name
-			return w
-		end
 
 		local RE_UINT = '^unsigned%s+int$'			-- unsigned int
 		local RE_PBOOL = '^(bool)%s*%*$'			-- bool*
@@ -561,67 +550,67 @@ function main()
 		end
 
 		local function gen_args_fetch(args)
-			local iarg_use, narg_use = false, false
+			local iarg_use, narg_use, fmt = false, false, ''
 			for i, a in ipairs(args) do
 				local atype, aname, attr = a.atype, a.name or string.format('__arg_%d', i), a.attr
 				if attr then
 					if attr=='...' then
-						-- not fetch
+						fmt = fmt .. 'va'
 					elseif attr:match('%[%d]') then
 						local n = tonumber(attr:match('%[(%d)%]'))
 						iarg_use = true
 						if inttypes[atype] then
+							fmt = fmt .. (inttypes[atype]=='int' and 'ai' or 'au')
 							for i=1, n do dst:writeln('	', aname, '[',i-1,'] = ', '('..atype..')luaL_checkinteger(L, ++__iarg__);') end
 						elseif atype=='float' or atype=='double' then
+							fmt = fmt .. (atype=='float' and 'af' or 'ad')
 							for i=1, n do dst:writeln('	', aname, '[',i-1,'] = ', '('..atype..')luaL_checknumber(L, ++__iarg__);') end
 						end
 					else
 						error(string.format('[NotSupport]	type(%s)', atype))
 					end
 				elseif inttypes[atype] or atype:match(RE_UINT) then
-					iarg_use = true
+					iarg_use, fmt = true, fmt .. (inttypes[atype]=='int' and 'i' or 'u')
 					dst:writeln('	', aname, ' = ', a.def and '('..atype..')luaL_optinteger(L, ++__iarg__, '..a.def..')' or '('..atype..')luaL_checkinteger(L, ++__iarg__)', ';')
 				elseif atype=='float' or atype=='double' then
-					iarg_use = true
+					iarg_use, fmt = true, fmt .. (atype=='float' and 'f' or 'd')
 					dst:writeln('	', aname, ' = ', a.def and '('..atype..')luaL_optnumber(L, ++__iarg__, '..a.def..')' or '(float)luaL_checknumber(L, ++__iarg__)', ';')
 				elseif atype=='bool' then
-					iarg_use = true
+					iarg_use, fmt = true, fmt .. 'b'
 					if a.def then
 						narg_use = true
 						dst:writeln('	', aname, ' = (__iarg__ < __narg__) ? lua_toboolean(L, ++__iarg__)!=0 : ('..a.def..');')
 					else
 						dst:writeln('	', aname, ' = lua_toboolean(L, ++__iarg__)!=0;')
 					end
-				elseif inttypes[atype] then
-					iarg_use = true
-					dst:writeln('	', aname, ' = ', a.def and '(int)luaL_optinteger(L, ++__iarg__, '..a.def..')' or '(int)luaL_checkinteger(L, ++__iarg__)', ';')
 				elseif atype:match(RE_PBOOL) then
-					iarg_use, narg_use = true, true
+					iarg_use, narg_use, fmt = true, true, fmt .. 'pb'
 					dst:writeln('	', '__value_', aname, ' = (__iarg__ < __narg__) ? lua_toboolean(L, ++__iarg__)!=0 : false;')
 					dst:writeln('	', aname, ' = ', a.def and '(__iarg__ <= __narg__) ? &__value_'..aname..' : ('..a.def..')' or '&__value_'..aname, ';')
 				elseif atype:match(RE_PINT) then
-					iarg_use, narg_use = true, true
+					iarg_use, narg_use, fmt = true, true, fmt .. 'pi'
 					dst:writeln('	', '__value_', aname, ' = (__iarg__ < __narg__) ? (int)luaL_checkinteger(L, ++__iarg__) : 0;')
 					dst:writeln('	', aname, ' = ', a.def and '(__iarg__ <= __narg__) ? &__value_'..aname..' : ('..a.def..')' or '&__value_'..aname, ';')
 				elseif atype:match(RE_PUINT) then
-					iarg_use, narg_use = true, true
+					iarg_use, narg_use, fmt = true, true, fmt .. 'pu'
 					dst:writeln('	', '__value_', aname, ' = (__iarg__ < __narg__) ? (unsigned int)luaL_checkinteger(L, ++__iarg__) : 0;')
 					dst:writeln('	', aname, ' = ', a.def and '(__iarg__ <= __narg__) ? &__value_'..aname..' : ('..a.def..')' or '&__value_'..aname, ';')
 				elseif atype:match(RE_PFLOAT) then
-					iarg_use, narg_use = true, true
+					iarg_use, narg_use, fmt = true, true, fmt .. 'pf'
 					dst:writeln('	', '__value_', aname, ' = (__iarg__ < __narg__) ? (float)luaL_checknumber(L, ++__iarg__) : 0.0f;')
 					dst:writeln('	', aname, ' = ', a.def and '(__iarg__ <= __narg__) ? &__value_'..aname..' : ('..a.def..')' or '&__value_'..aname, ';')
 				elseif atype:match(RE_PDOUBLE) then
-					iarg_use, narg_use = true, true
+					iarg_use, narg_use, fmt = true, true, fmt .. 'pd'
 					dst:writeln('	', '__value_', aname, ' = (__iarg__ < __narg__) ? luaL_checknumber(L, ++__iarg__) : 0.0;')
 					dst:writeln('	', aname, ' = ', a.def and '(__iarg__ <= __narg__) ? &__value_'..aname..' : ('..a.def..')' or '&__value_'..aname, ';')
 				elseif atype:match(RE_RFLOAT) then
 					-- output only, ignore fetch
+					fmt = fmt .. 'rf'
 				elseif atype:match(RE_CSTR) then
-					iarg_use = true
+					iarg_use, fmt = true, fmt .. 's'
 					dst:writeln('	', aname, ' = ', a.def and 'luaL_optstring(L, ++__iarg__, '..a.def..')' or 'luaL_checkstring(L, ++__iarg__)', ';')
 				elseif atype:match(RE_CVOID) then
-					iarg_use = true
+					iarg_use, fmt = true, fmt .. 'pv'
 					if a.def then
 						narg_use = true
 						dst:writeln('	', aname, ' = (__iarg__ < __narg__) ? lua_topointer(L, ++__iarg__) : ', a.def, ';')
@@ -629,25 +618,25 @@ function main()
 						dst:writeln('	', aname, ' = lua_topointer(L, ++__iarg__);')
 					end
 				elseif atype=='ImVec2' or atype:match(RE_RIMVEC2) or atype:match(RE_CIMVEC2) then
-					iarg_use = true
+					iarg_use, fmt = true, fmt .. 'v2'
 					if a.def then dst:writeln('	', aname, ' = ', a.def, ';') end
 					dst:writeln('	', aname, '.x = ', a.def and '(float)luaL_optnumber(L, ++__iarg__, '..aname..'.x)' or '(float)luaL_checknumber(L, ++__iarg__)', ';')
 					dst:writeln('	', aname, '.y = ', a.def and '(float)luaL_optnumber(L, ++__iarg__, '..aname..'.y)' or '(float)luaL_checknumber(L, ++__iarg__)', ';')
 				elseif atype=='ImVec4' or atype:match(RE_RIMVEC4) or atype:match(RE_CIMVEC4) then
-					iarg_use = true
+					iarg_use, fmt = true, fmt .. 'v4'
 					if a.def then dst:writeln('	', aname, ' = ', a.def, ';') end
 					dst:writeln('	', aname, '.x = ', a.def and '(float)luaL_optnumber(L, ++__iarg__, '..aname..'.x)' or '(float)luaL_checknumber(L, ++__iarg__)', ';')
 					dst:writeln('	', aname, '.y = ', a.def and '(float)luaL_optnumber(L, ++__iarg__, '..aname..'.y)' or '(float)luaL_checknumber(L, ++__iarg__)', ';')
 					dst:writeln('	', aname, '.z = ', a.def and '(float)luaL_optnumber(L, ++__iarg__, '..aname..'.z)' or '(float)luaL_checknumber(L, ++__iarg__)', ';')
 					dst:writeln('	', aname, '.w = ', a.def and '(float)luaL_optnumber(L, ++__iarg__, '..aname..'.w)' or '(float)luaL_checknumber(L, ++__iarg__)', ';')
 				elseif atype=='ImTextureID' then
-					iarg_use = true
+					iarg_use, fmt = true, fmt .. 'pv'
 					dst:writeln('	', aname, ' = ('..atype..')lua_topointer(L, ++__iarg__);')
 				else
 					error(string.format('[NotSupport]	arg type(%s)', atype))
 				end
 			end
-			return iarg_use, narg_use
+			return iarg_use, narg_use, fmt
 		end
 
 		local function gen_api_invoke(ret, name, args)
@@ -799,13 +788,15 @@ function main()
 			dst:writeln('	IMGUI_LUA_WRAP_STACK_END(', fetch_stack_type(tp), ')')
 		end
 
-		local function gen_lua_wrap(w, ret, name, args)
-			dst:writeln(string.format('static int wrap_%s(lua_State* L) {', w))
+		local function gen_lua_wrap(ret, name, args, exist)
+			local fname = 'wrap_' .. name
+			if exist then dst:writeln('// [Override]') end
+			local pos = dst:writeln(string.format('static int %s(lua_State* L) {', fname))
 			local narg_pos = dst:writeln('	int __narg__ = lua_gettop(L);')
 			local iarg_pos = dst:writeln('	int __iarg__ = 0;')
 			gen_ret_decl(ret)
 			gen_args_decl(args)
-			local iarg_use, narg_use = gen_args_fetch(args)
+			local iarg_use, narg_use, suffix = gen_args_fetch(args)
 			gen_end_wraps(name)
 			gen_api_invoke(ret, name, args)
 			gen_begin_wraps(name, ret)
@@ -814,6 +805,11 @@ function main()
 			if not narg_use then dst:remove(narg_pos) end
 			dst:writeln('	return ', nret, ';')
 			dst:writeln('}')
+			if #suffix > 0 then
+				fname = fname .. '_' .. suffix
+				dst:replace(pos, string.format('static int %s(lua_State* L) {', fname))
+			end
+			return fname
 		end
 
 		local function gen_function(ret, name, args)
@@ -828,14 +824,18 @@ function main()
 			elseif ignore_apis[name] then
 				dst:writeln(string.format('// [Ignore]') )
 			else
-				local w = gen_wrapname(name)
+				local exist = functions[name]
 				local mark = #dst
-				local ok, err = pcall(gen_lua_wrap, w, ret, name, args)
+				local ok, ret = pcall(gen_lua_wrap, ret, name, args, exist)
 				if ok then
-					table.insert(wraps, w)
+					if not exist then
+						functions[name] = ret
+						wraps[name] = ret
+					end
 				else
+					if not exist then functions[name] = nil end
 					dst:revert(mark)
-					dst:writeln('// ', err)
+					dst:writeln('// ', ret)
 				end
 			end
 		end
@@ -860,16 +860,48 @@ function main()
 			for k in pairs(implements) do table.insert(t, k) end
 			table.sort(t)
 			for _, name in ipairs(t) do
-				local w = gen_wrapname(name)
 				local impl = implements[name]
-				dst:writeln(string.format('static int wrap_%s(lua_State* L) {', w))
+				dst:writeln(string.format('static int wrap_%s(lua_State* L) {', name))
 				dst:insert(impl)
 				dst:writeln('}')
-				table.insert(wraps, w)
+				wraps[name] = 'wrap_'..name
 				dst:writeln()
 			end
 		end
-		dst:writeln()
+
+		local overrides = {}
+		overrides.BeginChild = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_BeginChild_sv2bi(L) : wrap_BeginChild_uv2bi(L);]]
+		overrides.SetWindowPos = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_SetWindowPos_sv2i(L) : wrap_SetWindowPos_v2i(L);]]
+		overrides.SetWindowSize = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_SetWindowSize_sv2i(L) : wrap_SetWindowSize_v2i(L);]]
+		overrides.SetWindowCollapsed = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_SetWindowCollapsed_sbi(L) : wrap_SetWindowCollapsed_bi(L);]]
+		overrides.SetWindowFocus = [[return lua_gettop(L)==0 ? wrap_SetWindowFocus(L) : wrap_SetWindowFocus_s(L);]]
+		overrides.PushStyleColor = [[return lua_gettop(L)<=2 ? wrap_PushStyleColor_iu(L) : wrap_PushStyleColor_iv4(L);]]
+		overrides.PushStyleVar = [[return lua_gettop(L)<=2 ? wrap_PushStyleVar_if(L) : wrap_PushStyleVar_iv2(L);]]
+		overrides.GetColorU32 = [[switch( lua_gettop(L) ) { case 1: return lua_isinteger(L, 1) ? wrap_GetColorU32_if(L) : wrap_GetColorU32_u(L); case 2: return wrap_GetColorU32_if(L); } return wrap_GetColorU32_v4(L);]]
+		overrides.PushID = [[switch( lua_type(L, 1) ) { case LUA_TNUMBER: return wrap_PushID_i(L); case LUA_TUSERDATA: return wrap_PushID_pv(L); } return wrap_PushID_s(L); ]]
+		overrides.GetID = [[return lua_type(L, 1)==LUA_TUSERDATA ? wrap_GetID_pv(L) : wrap_GetID_s(L);]]
+		overrides.RadioButton = [[return lua_type(L, 2)==LUA_TBOOLEAN ? wrap_RadioButton_sb(L) : wrap_RadioButton_spii(L);]]
+		overrides.TreeNode = [[return lua_gettop(L)==1 ? wrap_TreeNode_s(L) : (lua_type(L, 1)==LUA_TUSERDATA ? wrap_TreeNode_pvsva(L) : wrap_TreeNode_ssva(L));]]
+		overrides.TreeNodeEx = [[return lua_gettop(L)<=2 ? wrap_TreeNodeEx_si(L) : (lua_type(L, 1)==LUA_TUSERDATA ? wrap_TreeNodeEx_pvisva(L) : wrap_TreeNodeEx_sisva(L));]]
+		overrides.TreePush = [[return lua_type(L, 1)==LUA_TUSERDATA ? wrap_TreePush_pv(L) : wrap_TreePush_s(L);]]
+		wraps.ListBoxHeader = 'wrap_ListBoxHeader_sv2'
+		wraps.ListBoxHeader2 = 'wrap_ListBoxHeader_sii'
+		overrides.Value = [[return lua_type(L, 2)==LUA_TNUMBER ? (lua_isinteger(L, 2) ? wrap_Value_si(L) : wrap_Value_sfs(L)) : wrap_Value_sb(L);]]
+		wraps.ValueUnsigned = 'wrap_Value_su'
+		overrides.IsRectVisible = [[ return lua_gettop(L)<=2 ? wrap_IsRectVisible_v2(L) : wrap_IsRectVisible_v2v2(L);]]
+		overrides.CollapsingHeader = [[return lua_type(L, 2)==LUA_TBOOLEAN ? wrap_CollapsingHeader_spbi(L) : wrap_CollapsingHeader_si(L);]]
+
+		do
+			local t = {}
+			for k in pairs(overrides) do table.insert(t, k) end
+			table.sort(t)
+			for _, name in ipairs(t) do
+				dst:writeln(string.format('static int override_%s(lua_State* L) { %s }', name, overrides[name]))
+				wraps[name] = 'override_'..name
+				dst:writeln()
+			end
+		end
+
 		dst:writeln('#define IMGUI_LUA_WRAP_STACK_POP(tp) \\')
 		dst:writeln('	switch(tp) { \\')
 		for i, v in ipairs(stack_types) do
@@ -881,8 +913,11 @@ function main()
 	end)
 
 	generate_file(vlua.filename_format(out..'/'..'imgui_wraps.inl'), function(dst)
-		for _, v in ipairs(wraps) do
-			dst:writeln('__REG_WRAP(', v, ')')
+		local ws = {}
+		for w in pairs(wraps) do table.insert(ws, w) end
+		table.sort(ws)
+		for _, w in ipairs(ws) do
+			dst:writeln('__REG_WRAP(', w, ', ', wraps[w], ')')
 		end
 		dst:writeln()
 	end)

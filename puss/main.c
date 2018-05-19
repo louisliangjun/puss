@@ -79,6 +79,17 @@ static int puss_dummy_main(lua_State* L) {
 	return 0;
 }
 
+#ifdef _WIN32
+static int puss_error_handle_win32(lua_State* L) {
+	puss_get_value(L, "debug.traceback");
+	lua_pushvalue(L, 1);
+	lua_call(L, 1, 1);
+	MessageBoxA(NULL, lua_tostring(L, -1), "ERROR", MB_OK|MB_ICONERROR);
+	lua_pop(L, 1);
+	return lua_gettop(L);
+}
+#endif
+
 static int puss_init(lua_State* L) {
 	int argc = (int)lua_tointeger(L, 1);
 	const char** argv = (const char**)lua_touserdata(L, 2);
@@ -115,18 +126,35 @@ static int puss_init(lua_State* L) {
 
 int main(int argc, char* argv[]) {
 	int res = 0;
-	lua_State* L;
 	const char* debug_level = puss_args_lookup(argc, argv, "--debug");
+	lua_State* L = puss_lua_newstate((debug_level==NULL) ? 0 : (*debug_level=='\0' ? 1 : (int)strtol(debug_level, NULL, 10)), NULL, NULL);
+
 #ifdef _WIN32
-	if( puss_args_lookup(argc, argv, "--gui") ) {
-		ShowWindow( GetConsoleWindow(), SW_HIDE );
+	const char* console_mode = puss_args_lookup(argc, argv, "--console");
+	if( console_mode ) {
+		AllocConsole();
+		freopen("CONIN$", "r+t", stdin);
+		freopen("CONOUT$", "w+t", stdout);
+		freopen("CONOUT$", "w+t", stderr);
 	}
 #endif
-	L = puss_lua_newstate((debug_level==NULL) ? 0 : (*debug_level=='\0' ? 1 : (int)strtol(debug_level, NULL, 10)), NULL, NULL);
+
 	luaL_openlibs(L);
 	puss_lua_open_default(L, argv[0], _PUSS_MODULE_SUFFIX);
 
-	puss_get_value(L, "puss.trace_pcall");
+	lua_getglobal(L, "puss");
+	lua_getfield(L, -1, "trace_pcall");
+	lua_setfield(L, -2, "_os_pcall");
+#ifdef _WIN32
+	if( !console_mode ) {
+		lua_pushcfunction(L, puss_error_handle_win32);
+		lua_setfield(L, -2, "_os_error_handle");
+		luaL_dostring(L, "puss._os_pcall = function(f, ...) return xpcall(f, puss._os_error_handle, ...) end");
+	}
+#endif
+	lua_pop(L, 1);
+
+	puss_get_value(L, "puss._os_pcall");
 	lua_pushcfunction(L, puss_init);
 	lua_pushinteger(L, argc);
 	lua_pushlightuserdata(L, argv);
@@ -136,13 +164,17 @@ int main(int argc, char* argv[]) {
 		fprintf(stderr, "puss_init() failed: %s\n", lua_tostring(L, -1));
 		lua_pop(L, 2);
 	} else {
-		puss_get_value(L, "puss.trace_pcall");
+		puss_get_value(L, "puss._os_pcall");
 		lua_replace(L, -3);
-		lua_call(L, 1, 1);
-		res = lua_toboolean(L, -1) ? 0 : 2;
-		lua_pop(L, 1);
+		lua_call(L, 1, 2);
+		res = lua_toboolean(L, -2) ? 0 : 2;
+		lua_pop(L, 2);
 	}
 	lua_close(L);
+
+#ifdef _WIN32
+	if( console_mode ) { system("PAUSE"); }
+#endif
 	return res;
 }
 

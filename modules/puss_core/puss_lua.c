@@ -27,6 +27,7 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 	"puss.dostring = puss_dostring\n"
 	"\n"
 	"local logerr_handle = function(err) print(debug.traceback(err,2)); return err; end\n"
+	"puss.logerr_handle_reset = function(h) if h then logerr_handle=h end; return logerr_handle end\n"
 	"puss.trace_pcall = function(f, ...) return xpcall(f, logerr_handle, ...) end\n"
 	"puss.trace_dofile = function(name, env, ...) return xpcall(puss_dofile, logerr_handle, name, env, ...) end\n"
 	"puss.trace_dostring = function(script, name, env, ...) return xpcall(puss_dostring, logerr_handle, script, name, env, ...) end\n"
@@ -619,11 +620,12 @@ static int puss_lua_pickle_unpack(lua_State* L) {
 #endif//_WIN32
 
 static luaL_Reg puss_methods[] =
-	{ { "require",			puss_lua_module_require }
-	, { "pickle_pack",		puss_lua_pickle_pack }
-	, { "pickle_unpack",	puss_lua_pickle_unpack }
-	, { "local_to_utf8",	puss_lua_local_to_utf8 }
-	, { "utf8_to_local",	puss_lua_utf8_to_local }
+	{ {"require",		puss_lua_module_require}
+	, {"pickle_pack",	puss_lua_pickle_pack}
+	, {"pickle_unpack",	puss_lua_pickle_unpack}
+	, {"local_to_utf8",	puss_lua_local_to_utf8}
+	, {"utf8_to_local",	puss_lua_utf8_to_local}
+	, {NULL, NULL}
 	};
 
 static void puss_module_setup(lua_State* L, const char* app_path, const char* app_name, const char* module_suffix) {
