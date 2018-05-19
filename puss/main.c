@@ -80,15 +80,29 @@ static int puss_dummy_main(lua_State* L) {
 }
 
 #ifdef _WIN32
-static int puss_error_handle_win32(lua_State* L) {
-	puss_get_value(L, "debug.traceback");
-	lua_pushvalue(L, 1);
-	lua_call(L, 1, 1);
-	MessageBoxA(NULL, lua_tostring(L, -1), "ERROR", MB_OK|MB_ICONERROR);
-	lua_pop(L, 1);
-	return lua_gettop(L);
-}
+	static int puss_error_handle_win32(lua_State* L) {
+		puss_get_value(L, "debug.traceback");
+		lua_pushvalue(L, 1);
+		lua_call(L, 1, 1);
+		MessageBoxA(NULL, lua_tostring(L, -1), "ERROR", MB_OK|MB_ICONERROR);
+		lua_pop(L, 1);
+		return lua_gettop(L);
+	}
+	static void puss_push_error_handle(lua_State* L, const char* console_mode) {
+		if( console_mode ) {
+			puss_get_value(L, "puss.logerr_handle_reset");
+			lua_call(L, 0, 1);
+		} else {
+			lua_pushcfunction(L, puss_error_handle_win32);
+		} 
+	}
+#else
+	static void puss_push_error_handle(lua_State* L, const char* console_mode) {
+		puss_get_value(L, "puss.logerr_handle_reset");
+		lua_call(L, 0, 1);
+	}
 #endif
+
 
 static int puss_init(lua_State* L) {
 	int argc = (int)lua_tointeger(L, 1);
@@ -128,9 +142,9 @@ int main(int argc, char* argv[]) {
 	int res = 0;
 	const char* debug_level = puss_args_lookup(argc, argv, "--debug");
 	lua_State* L = puss_lua_newstate((debug_level==NULL) ? 0 : (*debug_level=='\0' ? 1 : (int)strtol(debug_level, NULL, 10)), NULL, NULL);
+	const char* console_mode = puss_args_lookup(argc, argv, "--console");
 
 #ifdef _WIN32
-	const char* console_mode = puss_args_lookup(argc, argv, "--console");
 	if( console_mode ) {
 		AllocConsole();
 		freopen("CONIN$", "r+t", stdin);
@@ -142,31 +156,21 @@ int main(int argc, char* argv[]) {
 	luaL_openlibs(L);
 	puss_lua_open_default(L, argv[0], _PUSS_MODULE_SUFFIX);
 
-	lua_getglobal(L, "puss");
-	lua_getfield(L, -1, "trace_pcall");
-	lua_setfield(L, -2, "_os_pcall");
-#ifdef _WIN32
-	if( !console_mode ) {
-		lua_pushcfunction(L, puss_error_handle_win32);
-		lua_setfield(L, -2, "_os_error_handle");
-		luaL_dostring(L, "puss._os_pcall = function(f, ...) return xpcall(f, puss._os_error_handle, ...) end");
-	}
-#endif
-	lua_pop(L, 1);
-
-	puss_get_value(L, "puss._os_pcall");
+	lua_getglobal(L, "xpcall");
 	lua_pushcfunction(L, puss_init);
+	puss_push_error_handle(L, console_mode);
 	lua_pushinteger(L, argc);
 	lua_pushlightuserdata(L, argv);
-	lua_call(L, 3, 2);
+	lua_call(L, 4, 2);
 	res = lua_toboolean(L, -2) ? 0 : 1;
 	if( res ) {
 		fprintf(stderr, "puss_init() failed: %s\n", lua_tostring(L, -1));
 	} else {
-		puss_get_value(L, "puss._os_pcall");
+		lua_getglobal(L, "xpcall");
 		lua_replace(L, -3);
-		lua_call(L, 1, 1);
-		res = lua_toboolean(L, -2) ? 0 : 2;
+		puss_push_error_handle(L, console_mode);
+		lua_call(L, 2, 1);
+		res = lua_toboolean(L, -1) ? 0 : 2;
 	}
 	lua_close(L);
 
