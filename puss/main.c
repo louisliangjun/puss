@@ -159,16 +159,14 @@ int main(int argc, char* argv[]) {
 	lua_pushinteger(L, argc);
 	lua_pushlightuserdata(L, argv);
 	lua_call(L, 3, 2);
-	res = lua_toboolean(L, -1) ? 0 : 1;
+	res = lua_toboolean(L, -2) ? 0 : 1;
 	if( res ) {
 		fprintf(stderr, "puss_init() failed: %s\n", lua_tostring(L, -1));
-		lua_pop(L, 2);
 	} else {
 		puss_get_value(L, "puss._os_pcall");
 		lua_replace(L, -3);
-		lua_call(L, 1, 2);
+		lua_call(L, 1, 1);
 		res = lua_toboolean(L, -2) ? 0 : 2;
-		lua_pop(L, 2);
 	}
 	lua_close(L);
 
