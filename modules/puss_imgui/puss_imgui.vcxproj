@@ -238,6 +238,7 @@
   <ItemGroup>
     <None Include="..\..\3rd\scintilla-4.0.0\include\Scintilla.iface" />
     <None Include="..\..\3rd\scintilla-4.0.0\src\SciTE.properties" />
+    <None Include="scintilla_imgui_lua.inl" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>

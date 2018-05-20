@@ -935,7 +935,7 @@ public: 	// Public for scintilla_send_message
 			HandleKeyboardEvents(io, now, modifiers);
 		}
 	}
-	void Update() {
+	void UpdateDemo() {
 		ImGuiWindow* window = ImGui::GetCurrentWindow();
 		ImVec2 total_sz = window->Pos + window->Size - window->DC.CursorPos - (window->WindowPadding * 2.0f);
 		ImRect frame_bb(window->DC.CursorPos, (window->DC.CursorPos + total_sz));
@@ -979,6 +979,44 @@ public: 	// Public for scintilla_send_message
 		}
 
 		ImGui::EndChildFrame();
+	}
+	void Update() {
+		ImGuiWindow* window = ImGui::GetCurrentWindow();
+		float totalHeight = (float)((pdoc->LinesTotal() + 1) * vs.lineHeight);
+		float totalWidth = (float)(scrollWidth * vs.aveCharWidth);
+		ImVec2 total_sz(window->ClipRect.GetSize());
+		horizontalScrollBarVisible = (totalWidth > total_sz.x);
+		verticalScrollBarVisible = (totalHeight > total_sz.y);
+		mainWindow.win = window;
+
+		// input
+		HandleInputEvents(window->ID, window->ClipRect);
+
+		SetXYScroll(XYScrollPosition(window->Scroll.x / vs.aveCharWidth, window->Scroll.y / vs.lineHeight));
+		// fprintf(stderr, "scroll pos: %d, %d\n", xOffset, topLine);
+
+		// scrollbar
+		if( horizontalScrollBarVisible ) {
+			total_sz.x = totalWidth;
+			total_sz.y -= window->ScrollbarSizes.y;
+		}
+		if( verticalScrollBarVisible ) {
+			total_sz.x -= window->ScrollbarSizes.x;
+			total_sz.y = totalHeight;
+		}
+		if( verticalScrollBarVisible || horizontalScrollBarVisible ) {
+			ImGui::Dummy(total_sz);
+		}
+
+		// render
+		std::unique_ptr<Surface> surfaceWindow(Surface::Allocate(SC_TECHNOLOGY_DEFAULT));
+		surfaceWindow->Init(0, wMain.GetID());
+
+		PRectangle rc(0.0f, 0.0f, window->Size.x, window->Size.y);
+		Paint(surfaceWindow.get(), rc);
+		surfaceWindow->Release();
+
+		mainWindow.win = NULL;
 	}
 private:
 	sptr_t DefWndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) override {

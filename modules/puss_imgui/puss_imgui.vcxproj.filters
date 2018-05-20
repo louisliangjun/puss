@@ -692,5 +692,6 @@
     <None Include="..\..\3rd\scintilla-4.0.0\include\Scintilla.iface">
       <Filter>scintilla\include</Filter>
     </None>
+    <None Include="scintilla_imgui_lua.inl" />
   </ItemGroup>
 </Project>
