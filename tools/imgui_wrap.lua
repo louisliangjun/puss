@@ -884,13 +884,14 @@ function main()
 		overrides.TreeNode = [[return lua_gettop(L)==1 ? wrap_TreeNode_s(L) : (lua_type(L, 1)==LUA_TUSERDATA ? wrap_TreeNode_pvsva(L) : wrap_TreeNode_ssva(L));]]
 		overrides.TreeNodeEx = [[return lua_gettop(L)<=2 ? wrap_TreeNodeEx_si(L) : (lua_type(L, 1)==LUA_TUSERDATA ? wrap_TreeNodeEx_pvisva(L) : wrap_TreeNodeEx_sisva(L));]]
 		overrides.TreePush = [[return lua_type(L, 1)==LUA_TUSERDATA ? wrap_TreePush_pv(L) : wrap_TreePush_s(L);]]
+		overrides.IsRectVisible = [[ return lua_gettop(L)<=2 ? wrap_IsRectVisible_v2(L) : wrap_IsRectVisible_v2v2(L);]]
+		overrides.CollapsingHeader = [[return lua_type(L, 2)==LUA_TBOOLEAN ? wrap_CollapsingHeader_spbi(L) : wrap_CollapsingHeader_si(L);]]
+		wraps.Selectable = wrap_Selectable_spbiv2
 		wraps.ListBoxHeader = 'wrap_ListBoxHeader_sv2'
 		wraps.ListBoxHeader2 = 'wrap_ListBoxHeader_sii'
 		overrides.Value = [[return lua_type(L, 2)==LUA_TNUMBER ? (lua_isinteger(L, 2) ? wrap_Value_si(L) : wrap_Value_sfs(L)) : wrap_Value_sb(L);]]
 		wraps.ValueUnsigned = 'wrap_Value_su'
-		overrides.IsRectVisible = [[ return lua_gettop(L)<=2 ? wrap_IsRectVisible_v2(L) : wrap_IsRectVisible_v2v2(L);]]
-		overrides.CollapsingHeader = [[return lua_type(L, 2)==LUA_TBOOLEAN ? wrap_CollapsingHeader_spbi(L) : wrap_CollapsingHeader_si(L);]]
-
+		overrides.MenuItem = [[int selected=lua_toboolean(L,3); wrap_MenuItem_ssbb(L); lua_pushboolean(L, lua_toboolean(L,-1) ? !selected : selected); return 2;]]
 		do
 			local t = {}
 			for k in pairs(overrides) do table.insert(t, k) end
