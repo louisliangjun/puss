@@ -1,22 +1,9 @@
 -- app.lua
 
-local sci = puss.import('scintilla')
-local console = puss.import('console')
+local console = puss.import('core.console')
 
 local show_imgui_demos = false
 local show_console_window = false
-
-__exports.open_file = function(label, filename, line)
-	local f = io.open(filename, 'r')
-	if not f then return end
-	local cxt = f:read('*a')
-	f:close()
-
-	-- local sv = puss_editor.create(label, 'lua')
-	-- sv:SetText(nil, cxt)
-	-- sv:EmptyUndoBuffer()
-	-- return ed
-end
 
 local function main_menu()
 	local active
@@ -24,6 +11,7 @@ local function main_menu()
     if imgui.BeginMenu('Help') then
     	active, show_imgui_demos = imgui.MenuItem('ImGUI Demos', nil, show_imgui_demos)
     	active, show_console_window = imgui.MenuItem('Conosle', nil, show_console_window)
+    	if active then console = puss.import('core.console', true) end
         imgui.EndMenu()
     end
     imgui.EndMenuBar()
@@ -73,7 +61,7 @@ local function source_editor_main()
 end
 
 __exports.main = function()
-	local w = imgui.ImGuiCreateGLFW("Puss - SourceEditor", 1024, 768)
+	local w = imgui.ImGuiCreateGLFW("Puss - Editor", 1024, 768)
 	while imgui.ImGuiUpdate(w, source_editor_main) do
 		imgui.ImGuiRender(w)
 	end

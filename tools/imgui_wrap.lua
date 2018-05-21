@@ -291,19 +291,23 @@ local ignore_apis =
 
 local implements = {}
 
-implements.InputText = [[	bool InputText(const char* label, char* buf, size_t buf_size, ImGuiInputTextFlags flags = 0, ImGuiTextEditCallback callback = NULL, void* user_data = NULL);
+implements.InputText = [[	// bool InputText(const char* label, char* buf, size_t buf_size, ImGuiInputTextFlags flags = 0, ImGuiTextEditCallback callback = NULL, void* user_data = NULL);
 	const char* label = luaL_checkstring(L, 1);
 	ByteArrayLua* arr = (ByteArrayLua*)luaL_checkudata(L, 2, BYTE_ARRAY_NAME);
 	ImGuiInputTextFlags flags = (ImGuiInputTextFlags)luaL_optinteger(L, 3, 0);
-	lua_pushboolean(L, ImGui::InputText(label, (char*)arr->buf, (size_t)arr->len, flags) ? 1 : 0);
+	bool changed = ImGui::InputText(label, (char*)arr->buf, (size_t)arr->cap, flags);
+	if( changed ) { arr->len = (int)strlen((char*)(arr->buf)); }
+	lua_pushboolean(L, changed ? 1 : 0);
 	return 1;]]
 
-implements.InputTextMultiline = [[	bool InputTextMultiline(const char* label, char* buf, size_t buf_size, const ImVec2& size = ImVec2(0,0), ImGuiInputTextFlags flags = 0, ImGuiTextEditCallback callback = NULL, void* user_data = NULL);
+implements.InputTextMultiline = [[	// bool InputTextMultiline(const char* label, char* buf, size_t buf_size, const ImVec2& size = ImVec2(0,0), ImGuiInputTextFlags flags = 0, ImGuiTextEditCallback callback = NULL, void* user_data = NULL);
 	const char* label = luaL_checkstring(L, 1);
 	ByteArrayLua* arr = (ByteArrayLua*)luaL_checkudata(L, 2, BYTE_ARRAY_NAME);
 	ImVec2 size( (float)luaL_optnumber(L, 3, 0.0), (float)luaL_optnumber(L, 4, 0.0) ); 
 	ImGuiInputTextFlags flags = (ImGuiInputTextFlags)luaL_optinteger(L, 5, 0);
-	lua_pushboolean(L, ImGui::InputTextMultiline(label, (char*)arr->buf, (size_t)arr->len, size, flags) ? 1 : 0);
+	bool changed = ImGui::InputTextMultiline(label, (char*)arr->buf, (size_t)arr->cap, size, flags);
+	if( changed ) { arr->len = (int)strlen((char*)(arr->buf)); }
+	lua_pushboolean(L, changed ? 1 : 0);
 	return 1;]]
 
 implements.PlotLines = [[	// void PlotLines(const char* label, const float* values, int values_count, int values_offset = 0, const char* overlay_text = NULL, float scale_min = FLT_MAX, float scale_max = FLT_MAX, ImVec2 graph_size = ImVec2(0,0), int stride = sizeof(float));
