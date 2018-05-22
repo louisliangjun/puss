@@ -44,6 +44,7 @@
 #endif
 
 #include "imgui.h"
+#include "imgui_tabs.h"
 
 // GL3W/GLFW
 #include <GL/gl3w.h>    // This example is using gl3w to access OpenGL functions (because it is small). You may use glew/glad/glLoadGen/etc. whatever already works for you.
@@ -534,7 +535,7 @@ void ImguiEnv::ImGui_ImplGlfwGL3_NewFrame()
     }
 
     // Update OS/hardware mouse cursor if imgui isn't drawing a software cursor
-    if ((io.ConfigFlags & ImGuiConfigFlags_NoSetMouseCursor) == 0 && glfwGetInputMode(g_Window, GLFW_CURSOR) != GLFW_CURSOR_DISABLED)
+    if ((io.ConfigFlags & ImGuiConfigFlags_NoMouseCursorChange) == 0 && glfwGetInputMode(g_Window, GLFW_CURSOR) != GLFW_CURSOR_DISABLED)
     {
         ImGuiMouseCursor cursor = ImGui::GetMouseCursor();
         if (io.MouseDrawCursor || cursor == ImGuiMouseCursor_None)

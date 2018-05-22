@@ -151,11 +151,12 @@ vmake_target_add('imgui_wrap', function(target)
 	local src = path_concat('modules', 'puss_imgui', 'imgui')
 	make_copy('imconfig.h', PUSS_INCLUDE_PATH, src)
 	make_copy('imgui.h', PUSS_INCLUDE_PATH, src)
+	make_copy('imgui_tabs.h', PUSS_INCLUDE_PATH, src)
 	local imgui_wrap = path_concat('tools', 'imgui_wrap.lua')
-	local imgui_hdr = path_concat(PUSS_INCLUDE_PATH, 'imgui.h')
 	local deps =
 		{ imgui_wrap
-		, imgui_hdr
+		, path_concat(PUSS_INCLUDE_PATH, 'imgui.h')
+		, path_concat(PUSS_INCLUDE_PATH, 'imgui_tabs.h')
 		}
 	if check_deps(path_concat(GEN_INCLUDE_PATH, 'imgui_enums.inl'), deps)
 		and check_deps(path_concat(GEN_INCLUDE_PATH, 'imgui_wraps.inl'), deps)
@@ -166,7 +167,7 @@ vmake_target_add('imgui_wrap', function(target)
 
 	make_target(path_concat(GEN_INCLUDE_PATH, '.dummy'), nil
 		, vlua.self, imgui_wrap
-		, '-src='..imgui_hdr
+		, '-src='..PUSS_INCLUDE_PATH
 		, '-out='..GEN_INCLUDE_PATH
 		)
 end)

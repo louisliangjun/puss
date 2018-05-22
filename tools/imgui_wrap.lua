@@ -401,25 +401,31 @@ implements.AcceptDragDropPayload = [[	//	const ImGuiPayload* AcceptDragDropPaylo
 
 function main()
 	local out = vlua.match_arg('^%-out=(.+)$') or '.'
-	local src
-	do
-		local fname = vlua.match_arg('^%-src=(.+)$') or 'imgui.h'
-		local f = io.open(fname, 'r')
-		src = f:read('*a')
-		f:close()
-	end
-	src = src:gsub('/%*.-%*/', ' ')		-- remove comment /* */
-	src = src:gsub('\r', '')			-- remove \r
-	src = src:gsub('//.-\n', '\n')		-- remove line comment
-	-- print(src)
+	local src = vlua.match_arg('^%-src=(.+)$') or './include'
 
 	local apis = {}
 	local enums = {}
 	local inttypes = {}
+
+	local function load_header(fname)
+		local f = io.open(src..'/'..fname, 'r')
+		local t = f:read('*a')
+		f:close()
+
+		t = t:gsub('/%*.-%*/', ' ')		-- remove comment /* */
+		t = t:gsub('\r', '')			-- remove \r
+		t = t:gsub('//.-\n', '\n')		-- remove line comment
+		-- print(t)
+
+		pasre_apis(apis, t)
+		parse_enums(enums, t)
+		parse_inttypes(inttypes, t)
+	end
+
+	load_header('imgui.h')
+	load_header('imgui_tabs.h')
+
 	local wraps, begins, ends = {}, {}, {}
-	pasre_apis(apis, src)
-	parse_enums(enums, src)
-	parse_inttypes(inttypes, src)
 
 	local function generate_file(filename, cb)
 		local output_lines = {}

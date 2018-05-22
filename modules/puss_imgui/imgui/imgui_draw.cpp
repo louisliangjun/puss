@@ -1,4 +1,4 @@
-// dear imgui, v1.60 WIP
+// dear imgui, v1.61
 // (drawing and font code)
 
 // Contains implementation for
@@ -54,7 +54,6 @@
 #pragma GCC diagnostic ignored "-Wunused-function"          // warning: 'xxxx' defined but not used
 #pragma GCC diagnostic ignored "-Wdouble-promotion"         // warning: implicit conversion from 'float' to 'double' when passing argument to function
 #pragma GCC diagnostic ignored "-Wconversion"               // warning: conversion to 'xxxx' from 'xxxx' may alter its value
-#pragma GCC diagnostic ignored "-Wcast-qual"                // warning: cast from type 'xxxx' to type 'xxxx' casts away qualifiers
 #endif
 
 //-------------------------------------------------------------------------
@@ -83,13 +82,16 @@ namespace IMGUI_STB_NAMESPACE
 #pragma clang diagnostic ignored "-Wunused-function"
 #pragma clang diagnostic ignored "-Wmissing-prototypes"
 #pragma clang diagnostic ignored "-Wimplicit-fallthrough"
+#pragma clang diagnostic ignored "-Wcast-qual"              // warning : cast from 'const xxxx *' to 'xxx *' drops const qualifier //
 #endif
 
 #ifdef __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wtype-limits"              // warning: comparison is always true due to limited range of data type [-Wtype-limits]
+#pragma GCC diagnostic ignored "-Wcast-qual"                // warning: cast from type 'const xxxx *' to type 'xxxx *' casts away qualifiers
 #endif
 
+#ifndef STB_RECT_PACK_IMPLEMENTATION                        // in case the user already have an implementation in the _same_ compilation unit (e.g. unity builds)
 #ifndef IMGUI_DISABLE_STB_RECT_PACK_IMPLEMENTATION
 #define STBRP_STATIC
 #define STBRP_ASSERT(x)    IM_ASSERT(x)
@@ -100,11 +102,19 @@ namespace IMGUI_STB_NAMESPACE
 #else
 #include "stb_rect_pack.h"
 #endif
+#endif
 
+#ifndef STB_TRUETYPE_IMPLEMENTATION                         // in case the user already have an implementation in the _same_ compilation unit (e.g. unity builds)
 #ifndef IMGUI_DISABLE_STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_malloc(x,u)  ((void)(u), ImGui::MemAlloc(x))
-#define STBTT_free(x,u)    ((void)(u), ImGui::MemFree(x))
-#define STBTT_assert(x)    IM_ASSERT(x)
+#define STBTT_malloc(x,u)   ((void)(u), ImGui::MemAlloc(x))
+#define STBTT_free(x,u)     ((void)(u), ImGui::MemFree(x))
+#define STBTT_assert(x)     IM_ASSERT(x)
+#define STBTT_fmod(x,y)     ImFmod(x,y)
+#define STBTT_sqrt(x)       ImSqrt(x)
+#define STBTT_pow(x,y)      ImPow(x,y)
+#define STBTT_fabs(x)       ImFabs(x)
+#define STBTT_ifloor(x)     ((int)ImFloorStd(x))
+#define STBTT_iceil(x)      ((int)ImCeil(x))
 #define STBTT_STATIC
 #define STB_TRUETYPE_IMPLEMENTATION
 #else
@@ -114,6 +124,7 @@ namespace IMGUI_STB_NAMESPACE
 #include IMGUI_STB_TRUETYPE_FILENAME
 #else
 #include "stb_truetype.h"
+#endif
 #endif
 
 #ifdef __GNUC__
@@ -243,8 +254,6 @@ void ImGui::StyleColorsLight(ImGuiStyle* dst)
 
     colors[ImGuiCol_Text]                   = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
     colors[ImGuiCol_TextDisabled]           = ImVec4(0.60f, 0.60f, 0.60f, 1.00f);
-    //colors[ImGuiCol_TextHovered]          = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
-    //colors[ImGuiCol_TextActive]           = ImVec4(1.00f, 1.00f, 0.00f, 1.00f);
     colors[ImGuiCol_WindowBg]               = ImVec4(0.94f, 0.94f, 0.94f, 1.00f);
     colors[ImGuiCol_ChildBg]                = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
     colors[ImGuiCol_PopupBg]                = ImVec4(1.00f, 1.00f, 1.00f, 0.98f);
@@ -302,7 +311,7 @@ ImDrawListSharedData::ImDrawListSharedData()
     for (int i = 0; i < IM_ARRAYSIZE(CircleVtx12); i++)
     {
         const float a = ((float)i * 2 * IM_PI) / (float)IM_ARRAYSIZE(CircleVtx12);
-        CircleVtx12[i] = ImVec2(cosf(a), sinf(a));
+        CircleVtx12[i] = ImVec2(ImCos(a), ImSin(a));
     }
 }
 
@@ -900,7 +909,7 @@ void ImDrawList::PathArcTo(const ImVec2& centre, float radius, float a_min, floa
     for (int i = 0; i <= num_segments; i++)
     {
         const float a = a_min + ((float)i / (float)num_segments) * (a_max - a_min);
-        _Path.push_back(ImVec2(centre.x + cosf(a) * radius, centre.y + sinf(a) * radius));
+        _Path.push_back(ImVec2(centre.x + ImCos(a) * radius, centre.y + ImSin(a) * radius));
     }
 }
 
@@ -956,8 +965,8 @@ void ImDrawList::PathBezierCurveTo(const ImVec2& p2, const ImVec2& p3, const ImV
 
 void ImDrawList::PathRect(const ImVec2& a, const ImVec2& b, float rounding, int rounding_corners)
 {
-    rounding = ImMin(rounding, fabsf(b.x - a.x) * ( ((rounding_corners & ImDrawCornerFlags_Top)  == ImDrawCornerFlags_Top)  || ((rounding_corners & ImDrawCornerFlags_Bot)   == ImDrawCornerFlags_Bot)   ? 0.5f : 1.0f ) - 1.0f);
-    rounding = ImMin(rounding, fabsf(b.y - a.y) * ( ((rounding_corners & ImDrawCornerFlags_Left) == ImDrawCornerFlags_Left) || ((rounding_corners & ImDrawCornerFlags_Right) == ImDrawCornerFlags_Right) ? 0.5f : 1.0f ) - 1.0f);
+    rounding = ImMin(rounding, ImFabs(b.x - a.x) * ( ((rounding_corners & ImDrawCornerFlags_Top)  == ImDrawCornerFlags_Top)  || ((rounding_corners & ImDrawCornerFlags_Bot)   == ImDrawCornerFlags_Bot)   ? 0.5f : 1.0f ) - 1.0f);
+    rounding = ImMin(rounding, ImFabs(b.y - a.y) * ( ((rounding_corners & ImDrawCornerFlags_Left) == ImDrawCornerFlags_Left) || ((rounding_corners & ImDrawCornerFlags_Right) == ImDrawCornerFlags_Right) ? 0.5f : 1.0f ) - 1.0f);
 
     if (rounding <= 0.0f || rounding_corners == 0)
     {
@@ -1507,8 +1516,8 @@ ImFont* ImFontAtlas::AddFont(const ImFontConfig* font_cfg)
 }
 
 // Default font TTF is compressed with stb_compress then base85 encoded (see misc/fonts/binary_to_compressed_c.cpp for encoder)
-static unsigned int stb_decompress_length(unsigned char *input);
-static unsigned int stb_decompress(unsigned char *output, unsigned char *i, unsigned int length);
+static unsigned int stb_decompress_length(const unsigned char *input);
+static unsigned int stb_decompress(unsigned char *output, const unsigned char *input, unsigned int length);
 static const char*  GetDefaultCompressedFontDataTTFBase85();
 static unsigned int Decode85Byte(char c)                                    { return c >= '\\' ? c-36 : c-35; }
 static void         Decode85(const unsigned char* src, unsigned char* dst)
@@ -1542,7 +1551,7 @@ ImFont* ImFontAtlas::AddFontDefault(const ImFontConfig* font_cfg_template)
 
 ImFont* ImFontAtlas::AddFontFromFileTTF(const char* filename, float size_pixels, const ImFontConfig* font_cfg_template, const ImWchar* glyph_ranges)
 {
-    int data_size = 0;
+    size_t data_size = 0;
     void* data = ImFileLoadToMemory(filename, "rb", &data_size, 0);
     if (!data)
     {
@@ -1557,7 +1566,7 @@ ImFont* ImFontAtlas::AddFontFromFileTTF(const char* filename, float size_pixels,
         for (p = filename + strlen(filename); p > filename && p[-1] != '/' && p[-1] != '\\'; p--) {}
         ImFormatString(font_cfg.Name, IM_ARRAYSIZE(font_cfg.Name), "%s, %.0fpx", p, size_pixels);
     }
-    return AddFontFromMemoryTTF(data, data_size, size_pixels, &font_cfg, glyph_ranges);
+    return AddFontFromMemoryTTF(data, (int)data_size, size_pixels, &font_cfg, glyph_ranges);
 }
 
 // NB: Transfer ownership of 'ttf_data' to ImFontAtlas, unless font_cfg_template->FontDataOwnedByAtlas == false. Owned TTF buffer will be deleted after Build().
@@ -1575,9 +1584,9 @@ ImFont* ImFontAtlas::AddFontFromMemoryTTF(void* ttf_data, int ttf_size, float si
 
 ImFont* ImFontAtlas::AddFontFromMemoryCompressedTTF(const void* compressed_ttf_data, int compressed_ttf_size, float size_pixels, const ImFontConfig* font_cfg_template, const ImWchar* glyph_ranges)
 {
-    const unsigned int buf_decompressed_size = stb_decompress_length((unsigned char*)compressed_ttf_data);
+    const unsigned int buf_decompressed_size = stb_decompress_length((const unsigned char*)compressed_ttf_data);
     unsigned char* buf_decompressed_data = (unsigned char *)ImGui::MemAlloc(buf_decompressed_size);
-    stb_decompress(buf_decompressed_data, (unsigned char*)compressed_ttf_data, (unsigned int)compressed_ttf_size);
+    stb_decompress(buf_decompressed_data, (const unsigned char*)compressed_ttf_data, (unsigned int)compressed_ttf_size);
 
     ImFontConfig font_cfg = font_cfg_template ? *font_cfg_template : ImFontConfig();
     IM_ASSERT(font_cfg.FontData == NULL);
@@ -1639,6 +1648,7 @@ bool ImFontAtlas::GetMouseCursorTexData(ImGuiMouseCursor cursor_type, ImVec2* ou
     if (Flags & ImFontAtlasFlags_NoMouseCursors)
         return false;
 
+    IM_ASSERT(CustomRectIds[0] != -1);
     ImFontAtlas::CustomRect& r = CustomRects[CustomRectIds[0]];
     IM_ASSERT(r.ID == FONT_ATLAS_DEFAULT_TEX_DATA_ID);
     ImVec2 pos = FONT_ATLAS_DEFAULT_TEX_CURSOR_DATA[cursor_type][0] + ImVec2((float)r.X, (float)r.Y);
@@ -1731,7 +1741,7 @@ bool    ImFontAtlasBuildWithStbTruetype(ImFontAtlas* atlas)
         IM_ASSERT(cfg.DstFont && (!cfg.DstFont->IsLoaded() || cfg.DstFont->ContainerAtlas == atlas));
 
         const int font_offset = stbtt_GetFontOffsetForIndex((unsigned char*)cfg.FontData, cfg.FontNo);
-        IM_ASSERT(font_offset >= 0);
+        IM_ASSERT(font_offset >= 0 && "FontData is incorrect, or FontNo cannot be found.");
         if (!stbtt_InitFont(&tmp.FontInfo, (unsigned char*)cfg.FontData, font_offset))
         {
             atlas->TexWidth = atlas->TexHeight = 0; // Reset output on failure
@@ -1774,19 +1784,34 @@ bool    ImFontAtlasBuildWithStbTruetype(ImFontAtlas* atlas)
             buf_packedchars_n += range.num_chars;
         }
 
-        // Pack
+        // Gather the sizes of all rectangle we need
         tmp.Rects = buf_rects + buf_rects_n;
         tmp.RectsCount = font_glyphs_count;
         buf_rects_n += font_glyphs_count;
         stbtt_PackSetOversampling(&spc, cfg.OversampleH, cfg.OversampleV);
         int n = stbtt_PackFontRangesGatherRects(&spc, &tmp.FontInfo, tmp.Ranges, tmp.RangesCount, tmp.Rects);
         IM_ASSERT(n == font_glyphs_count);
+
+        // Detect missing glyphs and replace them with a zero-sized box instead of relying on the default glyphs
+        // This allows us merging overlapping icon fonts more easily.
+        int rect_i = 0;
+        for (int range_i = 0; range_i < tmp.RangesCount; range_i++)
+            for (int char_i = 0; char_i < tmp.Ranges[range_i].num_chars; char_i++, rect_i++)
+                if (stbtt_FindGlyphIndex(&tmp.FontInfo, tmp.Ranges[range_i].first_unicode_codepoint_in_range + char_i) == 0)
+                    tmp.Rects[rect_i].w = tmp.Rects[rect_i].h = 0;
+
+        // Pack
         stbrp_pack_rects((stbrp_context*)spc.pack_info, tmp.Rects, n);
 
         // Extend texture height
+        // Also mark missing glyphs as non-packed so we don't attempt to render into them
         for (int i = 0; i < n; i++)
+        {
+            if (tmp.Rects[i].w == 0 && tmp.Rects[i].h == 0)
+                tmp.Rects[i].was_packed = 0;
             if (tmp.Rects[i].was_packed)
                 atlas->TexHeight = ImMax(atlas->TexHeight, tmp.Rects[i].y + tmp.Rects[i].h);
+        }
     }
     IM_ASSERT(buf_rects_n == total_glyphs_count);
     IM_ASSERT(buf_packedchars_n == total_glyphs_count);
@@ -2351,7 +2376,7 @@ const char* ImFont::CalcWordWrapPositionA(float scale, const char* text, const c
         }
 
         const float char_width = ((int)c < IndexAdvanceX.Size ? IndexAdvanceX[(int)c] : FallbackAdvanceX);
-        if (ImCharIsSpace(c))
+        if (ImCharIsBlankW(c))
         {
             if (inside_word)
             {
@@ -2434,7 +2459,7 @@ ImVec2 ImFont::CalcTextSizeA(float size, float max_width, float wrap_width, cons
                 while (s < text_end)
                 {
                     const char c = *s;
-                    if (ImCharIsSpace(c)) { s++; } else if (c == '\n') { s++; break; } else { break; }
+                    if (ImCharIsBlankA(c)) { s++; } else if (c == '\n') { s++; break; } else { break; }
                 }
                 continue;
             }
@@ -2559,7 +2584,7 @@ void ImFont::RenderText(ImDrawList* draw_list, float size, ImVec2 pos, ImU32 col
                 while (s < text_end)
                 {
                     const char c = *s;
-                    if (ImCharIsSpace(c)) { s++; } else if (c == '\n') { s++; break; } else { break; }
+                    if (ImCharIsBlankA(c)) { s++; } else if (c == '\n') { s++; break; } else { break; }
                 }
                 continue;
             }
@@ -2683,7 +2708,7 @@ static inline float ImAcos01(float x)
 {
     if (x <= 0.0f) return IM_PI * 0.5f;
     if (x >= 1.0f) return 0.0f;
-    return acosf(x);
+    return ImAcos(x);
     //return (-0.69813170079773212f * x * x - 0.87266462599716477f) * x + 1.5707963267948966f; // Cheap approximation, may be enough for what we do.
 }
 
@@ -2755,27 +2780,28 @@ void ImGui::RenderRectFilledRangeH(ImDrawList* draw_list, const ImRect& rect, Im
 // Decompression from stb.h (public domain) by Sean Barrett https://github.com/nothings/stb/blob/master/stb.h
 //-----------------------------------------------------------------------------
 
-static unsigned int stb_decompress_length(unsigned char *input)
+static unsigned int stb_decompress_length(const unsigned char *input)
 {
     return (input[8] << 24) + (input[9] << 16) + (input[10] << 8) + input[11];
 }
 
-static unsigned char *stb__barrier, *stb__barrier2, *stb__barrier3, *stb__barrier4;
+static unsigned char *stb__barrier_out_e, *stb__barrier_out_b;
+static const unsigned char *stb__barrier_in_b;
 static unsigned char *stb__dout;
-static void stb__match(unsigned char *data, unsigned int length)
+static void stb__match(const unsigned char *data, unsigned int length)
 {
     // INVERSE of memmove... write each byte before copying the next...
-    IM_ASSERT (stb__dout + length <= stb__barrier);
-    if (stb__dout + length > stb__barrier) { stb__dout += length; return; }
-    if (data < stb__barrier4) { stb__dout = stb__barrier+1; return; }
+    IM_ASSERT(stb__dout + length <= stb__barrier_out_e);
+    if (stb__dout + length > stb__barrier_out_e) { stb__dout += length; return; }
+    if (data < stb__barrier_out_b) { stb__dout = stb__barrier_out_e+1; return; }
     while (length--) *stb__dout++ = *data++;
 }
 
-static void stb__lit(unsigned char *data, unsigned int length)
+static void stb__lit(const unsigned char *data, unsigned int length)
 {
-    IM_ASSERT (stb__dout + length <= stb__barrier);
-    if (stb__dout + length > stb__barrier) { stb__dout += length; return; }
-    if (data < stb__barrier2) { stb__dout = stb__barrier+1; return; }
+    IM_ASSERT(stb__dout + length <= stb__barrier_out_e);
+    if (stb__dout + length > stb__barrier_out_e) { stb__dout += length; return; }
+    if (data < stb__barrier_in_b) { stb__dout = stb__barrier_out_e+1; return; }
     memcpy(stb__dout, data, length);
     stb__dout += length;
 }
@@ -2784,7 +2810,7 @@ static void stb__lit(unsigned char *data, unsigned int length)
 #define stb__in3(x)   ((i[x] << 16) + stb__in2((x)+1))
 #define stb__in4(x)   ((i[x] << 24) + stb__in3((x)+1))
 
-static unsigned char *stb_decompress_token(unsigned char *i)
+static const unsigned char *stb_decompress_token(const unsigned char *i)
 {
     if (*i >= 0x20) { // use fewer if's for cases that expand small
         if (*i >= 0x80)       stb__match(stb__dout-i[1]-1, i[0] - 0x80 + 1), i += 2;
@@ -2832,21 +2858,20 @@ static unsigned int stb_adler32(unsigned int adler32, unsigned char *buffer, uns
     return (unsigned int)(s2 << 16) + (unsigned int)s1;
 }
 
-static unsigned int stb_decompress(unsigned char *output, unsigned char *i, unsigned int length)
+static unsigned int stb_decompress(unsigned char *output, const unsigned char *i, unsigned int /*length*/)
 {
     unsigned int olen;
     if (stb__in4(0) != 0x57bC0000) return 0;
     if (stb__in4(4) != 0)          return 0; // error! stream is > 4GB
     olen = stb_decompress_length(i);
-    stb__barrier2 = i;
-    stb__barrier3 = i+length;
-    stb__barrier = output + olen;
-    stb__barrier4 = output;
+    stb__barrier_in_b = i;
+    stb__barrier_out_e = output + olen;
+    stb__barrier_out_b = output;
     i += 16;
 
     stb__dout = output;
     for (;;) {
-        unsigned char *old_i = i;
+        const unsigned char *old_i = i;
         i = stb_decompress_token(i);
         if (i == old_i) {
             if (*i == 0x05 && i[1] == 0xfa) {
