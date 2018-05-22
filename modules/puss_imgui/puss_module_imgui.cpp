@@ -753,22 +753,59 @@ static luaL_Reg imgui_lua_apis[] =
 	, {"ImGuiDestroy", imgui_destroy_lua}
 	, {"ImGuiUpdate", imgui_update_lua}
 	, {"ImGuiRender", imgui_render_lua}
+
+	// imgui
 	, {"GetIODisplaySize", imgui_getio_display_size_lua}
 	, {"GetIODeltaTime", imgui_getio_delta_time_lua}
-
 	, {"ByteArrayCreate", byte_array_create}
 	, {"FloatArrayCreate", float_array_create}
-
 #define __REG_WRAP(w,f)	, { #w, f }
 	#include "imgui_wraps.inl"
 #undef __REG_WRAP
 
+	// scintilla
 	, {"ScintillaNew", im_scintilla_new}
 	, {"ScintillaUpdate", im_scintilla_update}
 	, {"ScintillaFree", im_scintilla_free}
 
 	, {NULL, NULL}
 	};
+
+static void lua_register_imgui(lua_State* L) {
+	puss_push_const_table(L);
+#define __REG_ENUM(e)	lua_pushinteger(L, e);	lua_setfield(L, -2, #e);
+	#include "imgui_enums.inl"
+#undef __REG_ENUM
+	lua_pop(L, 1);
+
+	luaL_newlib(L, imgui_lua_apis);
+	lua_pushvalue(L, -1);
+	lua_setfield(L, LUA_REGISTRYINDEX, IMGUI_LIB_NAME);
+}
+
+static void lua_register_scintilla(lua_State* L) {
+	// scintilla
+	{
+		puss_push_const_table(L);
+		IFaceVal* p;
+		for( p=sci_values; p->name; ++p ) {
+			lua_pushinteger(L, p->val);
+			lua_setfield(L, -2, p->name);
+		}
+		lua_pop(L, 1);
+	}
+
+	// metatable: fun/get/set
+	if( luaL_newmetatable(L, LUA_IM_SCI_NAME) ) {
+		IFaceDecl* p;
+		for( p=sci_functions; p->name; ++p ) {
+			lua_pushlightuserdata(L, p);
+			lua_pushcclosure(L, _lua__sci_send_wrap, 1);
+			lua_setfield(L, -2, p->name);
+		}
+	}
+	lua_setfield(L, -1, "__index");
+}
 
 PussInterface* __puss_iface__ = NULL;
 
@@ -799,41 +836,8 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 		return 1;
 	lua_pop(L, 1);
 
-	// imgui
-	puss_push_const_table(L);
-	{
-#define __REG_ENUM(e)	lua_pushinteger(L, e);	lua_setfield(L, -2, #e);
-	#include "imgui_enums.inl"
-#undef __REG_ENUM
-	}
-	lua_pop(L, 1);
-
-	luaL_newlib(L, imgui_lua_apis);
-	lua_pushvalue(L, -1);
-	lua_setfield(L, LUA_REGISTRYINDEX, IMGUI_LIB_NAME);
-
-	// scintilla
-	{
-		puss_push_const_table(L);
-		IFaceVal* p;
-		for( p=sci_values; p->name; ++p ) {
-			lua_pushinteger(L, p->val);
-			lua_setfield(L, -2, p->name);
-		}
-		lua_pop(L, 1);
-	}
-
-	// metatable: fun/get/set
-	if( luaL_newmetatable(L, LUA_IM_SCI_NAME) ) {
-		IFaceDecl* p;
-		for( p=sci_functions; p->name; ++p ) {
-			lua_pushlightuserdata(L, p);
-			lua_pushcclosure(L, _lua__sci_send_wrap, 1);
-			lua_setfield(L, -2, p->name);
-		}
-	}
-	lua_setfield(L, -1, "__index");
-
+	lua_register_imgui(L);
+	lua_register_scintilla(L);
 	return 1;
 }
 
