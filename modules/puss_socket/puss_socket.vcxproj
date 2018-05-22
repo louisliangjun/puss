@@ -18,7 +18,7 @@
     <ProjectGuid>{CF27D656-24A4-4A0D-B36E-E82F33257FD3}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>pusssocket</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.16299.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">

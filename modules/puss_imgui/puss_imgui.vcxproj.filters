@@ -450,6 +450,9 @@
     <ClCompile Include="..\..\3rd\scintilla-4.0.0\lexlib\WordList.cxx">
       <Filter>scintilla\lexlib</Filter>
     </ClCompile>
+    <ClCompile Include="imgui\imgui_tabs.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="puss_module_imgui.h" />
@@ -657,6 +660,9 @@
     </ClInclude>
     <ClInclude Include="..\..\3rd\scintilla-4.0.0\include\Sci_Position.h">
       <Filter>scintilla\include</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imgui_tabs.h">
+      <Filter>imgui</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
