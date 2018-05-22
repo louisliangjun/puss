@@ -7,19 +7,20 @@ local modules_base_mt = { __index=_ENV }
 
 puss.import = function(name, reload)
 	local env = modules[name]
-	local exports
+	local interface
 	if env then
-		exports = getmetatable(env).__exports
-		if not reload then return exports end
+		interface = getmetatable(env)
+		if not reload then return interface end
 	else
-		exports = {}
-		local module_env = setmetatable({__name=name, __exports=exports}, modules_base_mt)
-		module_env.__index = module_env
+		interface = {__name=name }
+		interface.__exports = interface
+		interface.__index = interface
+		local module_env = setmetatable(interface, modules_base_mt)
 		env = setmetatable({}, module_env)
 		modules[name] = env
 	end
 	puss.dofile(name:gsub('%.', '/') .. '.lua', env)
-	return exports
+	return interface
 end
 
 function __main__()
