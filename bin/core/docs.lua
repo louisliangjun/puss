@@ -4,9 +4,9 @@ local app = puss.import('core.app')
 local sci = puss.import('core.sci')
 
 local function do_draw(page)
-	-- local w, h = imgui.GetWindowContentRegionMax()
-	imgui.BeginChild('Output', -1, -1, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
+	imgui.BeginChild('Output', nil, nil, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
 		imgui.ScintillaUpdate(page.sv)
+		page.unsaved = page.sv:GetModify()
 	imgui.EndChild()
 end
 
@@ -16,14 +16,22 @@ local function draw(page)
 	return __draw(page)
 end
 
-local function new_doc(id, fname)
-	page = app.create_page(id, fname, draw)
+local function new_doc(fname)
+	page = app.create_page(fname, draw)
 	page.sv = sci.create('lua')
 	return page
 end
 
+local last_index = 0
+
 __exports.new_page = function()
-	return new_doc(nil, 'noname')
+	local label
+	while true do
+		last_index = last_index + 1
+		label = string.format('noname##%u', last_index)
+		if not app.lookup_page(label) then break end
+	end
+	return new_doc(label)
 end
 
 __exports.open = function(fname)
@@ -34,8 +42,9 @@ __exports.open = function(fname)
 		local ctx = f:read('*a')
 		f:close()
 
-		page = new_doc(fname, fname)
+		page = new_doc(fname)
 		page.sv:SetText(ctx)
+		page.sv:EmptyUndoBuffer()
 	end
 	return page
 end

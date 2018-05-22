@@ -7,21 +7,17 @@ local show_imgui_demos = false
 local show_tabs_demo = false
 local show_console_window = false
 
-_pages = _pages or { last_index=0 }
+_pages = _pages or {}
 _index = _index or setmetatable({}, {__mode='v'})
 local pages = _pages
 local index = _index
 
-local function create_page(id, label, draw)
-	if not id then
-		id = pages.last_index + 1
-		pages.last_index = id
-	end
-	local page = index[id]
+local function create_page(label, draw)
+	local page = index[label]
 	if page then return page end 
-	local page = {id=id, label=label, draw=draw, show=true}
+	local page = {label=label, draw=draw, show=true}
 	table.insert(pages, page)
-	index[id] = page
+	index[label] = page
 	return page
 end
 
@@ -34,7 +30,7 @@ local function main_menu()
 	local active
 	if not imgui.BeginMenuBar() then return end
     if imgui.BeginMenu('File') then
-    	if imgui.MenuItem('Test Add Tab') then create_page(nil, 'Page ' .. (#pages + 1), demo_page) end
+    	if imgui.MenuItem('Test Add Tab') then create_page('Page ' .. (#pages + 1), demo_page) end
     	if imgui.MenuItem('New page') then docs.new_page() end
     	if imgui.MenuItem('Open app.lua') then docs.open(puss._path .. '/core/app.lua') end
     	if imgui.MenuItem('Open console.lua') then docs.open(puss._path .. '/core/console.lua') end
@@ -59,7 +55,7 @@ local function tabs_bar()
     imgui.BeginTabBar("PussMainTabsBar", ImGuiTabBarFlags_SizingPolicyFit)
 	for i, page in ipairs(pages) do
 	    local active
-		active, page.show = imgui.TabItem(page.label, page.show)
+		active, page.show = imgui.TabItem(page.label, page.show, page.unsaved and ImGuiTabItemFlags_UnsavedDocument or ImGuiTabItemFlags_None)
 		if active then
 			puss.trace_pcall(page.draw, page)
 		end
@@ -71,6 +67,8 @@ local function main_window()
 	local flags = ( ImGuiWindowFlags_NoTitleBar
 		| ImGuiWindowFlags_NoResize
 		| ImGuiWindowFlags_NoMove
+		| ImGuiWindowFlags_NoScrollbar
+		| ImGuiWindowFlags_NoScrollWithMouse
 		| ImGuiWindowFlags_NoCollapse
 		| ImGuiWindowFlags_NoSavedSettings
 		| ImGuiWindowFlags_MenuBar
