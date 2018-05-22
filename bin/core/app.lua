@@ -39,25 +39,14 @@ local function back_window()
 	imgui.End()
 end
 
-local function main_window()
-	imgui.Begin("Puss Main Window")
-	if imgui.Button("111") then
-	end
-	imgui.SameLine()
-	if imgui.Button("222") then
-	end
-	imgui.SameLine()
-	if imgui.Button("333") then
-	end
-	imgui.End()
-end
-
 local function source_editor_main()
 	back_window()
-	main_window()
-	local active
-	if show_imgui_demos then imgui.ShowDemoWindow() end
-	if show_console_window then console.update() end
+	if show_imgui_demos then
+		show_imgui_demos = imgui.ShowDemoWindow(show_imgui_demos)
+	end
+	if show_console_window then
+		show_console_window = console.update(show_console_window)
+	end
 end
 
 __exports.main = function()

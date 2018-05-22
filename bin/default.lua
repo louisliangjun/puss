@@ -2,11 +2,8 @@
 
 _ENV.imgui = puss.require('puss_imgui')
 
-puss._modules = puss._modules or {}
-puss._modules_base_mt = puss._modules_base_mt or { __index=_ENV }
-
-local modules = puss._modules
-local modules_base_mt = puss._modules_base_mt
+local modules = {}
+local modules_base_mt = { __index=_ENV }
 
 puss.import = function(name, reload)
 	local env = modules[name]
@@ -21,11 +18,7 @@ puss.import = function(name, reload)
 		env = setmetatable({}, module_env)
 		modules[name] = env
 	end
-
-	-- print('import', name, 'begin')
-	local fname = name:gsub('%.', '/') .. '.lua'
-	puss.dofile(fname, env)
-	-- print('import', name, 'end')
+	puss.dofile(name:gsub('%.', '/') .. '.lua', env)
 	return exports
 end
 
