@@ -3,21 +3,15 @@
 local app = puss.import('core.app')
 local sci = puss.import('core.sci')
 
-local function do_draw(page)
+function tabs_page_draw(page)
 	imgui.BeginChild('Output', nil, nil, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
 		imgui.ScintillaUpdate(page.sv)
 		page.unsaved = page.sv:GetModify()
 	imgui.EndChild()
 end
 
-__draw = do_draw
-
-local function draw(page)
-	return __draw(page)
-end
-
 local function new_doc(fname)
-	page = app.create_page(fname, draw)
+	page = app.create_page(fname, _ENV)
 	page.sv = sci.create('lua')
 	return page
 end

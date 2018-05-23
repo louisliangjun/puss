@@ -12,16 +12,16 @@ _index = _index or setmetatable({}, {__mode='v'})
 local pages = _pages
 local index = _index
 
-local function create_page(label, draw)
+local function create_page(label, module)
 	local page = index[label]
 	if page then return page end 
-	local page = {label=label, draw=draw, show=true}
+	local page = {label=label, module=module, show=true}
 	table.insert(pages, page)
 	index[label] = page
 	return page
 end
 
-local function demo_page(page)
+function tabs_page_draw(page)
 	imgui.Text(page.label)
 	imgui.Text(string.format('DemoPage: %s %s', page, page.draw))
 end
@@ -30,7 +30,7 @@ local function main_menu()
 	local active
 	if not imgui.BeginMenuBar() then return end
     if imgui.BeginMenu('File') then
-    	if imgui.MenuItem('Test Add Tab') then create_page('Page ' .. (#pages + 1), demo_page) end
+    	if imgui.MenuItem('Test Add Tab') then create_page('Page ' .. (#pages + 1), _ENV) end
     	if imgui.MenuItem('New page') then docs.new_page() end
     	if imgui.MenuItem('Open app.lua') then docs.open(puss._path .. '/core/app.lua') end
     	if imgui.MenuItem('Open console.lua') then docs.open(puss._path .. '/core/console.lua') end
@@ -55,7 +55,8 @@ local function tabs_bar()
 	    local active
 		active, page.show = imgui.TabItem(page.label, page.show, page.unsaved and ImGuiTabItemFlags_UnsavedDocument or ImGuiTabItemFlags_None)
 		if active then
-			puss.trace_pcall(page.draw, page)
+			local draw = page.module.tabs_page_draw
+			if draw then puss.trace_pcall(draw, page) end
 		end
 	end
 	imgui.EndTabBar()
