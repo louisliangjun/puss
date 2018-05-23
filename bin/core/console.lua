@@ -4,6 +4,7 @@ local sci = puss.import('core.sci')
 
 local function console_write(output, text)
 	output:AppendText(#text, text)
+	output:ScrollToEnd()
 end
 
 local function console_execute(output, input)
@@ -39,13 +40,20 @@ end
 _G.print = console_print
 __exports.log = console_print
 
+log('test')
+
 local function console_update(output, inbuf)
 	local w, h = imgui.GetWindowContentRegionMax()
-	imgui.BeginChild('Output', w-8, h-128, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
+	imgui.BeginChild('ConsoleOutput', w-8, h-128, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
 		imgui.ScintillaUpdate(output)
 	imgui.EndChild()
-	if imgui.InputTextMultiline('', inbuf, w-8, 96, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AllowTabInput) then
-		puss.trace_pcall(console_execute, output, inbuf:sub(1, #inbuf))
+
+	local active = imgui.InputTextMultiline('ConsoleInput', inbuf, w-8, 96, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AllowTabInput)
+	if (not active) and (imgui.IsItemActive()) then
+		active = imgui.IsShortcutPressed(PUSS_IMGUI_KEY_KP_ENTER)
+	end
+	if active then
+		puss.trace_pcall(console_execute, output, inbuf:str())
 	end
 end
 

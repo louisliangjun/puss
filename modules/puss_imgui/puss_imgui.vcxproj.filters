@@ -664,6 +664,7 @@
     <ClInclude Include="imgui\imgui_tabs.h">
       <Filter>imgui</Filter>
     </ClInclude>
+    <ClInclude Include="puss_module_imgui_keys.inl" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="imgui">

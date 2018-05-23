@@ -231,6 +231,7 @@ vmake_target_add('puss_imgui', function(target)
 		, path_concat(src, 'imgui')
 		})
 	make_copy('puss_module_imgui.h', PUSS_INCLUDE_PATH, src)
+	make_copy('puss_module_imgui_keys.inl', PUSS_INCLUDE_PATH, src)
 	local cflags = array_pack(CFLAGS, '-DSCI_LEXER', shell('pkg-config --static --cflags glfw3'))
 	local libs = shell('pkg-config --static --libs glfw3')
 	if vlua.OS=='windows' then

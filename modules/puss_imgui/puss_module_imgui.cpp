@@ -58,6 +58,9 @@
 
 #include <new>
 
+#include "puss_module_imgui.h"
+#include "scintilla_imgui.h"
+
 static char				g_GlslVersion[32] = "#version 150";
 
 class ImguiEnv {
@@ -265,19 +268,34 @@ static void ImGui_ImplGlfw_ScrollCallback(GLFWwindow*, double xoffset, double yo
     io.MouseWheel += (float)yoffset;
 }
 
+static void puss_imgui_key_set(ImGuiIO& io, int key, bool st) {
+	if( ((unsigned)key) <= PUSS_IMGUI_BASIC_KEY_LAST ) {
+		io.KeysDown[key] = st;
+	} else {
+		switch(key) {
+		#define _PUSS_IMGUI_KEY_REG(key)	case GLFW_KEY_ ## key: io.KeysDown[PUSS_IMGUI_KEY_ ## key] = st;	break;
+			#include "puss_module_imgui_keys.inl"
+		#undef _PUSS_IMGUI_KEY_REG
+		default:
+			break;
+		}
+	}
+}
+
 static void ImGui_ImplGlfw_KeyCallback(GLFWwindow*, int key, int, int action, int mods)
 {
     ImGuiIO& io = ImGui::GetIO();
-    if (action == GLFW_PRESS)
-        io.KeysDown[key] = true;
-    if (action == GLFW_RELEASE)
-        io.KeysDown[key] = false;
+    if (action == GLFW_PRESS) {
+		puss_imgui_key_set(io, key, true);
+	} else if (action == GLFW_RELEASE) {
+		puss_imgui_key_set(io, key, false);
+	}
 
     (void)mods; // Modifiers are not reliable across systems
-    io.KeyCtrl = io.KeysDown[GLFW_KEY_LEFT_CONTROL] || io.KeysDown[GLFW_KEY_RIGHT_CONTROL];
-    io.KeyShift = io.KeysDown[GLFW_KEY_LEFT_SHIFT] || io.KeysDown[GLFW_KEY_RIGHT_SHIFT];
-    io.KeyAlt = io.KeysDown[GLFW_KEY_LEFT_ALT] || io.KeysDown[GLFW_KEY_RIGHT_ALT];
-    io.KeySuper = io.KeysDown[GLFW_KEY_LEFT_SUPER] || io.KeysDown[GLFW_KEY_RIGHT_SUPER];
+    io.KeyCtrl = io.KeysDown[PUSS_IMGUI_KEY_LEFT_CONTROL] || io.KeysDown[PUSS_IMGUI_KEY_RIGHT_CONTROL];
+    io.KeyShift = io.KeysDown[PUSS_IMGUI_KEY_LEFT_SHIFT] || io.KeysDown[PUSS_IMGUI_KEY_RIGHT_SHIFT];
+    io.KeyAlt = io.KeysDown[PUSS_IMGUI_KEY_LEFT_ALT] || io.KeysDown[PUSS_IMGUI_KEY_RIGHT_ALT];
+    io.KeySuper = io.KeysDown[PUSS_IMGUI_KEY_LEFT_SUPER] || io.KeysDown[PUSS_IMGUI_KEY_RIGHT_SUPER];
 }
 
 static void ImGui_ImplGlfw_CharCallback(GLFWwindow*, unsigned int c)
@@ -430,21 +448,21 @@ bool ImguiEnv::ImGui_ImplGlfwGL3_Init(GLFWwindow* window, bool install_callbacks
     io.BackendFlags |= ImGuiBackendFlags_HasSetMousePos;    // We can honor io.WantSetMousePos requests (optional, rarely used)
 
     // Keyboard mapping. ImGui will use those indices to peek into the io.KeyDown[] array.
-    io.KeyMap[ImGuiKey_Tab] = GLFW_KEY_TAB;
-    io.KeyMap[ImGuiKey_LeftArrow] = GLFW_KEY_LEFT;
-    io.KeyMap[ImGuiKey_RightArrow] = GLFW_KEY_RIGHT;
-    io.KeyMap[ImGuiKey_UpArrow] = GLFW_KEY_UP;
-    io.KeyMap[ImGuiKey_DownArrow] = GLFW_KEY_DOWN;
-    io.KeyMap[ImGuiKey_PageUp] = GLFW_KEY_PAGE_UP;
-    io.KeyMap[ImGuiKey_PageDown] = GLFW_KEY_PAGE_DOWN;
-    io.KeyMap[ImGuiKey_Home] = GLFW_KEY_HOME;
-    io.KeyMap[ImGuiKey_End] = GLFW_KEY_END;
-    io.KeyMap[ImGuiKey_Insert] = GLFW_KEY_INSERT;
-    io.KeyMap[ImGuiKey_Delete] = GLFW_KEY_DELETE;
-    io.KeyMap[ImGuiKey_Backspace] = GLFW_KEY_BACKSPACE;
+    io.KeyMap[ImGuiKey_Tab] = PUSS_IMGUI_KEY_TAB;
+    io.KeyMap[ImGuiKey_LeftArrow] = PUSS_IMGUI_KEY_LEFT;
+    io.KeyMap[ImGuiKey_RightArrow] = PUSS_IMGUI_KEY_RIGHT;
+    io.KeyMap[ImGuiKey_UpArrow] = PUSS_IMGUI_KEY_UP;
+    io.KeyMap[ImGuiKey_DownArrow] = PUSS_IMGUI_KEY_DOWN;
+    io.KeyMap[ImGuiKey_PageUp] = PUSS_IMGUI_KEY_PAGE_UP;
+    io.KeyMap[ImGuiKey_PageDown] = PUSS_IMGUI_KEY_PAGE_DOWN;
+    io.KeyMap[ImGuiKey_Home] = PUSS_IMGUI_KEY_HOME;
+    io.KeyMap[ImGuiKey_End] = PUSS_IMGUI_KEY_END;
+    io.KeyMap[ImGuiKey_Insert] = PUSS_IMGUI_KEY_INSERT;
+    io.KeyMap[ImGuiKey_Delete] = PUSS_IMGUI_KEY_DELETE;
+    io.KeyMap[ImGuiKey_Backspace] = PUSS_IMGUI_KEY_BACKSPACE;
     io.KeyMap[ImGuiKey_Space] = GLFW_KEY_SPACE;
     io.KeyMap[ImGuiKey_Enter] = GLFW_KEY_ENTER;
-    io.KeyMap[ImGuiKey_Escape] = GLFW_KEY_ESCAPE;
+    io.KeyMap[ImGuiKey_Escape] = PUSS_IMGUI_KEY_ESCAPE;
     io.KeyMap[ImGuiKey_A] = GLFW_KEY_A;
     io.KeyMap[ImGuiKey_C] = GLFW_KEY_C;
     io.KeyMap[ImGuiKey_V] = GLFW_KEY_V;
@@ -587,11 +605,6 @@ void ImguiEnv::ImGui_ImplGlfwGL3_NewFrame()
     ImGui::NewFrame();
 }
 
-// puss_module_imgui.cpp
-
-#include "puss_module_imgui.h"
-#include "scintilla_imgui.h"
-
 #define IMGUI_LUA_WRAP_STACK_BEGIN(tp)	{ ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData); env->g_Stack.push_back(tp); }
 #define IMGUI_LUA_WRAP_STACK_END(tp)	{ ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData); if(!env->g_Stack.empty()) { env->g_Stack.pop_back(); } }
 #include "imgui_lua.inl"
@@ -671,6 +684,24 @@ static int imgui_getio_display_size_lua(lua_State* L) {
 static int imgui_getio_delta_time_lua(lua_State* L) {
 	ImGuiIO& io = ImGui::GetIO();
 	lua_pushnumber(L, io.DeltaTime);
+	return 1;
+}
+
+static bool shortcut_mod_check(lua_State* L, int arg, bool val) {
+	return lua_isnoneornil(L, arg) ? true : (val == ((lua_toboolean(L, 2)!=0)));
+}
+
+static int imgui_is_shortcut_pressed_lua(lua_State* L) {
+	ImGuiIO& io = ImGui::GetIO();
+	int key = (int)luaL_checkinteger(L, 1);
+	bool pressed = shortcut_mod_check(L, 2, io.KeyCtrl)
+		&& shortcut_mod_check(L, 3, io.KeyShift)
+		&& shortcut_mod_check(L, 4, io.KeyAlt)
+		&& shortcut_mod_check(L, 5, io.KeySuper)
+		&& (key>=0 && key<PUSS_IMGUI_TOTAL_KEY_LAST)
+		&& ImGui::IsKeyPressed(key)
+		;
+	lua_pushboolean(L, pressed ? 1 : 0);
 	return 1;
 }
 
@@ -758,6 +789,8 @@ static luaL_Reg imgui_lua_apis[] =
 	// imgui
 	, {"GetIODisplaySize", imgui_getio_display_size_lua}
 	, {"GetIODeltaTime", imgui_getio_delta_time_lua}
+	, {"IsShortcutPressed", imgui_is_shortcut_pressed_lua}
+
 	, {"ByteArrayCreate", byte_array_create}
 	, {"FloatArrayCreate", float_array_create}
 #define __REG_WRAP(w,f)	, { #w, f }
@@ -777,6 +810,9 @@ static void lua_register_imgui(lua_State* L) {
 #define __REG_ENUM(e)	lua_pushinteger(L, e);	lua_setfield(L, -2, #e);
 	#include "imgui_enums.inl"
 #undef __REG_ENUM
+#define _PUSS_IMGUI_KEY_REG(key)	lua_pushinteger(L, PUSS_IMGUI_KEY_ ## key);	lua_setfield(L, -2, "PUSS_IMGUI_KEY_" #key);
+	#include "puss_module_imgui_keys.inl"
+#undef _PUSS_IMGUI_KEY_REG
 	lua_pop(L, 1);
 
 	luaL_newlib(L, imgui_lua_apis);

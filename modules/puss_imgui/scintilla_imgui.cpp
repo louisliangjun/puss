@@ -935,51 +935,6 @@ public: 	// Public for scintilla_send_message
 			HandleKeyboardEvents(io, now, modifiers);
 		}
 	}
-	void UpdateDemo() {
-		ImGuiWindow* window = ImGui::GetCurrentWindow();
-		ImVec2 total_sz = window->Pos + window->Size - window->DC.CursorPos - (window->WindowPadding * 2.0f);
-		ImRect frame_bb(window->DC.CursorPos, (window->DC.CursorPos + total_sz));
-		float totalHeight = (float)((pdoc->LinesTotal() + 1) * vs.lineHeight);
-		float totalWidth = (float)(scrollWidth * vs.aveCharWidth);
-		ImVec2 frame_sz = total_sz;
-		horizontalScrollBarVisible = (totalWidth > frame_sz.x);
-		verticalScrollBarVisible = (totalHeight > frame_sz.y);
-		ImGuiID id = window->GetID(this);
-		if( ImGui::BeginChildFrame(id, frame_sz, ImGuiWindowFlags_HorizontalScrollbar)) {
-			window = ImGui::GetCurrentWindow();
-			mainWindow.win = window;
-
-			// input
-			HandleInputEvents(id, frame_bb);
-
-			// scrollbar
-			if( horizontalScrollBarVisible ) {
-				total_sz.x = totalWidth;
-				total_sz.y -= (window->ScrollbarSizes.y + (window->WindowPadding.y * 2.0f));
-			}
-			if( verticalScrollBarVisible ) {
-				total_sz.x -= (window->ScrollbarSizes.x + (window->WindowPadding.x * 2.0f));
-				total_sz.y = totalHeight;
-			}
-			SetXYScroll(XYScrollPosition(window->Scroll.x / vs.aveCharWidth, window->Scroll.y / vs.lineHeight));
-			// fprintf(stderr, "scroll pos: %d, %d\n", xOffset, topLine);
-			if( verticalScrollBarVisible || horizontalScrollBarVisible ) {
-				ImGui::Dummy(total_sz);
-			}
-
-			// render
-			std::unique_ptr<Surface> surfaceWindow(Surface::Allocate(SC_TECHNOLOGY_DEFAULT));
-			surfaceWindow->Init(0, wMain.GetID());
-
-			PRectangle rc(0.0f, 0.0f, frame_sz.x, frame_sz.y);
-			Paint(surfaceWindow.get(), rc);
-			surfaceWindow->Release();
-
-			mainWindow.win = NULL;
-		}
-
-		ImGui::EndChildFrame();
-	}
 	void Update() {
 		ImGuiWindow* window = ImGui::GetCurrentWindow();
 		float totalHeight = (float)((pdoc->LinesTotal() + 1) * vs.lineHeight);
@@ -1016,7 +971,7 @@ public: 	// Public for scintilla_send_message
 		Paint(surfaceWindow.get(), rc);
 		surfaceWindow->Release();
 
-		mainWindow.win = NULL;
+		// mainWindow.win = NULL;
 	}
 private:
 	sptr_t DefWndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) override {

@@ -93,19 +93,18 @@ local buffer_implements = [[
 
 typedef struct _ByteArrayLua {
 	int				cap;
-	int				len;
 	unsigned char	buf[1];
 } ByteArrayLua;
 
 static int byte_array_tostring(lua_State* L) {
 	ByteArrayLua* ud = (ByteArrayLua*)luaL_checkudata(L, 1, BYTE_ARRAY_NAME);
-	lua_pushfstring(L, "Byte[%d/%d] %p", ud->len, ud->cap, ud);
+	lua_pushfstring(L, "Byte[%d] %p", ud->cap, ud);
 	return 1;
 }
 
 static int byte_array_len(lua_State* L) {
 	ByteArrayLua* ud = (ByteArrayLua*)luaL_checkudata(L, 1, BYTE_ARRAY_NAME);
-	lua_pushinteger(L, ud->len);
+	lua_pushinteger(L, ud->cap);
 	return 1;
 }
 
@@ -113,10 +112,10 @@ static int byte_array_sub(lua_State* L) {
 	ByteArrayLua* ud = (ByteArrayLua*)luaL_checkudata(L, 1, BYTE_ARRAY_NAME);
 	int from = (int)luaL_optinteger(L, 2, 1);
 	int to = (int)luaL_optinteger(L, 3, -1);
-	if( from < 0 ) { from += ud->len; }
+	if( from < 0 ) { from += ud->cap; }
 	from = (from < 1) ? 0 : (from - 1);
-	if( to < 0 ) { to += ud->len; }
-	to = (to > ud->len) ? ud->len : to;
+	if( to < 0 ) { to += ud->cap; }
+	to = (to > ud->cap) ? ud->cap : to;
 	if( from < to ) {
 		lua_pushlstring(L, (const char*)(ud->buf + from), (to - from));
 	} else {
@@ -130,9 +129,20 @@ static int byte_array_reset(lua_State* L) {
 	size_t len = 0;
 	const char* buf = luaL_optlstring(L, 2, "", &len);
 	if( len > (size_t)(ud->cap) ) { len = (size_t)(ud->cap); }
-	memcpy(ud->buf, buf, len);
-	ud->len = (int)len;
+	memcpy(ud->buf, buf, len+1);
 	return 0;
+}
+
+static int byte_array_strlen(lua_State* L) {
+	ByteArrayLua* ud = (ByteArrayLua*)luaL_checkudata(L, 1, BYTE_ARRAY_NAME);
+	lua_pushinteger(L, (lua_Integer)strlen((const char*)(ud->buf)));
+	return 1;
+}
+
+static int byte_array_str(lua_State* L) {
+	ByteArrayLua* ud = (ByteArrayLua*)luaL_checkudata(L, 1, BYTE_ARRAY_NAME);
+	lua_pushstring(L, (const char*)(ud->buf));
+	return 1;
 }
 
 static luaL_Reg byte_array_methods[] =
@@ -140,6 +150,8 @@ static luaL_Reg byte_array_methods[] =
 	, {"__len", byte_array_len}
 	, {"sub", byte_array_sub}
 	, {"reset", byte_array_reset}
+	, {"strlen", byte_array_strlen}
+	, {"str", byte_array_str}
 	, {NULL, NULL}
 	};
 
@@ -151,7 +163,6 @@ static int byte_array_create(lua_State* L) {
 	cap =  (cap < (int)len) ? (int)len : cap;
 	ud = (ByteArrayLua*)lua_newuserdata(L, sizeof(ByteArrayLua) + cap);
 	ud->cap = cap;
-	ud->len = (int)len;
 	memcpy(ud->buf, buf, len+1);
 	if( luaL_newmetatable(L, BYTE_ARRAY_NAME) ) {
 		luaL_setfuncs(L, byte_array_methods, 0);
@@ -296,7 +307,6 @@ implements.InputText = [[	// bool InputText(const char* label, char* buf, size_t
 	ByteArrayLua* arr = (ByteArrayLua*)luaL_checkudata(L, 2, BYTE_ARRAY_NAME);
 	ImGuiInputTextFlags flags = (ImGuiInputTextFlags)luaL_optinteger(L, 3, 0);
 	bool changed = ImGui::InputText(label, (char*)arr->buf, (size_t)arr->cap, flags);
-	if( changed ) { arr->len = (int)strlen((char*)(arr->buf)); }
 	lua_pushboolean(L, changed ? 1 : 0);
 	return 1;]]
 
@@ -306,7 +316,6 @@ implements.InputTextMultiline = [[	// bool InputTextMultiline(const char* label,
 	ImVec2 size( (float)luaL_optnumber(L, 3, 0.0), (float)luaL_optnumber(L, 4, 0.0) ); 
 	ImGuiInputTextFlags flags = (ImGuiInputTextFlags)luaL_optinteger(L, 5, 0);
 	bool changed = ImGui::InputTextMultiline(label, (char*)arr->buf, (size_t)arr->cap, size, flags);
-	if( changed ) { arr->len = (int)strlen((char*)(arr->buf)); }
 	lua_pushboolean(L, changed ? 1 : 0);
 	return 1;]]
 

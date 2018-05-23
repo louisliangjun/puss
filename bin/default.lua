@@ -5,6 +5,10 @@ _ENV.imgui = puss.require('puss_imgui')
 local modules = {}
 local modules_base_mt = { __index=_ENV }
 
+local function load_module(name, env)
+	puss.dofile(name:gsub('%.', '/') .. '.lua', env)
+end
+
 puss.import = function(name, reload)
 	local env = modules[name]
 	local interface
@@ -19,8 +23,14 @@ puss.import = function(name, reload)
 		env = setmetatable({}, module_env)
 		modules[name] = env
 	end
-	puss.dofile(name:gsub('%.', '/') .. '.lua', env)
+	load_module(name, env)
 	return interface
+end
+
+puss.reload = function()
+	for name, env in pairs(modules) do
+		puss.trace_pcall(load_module, name, env)
+	end
 end
 
 function __main__()

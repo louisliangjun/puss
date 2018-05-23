@@ -3,9 +3,9 @@
 local docs = puss.import('core.docs')
 local console = puss.import('core.console')
 
-local show_imgui_demos = false
-local show_tabs_demo = false
-local show_console_window = false
+show_imgui_demos = show_imgui_demos or false
+show_tabs_demo = show_tabs_demo or false
+show_console_window = show_console_window or false
 
 _pages = _pages or {}
 _index = _index or setmetatable({}, {__mode='v'})
@@ -41,14 +41,12 @@ local function main_menu()
 		active, show_tabs_demo = imgui.MenuItem('Tabs Demo', nil, show_tabs_demo)
     	active, show_console_window = imgui.MenuItem('Conosle', nil, show_console_window)
     	imgui.Separator()
-    	if imgui.MenuItem('Reload') then
-	    	docs = puss.import('core.app', true)
-	    	docs = puss.import('core.docs', true)
-    		console = puss.import('core.console', true)
-    	end
+    	if imgui.MenuItem('Reload', 'Ctrl+F12') then puss.reload() end
         imgui.EndMenu()
     end
     imgui.EndMenuBar()
+
+	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_F12, true) then puss.reload() end
 end
 
 local function tabs_bar()
