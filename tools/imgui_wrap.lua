@@ -124,13 +124,23 @@ static int byte_array_sub(lua_State* L) {
 	return 1;
 }
 
-static int byte_array_reset(lua_State* L) {
+static int byte_array_strcpy(lua_State* L) {
 	ByteArrayLua* ud = (ByteArrayLua*)luaL_checkudata(L, 1, BYTE_ARRAY_NAME);
+	size_t offset = (size_t)luaL_optinteger(L, 2, 0);
 	size_t len = 0;
-	const char* buf = luaL_optlstring(L, 2, "", &len);
-	if( len > (size_t)(ud->cap) ) { len = (size_t)(ud->cap); }
-	memcpy(ud->buf, buf, len+1);
-	return 0;
+	const char* buf = luaL_optlstring(L, 3, "", &len);
+	int newline = lua_toboolean(L, 4) ? 1 : 0;
+	char* dst = (char*)(ud->buf + offset);
+	if( (offset+len+newline) > (size_t)(ud->cap) )
+		return 0;
+	if( offset >= (size_t)(ud->cap) )
+		return 0;
+	memcpy(dst, buf, len);	dst += len;
+	if( newline )
+		*dst++ = '\n';
+	*dst = '\0';
+	lua_pushinteger(L, (lua_Integer)(offset + len + newline));
+	return 1;
 }
 
 static int byte_array_strlen(lua_State* L) {
@@ -149,7 +159,7 @@ static luaL_Reg byte_array_methods[] =
 	{ {"__tostring", byte_array_tostring}
 	, {"__len", byte_array_len}
 	, {"sub", byte_array_sub}
-	, {"reset", byte_array_reset}
+	, {"strcpy", byte_array_strcpy}
 	, {"strlen", byte_array_strlen}
 	, {"str", byte_array_str}
 	, {NULL, NULL}

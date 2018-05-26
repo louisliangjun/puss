@@ -2,7 +2,7 @@
 
 _output = _output or {}
 _outbuf = _outbuf or imgui.CreateByteArray(32*1024)
-_inbuf = _inbuf or imgui.CreateByteArray(4*1024)
+_inbuf = _inbuf or imgui.CreateByteArray(4*1024, 'print("hello console") -- press Ctrl+Enter or KP_Enter run script')
 
 local output = _output
 local outbuf = _outbuf
@@ -47,27 +47,10 @@ end
 __exports.log = console_log
 
 local function output_to_outbuf()
-	local output_max_size = #outbuf
-	local removes
-	local sz = 0
+	local pos = 0
 	for i=#output,1,-1 do
-		sz = sz + #output[i] + 1
-		if sz > output_max_size then
-			removes = i
-			break
-		end
+		pos = outbuf:strcpy(pos, output[i], true)
 	end
-	if removes then
-		table.move(output, removes+1, #output, 1)
-		for i=1,removes do
-			table.remove(output)
-		end
-	end
-	local t = {}
-	for i=#output,1,-1 do
-		table.insert(t, output[i])
-	end
-	outbuf:reset(table.concat(t, '\n'))
 end
 
 local CONSOLE_OUTPUT_NAME = '##ConsoleOutput'
