@@ -241,6 +241,10 @@
   <ItemGroup>
     <None Include="..\..\3rd\scintilla-4.0.0\include\Scintilla.iface" />
     <None Include="..\..\3rd\scintilla-4.0.0\src\SciTE.properties" />
+    <None Include="..\..\objs\gen\imgui_enums.inl" />
+    <None Include="..\..\objs\gen\imgui_lua.inl" />
+    <None Include="..\..\objs\gen\imgui_wraps.inl" />
+    <None Include="..\..\objs\gen\scintilla.iface.inl" />
     <None Include="scintilla_imgui_lua.inl" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

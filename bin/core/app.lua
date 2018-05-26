@@ -3,6 +3,8 @@
 local docs = puss.import('core.docs')
 local console = puss.import('core.console')
 
+main_ui = main_ui	-- reload
+
 show_imgui_demos = show_imgui_demos or false
 show_tabs_demo = show_tabs_demo or false
 show_console_window = show_console_window or false
@@ -56,13 +58,17 @@ local function tabs_bar()
 		active, page.show = imgui.TabItem(page.label, page.show, page.unsaved and ImGuiTabItemFlags_UnsavedDocument or ImGuiTabItemFlags_None)
 		if active then
 			local draw = page.module.tabs_page_draw
-			if draw then puss.trace_pcall(draw, page) end
+			if draw then
+				local st,sb = main_ui:stack_protect_begin()
+				puss.trace_pcall(draw, page)
+				main_ui:stack_protect_end(st,sb)
+			end
 		end
 	end
 	imgui.EndTabBar()
 end
 
-local function main_window()
+local function show_main_window()
 	local flags = ( ImGuiWindowFlags_NoTitleBar
 		| ImGuiWindowFlags_NoResize
 		| ImGuiWindowFlags_NoMove
@@ -76,13 +82,13 @@ local function main_window()
 	imgui.SetNextWindowPos(0, 0)
 	imgui.SetNextWindowSize(imgui.GetIODisplaySize())
 	imgui.Begin("PussMainWindow", nil, flags)
-	main_menu()
-	tabs_bar()
+	main_menu(ui)
+	tabs_bar(ui)
 	imgui.End()
 end
 
 local function source_editor_main()
-	main_window()
+	show_main_window(ui)
 	if show_imgui_demos then
 		show_imgui_demos = imgui.ShowDemoWindow(show_imgui_demos)
 	end
@@ -100,13 +106,16 @@ __exports.lookup_page = function(id)
 	return index[id]
 end
 
-__main = source_editor_main
+__exports.init = function()
+	main_ui = imgui.Create("Puss - Editor", 1024, 768)
+end
 
-__exports.main = function()
-	local w = imgui.ImGuiCreateGLFW("Puss - Editor", 1024, 768)
-	while imgui.ImGuiUpdate(w, __main) do
-		imgui.ImGuiRender(w)
-	end
-	imgui.ImGuiDestroy(w)
+__exports.uninit = function()
+	main_ui:destroy()
+	main_ui = nil
+end
+
+__exports.update = function()
+	return main_ui(puss.trace_pcall, source_editor_main, main_ui)
 end
 

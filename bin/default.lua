@@ -1,6 +1,6 @@
 -- default.lua
 
-_ENV.imgui = puss.require('puss_imgui')
+_ENV.imgui = puss.require('puss_imgui')	-- MUST require before require other modules who use imgui
 
 local modules = {}
 local modules_base_mt = { __index=_ENV }
@@ -35,6 +35,9 @@ end
 
 function __main__()
 	local puss_app = puss.import('core.app')
-	puss_app.main()
+	puss_app.init()
+	while puss_app.update() do
+	end
+	puss_app.uninit()
 end
 

@@ -84,6 +84,7 @@ public:
 	int					g_AttribLocationColor;
 	unsigned int		g_VboHandle;
 	unsigned int		g_ElementsHandle;
+	int					g_StackProtected;
 	ImVector<char>		g_Stack;
 
 public:
@@ -605,9 +606,23 @@ void ImguiEnv::ImGui_ImplGlfwGL3_NewFrame()
     ImGui::NewFrame();
 }
 
-#define IMGUI_LUA_WRAP_STACK_BEGIN(tp)	{ ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData); env->g_Stack.push_back(tp); }
-#define IMGUI_LUA_WRAP_STACK_END(tp)	{ ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData); if(!env->g_Stack.empty()) { env->g_Stack.pop_back(); } }
+#define IMGUI_LUA_WRAP_STACK_BEGIN(tp) { \
+	ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData); \
+	env->g_Stack.push_back(tp); \
+}
+
+#define IMGUI_LUA_WRAP_STACK_END(tp) { \
+	ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData); \
+	int top_type = (env->g_Stack.size() > env->g_StackProtected) ? env->g_Stack.back() : -1; \
+	if( top_type==tp ) { \
+		env->g_Stack.pop_back(); \
+	} else { \
+		luaL_error(L, "Stack Push/Pop NOT matched!"); \
+	} \
+}
+
 #include "imgui_lua.inl"
+
 #undef IMGUI_LUA_WRAP_STACK_BEGIN
 #undef IMGUI_LUA_WRAP_STACK_END
 
@@ -630,6 +645,7 @@ static int imgui_update_lua(lua_State* L) {
 	GLFWwindow* win = env->g_Window;
 	luaL_argcheck(L, lua_type(L, 2)==LUA_TFUNCTION, 2, "need function!");
 
+	// check close
 	if( !win ) return 0;
     if( glfwWindowShouldClose(win) ) return 0;
 
@@ -639,29 +655,33 @@ static int imgui_update_lua(lua_State* L) {
 	glfwPollEvents();
 	env->ImGui_ImplGlfwGL3_NewFrame();
 
-	// GUI
-	lua_call(L, lua_gettop(L)-2, 0);
-	lua_pushboolean(L, 1);
-	return 1;
-}
+	env->g_Stack.clear();
+	env->g_StackProtected = 0;
 
-static int imgui_render_lua(lua_State* L) {
-	ImguiEnv* env = (ImguiEnv*)luaL_checkudata(L, 1, IMGUI_MT_NAME);
-	GLFWwindow* win = env->g_Window;
+	// run
+	if( lua_pcall(L, lua_gettop(L)-2, 0, 0) ) {
+		fprintf(stderr, "[ImGui] error: %s\n", lua_tostring(L, -1));
+		lua_pop(L, 1);
+	}
+
+	// check close
+	win = env->g_Window;
 	if( !win ) return 0;
+    if( glfwWindowShouldClose(win) ) return 0;
 
+	// check stack
+	env->g_StackProtected = 0;
 	while( !env->g_Stack.empty() ) {
 		int tp = env->g_Stack.back();
 		env->g_Stack.pop_back();
 		IMGUI_LUA_WRAP_STACK_POP(tp);
 	}
 
-	ImGui::SetCurrentContext(env->g_Context);
+	// render
 	glfwMakeContextCurrent(win);
 	int width, height;
 	glfwGetFramebufferSize(win, &width, &height);
 
-	// draw
 	glViewport(0, 0, width, height);
 	glClear(GL_COLOR_BUFFER_BIT);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -671,6 +691,31 @@ static int imgui_render_lua(lua_State* L) {
 	ImGui::EndFrame();
 
 	glfwSwapBuffers(win);
+	lua_pushboolean(L, 1);
+	return 1;
+}
+
+static int imgui_stack_protect_begin_lua(lua_State* L) {
+	ImguiEnv* env = (ImguiEnv*)luaL_checkudata(L, 1, IMGUI_MT_NAME);
+	int top = env->g_Stack.size();
+	lua_pushinteger(L, top);
+	lua_pushinteger(L, env->g_StackProtected);
+	env->g_StackProtected = top;
+	return 2;
+}
+
+static int imgui_stack_protect_end_lua(lua_State* L) {
+	ImguiEnv* env = (ImguiEnv*)luaL_checkudata(L, 1, IMGUI_MT_NAME);
+	int top = (int)luaL_checkinteger(L, 2);
+	int base = (int)luaL_checkinteger(L, 3);
+	luaL_argcheck(L, top<=env->g_StackProtected, 2, "bad stack protect top");
+	luaL_argcheck(L, base<=top, 3, "bad stack protect base");
+	env->g_StackProtected = base;
+	while( env->g_Stack.size() > top ) {
+		int tp = env->g_Stack.back();
+		env->g_Stack.pop_back();
+		IMGUI_LUA_WRAP_STACK_POP(tp);
+	}
 	return 0;
 }
 
@@ -705,7 +750,7 @@ static int imgui_is_shortcut_pressed_lua(lua_State* L) {
 	return 1;
 }
 
-static int imgui_create_glfw_lua(lua_State* L) {
+static int imgui_create_lua(lua_State* L) {
 	const char* title = luaL_optstring(L, 1, "imgui window");
 	int width = (int)luaL_optinteger(L, 2, 1024);
 	int height = (int)luaL_optinteger(L, 3, 768);
@@ -713,17 +758,7 @@ static int imgui_create_glfw_lua(lua_State* L) {
 	GLFWwindow* win = NULL;
 	int err = 0;
 
-	if( luaL_newmetatable(L, IMGUI_MT_NAME) ) {
-		static luaL_Reg methods[] =
-			{ {"__index", NULL}
-			, {"__gc", imgui_destroy_lua}
-			, {NULL, NULL}
-			};
-		luaL_setfuncs(L, methods, 0);
-		lua_pushvalue(L, -1);
-		lua_setfield(L, -2, "__index");
-	}
-	lua_setmetatable(L, -2);
+	luaL_setmetatable(L, IMGUI_MT_NAME);
 
     win = glfwCreateWindow(width, height, title, NULL, NULL);
     if( !win ) return luaL_error(L, "glfw window create failed!");
@@ -781,31 +816,23 @@ static int imgui_create_glfw_lua(lua_State* L) {
 #include "scintilla.iface.inl"
 
 static luaL_Reg imgui_lua_apis[] =
-	{ {"ImGuiCreateGLFW", imgui_create_glfw_lua}
-	, {"ImGuiDestroy", imgui_destroy_lua}
-	, {"ImGuiUpdate", imgui_update_lua}
-	, {"ImGuiRender", imgui_render_lua}
+	{ {"Create", imgui_create_lua}
+	, {"CreateByteArray", byte_array_create}
+	, {"CreateFloatArray", float_array_create}
+	, {"CreateScintilla", im_scintilla_create}
 
-	// imgui
 	, {"GetIODisplaySize", imgui_getio_display_size_lua}
 	, {"GetIODeltaTime", imgui_getio_delta_time_lua}
 	, {"IsShortcutPressed", imgui_is_shortcut_pressed_lua}
 
-	, {"ByteArrayCreate", byte_array_create}
-	, {"FloatArrayCreate", float_array_create}
 #define __REG_WRAP(w,f)	, { #w, f }
 	#include "imgui_wraps.inl"
 #undef __REG_WRAP
-
-	// scintilla
-	, {"ScintillaNew", im_scintilla_new}
-	, {"ScintillaUpdate", im_scintilla_update}
-	, {"ScintillaFree", im_scintilla_free}
-
 	, {NULL, NULL}
 	};
 
 static void lua_register_imgui(lua_State* L) {
+	// consts
 	puss_push_const_table(L);
 #define __REG_ENUM(e)	lua_pushinteger(L, e);	lua_setfield(L, -2, #e);
 	#include "imgui_enums.inl"
@@ -815,17 +842,26 @@ static void lua_register_imgui(lua_State* L) {
 #undef _PUSS_IMGUI_KEY_REG
 	lua_pop(L, 1);
 
-	luaL_newlib(L, imgui_lua_apis);
-	lua_pushvalue(L, -1);
-	lua_setfield(L, LUA_REGISTRYINDEX, IMGUI_LIB_NAME);
+	if( luaL_newmetatable(L, IMGUI_MT_NAME) ) {
+		static luaL_Reg methods[] =
+			{ {"__index", NULL}
+			, {"__gc", imgui_destroy_lua}
+			, {"__call", imgui_update_lua}
+			, {"destroy", imgui_destroy_lua}
+			, {"stack_protect_begin", imgui_stack_protect_begin_lua}
+			, {"stack_protect_end", imgui_stack_protect_end_lua}
+			, {NULL, NULL}
+			};
+		luaL_setfuncs(L, methods, 0);
+	}
+	lua_setfield(L, -1, "__index");
 }
 
 static void lua_register_scintilla(lua_State* L) {
-	// scintilla
+	// consts
 	{
 		puss_push_const_table(L);
-		IFaceVal* p;
-		for( p=sci_values; p->name; ++p ) {
+		for( IFaceVal* p=sci_values; p->name; ++p ) {
 			lua_pushinteger(L, p->val);
 			lua_setfield(L, -2, p->name);
 		}
@@ -834,8 +870,16 @@ static void lua_register_scintilla(lua_State* L) {
 
 	// metatable: fun/get/set
 	if( luaL_newmetatable(L, LUA_IM_SCI_NAME) ) {
-		IFaceDecl* p;
-		for( p=sci_functions; p->name; ++p ) {
+		static luaL_Reg methods[] =
+			{ {"__index", NULL}
+			, {"__call",im_scintilla_update}
+			, {"__gc",im_scintilla_destroy}
+			, {"destroy",im_scintilla_destroy}
+			, {NULL, NULL}
+			};
+		luaL_setfuncs(L, methods, 0);
+
+		for( IFaceDecl* p=sci_functions; p->name; ++p ) {
 			lua_pushlightuserdata(L, p);
 			lua_pushcclosure(L, _lua__sci_send_wrap, 1);
 			lua_setfield(L, -2, p->name);
@@ -873,8 +917,13 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 		return 1;
 	lua_pop(L, 1);
 
-	lua_register_imgui(L);
-	lua_register_scintilla(L);
+	luaL_newlib(L, imgui_lua_apis);
+	lua_pushvalue(L, -1);
+	lua_setfield(L, LUA_REGISTRYINDEX, IMGUI_LIB_NAME);
+	{
+		lua_register_imgui(L);
+		lua_register_scintilla(L);
+	}
 	return 1;
 }
 

@@ -285,37 +285,64 @@ static int float_array_create(lua_State* L) {
 	lua_setmetatable(L, -2);
 	return 1;
 }
-
 ]]
 
-local ignore_apis =
-	{ Shutdown = true
-	, Render = true
-	, SetAllocatorFunctions = true
-	, MemAlloc = true
-	, MemFree = true
-	, NewFrame = true
-	, EndFrame = true
-	, PushFont = true
-	, PopFont = true
+local callback_implements = [[
+struct ImGuiCallback_LuaWrapUserData {
+	lua_State*	L;
+	int			f;
+	int			n;
+};
+
+static int ImGuiTextEditCallback_LuaWrap(ImGuiTextEditCallbackData *data) {
+	ImGuiCallback_LuaWrapUserData* ud = (ImGuiCallback_LuaWrapUserData*)(data->UserData);
+	lua_State* L = ud->L;
+	int res = 0;
+	int n = 0;
+	luaL_checkstack(L, 4 + ud->n, NULL);
+	lua_pushvalue(L, ud->f);
+	lua_pushlightuserdata(L, data);
+	for( n=1; n<=ud->n; ++n ) {
+		lua_pushvalue(L, ud->f + n);
 	}
+	if( lua_pcall(L, n, 1, 0) ) {
+		fprintf(stderr, "ImGuiTextEditCallback error: %s\n", lua_tostring(L, -1));
+	} else {
+		res = (int)lua_tointeger(L, -1);
+	}
+	lua_pop(L, 1);
+	return res;
+}
+]]
 
 local implements = {}
 
+implements.SetNextWindowSizeConstraints = [[	// void SetNextWindowSizeConstraints(const ImVec2& size_min, const ImVec2& size_max, ImGuiSizeCallback custom_callback = NULL, void* custom_callback_data = NULL);
+	ImVec2 size_min( (float)luaL_checknumber(L, 1), (float)luaL_checknumber(L, 2) );
+	ImVec2 size_max( (float)luaL_checknumber(L, 3), (float)luaL_checknumber(L, 4) );
+	ImGui::SetNextWindowSizeConstraints(size_min, size_max);
+	return 0;]]
+
 implements.InputText = [[	// bool InputText(const char* label, char* buf, size_t buf_size, ImGuiInputTextFlags flags = 0, ImGuiTextEditCallback callback = NULL, void* user_data = NULL);
+	int top = lua_gettop(L);
 	const char* label = luaL_checkstring(L, 1);
 	ByteArrayLua* arr = (ByteArrayLua*)luaL_checkudata(L, 2, BYTE_ARRAY_NAME);
 	ImGuiInputTextFlags flags = (ImGuiInputTextFlags)luaL_optinteger(L, 3, 0);
-	bool changed = ImGui::InputText(label, (char*)arr->buf, (size_t)arr->cap, flags);
+	ImGuiTextEditCallback callback = lua_isfunction(L, 4) ? &ImGuiTextEditCallback_LuaWrap : NULL;
+	ImGuiCallback_LuaWrapUserData callback_ud = { L, 4, top<=4 ? 0 : top-4 };
+	bool changed = ImGui::InputText(label, (char*)arr->buf, (size_t)arr->cap, flags, callback, &callback_ud);
 	lua_pushboolean(L, changed ? 1 : 0);
 	return 1;]]
 
 implements.InputTextMultiline = [[	// bool InputTextMultiline(const char* label, char* buf, size_t buf_size, const ImVec2& size = ImVec2(0,0), ImGuiInputTextFlags flags = 0, ImGuiTextEditCallback callback = NULL, void* user_data = NULL);
+	int top = lua_gettop(L);
 	const char* label = luaL_checkstring(L, 1);
 	ByteArrayLua* arr = (ByteArrayLua*)luaL_checkudata(L, 2, BYTE_ARRAY_NAME);
 	ImVec2 size( (float)luaL_optnumber(L, 3, 0.0), (float)luaL_optnumber(L, 4, 0.0) ); 
 	ImGuiInputTextFlags flags = (ImGuiInputTextFlags)luaL_optinteger(L, 5, 0);
-	bool changed = ImGui::InputTextMultiline(label, (char*)arr->buf, (size_t)arr->cap, size, flags);
+	ImGuiTextEditCallback callback = lua_isfunction(L, 6) ? &ImGuiTextEditCallback_LuaWrap : NULL;
+	ImGuiCallback_LuaWrapUserData callback_ud = { L, 6, top<=6 ? 0 : top-6 };
+	bool changed = ImGui::InputTextMultiline(label, (char*)arr->buf, (size_t)arr->cap, size, flags, callback, &callback_ud);
 	lua_pushboolean(L, changed ? 1 : 0);
 	return 1;]]
 
@@ -407,6 +434,18 @@ implements.AcceptDragDropPayload = [[	//	const ImGuiPayload* AcceptDragDropPaylo
 		lua_pushnil(L);
 	}
 	return 1;]]
+
+local ignore_apis =
+	{ Shutdown = true
+	, Render = true
+	, SetAllocatorFunctions = true
+	, MemAlloc = true
+	, MemFree = true
+	, NewFrame = true
+	, EndFrame = true
+	, PushFont = true
+	, PopFont = true
+	}
 
 function main()
 	local out = vlua.match_arg('^%-out=(.+)$') or '.'
@@ -869,6 +908,7 @@ function main()
 		dst:writeln('#endif//IMGUI_LUA_WRAP_STACK_END')
 		dst:writeln()
 		dst:insert(buffer_implements)
+		dst:insert(callback_implements)
 
 		for _, v in ipairs(apis) do
 			gen_function(table.unpack(v))
@@ -905,7 +945,7 @@ function main()
 		overrides.TreePush = [[return lua_type(L, 1)==LUA_TUSERDATA ? wrap_TreePush_pv(L) : wrap_TreePush_s(L);]]
 		overrides.IsRectVisible = [[ return lua_gettop(L)<=2 ? wrap_IsRectVisible_v2(L) : wrap_IsRectVisible_v2v2(L);]]
 		overrides.CollapsingHeader = [[return lua_type(L, 2)==LUA_TBOOLEAN ? wrap_CollapsingHeader_spbi(L) : wrap_CollapsingHeader_si(L);]]
-		wraps.Selectable = wrap_Selectable_spbiv2
+		wraps.Selectable = 'wrap_Selectable_spbiv2'
 		wraps.ListBoxHeader = 'wrap_ListBoxHeader_sv2'
 		wraps.ListBoxHeader2 = 'wrap_ListBoxHeader_sii'
 		overrides.Value = [[return lua_type(L, 2)==LUA_TNUMBER ? (lua_isinteger(L, 2) ? wrap_Value_si(L) : wrap_Value_sfs(L)) : wrap_Value_sb(L);]]

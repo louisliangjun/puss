@@ -691,6 +691,9 @@
     <Filter Include="scintilla\include">
       <UniqueIdentifier>{1fbb0011-852e-4bbe-ade0-aa7490d239d3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="_gen">
+      <UniqueIdentifier>{4ac8639d-2294-47c2-8a89-e3acd0d155c6}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\3rd\scintilla-4.0.0\src\SciTE.properties">
@@ -700,5 +703,17 @@
       <Filter>scintilla\include</Filter>
     </None>
     <None Include="scintilla_imgui_lua.inl" />
+    <None Include="..\..\objs\gen\imgui_enums.inl">
+      <Filter>_gen</Filter>
+    </None>
+    <None Include="..\..\objs\gen\imgui_lua.inl">
+      <Filter>_gen</Filter>
+    </None>
+    <None Include="..\..\objs\gen\imgui_wraps.inl">
+      <Filter>_gen</Filter>
+    </None>
+    <None Include="..\..\objs\gen\scintilla.iface.inl">
+      <Filter>_gen</Filter>
+    </None>
   </ItemGroup>
 </Project>

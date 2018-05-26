@@ -37,7 +37,7 @@ do
 end
 
 __exports.create = function(lang)
-	local sv = imgui.ScintillaNew()
+	local sv = imgui.CreateScintilla()
 	sv:SetTabWidth(4)
 	local keywords, styles = keywords_map[lang], styles_map[lang]
 	if keywords then

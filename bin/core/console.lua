@@ -1,58 +1,81 @@
 -- console.lua
 
 _output = _output or {}
-_inbuf = _inbuf or imgui.ByteArrayCreate(4096)
+_outbuf = _outbuf or imgui.CreateByteArray(32*1024)
+_inbuf = _inbuf or imgui.CreateByteArray(4*1024)
 
 local output = _output
+local outbuf = _outbuf
 local inbuf = _inbuf
-local scroll_to_end = false
+local output_changed = false
+local output_max_line = 4096
+
+local function output_stack_push(line)
+	line = tostring(line)
+	if #output > output_max_line then
+		table.remove(output, 1)
+	end
+	table.insert(output, line)
+	output_changed = true
+end
 
 local function console_execute(input)
-	table.insert(output, string.format('> run: %s', input))
+	output_stack_push(string.format('> %s', input))
 	local f, e = load(input, input, 't')
 	if f then return f() end
-	table.insert(output, string.format('> load err: %s', e))
-	scroll_to_end = true
+	output_stack_push(string.format('[ERR] %s', e))
 end
 
 puss._print = puss._print or _G.print
 local raw_print = puss._print
 
-local function console_print(...)
+local function console_log(...)
 	local txt = {}
 	local n = select('#', ...)
 	for i=1, n do
 		local v = select(i, ...)
 		table.insert(txt, tostring(v))
 	end
-	table.insert(output, table.concat(txt, '\t'))
-	scroll_to_end = true
+	output_stack_push(table.concat(txt, ' '))
+end
+
+_G.print = function(...)
+	console_log(...)
 	raw_print(...)
 end
 
-_G.print = console_print
-__exports.log = console_print
+__exports.log = console_log
+
+local function output_to_outbuf()
+	local output_max_size = #outbuf
+	local removes
+	local sz = 0
+	for i=#output,1,-1 do
+		sz = sz + #output[i] + 1
+		if sz > output_max_size then
+			removes = i
+			break
+		end
+	end
+	if removes then
+		table.move(output, removes+1, #output, 1)
+		for i=1,removes do
+			table.remove(output)
+		end
+	end
+	local t = {}
+	for i=#output,1,-1 do
+		table.insert(t, output[i])
+	end
+	outbuf:reset(table.concat(t, '\n'))
+end
+
+local CONSOLE_OUTPUT_NAME = '##ConsoleOutput'
+local CONSOLE_OUTPUT_FLAGS = ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoUndoRedo | ImGuiInputTextFlags_NoUndoRedo
 
 local function console_update()
-	imgui.BeginChild('##ConsoleOutput', 0, -128, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
-		imgui.PushStyleVar(ImGuiStyleVar_ItemSpacing, 4, 1)
-		local r,g,b,a = imgui.GetStyleColorVec4(ImGuiCol_Text)
-		for i,v in ipairs(output) do
-			imgui.PushStyleColor(ImGuiCol_Text, 128,g,0,a)
-			imgui.TextUnformatted(v)
-			imgui.PopStyleColor()
-		end
-		if scroll_to_end then
-			imgui.SetScrollHere(1)
-			scroll_to_end = false
-		end
-		imgui.PopStyleVar()
-	imgui.EndChild()
-
-	imgui.Separator()
-
 	local active, reclaim_focus = false, false
-	if imgui.InputTextMultiline('##ConsoleInput', inbuf, -1, 0, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AllowTabInput) then
+	if imgui.InputTextMultiline('##ConsoleInput', inbuf, -1, 64, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AllowTabInput) then
 		reclaim_focus = true
 		active = true
 	elseif imgui.IsItemActive() then
@@ -60,6 +83,13 @@ local function console_update()
 	end
 	if active then puss.trace_pcall(console_execute, inbuf:str()) end
 	if reclaim_focus then imgui.SetKeyboardFocusHere(-1) end
+	imgui.Separator()
+
+	if output_changed then
+		output_changed = false
+		output_to_outbuf()
+	end
+	imgui.InputTextMultiline(CONSOLE_OUTPUT_NAME, outbuf, -1, -1, CONSOLE_OUTPUT_FLAGS)
 end
 
 __exports.update = function(show)

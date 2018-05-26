@@ -1065,11 +1065,11 @@ private:
 	WindowIM mainWindow;
 };
 
-ScintillaIM* scintilla_imgui_new() {
+ScintillaIM* scintilla_imgui_create() {
 	return new ScintillaIM();
 }
 
-void scintilla_imgui_free(ScintillaIM* sci) {
+void scintilla_imgui_destroy(ScintillaIM* sci) {
 	delete sci;
 }
 

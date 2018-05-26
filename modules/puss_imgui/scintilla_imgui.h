@@ -8,8 +8,8 @@
 
 class ScintillaIM;
 
-ScintillaIM*	scintilla_imgui_new();
-void			scintilla_imgui_free(ScintillaIM* sci);
+ScintillaIM*	scintilla_imgui_create();
+void			scintilla_imgui_destroy(ScintillaIM* sci);
 void			scintilla_imgui_update(ScintillaIM* sci);
 sptr_t			scintilla_imgui_send(ScintillaIM* sci, unsigned int iMessage, uptr_t wParam, sptr_t lParam);
 

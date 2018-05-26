@@ -55,9 +55,9 @@ typedef struct _IFaceVal {
 	lua_Integer			val;
 } IFaceVal;
 
-static int im_scintilla_new(lua_State* L) {
+static int im_scintilla_create(lua_State* L) {
 	ScintillaIM** ud;
-	ScintillaIM* sci = scintilla_imgui_new();
+	ScintillaIM* sci = scintilla_imgui_create();
 	if( !sci ) {
 		lua_pushnil(L);
 		return 0;
@@ -69,12 +69,12 @@ static int im_scintilla_new(lua_State* L) {
 	return 1;
 }
 
-static int im_scintilla_free(lua_State* L) {
+static int im_scintilla_destroy(lua_State* L) {
 	ScintillaIM** ud = (ScintillaIM**)luaL_checkudata(L, 1, LUA_IM_SCI_NAME);
 	ScintillaIM* sci = *ud;
 	if( sci ) {
 		*ud = NULL;
-		scintilla_imgui_free(sci);
+		scintilla_imgui_destroy(sci);
 	}
 	return 0;
 }

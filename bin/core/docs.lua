@@ -5,7 +5,7 @@ local sci = puss.import('core.sci')
 
 function tabs_page_draw(page)
 	imgui.BeginChild('Output', nil, nil, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
-		imgui.ScintillaUpdate(page.sv)
+		page.sv()
 		page.unsaved = page.sv:GetModify()
 	imgui.EndChild()
 end
