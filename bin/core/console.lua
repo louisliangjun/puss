@@ -47,9 +47,25 @@ end
 __exports.log = console_log
 
 local function output_to_outbuf()
-	local pos = 0
+	local max = #outbuf
+	local size = 0
+	local removes = 0
 	for i=#output,1,-1 do
-		pos = outbuf:strcpy(pos, output[i], true)
+		size = size + #output[i] + 1
+		if size > max then
+			removes = i + 1
+			break
+		end
+	end
+	if removes > 0 then
+		table.move(output, removes+1, #output, 1)
+		for i=1,removes do
+			table.remove(output)
+		end
+	end
+	local pos = 0
+	for i,v in ipairs(output) do
+		pos = outbuf:strcpy(pos, v, true)
 	end
 end
 
@@ -57,8 +73,18 @@ local CONSOLE_OUTPUT_NAME = '##ConsoleOutput'
 local CONSOLE_OUTPUT_FLAGS = ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoUndoRedo | ImGuiInputTextFlags_NoUndoRedo
 
 local function console_update()
+	if output_changed then output_to_outbuf() end
+	imgui.InputTextMultiline(CONSOLE_OUTPUT_NAME, outbuf, -1, -128, CONSOLE_OUTPUT_FLAGS)
+	if output_changed then
+		output_changed = false
+		imgui.BeginChild(imgui.GetID(CONSOLE_OUTPUT_NAME))
+			imgui.SetScrollY(imgui.GetScrollMaxY())
+		imgui.EndChild()
+	end
+	imgui.Separator()
+
 	local active, reclaim_focus = false, false
-	if imgui.InputTextMultiline('##ConsoleInput', inbuf, -1, 64, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AllowTabInput) then
+	if imgui.InputTextMultiline('##ConsoleInput', inbuf, -1, -1, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AllowTabInput) then
 		reclaim_focus = true
 		active = true
 	elseif imgui.IsItemActive() then
@@ -66,13 +92,6 @@ local function console_update()
 	end
 	if active then puss.trace_pcall(console_execute, inbuf:str()) end
 	if reclaim_focus then imgui.SetKeyboardFocusHere(-1) end
-	imgui.Separator()
-
-	if output_changed then
-		output_changed = false
-		output_to_outbuf()
-	end
-	imgui.InputTextMultiline(CONSOLE_OUTPUT_NAME, outbuf, -1, -1, CONSOLE_OUTPUT_FLAGS)
 end
 
 __exports.update = function(show)
