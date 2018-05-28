@@ -239,6 +239,7 @@ end
 ]])
 
 	while main_ui(puss.trace_pcall, puss_debugger_ui, source_view) do
+		WaitEventsTimeout()
 		-- main loop
 	end
 

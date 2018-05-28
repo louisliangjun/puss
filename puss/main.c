@@ -88,7 +88,7 @@ static int puss_dummy_main(lua_State* L) {
 		lua_pop(L, 1);
 		return lua_gettop(L);
 	}
-	static void puss_push_error_handle(lua_State* L, const char* console_mode) {
+	static void puss_push_error_handle(lua_State* L, int console_mode) {
 		if( console_mode ) {
 			puss_get_value(L, "puss.logerr_handle");
 			lua_call(L, 0, 1);
@@ -97,7 +97,7 @@ static int puss_dummy_main(lua_State* L) {
 		} 
 	}
 #else
-	static void puss_push_error_handle(lua_State* L, const char* console_mode) {
+	static void puss_push_error_handle(lua_State* L, int console_mode) {
 		puss_get_value(L, "puss.logerr_handle");
 		lua_call(L, 0, 1);
 	}
@@ -138,20 +138,23 @@ static int puss_init(lua_State* L) {
 	return 1;
 }
 
-int main(int argc, char* argv[]) {
+static int puss_main(int argc, char* argv[], int debug_level, int console_mode) {
+	lua_State* L = NULL;
 	int res = 0;
-	const char* debug_level = puss_args_lookup(argc, argv, "--debug");
-	lua_State* L = puss_lua_newstate((debug_level==NULL) ? 0 : (*debug_level=='\0' ? 1 : (int)strtol(debug_level, NULL, 10)), NULL, NULL);
-	const char* console_mode = puss_args_lookup(argc, argv, "--console");
+	int reboot_as_debug_level = 0;
+
+restart_label:
+	L = puss_lua_newstate(debug_level, NULL, NULL);
 
 #ifdef _WIN32
-	if( console_mode ) {
+	if( console_mode || (reboot_as_debug_level)) {
 		AllocConsole();
 		freopen("CONIN$", "r+t", stdin);
 		freopen("CONOUT$", "w+t", stdout);
 		freopen("CONOUT$", "w+t", stderr);
 	}
 #endif
+	reboot_as_debug_level = (debug_level==0);
 
 	luaL_openlibs(L);
 	puss_lua_open_default(L, argv[0], _PUSS_MODULE_SUFFIX);
@@ -172,8 +175,28 @@ int main(int argc, char* argv[]) {
 		lua_call(L, 2, 1);
 		res = lua_toboolean(L, -1) ? 0 : 2;
 	}
+	if( reboot_as_debug_level ) {
+		puss_get_value(L, "puss._reboot_as_debug_level");
+		debug_level = (int)lua_tointeger(L, -1);
+		reboot_as_debug_level = debug_level ? 1 : 0;
+		if( reboot_as_debug_level ) {
+		
+		}
+	}
 	lua_close(L);
 
+	if( reboot_as_debug_level )
+		goto restart_label;
+
+	return res;
+}
+
+int main(int argc, char* argv[]) {
+	const char* debug_level = puss_args_lookup(argc, argv, "--debug");
+	const char* console_mode = puss_args_lookup(argc, argv, "--console");
+	int res = puss_main(argc, argv
+		, (debug_level==NULL) ? 0 : (*debug_level=='\0' ? 1 : (int)strtol(debug_level, NULL, 10))
+		, console_mode ? 1 : 0);
 #ifdef _WIN32
 	if( console_mode ) { system("PAUSE"); }
 #endif

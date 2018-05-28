@@ -4,6 +4,8 @@ local console = puss.import('core.console')
 local docs = puss.import('core.docs')
 local demos = puss.import('core.demos')
 
+local run_sign = true
+
 main_ui = main_ui	-- reload
 
 show_imgui_demos = show_imgui_demos or false
@@ -19,22 +21,40 @@ local next_active_page_label = nil
 local function main_menu()
 	local active
 	if not imgui.BeginMenuBar() then return end
-    if imgui.BeginMenu('File') then
-    	if imgui.MenuItem('Add Demo Tab') then demos.new_page() end
-    	if imgui.MenuItem('New page') then docs.new_page() end
-    	if imgui.MenuItem('Open app.lua') then docs.open(puss._path .. '/core/app.lua') end
-    	if imgui.MenuItem('Open console.lua') then docs.open(puss._path .. '/core/console.lua') end
-        imgui.EndMenu()
-    end
-    if imgui.BeginMenu('Help') then
-    	active, show_imgui_demos = imgui.MenuItem('ImGUI Demos', nil, show_imgui_demos)
+	if imgui.BeginMenu('File') then
+		if imgui.MenuItem('Add Demo Tab') then demos.new_page() end
+		if imgui.MenuItem('New page') then docs.new_page() end
+		if imgui.MenuItem('Open app.lua') then docs.open(puss._path .. '/core/app.lua') end
+		if imgui.MenuItem('Open console.lua') then docs.open(puss._path .. '/core/console.lua') end
+		imgui.EndMenu()
+	end
+	if imgui.BeginMenu('Help') then
+		active, show_imgui_demos = imgui.MenuItem('ImGUI Demos', nil, show_imgui_demos)
 		active, show_tabs_demo = imgui.MenuItem('Tabs Demo', nil, show_tabs_demo)
-    	active, show_console_window = imgui.MenuItem('Conosle', nil, show_console_window)
-    	imgui.Separator()
-    	if imgui.MenuItem('Reload', 'Ctrl+F12') then puss.reload() end
-        imgui.EndMenu()
-    end
-    imgui.EndMenuBar()
+		active, show_console_window = imgui.MenuItem('Conosle', nil, show_console_window)
+		imgui.Separator()
+		if imgui.MenuItem('Reload', 'Ctrl+F12') then puss.reload() end
+		imgui.Separator()
+		if puss.debug then
+			if imgui.MenuItem('Load Debugger') then
+				if os.getenv('OS')=='Windows_NT' then
+					os.execute('start /B ' .. puss._path .. '/' .. puss._self .. ' tools/debugger.lua')
+				else
+					os.execute(puss._path .. '/' .. puss._self .. ' tools/debugger.lua &')
+				end
+			end
+			if imgui.MenuItem('Start debug & wait connect...') then
+				puss.debug()
+			end
+		else
+			if imgui.MenuItem('Reboot As Debug Mode') then
+				puss._reboot_as_debug_level = 9
+				run_sign = false
+			end
+		end
+		imgui.EndMenu()
+	end
+	imgui.EndMenuBar()
 
 	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_F12, true) then puss.reload() end
 end
@@ -138,8 +158,9 @@ __exports.uninit = function()
 end
 
 __exports.update = function()
-	imgui.WaitEventsTimeout()
-
-	return main_ui(puss.trace_pcall, do_update, main_ui)
+	if run_sign then
+		imgui.WaitEventsTimeout()
+		return main_ui(puss.trace_pcall, do_update, main_ui)
+	end
 end
 
