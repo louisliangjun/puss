@@ -113,7 +113,7 @@ do
 	]]
 
 	source_view_create = function()
-		local sv = ScintillaNew()
+		local sv = CreateScintilla()
 
 		sv:SetTabWidth(4)
 		sv:SetLexerLanguage('lua')
@@ -175,7 +175,7 @@ function puss_debugger_ui(source_view)
 	-- ShowUserGuide()
 	-- ShowDemoWindow()
 
-	Begin("Puss Debugger")
+	if not Begin("Puss Debugger") then return end
 	if puss.debug then
 		if Button("show_debugger") then
 			if os.getenv('OS')=='Windows_NT' then
@@ -213,12 +213,14 @@ function puss_debugger_ui(source_view)
 		local n, s = source_view:GetText(source_view:GetTextLength())
 		debug_call('host_pcall', 'puss._debug.fetch_stack')
 	end
-	ScintillaUpdate(source_view)
+	BeginChild('console', 0, 0, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
+		source_view()
+	EndChild()
 	End()
 end
 
 function __main__()
-	local main_window = ImGuiCreateGLFW("puss debugger", 400, 300)
+	local main_ui = Create("puss debugger", 400, 300)
 	local source_view = source_view_create()
 
 	source_view:SetText([[print('===')
@@ -236,13 +238,11 @@ do
 end
 ]])
 
-	while true do
-		local ok, running = puss.trace_pcall(ImGuiUpdate, main_window, puss_debugger_ui, source_view)
-		if ok and (not running) then break end
-		ImGuiRender(main_window)
+	while main_ui(puss.trace_pcall, puss_debugger_ui, source_view) do
+		-- main loop
 	end
 
-	ScintillaFree(source_view)
-	ImGuiDestroy(main_window)
+	source_view:destroy()
+	main_ui:destroy()
 end
 

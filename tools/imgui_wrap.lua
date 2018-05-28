@@ -1,93 +1,5 @@
 -- imgui_wrap.lua
 
-local function parse_arg(arg, brackets)
-	-- try fmt: type name[arr]
-	local atype, name, attr = arg:match('^(.-)%s+([_%w]+)%s*(%b[])$')
-	if atype then return atype, name, attr end
-
-	-- try fmt: type (*func)(arg)
-	local tp, ni, ai = arg:match('^(.-)@(%d+)%s*@(%d+)$')
-	if tp then
-		-- print(tp, ni, ai)
-		local t = brackets[tonumber(ni)]
-		return tp .. ' ' .. t .. brackets[tonumber(ai)], t:match('[_%w]+'), 'function'
-	end
-
-	-- try fmt: type name
-	atype, name = arg:match('^(.-)%s+([_%w]+)$')
-	if atype then return atype, name end
-
-	-- try fmt: ...
-	if arg:match('%.%.%.') then return nil, nil, '...' end
-
-	-- try fmt: type
-	return arg
-end
-
-local function parse_args(args)
-	local r = {}
-	args = args:match('^%s*%(%s*(.-)%s*%)%s*$') -- remove ()
-	if args=='' then return r end	-- no args
-	args = args .. ','	-- append ','
-	local brackets = {}
-	args = args:gsub('%b()', function(v)
-		table.insert(brackets, v)
-		return string.format('@%d', #brackets)
-	end)
-	for v in args:gmatch('%s*(.-)%s*,') do
-		if v=='' then break end
-		local arg, def = v:match('^(.-)%s*=%s*(.-)%s*$')
-		local atype, name, attr = parse_arg(arg or v, brackets)
-		def = def and def:gsub('@(%d+)', function(v) return brackets[tonumber(v)] or v end)
-		table.insert(r, {atype=atype, name=name, attr=attr, def=def})
-	end
-	return r
-end
-
-local function pasre_apis(apis, src)
-	for namespace_block in src:gmatch('namespace%s+ImGui%s*(%b{})') do
-		-- print('NAMESPACE BLOCK:', namespace_block)
-		for ret, name, args in namespace_block:gmatch('IMGUI_API%s+([_%w%s%*&]-)%s*([_%w]+)%s*(%b()).-;') do
-			-- print('API', ret, name, args)
-			table.insert(apis, {ret, name, args})
-		end
-		for ret, name, args in namespace_block:gmatch('static%s+inline%s+([_%w%s%*&]-)%s*([_%w]+)%s*(%b())%s*%b{}') do
-			-- print('API', ret, name, args)
-			table.insert(apis, {ret, name, args})
-		end
-	end
-end
-
-local function parse_enums(enums, src)
-	for block in src:gmatch('enum%s+[_%w]*%s*(%b{})%s*;') do
-		-- print('ENUMS BLOCK:', block)
-		local macros = {}
-		for macro, scope in block:gmatch('%s(#if%w+.-)\n(.-)#endif') do
-			-- print('  MACRO', macro, scope)
-			for line in scope:gmatch('%s*(.-)%s*[,\n]') do
-				local enum = line:match('^%s*([_%w]+)%s*')
-				-- print('  MACRO ENUM', enum, line)
-				if enum then macros[enum] = macro end
-			end
-		end
-		for line in block:gmatch('[%s{]*(.-)%s*[,}]') do
-			local enum = line:match('^%s*([_%w]+)%s*')
-			-- print('  ENUM', enum, line)
-			if enum then table.insert(enums, {enum, macros[enum]}) end
-		end
-	end
-end
-
-local function parse_inttypes(types, src)
-	types['ImU32'] = 'uint'
-	types['ImGuiID'] = 'uint'
-	types['ImWchar'] = 'uint'
-	types['int'] = 'int'
-	for enumtype in src:gmatch('typedef%s+int%s+(%w+)%s*;') do
-		types[enumtype] = 'int'
-	end
-end
-
 local buffer_implements = [[
 #define BYTE_ARRAY_NAME	"PussImguiByteArray"
 
@@ -126,9 +38,9 @@ static int byte_array_sub(lua_State* L) {
 
 static int byte_array_strcpy(lua_State* L) {
 	ByteArrayLua* ud = (ByteArrayLua*)luaL_checkudata(L, 1, BYTE_ARRAY_NAME);
-	size_t offset = (size_t)luaL_optinteger(L, 2, 0);
 	size_t len = 0;
-	const char* buf = luaL_optlstring(L, 3, "", &len);
+	const char* buf = luaL_optlstring(L, 2, "", &len);
+	size_t offset = (size_t)luaL_optinteger(L, 3, 0);
 	int newline = lua_toboolean(L, 4) ? 1 : 0;
 	char* dst = (char*)(ud->buf + offset);
 	if( (offset+len+newline) > (size_t)(ud->cap) )
@@ -461,9 +373,10 @@ function main()
 	local out = vlua.match_arg('^%-out=(.+)$') or '.'
 	local src = vlua.match_arg('^%-src=(.+)$') or './include'
 
-	local apis = {}
-	local enums = {}
 	local inttypes = {}
+	local apis = {}
+	-- local drawlist_apis = {}
+	local enums = {}
 
 	local function load_header(fname)
 		local f = io.open(src..'/'..fname, 'r')
@@ -475,9 +388,65 @@ function main()
 		t = t:gsub('//.-\n', '\n')		-- remove line comment
 		-- print(t)
 
-		pasre_apis(apis, t)
-		parse_enums(enums, t)
-		parse_inttypes(inttypes, t)
+		do
+			inttypes['ImU32'] = 'uint'
+			inttypes['ImGuiID'] = 'uint'
+			inttypes['ImWchar'] = 'uint'
+			inttypes['int'] = 'int'
+			for enumtype in t:gmatch('typedef%s+int%s+(%w+)%s*;') do
+				inttypes[enumtype] = 'int'
+			end
+		end
+
+		do
+			for namespace_block in t:gmatch('namespace%s+ImGui%s*(%b{})') do
+				-- print('NAMESPACE BLOCK:', namespace_block)
+				for ret, name, args in namespace_block:gmatch('IMGUI_API%s+([_%w%s%*&]-)%s*([_%w]+)%s*(%b()).-;') do
+					-- print('API', ret, name, args)
+					table.insert(apis, {ret, name, args})
+				end
+				for ret, name, args in namespace_block:gmatch('static%s+inline%s+([_%w%s%*&]-)%s*([_%w]+)%s*(%b())%s*%b{}') do
+					-- print('API', ret, name, args)
+					table.insert(apis, {ret, name, args})
+				end
+			end
+		end
+
+		--[[
+		do
+			for class_block in t:gmatch('struct%s+ImDrawList%s*(%b{})') do
+				-- print('NAMESPACE BLOCK:', namespace_block)
+				for ret, name, args in class_block:gmatch('IMGUI_API%s+([_%w%s%*&]-)%s*([_%w]+)%s*(%b()).-;') do
+					-- print('API', ret, name, args)
+					table.insert(drawlist_apis, {ret, name, args})
+				end
+				for ret, name, args in class_block:gmatch('inline%s+([_%w%s%*&]-)%s*([_%w]+)%s*(%b())%s*%b{}') do
+					-- print('API', ret, name, args)
+					table.insert(drawlist_apis, {ret, name, args})
+				end
+			end
+		end
+		--]]
+
+		do
+			for block in t:gmatch('enum%s+[_%w]*%s*(%b{})%s*;') do
+				-- print('ENUMS BLOCK:', block)
+				local macros = {}
+				for macro, scope in block:gmatch('%s(#if%w+.-)\n(.-)#endif') do
+					-- print('  MACRO', macro, scope)
+					for line in scope:gmatch('%s*(.-)%s*[,\n]') do
+						local enum = line:match('^%s*([_%w]+)%s*')
+						-- print('  MACRO ENUM', enum, line)
+						if enum then macros[enum] = macro end
+					end
+				end
+				for line in block:gmatch('[%s{]*(.-)%s*[,}]') do
+					local enum = line:match('^%s*([_%w]+)%s*')
+					-- print('  ENUM', enum, line)
+					if enum then table.insert(enums, {enum, macros[enum]}) end
+				end
+			end
+		end
 	end
 
 	load_header('imgui.h')
@@ -548,6 +517,50 @@ function main()
 		local RE_CIMVEC2 = '^const%s+ImVec2%s*%&$'	-- const ImVec2&
 		local RE_RIMVEC4 = '^ImVec4%s*%&$'			-- ImVec4&
 		local RE_CIMVEC4 = '^const%s+ImVec4%s*%&$'	-- const ImVec4&
+
+		local function parse_arg(arg, brackets)
+			-- try fmt: type name[arr]
+			local atype, name, attr = arg:match('^(.-)%s+([_%w]+)%s*(%b[])$')
+			if atype then return atype, name, attr end
+
+			-- try fmt: type (*func)(arg)
+			local tp, ni, ai = arg:match('^(.-)@(%d+)%s*@(%d+)$')
+			if tp then
+				-- print(tp, ni, ai)
+				local t = brackets[tonumber(ni)]
+				return tp .. ' ' .. t .. brackets[tonumber(ai)], t:match('[_%w]+'), 'function'
+			end
+
+			-- try fmt: type name
+			atype, name = arg:match('^(.-)%s+([_%w]+)$')
+			if atype then return atype, name end
+
+			-- try fmt: ...
+			if arg:match('%.%.%.') then return nil, nil, '...' end
+
+			-- try fmt: type
+			return arg
+		end
+
+		local function parse_args(args)
+			local r = {}
+			args = args:match('^%s*%(%s*(.-)%s*%)%s*$') -- remove ()
+			if args=='' then return r end	-- no args
+			args = args .. ','	-- append ','
+			local brackets = {}
+			args = args:gsub('%b()', function(v)
+				table.insert(brackets, v)
+				return string.format('@%d', #brackets)
+			end)
+			for v in args:gmatch('%s*(.-)%s*,') do
+				if v=='' then break end
+				local arg, def = v:match('^(.-)%s*=%s*(.-)%s*$')
+				local atype, name, attr = parse_arg(arg or v, brackets)
+				def = def and def:gsub('@(%d+)', function(v) return brackets[tonumber(v)] or v end)
+				table.insert(r, {atype=atype, name=name, attr=attr, def=def})
+			end
+			return r
+		end
 
 		local function gen_ret_decl(ret)
 			local atype, aname = ret, '__ret__'

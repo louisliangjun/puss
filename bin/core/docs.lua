@@ -16,12 +16,10 @@ local function new_doc(fname)
 	return page
 end
 
-local last_index = 0
-
 __exports.new_page = function()
 	local label
 	while true do
-		last_index = last_index + 1
+		last_index = (last_index or 0) + 1
 		label = string.format('noname##%u', last_index)
 		if not app.lookup_page(label) then break end
 	end

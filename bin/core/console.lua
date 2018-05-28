@@ -65,7 +65,7 @@ local function output_to_outbuf()
 	end
 	local pos = 0
 	for i,v in ipairs(output) do
-		pos = outbuf:strcpy(pos, v, true)
+		pos = outbuf:strcpy(v, pos, true)
 	end
 end
 

@@ -1,7 +1,8 @@
 -- app.lua
 
-local docs = puss.import('core.docs')
 local console = puss.import('core.console')
+local docs = puss.import('core.docs')
+local demos = puss.import('core.demos')
 
 main_ui = main_ui	-- reload
 
@@ -23,16 +24,11 @@ local function create_page(label, module)
 	return page
 end
 
-function tabs_page_draw(page)
-	imgui.Text(page.label)
-	imgui.Text(string.format('DemoPage: %s %s', page, page.draw))
-end
-
 local function main_menu()
 	local active
 	if not imgui.BeginMenuBar() then return end
     if imgui.BeginMenu('File') then
-    	if imgui.MenuItem('Test Add Tab') then create_page('Page ' .. (#pages + 1), _ENV) end
+    	if imgui.MenuItem('Add Demo Tab') then demos.new_page() end
     	if imgui.MenuItem('New page') then docs.new_page() end
     	if imgui.MenuItem('Open app.lua') then docs.open(puss._path .. '/core/app.lua') end
     	if imgui.MenuItem('Open console.lua') then docs.open(puss._path .. '/core/console.lua') end
