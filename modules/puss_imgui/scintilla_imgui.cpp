@@ -935,14 +935,12 @@ public: 	// Public for scintilla_send_message
 			HandleKeyboardEvents(io, now, modifiers);
 		}
 	}
-	void Update() {
-		ImGuiWindow* window = ImGui::GetCurrentWindow();
+	void Draw(ImGuiWindow* window) {
 		float totalHeight = (float)((pdoc->LinesTotal() + 1) * vs.lineHeight);
 		float totalWidth = (float)(scrollWidth * vs.aveCharWidth);
 		ImVec2 total_sz(window->ClipRect.GetSize());
 		horizontalScrollBarVisible = (totalWidth > total_sz.x);
 		verticalScrollBarVisible = (totalHeight > total_sz.y);
-		mainWindow.win = window;
 
 		// input
 		HandleInputEvents(window->ID, window->ClipRect);
@@ -970,8 +968,16 @@ public: 	// Public for scintilla_send_message
 		PRectangle rc(0.0f, 0.0f, window->Size.x, window->Size.y);
 		Paint(surfaceWindow.get(), rc);
 		surfaceWindow->Release();
-
-		// mainWindow.win = NULL;
+	}
+	void Update(ScintillaIMCallback cb, void* ud) {
+		ImGuiWindow* window = ImGui::GetCurrentWindow();
+		mainWindow.win = window;
+		if( cb ) {
+			cb(this, ud);
+		} else {
+			Draw(window);
+		}
+		mainWindow.win = NULL;
 	}
 private:
 	sptr_t DefWndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) override {
@@ -1073,8 +1079,8 @@ void scintilla_imgui_destroy(ScintillaIM* sci) {
 	delete sci;
 }
 
-void scintilla_imgui_update(ScintillaIM* sci) {
-	if( sci ) { sci->Update(); }
+void scintilla_imgui_update(ScintillaIM* sci, ScintillaIMCallback cb, void* ud) {
+	if( sci ) { sci->Update(cb, ud); }
 }
 
 sptr_t scintilla_imgui_send(ScintillaIM* sci, unsigned int iMessage, uptr_t wParam, sptr_t lParam) {

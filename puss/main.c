@@ -90,7 +90,7 @@ static int puss_dummy_main(lua_State* L) {
 	}
 	static void puss_push_error_handle(lua_State* L, const char* console_mode) {
 		if( console_mode ) {
-			puss_get_value(L, "puss.logerr_handle_reset");
+			puss_get_value(L, "puss.logerr_handle");
 			lua_call(L, 0, 1);
 		} else {
 			lua_pushcfunction(L, puss_error_handle_win32);
@@ -98,7 +98,7 @@ static int puss_dummy_main(lua_State* L) {
 	}
 #else
 	static void puss_push_error_handle(lua_State* L, const char* console_mode) {
-		puss_get_value(L, "puss.logerr_handle_reset");
+		puss_get_value(L, "puss.logerr_handle");
 		lua_call(L, 0, 1);
 	}
 #endif

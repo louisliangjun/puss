@@ -84,6 +84,7 @@ public:
 	int					g_AttribLocationColor;
 	unsigned int		g_VboHandle;
 	unsigned int		g_ElementsHandle;
+	int					g_ScriptErrorHandle;
 	int					g_StackProtected;
 	ImVector<char>		g_Stack;
 
@@ -628,16 +629,44 @@ void ImguiEnv::ImGui_ImplGlfwGL3_NewFrame()
 
 #define IMGUI_LIB_NAME	"ImguiLib"
 
+static int imgui_error_handle_default(lua_State* L) {
+	fprintf(stderr, "[ImGui] error: %s\n", lua_tostring(L, -1));
+	return lua_gettop(L);
+}
+
 static int imgui_destroy_lua(lua_State* L) {
 	ImguiEnv* env = (ImguiEnv*)luaL_checkudata(L, 1, IMGUI_MT_NAME);
-	GLFWwindow* win = env->g_Window;
-	if( !win ) { return 0; }
+	if( env->g_Window ) {
+		GLFWwindow* win = env->g_Window;
+		env->ImGui_ImplGlfwGL3_Shutdown();
+		ImGui::DestroyContext(env->g_Context);
+		env->g_Window = NULL;
+		glfwDestroyWindow(win);
+	}
+	if( env->g_ScriptErrorHandle!=LUA_NOREF ) {
+		int ref = env->g_ScriptErrorHandle;
+		env->g_ScriptErrorHandle = LUA_NOREF;
+		luaL_unref(L, LUA_REGISTRYINDEX, ref);
+	}
+	return 0;
+}
 
-	env->ImGui_ImplGlfwGL3_Shutdown();
-	ImGui::DestroyContext(env->g_Context);
-	env->g_Window = NULL;
-	glfwDestroyWindow(win);
-    return 0;
+static int imgui_set_error_handle_lua(lua_State* L) {
+	ImguiEnv* env = (ImguiEnv*)luaL_checkudata(L, 1, IMGUI_MT_NAME);
+	if( lua_isfunction(L, 2) ) {
+		lua_pushvalue(L, 2);
+		if( env->g_ScriptErrorHandle==LUA_NOREF ) {
+			env->g_ScriptErrorHandle = luaL_ref(L, LUA_REGISTRYINDEX);
+		} else {
+			lua_rawseti(L, LUA_REGISTRYINDEX, env->g_ScriptErrorHandle);
+		}
+	}
+	if( env->g_ScriptErrorHandle!=LUA_NOREF ) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, env->g_ScriptErrorHandle);
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
 }
 
 static int imgui_update_lua(lua_State* L) {
@@ -659,10 +688,10 @@ static int imgui_update_lua(lua_State* L) {
 	env->g_StackProtected = 0;
 
 	// run
-	if( lua_pcall(L, lua_gettop(L)-2, 0, 0) ) {
-		fprintf(stderr, "[ImGui] error: %s\n", lua_tostring(L, -1));
+	lua_rawgeti(L, LUA_REGISTRYINDEX, env->g_ScriptErrorHandle);
+	lua_replace(L, 1);
+	if( lua_pcall(L, lua_gettop(L)-2, 0, 1) )
 		lua_pop(L, 1);
-	}
 
 	// check close
 	win = env->g_Window;
@@ -695,28 +724,22 @@ static int imgui_update_lua(lua_State* L) {
 	return 1;
 }
 
-static int imgui_stack_protect_begin_lua(lua_State* L) {
+static int imgui_protect_pcall_lua(lua_State* L) {
 	ImguiEnv* env = (ImguiEnv*)luaL_checkudata(L, 1, IMGUI_MT_NAME);
+	int base = env->g_StackProtected;
 	int top = env->g_Stack.size();
-	lua_pushinteger(L, top);
-	lua_pushinteger(L, env->g_StackProtected);
 	env->g_StackProtected = top;
-	return 2;
-}
-
-static int imgui_stack_protect_end_lua(lua_State* L) {
-	ImguiEnv* env = (ImguiEnv*)luaL_checkudata(L, 1, IMGUI_MT_NAME);
-	int top = (int)luaL_checkinteger(L, 2);
-	int base = (int)luaL_checkinteger(L, 3);
-	luaL_argcheck(L, top<=env->g_StackProtected, 2, "bad stack protect top");
-	luaL_argcheck(L, base<=top, 3, "bad stack protect base");
+	lua_rawgeti(L, LUA_REGISTRYINDEX, env->g_ScriptErrorHandle);
+	lua_replace(L, 1);
+	lua_pushboolean(L, lua_pcall(L, lua_gettop(L)-2, LUA_MULTRET, 1)==LUA_OK);
+	lua_replace(L, 1);
 	env->g_StackProtected = base;
 	while( env->g_Stack.size() > top ) {
 		int tp = env->g_Stack.back();
 		env->g_Stack.pop_back();
 		IMGUI_LUA_WRAP_STACK_POP(tp);
 	}
-	return 0;
+	return lua_gettop(L);
 }
 
 static int imgui_getio_display_size_lua(lua_State* L) {
@@ -757,8 +780,11 @@ static int imgui_create_lua(lua_State* L) {
 	ImguiEnv* env = new (lua_newuserdata(L, sizeof(ImguiEnv))) ImguiEnv;
 	GLFWwindow* win = NULL;
 	int err = 0;
-
+	env->g_ScriptErrorHandle = LUA_NOREF;
 	luaL_setmetatable(L, IMGUI_MT_NAME);
+
+	lua_pushcfunction(L, imgui_error_handle_default);
+	env->g_ScriptErrorHandle = luaL_ref(L, LUA_REGISTRYINDEX);
 
     win = glfwCreateWindow(width, height, title, NULL, NULL);
     if( !win ) return luaL_error(L, "glfw window create failed!");
@@ -812,11 +838,19 @@ static int imgui_create_lua(lua_State* L) {
 	return 1;
 }
 
+static int imgui_wait_events_lua(lua_State* L) {
+	double timeout = luaL_optnumber(L, 1, 0.01);
+	glfwWaitEventsTimeout(timeout);
+	return 0;
+}
+
 #include "scintilla_imgui_lua.inl"
 #include "scintilla.iface.inl"
 
 static luaL_Reg imgui_lua_apis[] =
 	{ {"Create", imgui_create_lua}
+	, {"WaitEventsTimeout", imgui_wait_events_lua}
+
 	, {"CreateByteArray", byte_array_create}
 	, {"CreateFloatArray", float_array_create}
 	, {"CreateScintilla", im_scintilla_create}
@@ -848,13 +882,32 @@ static void lua_register_imgui(lua_State* L) {
 			, {"__gc", imgui_destroy_lua}
 			, {"__call", imgui_update_lua}
 			, {"destroy", imgui_destroy_lua}
-			, {"stack_protect_begin", imgui_stack_protect_begin_lua}
-			, {"stack_protect_end", imgui_stack_protect_end_lua}
+			, {"set_error_handle", imgui_set_error_handle_lua}
+			, {"protect_pcall", imgui_protect_pcall_lua}
 			, {NULL, NULL}
 			};
 		luaL_setfuncs(L, methods, 0);
 	}
 	lua_setfield(L, -1, "__index");
+}
+
+static void im_scintilla_update_callback(ScintillaIM* sci, void* ud) {
+	lua_State* L = (lua_State*)ud;
+	ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData);
+	if( !env )	return;
+	lua_rawgeti(L, LUA_REGISTRYINDEX, env->g_ScriptErrorHandle);
+	lua_insert(L, 1);		// error handle
+	lua_pushvalue(L, 2);	// self
+	lua_pushvalue(L, 3);	// function
+	lua_replace(L, 2);
+	lua_replace(L, 3);
+	lua_pcall(L, lua_gettop(L)-2, 0, 1);
+}
+
+static int im_scintilla_update(lua_State* L) {
+	ScintillaIM** ud = (ScintillaIM**)luaL_checkudata(L, 1, LUA_IM_SCI_NAME);
+	scintilla_imgui_update(*ud, lua_isfunction(L, 2) ? im_scintilla_update_callback : NULL, L);
+	return 0;
 }
 
 static void lua_register_scintilla(lua_State* L) {

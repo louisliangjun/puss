@@ -79,12 +79,6 @@ static int im_scintilla_destroy(lua_State* L) {
 	return 0;
 }
 
-static int im_scintilla_update(lua_State* L) {
-	ScintillaIM** ud = (ScintillaIM**)luaL_checkudata(L, 1, LUA_IM_SCI_NAME);
-	scintilla_imgui_update(*ud);
-	return 0;
-}
-
 static int _lua__sci_send_wrap(lua_State* L) {
 	IFaceDecl* decl = (IFaceDecl*)lua_touserdata(L, lua_upvalueindex(1));
 	ScintillaIM** ud = (ScintillaIM**)luaL_checkudata(L, 1, LUA_IM_SCI_NAME);

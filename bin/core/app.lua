@@ -14,15 +14,7 @@ _pages = _pages or {}
 _index = _index or setmetatable({}, {__mode='v'})
 local pages = _pages
 local index = _index
-
-local function create_page(label, module)
-	local page = index[label]
-	if page then return page end 
-	local page = {label=label, module=module, show=true}
-	table.insert(pages, page)
-	index[label] = page
-	return page
-end
+local next_active_page_label = nil
 
 local function main_menu()
 	local active
@@ -49,19 +41,41 @@ end
 
 local function tabs_bar()
     imgui.BeginTabBar("PussMainTabsBar", ImGuiTabBarFlags_SizingPolicyFit)
+
+	-- set active
+	if next_active_page_label then
+		local label = next_active_page_label
+		next_active_page_label = nil
+		local page = index[label]
+		if page then imgui.SetTabItemSelected(label) end
+	end
+
+	-- draw tabs
 	for i, page in ipairs(pages) do
-	    local active
-		active, page.show = imgui.TabItem(page.label, page.show, page.unsaved and ImGuiTabItemFlags_UnsavedDocument or ImGuiTabItemFlags_None)
-		if active then
+		local selected
+		page.was_open = page.open
+		selected, page.open = imgui.TabItem(page.label, page.open, page.unsaved and ImGuiTabItemFlags_UnsavedDocument or ImGuiTabItemFlags_None)
+		if selected then
 			local draw = page.module.tabs_page_draw
-			if draw then
-				local st,sb = main_ui:stack_protect_begin()
-				puss.trace_pcall(draw, page)
-				main_ui:stack_protect_end(st,sb)
-			end
+			if draw then main_ui:protect_pcall(draw, page) end
 		end
 	end
 	imgui.EndTabBar()
+
+	-- close 
+	for i=#pages,1,-1 do
+		local page = pages[i]
+		if not page.open then
+			local close = page.module.tabs_page_close
+			if close then main_ui:protect_pcall(close, page) end
+		end
+		if not page.was_open then
+			local destroy = page.module.tabs_page_destroy
+			if destroy then main_ui:protect_pcall(destroy, page) end
+			index[page.label] = nil
+			table.remove(pages, i)
+		end
+	end
 end
 
 local function show_main_window()
@@ -83,7 +97,7 @@ local function show_main_window()
 	imgui.End()
 end
 
-local function source_editor_main()
+local function do_update()
 	show_main_window(ui)
 	if show_imgui_demos then
 		show_imgui_demos = imgui.ShowDemoWindow(show_imgui_demos)
@@ -96,7 +110,18 @@ local function source_editor_main()
 	end
 end
 
-__exports.create_page = create_page
+__exports.create_page = function(label, module)
+	local page = index[label]
+	if page then return page end
+	local page = {label=label, module=module, was_open=true, open=true}
+	table.insert(pages, page)
+	index[label] = page
+	return page
+end
+
+__exports.active_page = function(label)
+	next_active_page_label = label
+end
 
 __exports.lookup_page = function(id)
 	return index[id]
@@ -104,6 +129,7 @@ end
 
 __exports.init = function()
 	main_ui = imgui.Create("Puss - Editor", 1024, 768)
+	main_ui:set_error_handle(puss.logerr_handle())
 end
 
 __exports.uninit = function()
@@ -112,6 +138,8 @@ __exports.uninit = function()
 end
 
 __exports.update = function()
-	return main_ui(puss.trace_pcall, source_editor_main, main_ui)
+	imgui.WaitEventsTimeout()
+
+	return main_ui(puss.trace_pcall, do_update, main_ui)
 end
 
