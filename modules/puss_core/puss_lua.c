@@ -1,12 +1,10 @@
 // puss_lua.c
 
 const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
-	"local sep = ...\n"
-	"\n"
 	"local function puss_loadfile(name, env)\n"
 	"	local f, err = loadfile(name, 'bt', env or _ENV)\n"
 	"	if not f then\n"
-	"		path = string.format('%s%s%s', puss._path, sep, name)\n"
+	"		path = string.format('%s%s%s', puss._path, puss._sep, name)\n"
 	"		f, err = loadfile(path, 'bt', env or _ENV)\n"
 	"	end\n"
 	"	if not f then return f, string.format('load script(%s) failed: %s', path, err) end\n"
@@ -50,10 +48,12 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 
 #ifdef _WIN32
 	#include <windows.h>
-	#define PATH_SEP	"\\"
+	#define PATH_SEP		'\\'
+	#define PATH_SEP_STR	"\\"
 #else
 	#include <unistd.h>
-	#define PATH_SEP	"/"
+	#define PATH_SEP		'/'
+	#define PATH_SEP_STR	"/"
 #endif
 
 #include "puss_debug.inl"
@@ -468,15 +468,126 @@ int puss_pickle_unpack(lua_State* L, const void* pkt, size_t len) {
 	return _pickle_unpack(&upac);
 }
 
+typedef struct _FileStr {
+	size_t n;
+	char* s;
+} FileStr;
+
+#ifdef _WIN32
+	#define is_sep(ch) ((ch)=='/' || (ch)=='\\')
+#else
+	#define is_sep(ch) ((ch)=='/')
+#endif
+
+static inline char* skip_seps(char* s) {
+	while( is_sep(*s) ) {
+		++s;
+	}
+	return s;
+}
+
+static inline char* copy_filestr(char* dst, char* src, size_t n) {
+	if( dst != src ) {
+		size_t i;
+		for( i=0; i<n; ++i ) {
+			dst[i] = src[i];
+		}
+	}
+	return dst + n;
+}
+
+size_t puss_filename_format(char* fname) {
+	FileStr strs[258];
+	FileStr* start = strs;
+	FileStr* cur = strs;
+	FileStr* end = cur + 258;
+	char* s = fname;
+
+	// root
+#ifdef _WIN32
+	if( ((s[0]>='a' && s[1]<='z') || (s[0]>='A' && s[1]<='Z')) && (s[1]==':') ) {
+		cur->s = s;
+		cur->n = 2;
+		s += 2;
+		if( is_sep(*s) ) {
+			s[0] = '\\';
+			++s;
+			cur->n++;
+		}
+		start = ++cur;
+	} else if( is_sep(s[0]) && is_sep(s[1]) ) {
+		cur->s = s;
+		cur->n = 2;
+		s[0] = '\\';
+		s[1] = '\\';
+		s += 2;
+		start = ++cur;
+	}
+#else
+	if( is_sep(*s) ) {
+		cur->s = s;
+		cur->n = 1;
+		++s;
+		start = ++cur;
+	}
+#endif
+
+	// separate & remove ./ && remove xx/../ 
+	// 
+	while( *(s = skip_seps(s)) ) {
+		if( cur >= end ) {
+			FileStr* prev = cur - 1;
+			while( *s ) { ++s; }
+			prev->n = (s - prev->s);
+			break;
+		}
+
+		cur->s = s++;
+		while( !(*s=='\0' || is_sep(*s)) ) {
+			++s;
+		}
+		cur->n = (s - cur->s);
+
+		if( cur->n==1 && cur->s[0]=='.' ) {
+			// remove ./
+		} else if( cur->n==2 && cur->s[0]=='.' && cur->s[1]=='.' ) {
+			FileStr* prev = cur - 1;
+			if( (prev < start) || (prev->n==2 && prev->s[0]=='.' && prev->s[1]=='.') ) {
+				++cur;
+			} else {
+				--cur;	// remove xx/../
+			}
+		} else {
+			++cur;
+		}
+	}
+
+	end = cur;
+	s = fname;
+	if( start!=strs ) {	// root C: or C:\ or \\ or / 
+		s = copy_filestr(s, strs[0].s, strs[0].n);
+	}
+	if( start < end ) {
+		s = copy_filestr(s, start->s, start->n);
+		for( cur=start+1; cur < end; ++cur) {
+			*s = PATH_SEP;
+			s = copy_filestr(s+1, cur->s, cur->n);
+		}
+	}
+	*s = '\0';
+	return (size_t)(s - fname);
+}
+
 static PussInterface puss_iface =
 	{ puss_module_require
 	, puss_interface_register
 	, puss_interface_check
 	, puss_push_const_table
-	, puss_app_path
-	, puss_get_value
 	, puss_pickle_pack
 	, puss_pickle_unpack
+	, puss_app_path
+	, puss_get_value
+	, puss_filename_format
 	};
 
 static int module_init_wrapper(lua_State* L) {
@@ -493,7 +604,7 @@ static int module_init_wrapper(lua_State* L) {
 		luaL_Buffer B;
 		luaL_buffinit(L, &B);
 		luaL_addstring(&B, app_path);
-		luaL_addstring(&B, PATH_SEP "modules" PATH_SEP);
+		luaL_addstring(&B, PATH_SEP_STR "modules" PATH_SEP_STR);
 		luaL_addstring(&B, name);
 		luaL_addstring(&B, module_suffix);
 		luaL_pushresult(&B);
@@ -556,6 +667,17 @@ static int puss_lua_pickle_unpack(lua_State* L) {
 	}
 
 	return _pickle_unpack(&upac);
+}
+
+static int puss_lua_filename_format(lua_State* L) {
+	size_t n = 0;
+	const char* s = luaL_checklstring(L, 1, &n);
+	luaL_Buffer B;
+	luaL_buffinitsize(L, &B, n+1);
+	memcpy(B.b, s, n+1);
+	n = puss_filename_format(B.b);
+	luaL_pushresultsize(&B, n);
+	return 1;
 }
 
 #ifdef _WIN32
@@ -623,11 +745,12 @@ static int puss_lua_pickle_unpack(lua_State* L) {
 #endif//_WIN32
 
 static luaL_Reg puss_methods[] =
-	{ {"require",		puss_lua_module_require}
-	, {"pickle_pack",	puss_lua_pickle_pack}
-	, {"pickle_unpack",	puss_lua_pickle_unpack}
-	, {"local_to_utf8",	puss_lua_local_to_utf8}
-	, {"utf8_to_local",	puss_lua_utf8_to_local}
+	{ {"require",			puss_lua_module_require}
+	, {"pickle_pack",		puss_lua_pickle_pack}
+	, {"pickle_unpack",		puss_lua_pickle_unpack}
+	, {"filename_format",	puss_lua_filename_format}
+	, {"local_to_utf8",		puss_lua_local_to_utf8}
+	, {"utf8_to_local",		puss_lua_utf8_to_local}
 	, {NULL, NULL}
 	};
 
@@ -654,6 +777,9 @@ static void puss_module_setup(lua_State* L, const char* app_path, const char* ap
 	lua_pushvalue(L, -1);
 	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_MODULE_SUFFIX);
 	lua_setfield(L, -2, "_module_suffix");	// puss._module_suffix
+
+	lua_pushstring(L, PATH_SEP_STR);
+	lua_setfield(L, -2, "_sep");	// puss._sep
 }
 
 static void *_default_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
@@ -730,8 +856,7 @@ static void puss_lua_init(lua_State* L, const char* app_path, const char* app_na
 	if( luaL_loadbuffer(L, builtin_scripts, sizeof(builtin_scripts)-1, "@puss_builtin.lua") ) {
 		lua_error(L);
 	}
-	lua_pushstring(L, PATH_SEP);
-	lua_call(L, 1, 0);
+	lua_call(L, 0, 0);
 }
 
 static int _lua_proxy_inited = 0;

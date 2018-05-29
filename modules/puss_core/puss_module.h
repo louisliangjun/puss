@@ -41,13 +41,14 @@ struct PussInterface {
 	// consts
 	void        (*push_const_table)		(lua_State* L);	// [-0,+1,-]
 
-	// misc
-	const char*	(*app_path)				(lua_State* L);	// [-0,+0,-]
-	int			(*get_value)			(lua_State* L, const char* name);	// [-0,+1,-]
-
 	// simple pickle
 	void*		(*pickle_pack)			(size_t* plen, lua_State* L, int start, int end);
 	int			(*pickle_unpack)		(lua_State* L, const void* pkt, size_t len);
+
+	// misc
+	const char*	(*app_path)				(lua_State* L);	// [-0,+0,-]
+	int			(*get_value)			(lua_State* L, const char* name);	// [-0,+1,-]
+	size_t		(*filename_format)		(char* fname);
 
 	// luaproxy
 	LuaProxy	luaproxy;

@@ -32,9 +32,17 @@ function tabs_page_destroy(page)
 	page.sv:destroy()
 end
 
-local function new_doc(fname)
-	page = app.create_page(fname, _ENV)
-	page.sv = sci.create('lua')
+local generate_label = function(filename, filepath) return filename..'###'..filepath end
+if puss._sep=='\\' then
+	generate_label = function(filename, filepath) return filename..'###'..filepath:lower() end
+end
+
+local function new_doc(label, lang, filepath)
+	local page = app.create_page(label, _ENV)
+	local sv = sci.create(lang)
+	-- sv:SetViewWS(SCWS_VISIBLEALWAYS)
+	page.sv = sv
+	page.filepath = filepath
 	return page
 end
 
@@ -45,20 +53,25 @@ __exports.new_page = function()
 		label = string.format('noname##%u', last_index)
 		if not app.lookup_page(label) then break end
 	end
-	return new_doc(label)
+	return new_doc(label, 'lua')
 end
 
-__exports.open = function(fname)
-	local page = app.lookup_page(fname)
+__exports.open = function(filepath)
+	filepath = puss.filename_format(filepath)
+	local path, name = filepath:match('^(.*)[/\\]([^/\\]+)$')
+	if not path then path, name = '', filepath end
+	local label = generate_label(name, filepath)
+
+	local page = app.lookup_page(label)
 	if page then
-		app.active_page(fname)
+		app.active_page(label)
 	else
-		local f = io.open(fname)
+		local f = io.open(filepath)
 		if not f then return end
 		local ctx = f:read('*a')
 		f:close()
 
-		page = new_doc(fname)
+		page = new_doc(label, sci.guess_language(name), filepath)
 		page.sv:SetText(ctx)
 		page.sv:EmptyUndoBuffer()
 	end

@@ -38,9 +38,9 @@ local function main_menu()
 		if puss.debug then
 			if imgui.MenuItem('Load Debugger') then
 				if os.getenv('OS')=='Windows_NT' then
-					os.execute('start /B ' .. puss._path .. '/' .. puss._self .. ' tools/debugger.lua')
+					os.execute('start /B ' .. puss._path .. puss._sep .. puss._self .. ' tools/debugger.lua')
 				else
-					os.execute(puss._path .. '/' .. puss._self .. ' tools/debugger.lua &')
+					os.execute(puss._path .. puss._sep .. puss._self .. ' tools/debugger.lua &')
 				end
 			end
 			if imgui.MenuItem('Start debug & wait connect...') then
@@ -143,8 +143,8 @@ __exports.active_page = function(label)
 	next_active_page_label = label
 end
 
-__exports.lookup_page = function(id)
-	return index[id]
+__exports.lookup_page = function(label)
+	return index[label]
 end
 
 __exports.init = function()

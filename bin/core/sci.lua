@@ -36,6 +36,51 @@ do
 		}
 end
 
+local lang_by_suffix = {}
+do
+	local lang_suffix_map =
+		{ ['ada'] = { 'ada' }
+		, ['cpp'] = { 'c', 'cc', 'cpp', 'cxx', 'h', 'hh', 'hpp', 'hxx', 'inl', 'inc' }
+		, ['lua'] = { 'lua' }
+		, ['py'] = { 'python' }
+		}
+	for lang, files in pairs(lang_suffix_map) do
+		for _, suffix in ipairs(files) do
+			suffix = suffix:lower()
+			if lang_by_suffix[suffix] then
+				error(string.format('already exist suffix(%s) in language(%s)', suffix, lang))
+			end
+			lang_by_suffix[suffix] = lang
+		end
+	end
+end
+
+local lang_by_filename = {}
+do
+	local lang_filename_map =
+		{ ['lua'] = { 'vmake' }
+		, ['makefile'] = { 'makefile' }
+		}
+	for lang, files in pairs(lang_filename_map) do
+		for _, name in ipairs(files) do
+			name = name:lower()
+			if lang_by_filename[name] then
+				error(string.format('already exist filename(%s) in language(%s)', name, lang))
+			end
+			lang_by_filename[name] = lang
+		end
+	end
+end
+
+__exports.guess_language = function(filename)
+	local lang = lang_by_filename[filename]
+	if lang then return lang end
+
+	local suffix = filename:match('^.*%.([^%.]+)$')
+	lang = suffix and lang_by_suffix[suffix:lower()]
+	if lang then return lang end
+end
+
 __exports.create = function(lang)
 	local sv = imgui.CreateScintilla()
 	sv:SetTabWidth(4)

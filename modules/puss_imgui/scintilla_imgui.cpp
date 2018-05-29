@@ -193,10 +193,11 @@ public:
 		move_to.y = (float)y_;
 	}
 	void LineTo(int x_, int y_) override {
-		ImVec2 pos = move_to;
+		ImVec2 a(offset.x + move_to.x, offset.y + move_to.y);
+		ImVec2 b(offset.x + x_, offset.y + y_);
 		move_to.x = (float)x_;
 		move_to.y = (float)y_;
-		ImGui::GetWindowDrawList()->AddLine(pos, move_to, pen_color, line_thickness);
+		ImGui::GetWindowDrawList()->AddLine(a, b, pen_color, line_thickness);
 	}
 	void Polygon(Point *pts, int npts, ColourDesired fore, ColourDesired back) override {
 		ImDrawList* canvas = ImGui::GetWindowDrawList();

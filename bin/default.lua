@@ -6,7 +6,7 @@ local modules = {}
 local modules_base_mt = { __index=_ENV }
 
 local function load_module(name, env)
-	puss.dofile(name:gsub('%.', '/') .. '.lua', env)
+	puss.dofile(name:gsub('%.', puss._sep) .. '.lua', env)
 end
 
 puss.import = function(name, reload)
