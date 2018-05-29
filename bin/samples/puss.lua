@@ -1,4 +1,4 @@
-puss.dofile('samples/utils.lua')
+puss.dofile(puss._path .. '/samples/utils.lua')
 
 function __main__()
 	print(puss, puss.require('puss'))

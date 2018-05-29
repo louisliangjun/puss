@@ -666,23 +666,23 @@ function main()
 					end
 				elseif atype:match(RE_PBOOL) then
 					iarg_use, narg_use, fmt = true, true, fmt .. 'pb'
-					dst:writeln('	', '__value_', aname, ' = (__iarg__ < __narg__) ? lua_toboolean(L, ++__iarg__)!=0 : false;')
+					dst:writeln('	', '__value_', aname, ' = (++__iarg__ <= __narg__) ? lua_toboolean(L, __iarg__)!=0 : false;')
 					dst:writeln('	', aname, ' = ', a.def and '(__iarg__ <= __narg__) ? &__value_'..aname..' : ('..a.def..')' or '&__value_'..aname, ';')
 				elseif atype:match(RE_PINT) then
 					iarg_use, narg_use, fmt = true, true, fmt .. 'pi'
-					dst:writeln('	', '__value_', aname, ' = (__iarg__ < __narg__) ? (int)luaL_checkinteger(L, ++__iarg__) : 0;')
+					dst:writeln('	', '__value_', aname, ' = (++__iarg__ <= __narg__) ? (int)luaL_checkinteger(L, __iarg__) : 0;')
 					dst:writeln('	', aname, ' = ', a.def and '(__iarg__ <= __narg__) ? &__value_'..aname..' : ('..a.def..')' or '&__value_'..aname, ';')
 				elseif atype:match(RE_PUINT) then
 					iarg_use, narg_use, fmt = true, true, fmt .. 'pu'
-					dst:writeln('	', '__value_', aname, ' = (__iarg__ < __narg__) ? (unsigned int)luaL_checkinteger(L, ++__iarg__) : 0;')
+					dst:writeln('	', '__value_', aname, ' = (++__iarg__ <= __narg__) ? (unsigned int)luaL_checkinteger(L, __iarg__) : 0;')
 					dst:writeln('	', aname, ' = ', a.def and '(__iarg__ <= __narg__) ? &__value_'..aname..' : ('..a.def..')' or '&__value_'..aname, ';')
 				elseif atype:match(RE_PFLOAT) then
 					iarg_use, narg_use, fmt = true, true, fmt .. 'pf'
-					dst:writeln('	', '__value_', aname, ' = (__iarg__ < __narg__) ? (float)luaL_checknumber(L, ++__iarg__) : 0.0f;')
+					dst:writeln('	', '__value_', aname, ' = (++__iarg__ <= __narg__) ? (float)luaL_checknumber(L, __iarg__) : 0.0f;')
 					dst:writeln('	', aname, ' = ', a.def and '(__iarg__ <= __narg__) ? &__value_'..aname..' : ('..a.def..')' or '&__value_'..aname, ';')
 				elseif atype:match(RE_PDOUBLE) then
 					iarg_use, narg_use, fmt = true, true, fmt .. 'pd'
-					dst:writeln('	', '__value_', aname, ' = (__iarg__ < __narg__) ? luaL_checknumber(L, ++__iarg__) : 0.0;')
+					dst:writeln('	', '__value_', aname, ' = (++__iarg__ <= __narg__) ? luaL_checknumber(L, __iarg__) : 0.0;')
 					dst:writeln('	', aname, ' = ', a.def and '(__iarg__ <= __narg__) ? &__value_'..aname..' : ('..a.def..')' or '&__value_'..aname, ';')
 				elseif atype:match(RE_RFLOAT) then
 					-- output only, ignore fetch
@@ -694,7 +694,7 @@ function main()
 					iarg_use, fmt = true, fmt .. 'pv'
 					if a.def then
 						narg_use = true
-						dst:writeln('	', aname, ' = (__iarg__ < __narg__) ? lua_topointer(L, ++__iarg__) : ', a.def, ';')
+						dst:writeln('	', aname, ' = (++__iarg__ < __narg__) ? lua_topointer(L, __iarg__) : ', a.def, ';')
 					else
 						dst:writeln('	', aname, ' = lua_topointer(L, ++__iarg__);')
 					end

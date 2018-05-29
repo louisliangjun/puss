@@ -238,9 +238,9 @@ do
 end
 ]])
 
-	while main_ui(puss.trace_pcall, puss_debugger_ui, source_view) do
+	while not main_ui:should_close() do
+		main_ui(puss_debugger_ui, source_view)
 		WaitEventsTimeout()
-		-- main loop
 	end
 
 	source_view:destroy()

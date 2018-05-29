@@ -19,8 +19,8 @@ end
 
 function __main__()
 	local w = imgui.Create("imgui lua api", 1024, 768)
-	while w(puss.trace_pcall, imgui_demo_lua) do
-		-- main loop
+	while not w:should_close() do
+		w(imgui_demo_lua)
 	end
 end
 

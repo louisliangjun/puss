@@ -80,6 +80,7 @@ static int puss_dummy_main(lua_State* L) {
 }
 
 #ifdef _WIN32
+	#define is_path_sep(ch) ((ch)=='/' || (ch)=='\\')
 	static int puss_error_handle_win32(lua_State* L) {
 		puss_get_value(L, "debug.traceback");
 		lua_pushvalue(L, 1);
@@ -97,12 +98,38 @@ static int puss_dummy_main(lua_State* L) {
 		} 
 	}
 #else
+	#define is_path_sep(ch) ((ch)=='/')
 	static void puss_push_error_handle(lua_State* L, int console_mode) {
 		puss_get_value(L, "puss.logerr_handle");
 		lua_call(L, 0, 1);
 	}
 #endif
 
+static const char* puss_push_script_filename(lua_State* L, const char* script) {
+	int is_abs_path = 0;
+	// check script filename
+#ifdef _WIN32
+	if( ((script[0]>='a' && script[1]<='z') || (script[0]>='A' && script[1]<='Z')) && (script[1]==':') ) {
+		is_abs_path = 1;
+	} else if( is_path_sep(script[0]) && is_path_sep(script[1]) ) {
+		is_abs_path = 1;
+	}
+#else
+	if( is_path_sep(*script) ) {
+		is_abs_path = 1;
+	}
+#endif
+	if( is_abs_path ) {
+		lua_pushstring(L, script);
+	} else {
+		puss_get_value(L, "puss._path");
+		puss_get_value(L, "puss._sep");
+		lua_pushstring(L, script);
+		lua_concat(L, 3);
+		script = lua_tostring(L, -1);
+	}
+	return script;
+}
 
 static int puss_init(lua_State* L) {
 	int argc = (int)lua_tointeger(L, 1);
@@ -120,12 +147,12 @@ static int puss_init(lua_State* L) {
 	}
 	lua_pushboolean(L, is_script_file);
 	lua_setfield(L, -2, "_is_script_file");	// puss._is_script_file
-	lua_pushstring(L, script);
+	script = is_script_file ? puss_push_script_filename(L, script) : lua_pushstring(L, script);
 	lua_setfield(L, -2, "_script");			// puss._script
 
 	if( is_script_file ) {
 		puss_get_value(L, "puss.dofile");
-		lua_pushstring(L, script);
+		puss_get_value(L, "puss._script");
 		lua_call(L, 1, 0);
 		if( lua_getglobal(L, "__main__")!=LUA_TFUNCTION ) {
 			lua_pop(L, 1);

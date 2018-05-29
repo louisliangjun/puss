@@ -49,7 +49,7 @@ local function main_menu()
 		else
 			if imgui.MenuItem('Reboot As Debug Mode') then
 				puss._reboot_as_debug_level = 9
-				run_sign = false
+				main_ui:set_should_close(true)
 			end
 		end
 		imgui.EndMenu()
@@ -60,7 +60,7 @@ local function main_menu()
 end
 
 local function tabs_bar()
-    imgui.BeginTabBar("PussMainTabsBar", ImGuiTabBarFlags_SizingPolicyFit)
+    imgui.BeginTabBar('PussMainTabsBar', ImGuiTabBarFlags_SizingPolicyFit)
 
 	-- set active
 	if next_active_page_label then
@@ -111,14 +111,14 @@ local function show_main_window()
 		)
 	imgui.SetNextWindowPos(0, 0)
 	imgui.SetNextWindowSize(imgui.GetIODisplaySize())
-	imgui.Begin("PussMainWindow", nil, flags)
-	main_menu(ui)
-	tabs_bar(ui)
+	imgui.Begin('PussMainWindow', nil, flags)
+	main_menu()
+	tabs_bar()
 	imgui.End()
 end
 
 local function do_update()
-	show_main_window(ui)
+	show_main_window()
 	if show_imgui_demos then
 		show_imgui_demos = imgui.ShowDemoWindow(show_imgui_demos)
 	end
@@ -127,6 +127,23 @@ local function do_update()
 	end
 	if show_console_window then
 		show_console_window = console.update(show_console_window)
+	end
+	if run_sign and main_ui:should_close() then
+		imgui.OpenPopup('Quit?')
+		main_ui:set_should_close(false)
+	end
+	if imgui.BeginPopupModal('Quit?') then
+		imgui.Text('really exit?')
+		imgui.Separator()
+		if imgui.Button('Quit') then
+			run_sign = false
+		end
+		imgui.SameLine()
+		if imgui.Button('Cancel') then
+			imgui.CloseCurrentPopup()
+			main_ui:set_should_close(false)
+		end
+		imgui.EndPopup()
 	end
 end
 
@@ -148,7 +165,7 @@ __exports.lookup_page = function(label)
 end
 
 __exports.init = function()
-	main_ui = imgui.Create("Puss - Editor", 1024, 768)
+	main_ui = imgui.Create('Puss - Editor', 1024, 768)
 	main_ui:set_error_handle(puss.logerr_handle())
 end
 
@@ -158,9 +175,7 @@ __exports.uninit = function()
 end
 
 __exports.update = function()
-	if run_sign then
-		imgui.WaitEventsTimeout()
-		return main_ui(puss.trace_pcall, do_update, main_ui)
-	end
+	main_ui(do_update)
+	return run_sign
 end
 

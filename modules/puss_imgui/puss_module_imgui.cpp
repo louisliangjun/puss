@@ -607,23 +607,22 @@ void ImguiEnv::ImGui_ImplGlfwGL3_NewFrame()
     ImGui::NewFrame();
 }
 
-#define IMGUI_LUA_WRAP_STACK_BEGIN(tp) { \
-	ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData); \
-	env->g_Stack.push_back(tp); \
+static inline void _wrap_stack_begin(char tp) {
+	ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData);
+	env->g_Stack.push_back(tp);
 }
 
-#define IMGUI_LUA_WRAP_STACK_END(tp) { \
-	ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData); \
-	int top_type = (env->g_Stack.size() > env->g_StackProtected) ? env->g_Stack.back() : -1; \
-	if( top_type==tp ) { \
-		env->g_Stack.pop_back(); \
-	} else { \
-		luaL_error(L, "Stack Push/Pop NOT matched!"); \
-	} \
+static inline void _wrap_stack_end(char tp) {
+	ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData);
+	int top_type = (env->g_Stack.size() > env->g_StackProtected) ? env->g_Stack.back() : -1;
+	if( top_type==tp ) {
+		env->g_Stack.pop_back();
+	}
 }
 
+#define IMGUI_LUA_WRAP_STACK_BEGIN(tp)	_wrap_stack_begin(tp);
+#define IMGUI_LUA_WRAP_STACK_END(tp)	_wrap_stack_end(tp);
 #include "imgui_lua.inl"
-
 #undef IMGUI_LUA_WRAP_STACK_BEGIN
 #undef IMGUI_LUA_WRAP_STACK_END
 
@@ -651,6 +650,23 @@ static int imgui_destroy_lua(lua_State* L) {
 	return 0;
 }
 
+static int imgui_set_should_close_lua(lua_State* L) {
+	ImguiEnv* env = (ImguiEnv*)luaL_checkudata(L, 1, IMGUI_MT_NAME);
+	int value = lua_toboolean(L, 2);
+	GLFWwindow* win = env->g_Window;
+	if( win ) {
+		glfwSetWindowShouldClose(win, value);
+	}
+	return 1;
+}
+
+static int imgui_should_close_lua(lua_State* L) {
+	ImguiEnv* env = (ImguiEnv*)luaL_checkudata(L, 1, IMGUI_MT_NAME);
+	GLFWwindow* win = env->g_Window;
+	lua_pushboolean(L, win==NULL || glfwWindowShouldClose(win));
+	return 1;
+}
+
 static int imgui_set_error_handle_lua(lua_State* L) {
 	ImguiEnv* env = (ImguiEnv*)luaL_checkudata(L, 1, IMGUI_MT_NAME);
 	if( lua_isfunction(L, 2) ) {
@@ -675,8 +691,8 @@ static int imgui_update_lua(lua_State* L) {
 	luaL_argcheck(L, lua_type(L, 2)==LUA_TFUNCTION, 2, "need function!");
 
 	// check close
-	if( !win ) return 0;
-    if( glfwWindowShouldClose(win) ) return 0;
+	if( !win )
+		return luaL_error(L, "window already destroy!");
 
 	ImGui::SetCurrentContext(env->g_Context);
 
@@ -692,11 +708,9 @@ static int imgui_update_lua(lua_State* L) {
 	lua_replace(L, 1);
 	if( lua_pcall(L, lua_gettop(L)-2, 0, 1) )
 		lua_pop(L, 1);
-
-	// check close
 	win = env->g_Window;
-	if( !win ) return 0;
-    if( glfwWindowShouldClose(win) ) return 0;
+	if( !win )
+		return 0;
 
 	// check stack
 	env->g_StackProtected = 0;
@@ -720,8 +734,7 @@ static int imgui_update_lua(lua_State* L) {
 	ImGui::EndFrame();
 
 	glfwSwapBuffers(win);
-	lua_pushboolean(L, 1);
-	return 1;
+	return 0;
 }
 
 static int imgui_protect_pcall_lua(lua_State* L) {
@@ -882,6 +895,8 @@ static void lua_register_imgui(lua_State* L) {
 			, {"__gc", imgui_destroy_lua}
 			, {"__call", imgui_update_lua}
 			, {"destroy", imgui_destroy_lua}
+			, {"set_should_close", imgui_set_should_close_lua}
+			, {"should_close", imgui_should_close_lua}
 			, {"set_error_handle", imgui_set_error_handle_lua}
 			, {"protect_pcall", imgui_protect_pcall_lua}
 			, {NULL, NULL}

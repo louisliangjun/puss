@@ -3098,7 +3098,7 @@ static void ShowExampleAppLog(bool* p_open)
     if (time - last_time >= 0.20f && !ImGui::GetIO().KeyCtrl)
     {
         const char* random_words[] = { "system", "info", "warning", "error", "fatal", "notice", "log" };
-        log.AddLog("[%s] Hello, time is %.1f, frame count is %d\n", random_words[rand() % IM_ARRAYSIZE(random_words)], time, ImGui::GetFrameCount());
+        log.AddLog("[%s] Hello, time is %.1f, frame count is %d\n", random_words[rand() %  IM_ARRAYSIZE(random_words)], time, ImGui::GetFrameCount());
         last_time = time;
     }
 

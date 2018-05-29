@@ -6,7 +6,7 @@ local modules = {}
 local modules_base_mt = { __index=_ENV }
 
 local function load_module(name, env)
-	puss.dofile(name:gsub('%.', puss._sep) .. '.lua', env)
+	return puss.dofile(puss._path .. puss._sep .. name:gsub('%.', puss._sep) .. '.lua', env)
 end
 
 puss.import = function(name, reload)
@@ -37,6 +37,7 @@ function __main__()
 	local puss_app = puss.import('core.app')
 	puss_app.init()
 	while puss_app.update() do
+		imgui.WaitEventsTimeout()
 	end
 	puss_app.uninit()
 end

@@ -3,17 +3,13 @@
 const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 	"local function puss_loadfile(name, env)\n"
 	"	local f, err = loadfile(name, 'bt', env or _ENV)\n"
-	"	if not f then\n"
-	"		path = string.format('%s%s%s', puss._path, puss._sep, name)\n"
-	"		f, err = loadfile(path, 'bt', env or _ENV)\n"
-	"	end\n"
-	"	if not f then return f, string.format('load script(%s) failed: %s', path, err) end\n"
+	"	if not f then return f, string.format('load script(%s) failed: %s', name, err) end\n"
 	"	return f\n"
 	"end\n"
 	"\n"
 	"local function puss_dofile(name, env, ...)\n"
 	"	local f, err = puss_loadfile(name, env)\n"
-	"	if not f then error(string.format('load file(%s) failed: %s', name, err)) end\n"
+	"	if not f then error(err) end\n"
 	"	return f(...)\n"
 	"end\n"
 	"\n"
@@ -48,11 +44,9 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 
 #ifdef _WIN32
 	#include <windows.h>
-	#define PATH_SEP		'\\'
 	#define PATH_SEP_STR	"\\"
 #else
 	#include <unistd.h>
-	#define PATH_SEP		'/'
 	#define PATH_SEP_STR	"/"
 #endif
 
@@ -570,8 +564,8 @@ size_t puss_filename_format(char* fname) {
 	if( start < end ) {
 		s = copy_filestr(s, start->s, start->n);
 		for( cur=start+1; cur < end; ++cur) {
-			*s = PATH_SEP;
-			s = copy_filestr(s+1, cur->s, cur->n);
+			s = copy_filestr(s, PATH_SEP_STR, 1);
+			s = copy_filestr(s, cur->s, cur->n);
 		}
 	}
 	*s = '\0';
