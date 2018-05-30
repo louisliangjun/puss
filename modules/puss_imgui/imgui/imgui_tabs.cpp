@@ -5,6 +5,8 @@
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
+#include <stdint.h>
+
 #include "imgui_tabs.h"
 #define IMGUI_DEFINE_MATH_OPERATORS
 #define IMGUI_DEFINE_PLACEMENT_NEW

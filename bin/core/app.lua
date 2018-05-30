@@ -37,10 +37,10 @@ local function main_menu()
 		imgui.Separator()
 		if puss.debug then
 			if imgui.MenuItem('Load Debugger') then
-				if os.getenv('OS')=='Windows_NT' then
-					os.execute('start /B ' .. puss._path .. puss._sep .. puss._self .. ' tools/debugger.lua')
+				if puss._sep=='\\' then
+					os.execute(string.format('start /B %s\\%s %s\\tools\\debugger.lua', puss._path, puss._self, puss._path))
 				else
-					os.execute(puss._path .. puss._sep .. puss._self .. ' tools/debugger.lua &')
+					os.execute(string.format('%s/%s %s/tools/debugger.lua &', puss._path, puss._self, puss._path))
 				end
 			end
 			if imgui.MenuItem('Start debug & wait connect...') then

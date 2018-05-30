@@ -408,7 +408,7 @@ static void lua_debugger_clear(DebugEnv* env) {
 
 static int lua_debugger_run(lua_State* hostL) {
 	DebugEnv* env = debug_env_fetch(hostL);
-	const char* debugger_script = luaL_optstring(hostL, 1, "tools/debugger.lua");
+	const char* debugger_script = luaL_optstring(hostL, 1, NULL);
 	lua_State* L = env->debug_state;
 	lua_debugger_clear(env);
 
@@ -417,7 +417,13 @@ static int lua_debugger_run(lua_State* hostL) {
 	lua_setglobal(L, "__puss_debug__");
 
 	puss_get_value(L, "puss.trace_dofile");
-	lua_pushstring(L, debugger_script);
+	if( debugger_script ) {
+		lua_pushvalue(L, 1);
+	} else {
+		puss_get_value(L, "puss._path");
+		lua_pushstring(L, "/tools/debugger.lua");
+		lua_concat(L, 2);
+	}
 	if( lua_pcall(L, 1, 0, 0) ) {
 		lua_pop(L, 1);
 	}

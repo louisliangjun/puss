@@ -378,7 +378,7 @@ static const char* _unpack(LUnPacker* upac, const char* pkt) {
 		lua_pushlightuserdata(L, (void*)Q);
 		break;
 	default:
-		assert( FALSE && "bad logic" );
+		assert( 0 && "bad logic" );
 		break;
 	}
 
@@ -730,7 +730,7 @@ static int puss_lua_filename_format(lua_State* L) {
 		return 1;
 	}
 
-	static int puss_lua_utf8_to_locale(lua_State* L) {
+	static int puss_lua_utf8_to_local(lua_State* L) {
 		// TODO if need, now locale==UTF8 
 		luaL_checkstring(L, 1);
 		lua_settop(L, 1);
