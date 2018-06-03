@@ -45,6 +45,53 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 #ifdef _WIN32
 	#include <windows.h>
 	#define PATH_SEP_STR	"\\"
+
+	static int _lua_mbcs2wch(lua_State* L, int stridx, UINT code_page, const char* code_page_name) {
+		size_t len = 0;
+		const char* str = luaL_checklstring(L, stridx, &len);
+		int wlen = MultiByteToWideChar(code_page, 0, str, (int)len, NULL, 0);
+		if( wlen > 0 ) {
+			luaL_Buffer B;
+			wchar_t* wstr = (wchar_t*)luaL_buffinitsize(L, &B, (size_t)(wlen<<1));
+			MultiByteToWideChar(code_page, 0, str, (int)len, wstr, wlen);
+			luaL_addsize(&B, (size_t)(wlen<<1));
+			luaL_addchar(&B, '\0');	// add more one byte for \u0000
+			luaL_pushresult(&B);
+		} else if( wlen==0 ) {
+			lua_pushliteral(L, "");
+		} else {
+			luaL_error(L, "%s to utf16 convert failed!", code_page_name);
+		}
+		return 1;
+	}
+
+	static int _lua_wch2mbcs(lua_State* L, int stridx, UINT code_page, const char* code_page_name) {
+		size_t wlen = 0;
+		const wchar_t* wstr = (const wchar_t*)luaL_checklstring(L, stridx, &wlen);
+		int len;
+		wlen >>= 1;
+		len = WideCharToMultiByte(code_page, 0, wstr, (int)wlen, NULL, 0, NULL, NULL);
+		if( len > 0 ) {
+			luaL_Buffer B;
+			char* str = luaL_buffinitsize(L, &B, (size_t)len);
+			WideCharToMultiByte(code_page, 0, wstr, (int)wlen, str, len, NULL, NULL);
+			luaL_addsize(&B, len);
+			luaL_pushresult(&B);
+		} else if( len==0 ) {
+			lua_pushliteral(L, "");
+		} else {
+			luaL_error(L, "utf16 to %s convert failed!", code_page_name);
+		}
+		return 1;
+	}
+
+	static int _lua_utf8_to_utf16(lua_State* L) {
+		return _lua_mbcs2wch(L, 1, CP_UTF8, "utf8");
+	}
+
+	static int _lua_utf16_to_utf8(lua_State* L) {
+		return _lua_wch2mbcs(L, 1, CP_UTF8, "utf8");
+	}
 #else
 	#include <unistd.h>
 	#include <dirent.h>
@@ -677,18 +724,26 @@ static int puss_lua_filename_format(lua_State* L) {
 }
 
 static int puss_lua_file_list(lua_State* L) {
-	const char* dirpath = luaL_checkstring(L, 1);
+#ifdef _WIN32
+	const WCHAR* wpath;
 	lua_Integer nfile = 0;
 	lua_Integer ndir = 0;
-#ifdef _WIN32
 	HANDLE h = INVALID_HANDLE_VALUE;
-	WIN32_FIND_DATAA fdata;
-	char findstr[4096];
+	WIN32_FIND_DATAW fdata;
+
+	// replace arg1 with(append \\*.* & convert to utf16)
+	lua_pushcfunction(L, _lua_utf8_to_utf16);
+	lua_pushvalue(L, 1);
+	lua_pushstring(L, "\\*.*");
+	lua_concat(L, 2);
+	lua_call(L, 1, 1);
+	lua_replace(L, 1);
+	wpath = (const WCHAR*)luaL_checkstring(L, 1);
+
 	lua_newtable(L);	// files
 	lua_newtable(L);	// dirs
 
-	snprintf(findstr, 4096, "%s\\*.*", dirpath);
-	h = FindFirstFileA(findstr, &fdata);
+	h = FindFirstFileW(wpath, &fdata);
 	if( h == INVALID_HANDLE_VALUE )
 		return 2;
 	while( h != INVALID_HANDLE_VALUE ) {
@@ -700,7 +755,10 @@ static int puss_lua_file_list(lua_State* L) {
 			}
 		}
 
-		lua_pushstring(L, fdata.cFileName);
+		lua_pushcfunction(L, _lua_utf16_to_utf8);
+		lua_pushlstring(L, (const char*)(fdata.cFileName), wcslen(fdata.cFileName)*2 + 1);	// add more one byte for \u0000
+		lua_call(L, 1, 1);
+
 		if( fdata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) {
 			lua_rawseti(L, -2, ++ndir);
 		} else {
@@ -708,11 +766,14 @@ static int puss_lua_file_list(lua_State* L) {
 		}
 
 	next_label:
-		if( !FindNextFileA(h, &fdata) )
+		if( !FindNextFileW(h, &fdata) )
 			break;
 	}
 	FindClose(h);
 #else
+	const char* dirpath = luaL_checkstring(L, 1);
+	lua_Integer nfile = 0;
+	lua_Integer ndir = 0;
 	DIR* dir = opendir(dirpath);
 	struct dirent* finfo = NULL;
 	lua_newtable(L);	// files
@@ -735,51 +796,13 @@ static int puss_lua_file_list(lua_State* L) {
 		} else {
 			lua_rawseti(L, -3, ++nfile);
 		}
-    }
+	}
 	closedir(dir);
 #endif
 	return 2;
 }
 
 #ifdef _WIN32
-	static int _lua_mbcs2wch(lua_State* L, int stridx, UINT code_page, const char* code_page_name) {
-		size_t len = 0;
-		const char* str = luaL_checklstring(L, stridx, &len);
-		int wlen = MultiByteToWideChar(code_page, 0, str, (int)len, NULL, 0);
-		if( wlen > 0 ) {
-			luaL_Buffer B;
-			wchar_t* wstr = (wchar_t*)luaL_buffinitsize(L, &B, (size_t)(wlen<<1));
-			MultiByteToWideChar(code_page, 0, str, (int)len, wstr, wlen);
-			luaL_addsize(&B, (size_t)(wlen<<1));
-			luaL_pushresult(&B);
-		} else if( wlen==0 ) {
-			lua_pushliteral(L, "");
-		} else {
-			luaL_error(L, "%s to utf16 convert failed!", code_page_name);
-		}
-		return 1;
-	}
-
-	static int _lua_wch2mbcs(lua_State* L, int stridx, UINT code_page, const char* code_page_name) {
-		size_t wlen = 0;
-		const wchar_t* wstr = (const wchar_t*)luaL_checklstring(L, stridx, &wlen);
-		int len;
-		wlen >>= 1;
-		len = WideCharToMultiByte(code_page, 0, wstr, (int)wlen, NULL, 0, NULL, NULL);
-		if( len > 0 ) {
-			luaL_Buffer B;
-			char* str = luaL_buffinitsize(L, &B, (size_t)len);
-			WideCharToMultiByte(code_page, 0, wstr, (int)wlen, str, len, NULL, NULL);
-			luaL_addsize(&B, len);
-			luaL_pushresult(&B);
-		} else if( len==0 ) {
-			lua_pushliteral(L, "");
-		} else {
-			luaL_error(L, "utf16 to %s convert failed!", code_page_name);
-		}
-		return 1;
-	}
-
 	static int puss_lua_local_to_utf8(lua_State* L) {
 		_lua_mbcs2wch(L, 1, 0, "utf8");
 		return _lua_wch2mbcs(L, -1, CP_UTF8, "local");

@@ -53,16 +53,14 @@ local function fill_folder(dir)
 	local index, dirs, files = {}, {}, {}
 	dir.index, dir.dirs, dir.files = index, dirs, files
 
-	local fs, ds = puss.file_list(puss.utf8_to_local(dir.path))
+	local fs, ds = puss.file_list(dir.path)
 	table.sort(fs)
 	table.sort(ds)
 	for i,v in ipairs(ds) do
-		local name = puss.local_to_utf8(v)
-		table.insert(dirs, {name=name, path=dir.path..'/'..name})
+		table.insert(dirs, {name=v, path=dir.path..'/'..v})
 	end
 	for i,v in ipairs(fs) do
-		local name = puss.local_to_utf8(v)
-		table.insert(files, {name=name, parent=dir})
+		table.insert(files, {name=v, parent=dir})
 	end
 end
 
