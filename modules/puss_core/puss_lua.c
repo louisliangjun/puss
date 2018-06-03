@@ -47,6 +47,7 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 	#define PATH_SEP_STR	"\\"
 #else
 	#include <unistd.h>
+	#include <dirent.h>
 	#define PATH_SEP_STR	"/"
 #endif
 
@@ -675,6 +676,71 @@ static int puss_lua_filename_format(lua_State* L) {
 	return 1;
 }
 
+static int puss_lua_file_list(lua_State* L) {
+	const char* dirpath = luaL_checkstring(L, 1);
+	lua_Integer nfile = 0;
+	lua_Integer ndir = 0;
+#ifdef _WIN32
+	HANDLE h = INVALID_HANDLE_VALUE;
+	WIN32_FIND_DATAA fdata;
+	char findstr[4096];
+	lua_newtable(L);	// files
+	lua_newtable(L);	// dirs
+
+	snprintf(findstr, 4096, "%s\\*.*", dirpath);
+	h = FindFirstFileA(findstr, &fdata);
+	if( h == INVALID_HANDLE_VALUE )
+		return 2;
+	while( h != INVALID_HANDLE_VALUE ) {
+		if( fdata.cFileName[0]==L'.' ) {
+			if( fdata.cFileName[1]==L'\0' ) {
+				goto next_label;
+			} else if( fdata.cFileName[1]==L'.' && fdata.cFileName[2]==L'\0' ) {
+				goto next_label;
+			}
+		}
+
+		lua_pushstring(L, fdata.cFileName);
+		if( fdata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) {
+			lua_rawseti(L, -2, ++ndir);
+		} else {
+			lua_rawseti(L, -3, ++nfile);
+		}
+
+	next_label:
+		if( !FindNextFileA(h, &fdata) )
+			break;
+	}
+	FindClose(h);
+#else
+	DIR* dir = opendir(dirpath);
+	struct dirent* finfo = NULL;
+	lua_newtable(L);	// files
+	lua_newtable(L);	// dirs
+
+	if( !dir )
+		return 2;
+	
+	while( (finfo = readdir(dir)) != NULL ) {
+		if( finfo->d_name[0]=='.' ) {
+			if( finfo->d_name[1]=='\0' )
+				continue;
+			if( finfo->d_name[1]=='.' && finfo->d_name[2]=='\0' )
+				continue;
+		}
+
+		lua_pushstring(L, finfo->d_name);
+		if( finfo->d_type==DT_DIR ) {
+			lua_rawseti(L, -2, ++ndir);
+		} else {
+			lua_rawseti(L, -3, ++nfile);
+		}
+    }
+	closedir(dir);
+#endif
+	return 2;
+}
+
 #ifdef _WIN32
 	static int _lua_mbcs2wch(lua_State* L, int stridx, UINT code_page, const char* code_page_name) {
 		size_t len = 0;
@@ -744,6 +810,7 @@ static luaL_Reg puss_methods[] =
 	, {"pickle_pack",		puss_lua_pickle_pack}
 	, {"pickle_unpack",		puss_lua_pickle_unpack}
 	, {"filename_format",	puss_lua_filename_format}
+	, {"file_list",			puss_lua_file_list}
 	, {"local_to_utf8",		puss_lua_local_to_utf8}
 	, {"utf8_to_local",		puss_lua_utf8_to_local}
 	, {NULL, NULL}

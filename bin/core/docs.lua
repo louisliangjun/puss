@@ -28,7 +28,6 @@ function tabs_page_close(page)
 end
 
 function tabs_page_destroy(page)
-	print('destroy', page)
 	page.sv:destroy()
 end
 

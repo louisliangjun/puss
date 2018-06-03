@@ -16,3 +16,4 @@ __exports.new_page = function()
 	end
 	return app.create_page(label, _ENV)
 end
+

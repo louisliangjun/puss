@@ -620,6 +620,10 @@ static inline void _wrap_stack_end(char tp) {
 	}
 }
 
+#if defined(__GNUC__)
+	#pragma GCC diagnostic ignored "-Wunused-function"          // warning: 'xxxx' defined but not used
+#endif
+
 #define IMGUI_LUA_WRAP_STACK_BEGIN(tp)	_wrap_stack_begin(tp);
 #define IMGUI_LUA_WRAP_STACK_END(tp)	_wrap_stack_end(tp);
 #include "imgui_lua.inl"
