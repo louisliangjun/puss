@@ -490,21 +490,21 @@ static inline char* copy_filestr(char* dst, char* src, size_t n) {
 	return dst + n;
 }
 
-size_t puss_filename_format(char* fname) {
+size_t puss_filename_format(char* fname, int convert_to_unix_path_sep) {
 	FileStr strs[258];
 	FileStr* start = strs;
 	FileStr* cur = strs;
 	FileStr* end = cur + 258;
 	char* s = fname;
-
-	// root
+	char sep = '/';
 #ifdef _WIN32
+	sep = convert_to_unix_path_sep ? '/' : '\\'
 	if( ((s[0]>='a' && s[1]<='z') || (s[0]>='A' && s[1]<='Z')) && (s[1]==':') ) {
 		cur->s = s;
 		cur->n = 2;
 		s += 2;
 		if( is_sep(*s) ) {
-			s[0] = '\\';
+			s[0] = sep;
 			++s;
 			cur->n++;
 		}
@@ -512,8 +512,8 @@ size_t puss_filename_format(char* fname) {
 	} else if( is_sep(s[0]) && is_sep(s[1]) ) {
 		cur->s = s;
 		cur->n = 2;
-		s[0] = '\\';
-		s[1] = '\\';
+		s[0] = sep;
+		s[1] = sep;
 		s += 2;
 		start = ++cur;
 	}
@@ -564,7 +564,7 @@ size_t puss_filename_format(char* fname) {
 	if( start < end ) {
 		s = copy_filestr(s, start->s, start->n);
 		for( cur=start+1; cur < end; ++cur) {
-			s = copy_filestr(s, PATH_SEP_STR, 1);
+			*s++ = sep;
 			s = copy_filestr(s, cur->s, cur->n);
 		}
 	}
@@ -666,10 +666,11 @@ static int puss_lua_pickle_unpack(lua_State* L) {
 static int puss_lua_filename_format(lua_State* L) {
 	size_t n = 0;
 	const char* s = luaL_checklstring(L, 1, &n);
+	int convert_to_unix_path_sep = lua_toboolean(L, 2);
 	luaL_Buffer B;
 	luaL_buffinitsize(L, &B, n+1);
 	memcpy(B.b, s, n+1);
-	n = puss_filename_format(B.b);
+	n = puss_filename_format(B.b, convert_to_unix_path_sep);
 	luaL_pushresultsize(&B, n);
 	return 1;
 }

@@ -3,6 +3,7 @@
 local console = puss.import('core.console')
 local docs = puss.import('core.docs')
 local demos = puss.import('core.demos')
+local filebrowser = puss.import('core.filebrowser')
 
 local run_sign = true
 
@@ -59,6 +60,10 @@ local function main_menu()
 	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_F12, true) then puss.reload() end
 end
 
+local function left_pane()
+	main_ui:protect_pcall(filebrowser.update)
+end
+
 local function tabs_bar()
     imgui.BeginTabBar('PussMainTabsBar', ImGuiTabBarFlags_SizingPolicyFit)
 
@@ -113,7 +118,13 @@ local function show_main_window()
 	imgui.SetNextWindowSize(imgui.GetIODisplaySize())
 	imgui.Begin('PussMainWindow', nil, flags)
 	main_menu()
-	tabs_bar()
+	imgui.BeginChild('PussLeftPane', 200, 0, true)
+		left_pane()
+	imgui.EndChild()
+	imgui.SameLine()
+	imgui.BeginChild('PussPagesPane', 0, 0, true)
+		tabs_bar()
+	imgui.EndChild()
 	imgui.End()
 end
 
