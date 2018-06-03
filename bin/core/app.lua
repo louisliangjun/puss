@@ -23,6 +23,7 @@ local function main_menu()
 	local active
 	if not imgui.BeginMenuBar() then return end
 	if imgui.BeginMenu('File') then
+		if imgui.MenuItem('Add puss path FileBrowser') then filebrowser.append_folder(puss.local_to_utf8(puss._path)) end
 		if imgui.MenuItem('Add Demo Tab') then demos.new_page() end
 		if imgui.MenuItem('New page') then docs.new_page() end
 		if imgui.MenuItem('Open app.lua') then docs.open(puss._path .. '/core/app.lua') end
@@ -62,6 +63,12 @@ end
 
 local function left_pane()
 	main_ui:protect_pcall(filebrowser.update)
+end
+
+local function pages_on_drop_files(files)
+	for path in files:gmatch('(.-)\n') do
+		docs.open(path)
+	end
 end
 
 local function tabs_bar()
@@ -123,6 +130,10 @@ local function show_main_window()
 	imgui.EndChild()
 	imgui.SameLine()
 	imgui.BeginChild('PussPagesPane', 0, 0, true)
+		if imgui.IsWindowHovered(ImGuiHoveredFlags_ChildWindows) then
+			local files = imgui.GetDropFiles()
+			if files then pages_on_drop_files(files) end
+		end
 		tabs_bar()
 	imgui.EndChild()
 	imgui.End()

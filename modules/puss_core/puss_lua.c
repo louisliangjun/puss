@@ -499,7 +499,7 @@ size_t puss_filename_format(char* fname, int convert_to_unix_path_sep) {
 	char* s = fname;
 	char sep = '/';
 #ifdef _WIN32
-	sep = convert_to_unix_path_sep ? '/' : '\\'
+	sep = convert_to_unix_path_sep ? '/' : '\\';
 	if( ((s[0]>='a' && s[1]<='z') || (s[0]>='A' && s[1]<='Z')) && (s[1]==':') ) {
 		cur->s = s;
 		cur->n = 2;

@@ -71,6 +71,7 @@ public:
 	double				g_Time;
 	bool				g_MouseJustPressed[3];
 	GLFWcursor*			g_MouseCursors[ImGuiMouseCursor_COUNT];
+	ImVector<char>		g_DropFiles;
 
 	// OpenGL3 data
 	GLuint				g_FontTexture;
@@ -84,6 +85,8 @@ public:
 	int					g_AttribLocationColor;
 	unsigned int		g_VboHandle;
 	unsigned int		g_ElementsHandle;
+
+	// Script data
 	int					g_ScriptErrorHandle;
 	int					g_StackProtected;
 	ImVector<char>		g_Stack;
@@ -307,6 +310,21 @@ static void ImGui_ImplGlfw_CharCallback(GLFWwindow*, unsigned int c)
         io.AddInputCharacter((unsigned short)c);
 }
 
+static void ImGui_ImplGlfw_DropCallback(GLFWwindow* w, int count, const char** files) {
+	ImguiEnv* env = (ImguiEnv*)glfwGetWindowUserPointer(w);
+	if( env ) {
+		env->g_DropFiles.reserve(4096);
+		env->g_DropFiles.clear();
+		for(int i=0; i<count; ++i) {
+			for( const char* p=files[i]; *p; ++p ) {
+				env->g_DropFiles.push_back(*p);
+			}
+			env->g_DropFiles.push_back('\n');
+		}
+		glfwFocusWindow(w);
+	}
+}
+
 bool ImguiEnv::ImGui_ImplGlfwGL3_CreateFontsTexture()
 {
     // Build texture atlas
@@ -430,6 +448,7 @@ static void ImGui_ImplGlfw_InstallCallbacks(GLFWwindow* window)
     glfwSetScrollCallback(window, ImGui_ImplGlfw_ScrollCallback);
     glfwSetKeyCallback(window, ImGui_ImplGlfw_KeyCallback);
     glfwSetCharCallback(window, ImGui_ImplGlfw_CharCallback);
+	glfwSetDropCallback(window, ImGui_ImplGlfw_DropCallback);
 }
 
 bool ImguiEnv::ImGui_ImplGlfwGL3_Init(GLFWwindow* window, bool install_callbacks, const char* glsl_version)
@@ -715,6 +734,7 @@ static int imgui_update_lua(lua_State* L) {
 	win = env->g_Window;
 	if( !win )
 		return 0;
+	env->g_DropFiles.clear();
 
 	// check stack
 	env->g_StackProtected = 0;
@@ -861,12 +881,22 @@ static int imgui_wait_events_lua(lua_State* L) {
 	return 0;
 }
 
+static int imgui_get_drop_files_lua(lua_State* L) {
+	ImguiEnv* env = ImGui::GetCurrentContext() ? (ImguiEnv*)(ImGui::GetIO().UserData) : NULL;
+	if( env && !(env->g_DropFiles.empty()) ) {
+		lua_pushlstring(L, env->g_DropFiles.Data, env->g_DropFiles.Size);
+		return 1;
+	}
+	return 0;
+}
+
 #include "scintilla_imgui_lua.inl"
 #include "scintilla.iface.inl"
 
 static luaL_Reg imgui_lua_apis[] =
 	{ {"Create", imgui_create_lua}
 	, {"WaitEventsTimeout", imgui_wait_events_lua}
+	, {"GetDropFiles", imgui_get_drop_files_lua}
 
 	, {"CreateByteArray", byte_array_create}
 	, {"CreateFloatArray", float_array_create}

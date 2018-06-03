@@ -65,7 +65,7 @@ __exports.open = function(filepath)
 	if page then
 		app.active_page(label)
 	else
-		local f = io.open(filepath)
+		local f = io.open(puss.utf8_to_local(filepath))
 		if not f then return end
 		local ctx = f:read('*a')
 		f:close()
