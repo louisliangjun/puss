@@ -810,6 +810,14 @@ static int imgui_is_shortcut_pressed_lua(lua_State* L) {
 	return 1;
 }
 
+static int imgui_fetch_extra_keys_lua(lua_State* L) {
+	luaL_checktype(L, 1, LUA_TTABLE);
+#define _PUSS_IMGUI_KEY_REG(key)	lua_pushinteger(L, PUSS_IMGUI_KEY_ ## key);	lua_setfield(L, 1, #key);
+	#include "puss_module_imgui_keys.inl"
+#undef _PUSS_IMGUI_KEY_REG
+	return 0;
+}
+
 static int imgui_create_lua(lua_State* L) {
 	const char* title = luaL_optstring(L, 1, "imgui window");
 	int width = (int)luaL_optinteger(L, 2, 1024);
@@ -905,6 +913,7 @@ static luaL_Reg imgui_lua_apis[] =
 	, {"GetIODisplaySize", imgui_getio_display_size_lua}
 	, {"GetIODeltaTime", imgui_getio_delta_time_lua}
 	, {"IsShortcutPressed", imgui_is_shortcut_pressed_lua}
+	, {"FetchExtraKeys", imgui_fetch_extra_keys_lua}
 
 #define __REG_WRAP(w,f)	, { #w, f }
 	#include "imgui_wraps.inl"
@@ -918,7 +927,7 @@ static void lua_register_imgui(lua_State* L) {
 #define __REG_ENUM(e)	lua_pushinteger(L, e);	lua_setfield(L, -2, #e);
 	#include "imgui_enums.inl"
 #undef __REG_ENUM
-#define _PUSS_IMGUI_KEY_REG(key)	lua_pushinteger(L, PUSS_IMGUI_KEY_ ## key);	lua_setfield(L, -2, "PUSS_IMGUI_KEY_" #key);
+#define _PUSS_IMGUI_KEY_REG(key)	lua_pushinteger(L, PUSS_IMGUI_KEY_ ## key);	lua_setfield(L, 1, "PUSS_IMGUI_KEY_" #key);
 	#include "puss_module_imgui_keys.inl"
 #undef _PUSS_IMGUI_KEY_REG
 	lua_pop(L, 1);

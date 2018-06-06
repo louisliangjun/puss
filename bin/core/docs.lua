@@ -2,17 +2,35 @@
 
 local app = puss.import('core.app')
 local sci = puss.import('core.sci')
+local shotcuts = puss.import('core.shotcuts')
+
+local function do_save_page(page)
+	if not page.sv:GetModify() then return end
+	if not page.filepath then
+		page.saving = true
+	else
+		local len, ctx = page.sv:GetText(page.sv:GetTextLength())
+		local f = io.open(puss.utf8_to_local(page.filepath), 'w')
+		if f then
+			f:write(ctx)
+			f:close()
+			page.sv:SetSavePoint()
+		end
+	end
+end
 
 function tabs_page_draw(page)
-	if page.saveing then
+	if page.saving then
 		if imgui.Button('save') then
 			page.sv:SetSavePoint()
-			page.saveing = nil
+			page.saving = nil
 			page.open = false
 		end
 		if imgui.Button('cancel') then
-			page.saveing = nil
+			page.saving = nil
 		end
+	elseif shotcuts.is_pressed('docs', 'save') then
+		do_save_page(page)
 	end
 	imgui.BeginChild('Output', nil, nil, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
 		page.sv()
@@ -22,7 +40,7 @@ end
 
 function tabs_page_close(page)
 	if page.unsaved then
-		page.saveing = true
+		page.saving = true
 		page.open = true
 	end
 end

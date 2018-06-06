@@ -1,9 +1,10 @@
 -- app.lua
 
-local console = puss.import('core.console')
+local shotcuts = puss.import('core.shotcuts')
 local docs = puss.import('core.docs')
 local demos = puss.import('core.demos')
 local filebrowser = puss.import('core.filebrowser')
+local console = puss.import('core.console')
 
 local run_sign = true
 
@@ -12,6 +13,7 @@ main_ui = main_ui	-- reload
 show_imgui_demos = show_imgui_demos or false
 show_tabs_demo = show_tabs_demo or false
 show_console_window = show_console_window or false
+show_shutcut_window = show_shutcut_window or false
 
 _pages = _pages or {}
 _index = _index or setmetatable({}, {__mode='v'})
@@ -34,6 +36,7 @@ local function main_menu()
 		active, show_imgui_demos = imgui.MenuItem('ImGUI Demos', nil, show_imgui_demos)
 		active, show_tabs_demo = imgui.MenuItem('Tabs Demo', nil, show_tabs_demo)
 		active, show_console_window = imgui.MenuItem('Conosle', nil, show_console_window)
+		active, show_shutcut_window = imgui.MenuItem('Shutcut', nil, show_shutcut_window)
 		imgui.Separator()
 		if imgui.MenuItem('Reload', 'Ctrl+F12') then puss.reload() end
 		imgui.Separator()
@@ -58,7 +61,7 @@ local function main_menu()
 	end
 	imgui.EndMenuBar()
 
-	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_F12, true) then puss.reload() end
+	if shotcuts.is_pressed('app', 'reload') then puss.reload() end
 end
 
 local function left_pane()
@@ -150,6 +153,10 @@ local function do_update()
 	if show_console_window then
 		show_console_window = console.update(show_console_window)
 	end
+	if show_shutcut_window then
+		show_shutcut_window = shotcuts.update(show_shutcut_window)
+	end
+
 	if run_sign and main_ui:should_close() then
 		imgui.OpenPopup('Quit?')
 		main_ui:set_should_close(false)
