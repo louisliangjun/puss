@@ -113,6 +113,17 @@ local function tabs_bar()
 	end
 end
 
+local function pages_save_all()
+	local all_saved = true
+	for _,page in ipairs(pages) do
+		local save = page.module.tabs_page_save
+		if save then save(page) end
+		if page.unsaved then all_saved = false end
+	end
+	print(all_saved)
+	return all_saved
+end
+
 local function show_main_window()
 	local flags = ( ImGuiWindowFlags_NoTitleBar
 		| ImGuiWindowFlags_NoResize
@@ -158,13 +169,33 @@ local function do_update()
 	end
 
 	if run_sign and main_ui:should_close() then
-		imgui.OpenPopup('Quit?')
-		main_ui:set_should_close(false)
+		local all_saved = true
+		for _, page in ipairs(pages) do
+			if page.unsaved then
+				all_saved = false
+				break
+			end
+		end
+		if all_saved then
+			run_sign = false
+		else
+			imgui.OpenPopup('Quit?')
+			main_ui:set_should_close(false)
+		end
 	end
 	if imgui.BeginPopupModal('Quit?') then
-		imgui.Text('really exit?')
+		imgui.Text('Quit?')
 		imgui.Separator()
-		if imgui.Button('Quit') then
+		if imgui.Button('Save all & Quit') then
+			if pages_save_all() then
+				run_sign = false
+			else
+				imgui.CloseCurrentPopup()
+				main_ui:set_should_close(false)
+			end
+		end
+		imgui.SameLine()
+		if imgui.Button('Quit without save') then
 			run_sign = false
 		end
 		imgui.SameLine()

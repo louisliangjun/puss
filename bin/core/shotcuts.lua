@@ -38,6 +38,7 @@ end
 shotcut_register('app', 'reload', 'Reload scripts', 'F12', true)
 
 shotcut_register('docs', 'save', 'Save file', 'S', true)
+shotcut_register('docs', 'close', 'Close file', 'W', true)
 
 -- 
 -- shotcuts register end
@@ -59,14 +60,15 @@ do
 end
 
 local function shotcut_update()
+	imgui.Text('module	name	desc	key	ctrl	shift	alt	super')
 	for _, v in ipairs(shotcut_sorted) do
-		imgui.Text( table.concat(v, '\t') )
+		imgui.Text(string.format('%s	%s	%s	%s	%s	%s	%s', v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8]))
 	end
 end
 
 __exports.update = function(show)
 	local res = false
-	imgui.SetNextWindowSize(400, 300, ImGuiCond_FirstUseEver)
+	imgui.SetNextWindowSize(640, 480, ImGuiCond_FirstUseEver)
 	res, show = imgui.Begin("Shotcut", show, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)
 	if res then shotcut_update() end
 	imgui.End()
