@@ -793,7 +793,7 @@ static int imgui_getio_delta_time_lua(lua_State* L) {
 }
 
 static bool shortcut_mod_check(lua_State* L, int arg, bool val) {
-	return lua_isnoneornil(L, arg) ? true : (val == ((lua_toboolean(L, 2)!=0)));
+	return lua_isnoneornil(L, arg) ? true : (val == ((lua_toboolean(L, arg)!=0)));
 }
 
 static int imgui_is_shortcut_pressed_lua(lua_State* L) {
@@ -927,7 +927,7 @@ static void lua_register_imgui(lua_State* L) {
 #define __REG_ENUM(e)	lua_pushinteger(L, e);	lua_setfield(L, -2, #e);
 	#include "imgui_enums.inl"
 #undef __REG_ENUM
-#define _PUSS_IMGUI_KEY_REG(key)	lua_pushinteger(L, PUSS_IMGUI_KEY_ ## key);	lua_setfield(L, 1, "PUSS_IMGUI_KEY_" #key);
+#define _PUSS_IMGUI_KEY_REG(key)	lua_pushinteger(L, PUSS_IMGUI_KEY_ ## key);	lua_setfield(L, -2, "PUSS_IMGUI_KEY_" #key);
 	#include "puss_module_imgui_keys.inl"
 #undef _PUSS_IMGUI_KEY_REG
 	lua_pop(L, 1);

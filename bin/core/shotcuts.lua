@@ -35,10 +35,13 @@ end
 
 -- shotcuts register start
 -- 
-shotcut_register('app', 'reload', 'Reload scripts', 'F12', true)
+shotcut_register('app', 'reload', 'Reload scripts', 'F12', true, false, false, false)
 
-shotcut_register('docs', 'save', 'Save file', 'S', true)
-shotcut_register('docs', 'close', 'Close file', 'W', true)
+shotcut_register('docs', 'save', 'Save file', 'S', true, false, false, false)
+shotcut_register('docs', 'close', 'Close file', 'W', true, false, false, false)
+shotcut_register('docs', 'find', 'Find in file', 'F', true, false, false, false)
+shotcut_register('docs', 'jump', 'Jump in file', 'G', true, false, false, false)
+shotcut_register('docs', 'replace', 'Replace in file', 'H', true, false, false, false)
 
 -- 
 -- shotcuts register end
@@ -62,7 +65,7 @@ end
 local function shotcut_update()
 	imgui.Text('module	name	desc	key	ctrl	shift	alt	super')
 	for _, v in ipairs(shotcut_sorted) do
-		imgui.Text(string.format('%s	%s	%s	%s	%s	%s	%s', v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8]))
+		imgui.Text(string.format('%s	%s	%s	%s	%s	%s	%s', v[1], v[2], v[3], v[4], v[6], v[7], v[8], v[9]))
 	end
 end
 

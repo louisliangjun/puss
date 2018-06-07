@@ -4,7 +4,13 @@ local app = puss.import('core.app')
 local sci = puss.import('core.sci')
 local shotcuts = puss.import('core.shotcuts')
 
-local function do_save_page(page)
+_inbuf = _inbuf or imgui.CreateByteArray(4*1024, 'find text')
+_rebuf = _rebuf or imgui.CreateByteArray(4*1024, 'replace text')
+local inbuf = _inbuf
+local rebuf = _rebuf
+
+local function do_save_page(page)
+	print(page.unsaved)
 	page.unsaved = page.sv:GetModify()
 	if not page.unsaved then
 		return
@@ -52,28 +58,50 @@ local function draw_saving_bar(page)
 	if imgui.Button('close without save') then
 		page.sv:SetSavePoint()
 		page.saving = nil
-		page.open = false
+		page.open = false
 	end
+end
+
+local function draw_overlay_bar(page)
+	local mode = page.show_overlay
+	imgui.SetNextWindowBgAlpha(0.5)
+	local show, open = imgui.Begin('##Layout', true, ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoNav)
+	if not show then return end
+
+	imgui.Text(mode)
+	if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_EnterReturnsTrue) then
+		print(mode, inbuf:str())
+	end
+	--if mode=='jump' then end
+	--if mode=='find' then end
+	if mode=='replace' then
+		if imgui.InputText('##ReplaceText', rebuf, ImGuiInputTextFlags_EnterReturnsTrue) then
+			print(mode, rebuf:str())
+		end
+	end
+	imgui.End()
 end
 
 function tabs_page_draw(page)
-	if not page.saving then
-		if shotcuts.is_pressed('docs', 'save') then
-			do_save_page(page)
-		elseif shotcuts.is_pressed('docs', 'close') then
-			page.open = false
-		end
-	end
+	if (not page.saving) and shotcuts.is_pressed('docs', 'save') then do_save_page(page) end
+	if shotcuts.is_pressed('docs', 'close') then page.open = false end
+	if page.saving then draw_saving_bar(page) end
 
-	if page.saving then
-		draw_saving_bar(page)
+	if shotcuts.is_pressed('docs', 'jump') then
+		page.show_overlay = 'jump'
+	elseif shotcuts.is_pressed('docs', 'find') then
+		page.show_overlay = 'find'
+	elseif shotcuts.is_pressed('docs', 'replace') then
+		page.show_overlay = 'replace'
 	end
-
-	imgui.BeginChild('DocsSourceView', nil, nil, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
+
+	imgui.BeginChild('##SourceView', nil, nil, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
 		page.sv()
 		page.unsaved = page.sv:GetModify()
-	imgui.EndChild()
-end
+	imgui.EndChild()
+
+	if page.show_overlay then draw_overlay_bar(page) end
+end
 
 function tabs_page_save(page)
 	do_save_page(page)

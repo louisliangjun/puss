@@ -16,7 +16,7 @@ show_console_window = show_console_window or false
 show_shutcut_window = show_shutcut_window or false
 
 _pages = _pages or {}
-_index = _index or setmetatable({}, {__mode='v'})
+_index = _index or setmetatable({}, {__mode='v'})
 local pages = _pages
 local index = _index
 local next_active_page_label = nil

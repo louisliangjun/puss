@@ -30,7 +30,8 @@ end
 puss.reload = function()
 	for name, env in pairs(modules) do
 		puss.trace_pcall(load_module, name, env)
-	end
+	end
+	print('reload finished')
 end
 
 function __main__()
