@@ -4,12 +4,14 @@ local app = puss.import('core.app')
 local sci = puss.import('core.sci')
 local shotcuts = puss.import('core.shotcuts')
 
-_inbuf = _inbuf or imgui.CreateByteArray(4*1024, 'find text')
-_rebuf = _rebuf or imgui.CreateByteArray(4*1024, 'replace text')
-local inbuf = _inbuf
-local rebuf = _rebuf
-
-local function do_save_page(page)
+_inbuf = _inbuf or imgui.CreateByteArray(4*1024, 'find text')
+_rebuf = _rebuf or imgui.CreateByteArray(4*1024, 'replace text')
+local inbuf = _inbuf
+local rebuf = _rebuf
+
+local SOURCE_VIEW_LABEL = '##SourceView'
+
+local function do_save_page(page)
 	print(page.unsaved)
 	page.unsaved = page.sv:GetModify()
 	if not page.unsaved then
@@ -58,50 +60,145 @@ local function draw_saving_bar(page)
 	if imgui.Button('close without save') then
 		page.sv:SetSavePoint()
 		page.saving = nil
-		page.open = false
+		page.open = false
 	end
-end
-
-local function draw_overlay_bar(page)
-	local mode = page.show_overlay
-	imgui.SetNextWindowBgAlpha(0.5)
-	local show, open = imgui.Begin('##Layout', true, ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoNav)
-	if not show then return end
-
-	imgui.Text(mode)
-	if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_EnterReturnsTrue) then
-		print(mode, inbuf:str())
-	end
-	--if mode=='jump' then end
-	--if mode=='find' then end
-	if mode=='replace' then
-		if imgui.InputText('##ReplaceText', rebuf, ImGuiInputTextFlags_EnterReturnsTrue) then
-			print(mode, rebuf:str())
-		end
-	end
-	imgui.End()
 end
 
-function tabs_page_draw(page)
-	if (not page.saving) and shotcuts.is_pressed('docs', 'save') then do_save_page(page) end
-	if shotcuts.is_pressed('docs', 'close') then page.open = false end
+local function page_call(page, cb, ...)
+	imgui.BeginChild(SOURCE_VIEW_LABEL)
+		page.sv(false, cb, ...)
+	imgui.EndChild()
+end
+
+local function show_dialog_jump(page, active)
+	if active then
+		local line = page.sv:LineFromPosition(page.sv:GetCurrentPos())
+		inbuf:strcpy(tostring(line+1))
+	end
+
+	if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue|ImGuiInputTextFlags_CharsDecimal) then
+		local line = tonumber(inbuf:str())
+		if line then
+			active = false
+			page.dialog_mode = nil	-- hide dialog
+			page_call(page, function(sv)
+				sv:GotoLine(line-1)
+				sv:ScrollCaret()
+				imgui.SetWindowFocus()
+			end)
+		else
+			active = true
+		end
+	end
+	if active then imgui.SetKeyboardFocusHere(-1) end
+end
+
+local function show_dialog_find(page, active)
+	if active then
+		page_call(page, function(sv)
+			local len, txt = sv:GetSelText()
+			if len > 0 then inbuf:strcpy(txt) end
+		end)
+	end
+
+	if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
+		local text = inbuf:str()
+		if #text > 0 then
+			page_call(page, function(sv)
+				local search_flags = 0
+				local ps = sv:GetSelectionStart()
+				local pe = sv:GetSelectionEnd()
+				if imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT) then
+					sv:SearchAnchor()
+					ps = sv:SearchPrev(search_flags, text)
+				else
+					sv:SetCurrentPos(pe)
+					sv:SearchAnchor()
+					ps = sv:SearchNext(search_flags, text)
+					if ps < 0 then
+						sv:SetCurrentPos(0)
+						sv:SearchAnchor()
+						ps = sv:SearchNext(search_flags, text)
+					end
+				end
+				if ps < 0 then
+					sv:ClearSelections()
+				else
+					pe = ps + #text
+					sv:SetSelection(ps, pe)
+					sv:ScrollRange(ps, pe)
+				end
+			end)
+		end
+		active = true
+	end
+	if active then imgui.SetKeyboardFocusHere(-1) end
+end
+
+
+ function show_dialog_replace(page, active)
+	if active then
+		local len, txt = page.sv:GetSelText()
+		if len > 0 then inbuf:strcpy(txt) end
+	end
+
+	if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
+		print(mode, inbuf:str())
+		active = true
+	end
+	if active then imgui.SetKeyboardFocusHere(-1) end
+
+	if imgui.InputText('##ReplaceText', rebuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
+		print(mode, rebuf:str())
+	end
+end
+
+local dialog_modes =
+	{ {'jump', 'docs/jump', 1, show_dialog_jump}
+	, {'find', 'docs/find', 1, show_dialog_find}
+	, {'replace', 'docs/replace', 2, show_dialog_replace}
+	}
+
+function tabs_page_draw(page, active_page)
+	if (not page.saving) and shotcuts.is_pressed('docs/save') then do_save_page(page) end
+	if shotcuts.is_pressed('docs/close') then page.open = false end
 	if page.saving then draw_saving_bar(page) end
 
-	if shotcuts.is_pressed('docs', 'jump') then
-		page.show_overlay = 'jump'
-	elseif shotcuts.is_pressed('docs', 'find') then
-		page.show_overlay = 'find'
-	elseif shotcuts.is_pressed('docs', 'replace') then
-		page.show_overlay = 'replace'
+	local active
+	if imgui.IsWindowFocused(ImGuiFocusedFlags_ChildWindows) then
+		for _,v in ipairs(dialog_modes) do
+			if shotcuts.is_pressed(v[2]) then
+				active = v
+				break
+			end
+		end
 	end
-
-	imgui.BeginChild('##SourceView', nil, nil, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
-		page.sv()
+
+	local mode = active
+	if active then
+		page.dialog_mode = mode
+	else
+		mode = page.dialog_mode
+	end
+
+	if active_page then imgui.SetNextWindowFocus() end
+
+	local height = mode and -(mode[3] * imgui.GetFrameHeightWithSpacing()) or nil
+	imgui.BeginChild(SOURCE_VIEW_LABEL, nil, height, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
+		page.sv(true)
 		page.unsaved = page.sv:GetModify()
-	imgui.EndChild()
-
-	if page.show_overlay then draw_overlay_bar(page) end
-end
+	imgui.EndChild()
+
+	if mode then
+		imgui.BeginGroup()
+		imgui.Text(mode[1])
+		imgui.SameLine()
+		imgui.BeginGroup()
+		mode[4](page, active)
+		imgui.EndGroup()
+		imgui.EndGroup()
+	end
+end
 
 function tabs_page_save(page)
 	do_save_page(page)
@@ -129,6 +226,7 @@ local function new_doc(label, lang, filepath)
 	-- sv:SetViewWS(SCWS_VISIBLEALWAYS)
 	page.sv = sv
 	page.filepath = filepath
+	app.active_page(label)
 	return page
 end
 

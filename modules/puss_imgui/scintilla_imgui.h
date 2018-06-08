@@ -12,7 +12,7 @@ typedef void (*ScintillaIMCallback)(ScintillaIM* sci, void* ud);
 
 ScintillaIM*	scintilla_imgui_create();
 void			scintilla_imgui_destroy(ScintillaIM* sci);
-void			scintilla_imgui_update(ScintillaIM* sci, ScintillaIMCallback cb, void* ud);
+void			scintilla_imgui_update(ScintillaIM* sci, bool draw, ScintillaIMCallback cb, void* ud);
 sptr_t			scintilla_imgui_send(ScintillaIM* sci, unsigned int iMessage, uptr_t wParam, sptr_t lParam);
 
 #endif//_INC_SCINTILLA_IMGUI_H_

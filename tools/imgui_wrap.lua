@@ -956,7 +956,7 @@ function main()
 		overrides.SetWindowPos = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_SetWindowPos_sv2i(L) : wrap_SetWindowPos_v2i(L);]]
 		overrides.SetWindowSize = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_SetWindowSize_sv2i(L) : wrap_SetWindowSize_v2i(L);]]
 		overrides.SetWindowCollapsed = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_SetWindowCollapsed_sbi(L) : wrap_SetWindowCollapsed_bi(L);]]
-		overrides.SetWindowFocus = [[return lua_gettop(L)==0 ? wrap_SetWindowFocus(L) : wrap_SetWindowFocus_s(L);]]
+		overrides.SetWindowFocus = [[if( lua_gettop(L)==0 ) ImGui::SetWindowFocus(); else ImGui::SetWindowFocus(luaL_optstring(L,1,NULL)); return 0;]]
 		overrides.PushStyleColor = [[return lua_gettop(L)<=2 ? wrap_PushStyleColor_iu(L) : wrap_PushStyleColor_iv4(L);]]
 		overrides.PushStyleVar = [[return lua_gettop(L)<=2 ? wrap_PushStyleVar_if(L) : wrap_PushStyleVar_iv2(L);]]
 		overrides.GetColorU32 = [[switch( lua_gettop(L) ) { case 1: return lua_isinteger(L, 1) ? wrap_GetColorU32_if(L) : wrap_GetColorU32_u(L); case 2: return wrap_GetColorU32_if(L); } return wrap_GetColorU32_v4(L);]]

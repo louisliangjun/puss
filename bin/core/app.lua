@@ -7,8 +7,7 @@ local filebrowser = puss.import('core.filebrowser')
 local console = puss.import('core.console')
 
 local run_sign = true
-
-main_ui = main_ui	-- reload
+local main_ui = _main_ui
 
 show_imgui_demos = show_imgui_demos or false
 show_tabs_demo = show_tabs_demo or false
@@ -16,9 +15,10 @@ show_console_window = show_console_window or false
 show_shutcut_window = show_shutcut_window or false
 
 _pages = _pages or {}
-_index = _index or setmetatable({}, {__mode='v'})
+_index = _index or setmetatable({}, {__mode='v'})
 local pages = _pages
 local index = _index
+local selected_page_label = nil
 local next_active_page_label = nil
 
 local function main_menu()
@@ -61,11 +61,7 @@ local function main_menu()
 	end
 	imgui.EndMenuBar()
 
-	if shotcuts.is_pressed('app', 'reload') then puss.reload() end
-end
-
-local function left_pane()
-	main_ui:protect_pcall(filebrowser.update)
+	if shotcuts.is_pressed('app/reload') then puss.reload() end
 end
 
 local function pages_on_drop_files(files)
@@ -77,24 +73,28 @@ end
 local function tabs_bar()
     imgui.BeginTabBar('PussMainTabsBar', ImGuiTabBarFlags_SizingPolicyFit)
 
-	-- set active
-	if next_active_page_label then
-		local label = next_active_page_label
+	-- set active, must after draw tabs
+	local active = next_active_page_label
+	if active then
 		next_active_page_label = nil
-		local page = index[label]
-		if page then imgui.SetTabItemSelected(label) end
+		local page = index[active]
+		if page then imgui.SetTabItemSelected(active) end
 	end
 
 	-- draw tabs
+	local selected
 	for i, page in ipairs(pages) do
-		local selected
+		local label = page.label
 		page.was_open = page.open
-		selected, page.open = imgui.TabItem(page.label, page.open, page.unsaved and ImGuiTabItemFlags_UnsavedDocument or ImGuiTabItemFlags_None)
+		selected, page.open = imgui.TabItem(label, page.open, page.unsaved and ImGuiTabItemFlags_UnsavedDocument or ImGuiTabItemFlags_None)
 		if selected then
+			local last = selected_page_label
+			selected_page_label = label
 			local draw = page.module.tabs_page_draw
-			if draw then main_ui:protect_pcall(draw, page) end
+			if draw then main_ui:protect_pcall(draw, page, last~=label) end
 		end
 	end
+
 	imgui.EndTabBar()
 
 	-- close 
@@ -124,50 +124,47 @@ local function pages_save_all()
 	return all_saved
 end
 
-local function show_main_window()
-	local flags = ( ImGuiWindowFlags_NoTitleBar
-		| ImGuiWindowFlags_NoResize
-		| ImGuiWindowFlags_NoMove
-		| ImGuiWindowFlags_NoScrollbar
-		| ImGuiWindowFlags_NoScrollWithMouse
-		| ImGuiWindowFlags_NoCollapse
-		| ImGuiWindowFlags_NoSavedSettings
-		| ImGuiWindowFlags_MenuBar
-		| ImGuiWindowFlags_NoBringToFrontOnFocus
-		)
+local function left_pane()
+	main_ui:protect_pcall(filebrowser.update)
+end
+
+local function main_pane()
+	imgui.BeginChild('PussPagesPane', 0, 0, false)
+	if imgui.IsWindowHovered(ImGuiHoveredFlags_ChildWindows) then
+		local files = imgui.GetDropFiles()
+		if files then pages_on_drop_files(files) end
+	end
+	tabs_bar()
+	imgui.EndChild()
+end
+
+local MAIN_WINDOW_FLAGS = ( ImGuiWindowFlags_NoTitleBar
+	| ImGuiWindowFlags_NoResize
+	| ImGuiWindowFlags_NoMove
+	| ImGuiWindowFlags_NoScrollbar
+	| ImGuiWindowFlags_NoScrollWithMouse
+	| ImGuiWindowFlags_NoCollapse
+	| ImGuiWindowFlags_NoSavedSettings
+	| ImGuiWindowFlags_MenuBar
+	| ImGuiWindowFlags_NoBringToFrontOnFocus
+	)
+
+local function show_main_window(is_init)
 	imgui.SetNextWindowPos(0, 0)
 	imgui.SetNextWindowSize(imgui.GetIODisplaySize())
-	imgui.Begin('PussMainWindow', nil, flags)
+	imgui.Begin('PussMainWindow', nil, MAIN_WINDOW_FLAGS)
 	main_menu()
-	imgui.BeginChild('PussLeftPane', 200, 0, true)
-		left_pane()
-	imgui.EndChild()
-	imgui.SameLine()
-	imgui.BeginChild('PussPagesPane', 0, 0, true)
-		if imgui.IsWindowHovered(ImGuiHoveredFlags_ChildWindows) then
-			local files = imgui.GetDropFiles()
-			if files then pages_on_drop_files(files) end
-		end
-		tabs_bar()
-	imgui.EndChild()
+	imgui.Columns(2)
+	if is_init then imgui.SetColumnWidth(-1, 200) end
+	left_pane()
+	imgui.NextColumn()
+	main_pane()
+	imgui.NextColumn()
+	imgui.Columns(1)
 	imgui.End()
 end
 
-local function do_update()
-	show_main_window()
-	if show_imgui_demos then
-		show_imgui_demos = imgui.ShowDemoWindow(show_imgui_demos)
-	end
-	if show_tabs_demo then
-		show_tabs_demo = imgui.ShowTabsDemo('Tabs Demo', show_tabs_demo)
-	end
-	if show_console_window then
-		show_console_window = console.update(show_console_window)
-	end
-	if show_shutcut_window then
-		show_shutcut_window = shotcuts.update(show_shutcut_window)
-	end
-
+local function do_quit_update()
 	if run_sign and main_ui:should_close() then
 		local all_saved = true
 		for _, page in ipairs(pages) do
@@ -183,6 +180,7 @@ local function do_update()
 			main_ui:set_should_close(false)
 		end
 	end
+
 	if imgui.BeginPopupModal('Quit?') then
 		imgui.Text('Quit?')
 		imgui.Separator()
@@ -207,6 +205,23 @@ local function do_update()
 	end
 end
 
+local function do_update(is_init)
+	show_main_window(is_init)
+	if show_imgui_demos then
+		show_imgui_demos = imgui.ShowDemoWindow(show_imgui_demos)
+	end
+	if show_tabs_demo then
+		show_tabs_demo = imgui.ShowTabsDemo('Tabs Demo', show_tabs_demo)
+	end
+	if show_console_window then
+		show_console_window = console.update(show_console_window)
+	end
+	if show_shutcut_window then
+		show_shutcut_window = shotcuts.update(show_shutcut_window)
+	end
+	do_quit_update()
+end
+
 __exports.create_page = function(label, module)
 	local page = index[label]
 	if page then return page end
@@ -226,7 +241,9 @@ end
 
 __exports.init = function()
 	main_ui = imgui.Create('Puss - Editor', 1024, 768)
+	_main_ui = main_ui
 	main_ui:set_error_handle(puss.logerr_handle())
+	main_ui(do_update, true)
 end
 
 __exports.uninit = function()

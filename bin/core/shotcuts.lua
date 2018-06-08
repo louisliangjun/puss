@@ -20,53 +20,55 @@ end
 _shotcuts = _shotcuts or {}
 local shotcuts = _shotcuts
 
-local function shotcut_register(module, name, desc, key, ctrl, shift, alt, super)
+local function shotcut_register(name, desc, key, ctrl, shift, alt, super)
 	local code = keys[key]
 	if not code then error('shotcut_register() not support key:'..tostring(key)) end
-
-	local m = shotcuts[module]
-	if not m then
-		m = {}
-		shotcuts[module] = m
-	end
-
-	m[name] = { module, name, desc or '', key, code, ctrl, shift, alt, super }
+	shotcuts[name] = { name, desc or '', key, code, ctrl, shift, alt, super }
 end
 
 -- shotcuts register start
 -- 
-shotcut_register('app', 'reload', 'Reload scripts', 'F12', true, false, false, false)
+shotcut_register('app/reload', 'Reload scripts', 'F12', true, false, false, false)
 
-shotcut_register('docs', 'save', 'Save file', 'S', true, false, false, false)
-shotcut_register('docs', 'close', 'Close file', 'W', true, false, false, false)
-shotcut_register('docs', 'find', 'Find in file', 'F', true, false, false, false)
-shotcut_register('docs', 'jump', 'Jump in file', 'G', true, false, false, false)
-shotcut_register('docs', 'replace', 'Replace in file', 'H', true, false, false, false)
+shotcut_register('docs/save', 'Save file', 'S', true, false, false, false)
+shotcut_register('docs/close', 'Close file', 'W', true, false, false, false)
+shotcut_register('docs/find', 'Find in file', 'F', true, false, false, false)
+shotcut_register('docs/jump', 'Jump in file', 'G', true, false, false, false)
+shotcut_register('docs/replace', 'Replace in file', 'H', true, false, false, false)
 
 -- 
 -- shotcuts register end
 
 local shotcut_sorted = {}
 do
-	local ms = {}
-	for k in pairs(shotcuts) do table.insert(ms, k) end
-	table.sort(ms)
-	for _, module in ipairs(ms) do
-		local m = shotcuts[module]
-		local keys = {}
-		for k in pairs(m) do table.insert(keys, k) end
-		table.sort(keys)
-		for _, name in ipairs(keys) do
-			table.insert(shotcut_sorted, m[name])
-		end
+	local keys = {}
+	for k in pairs(shotcuts) do table.insert(keys, k) end
+	table.sort(keys)
+	for _, name in ipairs(keys) do
+		table.insert(shotcut_sorted, shotcuts[name])
+	end
+end
+
+local shotcut_columns = {'name', 'desc', 'key', 'code', 'ctrl', 'shift', 'alt', 'super'}
+local n_shotcut_columns = #shotcut_columns
+
+local function shotcut_draw_row(row)
+	for i=1,n_shotcut_columns do
+		imgui.Text(tostring(row[i]))
+		imgui.NextColumn()
 	end
 end
 
 local function shotcut_update()
-	imgui.Text('module	name	desc	key	ctrl	shift	alt	super')
+	imgui.Columns(n_shotcut_columns)
+	imgui.Separator()
+	shotcut_draw_row(shotcut_columns)
+	imgui.Separator()
 	for _, v in ipairs(shotcut_sorted) do
-		imgui.Text(string.format('%s	%s	%s	%s	%s	%s	%s', v[1], v[2], v[3], v[4], v[6], v[7], v[8], v[9]))
+		shotcut_draw_row(v)
 	end
+	imgui.Columns(1)
+	imgui.Separator()
 end
 
 __exports.update = function(show)
@@ -78,11 +80,9 @@ __exports.update = function(show)
 	return show
 end
 
-__exports.is_pressed = function(module, name)
-	local m = shotcuts[module]
-	if not m then return end
-	local info = m[name]
+__exports.is_pressed = function(name)
+	local info = shotcuts[name]
 	if not info then return end
-	return imgui.IsShortcutPressed(table.unpack(info, 5))
+	return imgui.IsShortcutPressed(table.unpack(info, 4))
 end
 

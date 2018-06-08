@@ -769,7 +769,10 @@ public: 	// Public for scintilla_send_message
 		try {
 			switch (iMessage) {
 			case SCI_GRABFOCUS:
-				SetFocusState(true);
+				if( mainWindow.win ) {
+					ImGui::SetWindowFocus();
+					ImGui::FocusWindow(mainWindow.win);
+				}
 				break;
 			case SCI_GETDIRECTFUNCTION:
 				return reinterpret_cast<sptr_t>(DirectFunction);
@@ -816,7 +819,6 @@ public: 	// Public for scintilla_send_message
 
 	    if( focus_requested || user_clicked || user_scrolled ) {
 			// fprintf(stderr, "grab focus!\n");
-			SetFocusState(true);
 			ImGui::SetActiveID(id, window);
 			ImGui::SetFocusID(id, window);
 			ImGui::FocusWindow(window);
@@ -929,9 +931,8 @@ public: 	// Public for scintilla_send_message
 		bool hovered = ImGui::ItemHoverable(bb, id);
 		if( hovered || HaveMouseCapture() ) {
 			HandleMouseEvents(io, id, hovered, wRect, now, modifiers);
-		} else if( hasFocus && ImGui::IsAnyMouseDown() ) {
-			SetFocusState(false);
 		}
+		SetFocusState(ImGui::IsWindowFocused());
 		if( hasFocus ) {
 			HandleKeyboardEvents(io, now, modifiers);
 		}
@@ -970,14 +971,11 @@ public: 	// Public for scintilla_send_message
 		Paint(surfaceWindow.get(), rc);
 		surfaceWindow->Release();
 	}
-	void Update(ScintillaIMCallback cb, void* ud) {
+	void Update(bool draw, ScintillaIMCallback cb, void* ud) {
 		ImGuiWindow* window = ImGui::GetCurrentWindow();
 		mainWindow.win = window;
-		if( cb ) {
-			cb(this, ud);
-		} else {
-			Draw(window);
-		}
+		if( cb )	cb(this, ud);
+		if( draw )	Draw(window);
 		mainWindow.win = NULL;
 	}
 private:
@@ -1080,8 +1078,8 @@ void scintilla_imgui_destroy(ScintillaIM* sci) {
 	delete sci;
 }
 
-void scintilla_imgui_update(ScintillaIM* sci, ScintillaIMCallback cb, void* ud) {
-	if( sci ) { sci->Update(cb, ud); }
+void scintilla_imgui_update(ScintillaIM* sci, bool draw, ScintillaIMCallback cb, void* ud) {
+	if( sci ) { sci->Update(draw, cb, ud); }
 }
 
 sptr_t scintilla_imgui_send(ScintillaIM* sci, unsigned int iMessage, uptr_t wParam, sptr_t lParam) {

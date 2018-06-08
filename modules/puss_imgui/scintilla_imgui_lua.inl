@@ -86,6 +86,7 @@ static int _lua__sci_send_wrap(lua_State* L) {
 	int nret = 0;
 	uptr_t wparam = 0;
 	sptr_t lparam = 0;
+	Sci_TextToFind ft;
 	if( !(*ud) )
 		return luaL_argerror(L, 1, "ScintillaNK already free!");
 
@@ -118,6 +119,17 @@ static int _lua__sci_send_wrap(lua_State* L) {
 			lparam = (sptr_t)lua_newuserdata(L, (size_t)len);
 		}
 		break;
+	case IFaceType_findtext:
+		{
+			lparam = (sptr_t)&ft;
+			ft.lpstrText = luaL_checkstring(L, lparam_index);
+			ft.chrg.cpMin = (Sci_PositionCR)luaL_optinteger(L, lparam_index+1, 0);
+			ft.chrg.cpMax = lua_isinteger(L, lparam_index+2)
+				? (Sci_PositionCR)lua_tointeger(L,lparam_index+2)
+				: (Sci_PositionCR)scintilla_imgui_send(*ud, SCI_GETLENGTH, 0, 0)
+				;
+		}
+		break;
 	default:
 		if( decl->lparam < IFaceTypeMax )
 			return luaL_error(L, "not support lparam type(%s)", iface_type_name[decl->lparam]);
@@ -137,9 +149,20 @@ static int _lua__sci_send_wrap(lua_State* L) {
 		return luaL_error(L, "not support return type(%d) system error!", decl->rtype);
 	}
 
-	if( decl->lparam==IFaceType_stringresult ) {
+	switch( decl->lparam ) {
+	case IFaceType_stringresult:
 		lua_pushlstring(L, (const char*)lparam, (size_t)ret);
 		++nret;
+		break;
+	case IFaceType_findtext:
+		if( ((int)ret) != -1 ) {
+			lua_pushinteger(L, ft.chrgText.cpMin);
+			lua_pushinteger(L, ft.chrgText.cpMax);
+			nret += 2;
+		}
+		break;
+	default:
+		break;
 	}
 
 	return nret;
