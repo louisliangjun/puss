@@ -104,19 +104,32 @@ local function show_dialog_find(page, active)
 	if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
 		local text = inbuf:str()
 		if #text > 0 then
-			page_call(page, function(sv)				local search_flags = 0
-				local ps = sv:GetSelectionStart()				local pe = sv:GetSelectionEnd()
-				if imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT) then					sv:SearchAnchor()
-					ps = sv:SearchPrev(search_flags, text)				else					sv:SetCurrentPos(pe)
+			page_call(page, function(sv)
+				local search_flags = 0
+				local ps = sv:GetSelectionStart()
+				local pe = sv:GetSelectionEnd()
+				if imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT) then
+					sv:SearchAnchor()
+					ps = sv:SearchPrev(search_flags, text)
+				else
+					sv:SetCurrentPos(pe)
 					sv:SearchAnchor()
 					ps = sv:SearchNext(search_flags, text)
-					if ps < 0 then						sv:SetCurrentPos(0)
-						sv:SearchAnchor()						ps = sv:SearchNext(search_flags, text)					end				end
-				if ps < 0 then					sv:ClearSelections()				else
+					if ps < 0 then
+						sv:SetCurrentPos(0)
+						sv:SearchAnchor()
+						ps = sv:SearchNext(search_flags, text)
+					end
+				end
+				if ps < 0 then
+					sv:ClearSelections()
+				else
 					pe = ps + #text
 					sv:SetSelection(ps, pe)
 					sv:ScrollRange(ps, pe)
-				end			end)		end
+				end
+			end)
+		end
 		active = true
 	end
 	if active then imgui.SetKeyboardFocusHere(-1) end

@@ -107,15 +107,23 @@ local function on_drop_files(files)
 	end
 end
 
-local function draw_blink_page()	imgui.Text('drag folder here')end
-__exports.update = function()	if #root_folders==0 then		draw_blink_page()	else		local remove_id
+local function draw_blink_page()
+	imgui.Text('drag folder here')
+end
+
+__exports.update = function()
+	if #root_folders==0 then
+		draw_blink_page()
+	else
+		local remove_id
 		for i,v in ipairs(root_folders) do
 			local show, open = imgui.CollapsingHeader(v._label, true)
 			if not open then remove_id = i end
 			if show then show_folder(v) end
 		end
 		if remove_id then table.remove(root_folders, remove_id) end
-	end
+	end
+
 	if imgui.IsWindowHovered() then
 		local files = imgui.GetDropFiles()
 		if files then on_drop_files(files) end
