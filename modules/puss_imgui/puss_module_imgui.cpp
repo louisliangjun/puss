@@ -71,7 +71,7 @@ public:
 	double				g_Time;
 	bool				g_MouseJustPressed[3];
 	GLFWcursor*			g_MouseCursors[ImGuiMouseCursor_COUNT];
-	ImVector<char>		g_DropFiles;
+	ImVector<char>*		g_DropFiles;
 
 	// OpenGL3 data
 	GLuint				g_FontTexture;
@@ -89,33 +89,9 @@ public:
 	// Script data
 	int					g_ScriptErrorHandle;
 	int					g_StackProtected;
-	ImVector<char>		g_Stack;
+	ImVector<char>*		g_Stack;
 
 public:
-	ImguiEnv()
-		: g_Window(NULL)
-		, g_Context(NULL)
-		, g_Time(0.0)
-		, g_FontTexture(0)
-		, g_ShaderHandle(0)
-		, g_VertHandle(0)
-		, g_FragHandle(0)
-		, g_AttribLocationTex(0)
-		, g_AttribLocationProjMtx(0)
-		, g_AttribLocationPosition(0)
-		, g_AttribLocationUV(0)
-		, g_AttribLocationColor(0)
-		, g_VboHandle(0)
-		, g_ElementsHandle(0)
-	{
-		for( int i=0; i<3; ++i ) {
-			g_MouseJustPressed[0] = false;
-		}
-		for( int i=0; i<ImGuiMouseCursor_COUNT; ++i ) {
-			g_MouseCursors[i] = 0;
-		}
-	}
-
 	bool ImGui_ImplGlfwGL3_Init(GLFWwindow* window, bool install_callbacks, const char* glsl_version=NULL);
 	void ImGui_ImplGlfwGL3_RenderDrawData(ImDrawData* draw_data);
 	bool ImGui_ImplGlfwGL3_CreateFontsTexture();
@@ -312,14 +288,14 @@ static void ImGui_ImplGlfw_CharCallback(GLFWwindow*, unsigned int c)
 
 static void ImGui_ImplGlfw_DropCallback(GLFWwindow* w, int count, const char** files) {
 	ImguiEnv* env = (ImguiEnv*)glfwGetWindowUserPointer(w);
-	if( env ) {
-		env->g_DropFiles.reserve(4096);
-		env->g_DropFiles.clear();
+	if( env && env->g_DropFiles ) {
+		env->g_DropFiles->reserve(4096);
+		env->g_DropFiles->clear();
 		for(int i=0; i<count; ++i) {
 			for( const char* p=files[i]; *p; ++p ) {
-				env->g_DropFiles.push_back(*p);
+				env->g_DropFiles->push_back(*p);
 			}
-			env->g_DropFiles.push_back('\n');
+			env->g_DropFiles->push_back('\n');
 		}
 		glfwFocusWindow(w);
 	}
@@ -628,14 +604,14 @@ void ImguiEnv::ImGui_ImplGlfwGL3_NewFrame()
 
 static inline void _wrap_stack_begin(char tp) {
 	ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData);
-	env->g_Stack.push_back(tp);
+	env->g_Stack->push_back(tp);
 }
 
 static inline void _wrap_stack_end(char tp) {
 	ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData);
-	int top_type = (env->g_Stack.size() > env->g_StackProtected) ? env->g_Stack.back() : -1;
+	int top_type = (env->g_Stack->size() > env->g_StackProtected) ? env->g_Stack->back() : -1;
 	if( top_type==tp ) {
-		env->g_Stack.pop_back();
+		env->g_Stack->pop_back();
 	}
 }
 
@@ -670,6 +646,15 @@ static int imgui_destroy_lua(lua_State* L) {
 		env->g_ScriptErrorHandle = LUA_NOREF;
 		luaL_unref(L, LUA_REGISTRYINDEX, ref);
 	}
+	if( env->g_DropFiles ) {
+		delete env->g_DropFiles;
+		env->g_DropFiles = NULL;
+	}
+	if( env->g_Stack ) {
+		delete env->g_Stack;
+		env->g_Stack = NULL;
+	}
+
 	return 0;
 }
 
@@ -723,7 +708,7 @@ static int imgui_update_lua(lua_State* L) {
 	glfwPollEvents();
 	env->ImGui_ImplGlfwGL3_NewFrame();
 
-	env->g_Stack.clear();
+	env->g_Stack->clear();
 	env->g_StackProtected = 0;
 
 	// run
@@ -734,13 +719,13 @@ static int imgui_update_lua(lua_State* L) {
 	win = env->g_Window;
 	if( !win )
 		return 0;
-	env->g_DropFiles.clear();
+	env->g_DropFiles->clear();
 
 	// check stack
 	env->g_StackProtected = 0;
-	while( !env->g_Stack.empty() ) {
-		int tp = env->g_Stack.back();
-		env->g_Stack.pop_back();
+	while( !env->g_Stack->empty() ) {
+		int tp = env->g_Stack->back();
+		env->g_Stack->pop_back();
 		IMGUI_LUA_WRAP_STACK_POP(tp);
 	}
 
@@ -764,16 +749,16 @@ static int imgui_update_lua(lua_State* L) {
 static int imgui_protect_pcall_lua(lua_State* L) {
 	ImguiEnv* env = (ImguiEnv*)luaL_checkudata(L, 1, IMGUI_MT_NAME);
 	int base = env->g_StackProtected;
-	int top = env->g_Stack.size();
+	int top = env->g_Stack->size();
 	env->g_StackProtected = top;
 	lua_rawgeti(L, LUA_REGISTRYINDEX, env->g_ScriptErrorHandle);
 	lua_replace(L, 1);
 	lua_pushboolean(L, lua_pcall(L, lua_gettop(L)-2, LUA_MULTRET, 1)==LUA_OK);
 	lua_replace(L, 1);
 	env->g_StackProtected = base;
-	while( env->g_Stack.size() > top ) {
-		int tp = env->g_Stack.back();
-		env->g_Stack.pop_back();
+	while( env->g_Stack->size() > top ) {
+		int tp = env->g_Stack->back();
+		env->g_Stack->pop_back();
 		IMGUI_LUA_WRAP_STACK_POP(tp);
 	}
 	return lua_gettop(L);
@@ -822,10 +807,13 @@ static int imgui_create_lua(lua_State* L) {
 	const char* title = luaL_optstring(L, 1, "imgui window");
 	int width = (int)luaL_optinteger(L, 2, 1024);
 	int height = (int)luaL_optinteger(L, 3, 768);
-	ImguiEnv* env = new (lua_newuserdata(L, sizeof(ImguiEnv))) ImguiEnv;
+	ImguiEnv* env = (ImguiEnv*)lua_newuserdata(L, sizeof(ImguiEnv));
 	GLFWwindow* win = NULL;
 	int err = 0;
+	memset(env, 0, sizeof(ImguiEnv));
 	env->g_ScriptErrorHandle = LUA_NOREF;
+	env->g_DropFiles = new ImVector<char>();
+	env->g_Stack = new ImVector<char>();
 	luaL_setmetatable(L, IMGUI_MT_NAME);
 
 	lua_pushcfunction(L, imgui_error_handle_default);
@@ -891,8 +879,8 @@ static int imgui_wait_events_lua(lua_State* L) {
 
 static int imgui_get_drop_files_lua(lua_State* L) {
 	ImguiEnv* env = ImGui::GetCurrentContext() ? (ImguiEnv*)(ImGui::GetIO().UserData) : NULL;
-	if( env && !(env->g_DropFiles.empty()) ) {
-		lua_pushlstring(L, env->g_DropFiles.Data, env->g_DropFiles.Size);
+	if( env && env->g_DropFiles && !(env->g_DropFiles->empty()) ) {
+		lua_pushlstring(L, env->g_DropFiles->Data, env->g_DropFiles->Size);
 		return 1;
 	}
 	return 0;
