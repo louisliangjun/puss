@@ -104,46 +104,40 @@ local function show_dialog_find(page, active)
 	if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
 		local text = inbuf:str()
 		if #text > 0 then
-			page_call(page, function(sv)
-				local search_flags = 0
-				local ps = sv:GetSelectionStart()
-				local pe = sv:GetSelectionEnd()
-				if imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT) then
-					sv:SearchAnchor()
-					ps = sv:SearchPrev(search_flags, text)
-				else
-					sv:SetCurrentPos(pe)
+			page_call(page, function(sv)				local search_flags = 0
+				local ps = sv:GetSelectionStart()				local pe = sv:GetSelectionEnd()
+				if imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT) then					sv:SearchAnchor()
+					ps = sv:SearchPrev(search_flags, text)				else					sv:SetCurrentPos(pe)
 					sv:SearchAnchor()
 					ps = sv:SearchNext(search_flags, text)
-					if ps < 0 then
-						sv:SetCurrentPos(0)
-						sv:SearchAnchor()
-						ps = sv:SearchNext(search_flags, text)
-					end
-				end
-				if ps < 0 then
-					sv:ClearSelections()
-				else
+					if ps < 0 then						sv:SetCurrentPos(0)
+						sv:SearchAnchor()						ps = sv:SearchNext(search_flags, text)					end				end
+				if ps < 0 then					sv:ClearSelections()				else
 					pe = ps + #text
 					sv:SetSelection(ps, pe)
 					sv:ScrollRange(ps, pe)
-				end
-			end)
-		end
+				end			end)		end
 		active = true
 	end
 	if active then imgui.SetKeyboardFocusHere(-1) end
 end
 
-
  function show_dialog_replace(page, active)
 	if active then
-		local len, txt = page.sv:GetSelText()
-		if len > 0 then inbuf:strcpy(txt) end
+		page_call(page, function(sv)
+			local len, txt = sv:GetSelText()
+			if len > 0 then inbuf:strcpy(txt) end
+			sv:TargetWholeDocument()
+			sv:SetSearchFlags(0)
+		end)
 	end
 
 	if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
 		print(mode, inbuf:str())
+		local text = inbuf:str()
+		page_call(page, function(sv)
+			print(sv:SearchInTarget(#text, text))
+		end)
 		active = true
 	end
 	if active then imgui.SetKeyboardFocusHere(-1) end
@@ -254,6 +248,7 @@ __exports.open = function(filepath)
 		if not f then return end
 		local ctx = f:read('*a')
 		f:close()
+		if not ctx then return end
 
 		page = new_doc(label, sci.guess_language(name), filepath)
 		page.sv:SetText(ctx)

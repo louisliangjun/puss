@@ -94,24 +94,21 @@ end
 local function on_drop_files(files)
 	for path in files:gmatch('(.-)\n') do
 		local local_path = puss.utf8_to_local(path)
-		local f = io.open(local_path)
-		if f then
-			f:close()
-		else
+		local f = io.open(local_path, 'r')
+		if not f then
 			append_folder(path)
+		else
+			local ctx = f:read(64)
+			if ctx==nil then
+				append_folder(path)
+			end
+			f:close()
 		end
 	end
 end
-
-local function draw_blink_page()
-	imgui.Text('drag folder here')
-end
 
-__exports.update = function()
-	if #root_folders==0 then
-		draw_blink_page()
-	else
-		local remove_id
+local function draw_blink_page()	imgui.Text('drag folder here')end
+__exports.update = function()	if #root_folders==0 then		draw_blink_page()	else		local remove_id
 		for i,v in ipairs(root_folders) do
 			local show, open = imgui.CollapsingHeader(v._label, true)
 			if not open then remove_id = i end
@@ -119,7 +116,6 @@ __exports.update = function()
 		end
 		if remove_id then table.remove(root_folders, remove_id) end
 	end
-
 	if imgui.IsWindowHovered() then
 		local files = imgui.GetDropFiles()
 		if files then on_drop_files(files) end
