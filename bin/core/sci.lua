@@ -81,19 +81,32 @@ __exports.guess_language = function(filename)
 	if lang then return lang end
 end
 
-__exports.create = function(lang)
-	local sv = imgui.CreateScintilla()
-	sv:SetTabWidth(4)
+local function do_reset_styles(sv, lang)
 	local keywords, styles = keywords_map[lang], styles_map[lang]
 	if keywords then
 		sv:SetLexerLanguage(lang)
 		sv:SetKeyWords(0, keywords)
 	end
+	--sv:StyleSetBack(STYLE_DEFAULT, imgui.GetColorU32(ImGuiCol_FrameBg))
+	--sv:StyleSetFore(STYLE_DEFAULT, imgui.GetColorU32(ImGuiCol_Text))
+	sv:StyleSetBack(STYLE_DEFAULT, 0xFFF7FFFF)
+	sv:StyleSetFore(STYLE_DEFAULT, 0x00000000)
+	sv:StyleClearAll()
 	if styles then
 		for k,v in pairs(styles) do
 			sv:StyleSetFore(k, v)
 		end
 	end
+end
+
+__exports.reset_styles = function(sv, lang)
+	sv(false, do_reset_styles, lang)
+end
+
+__exports.create = function(lang)
+	local sv = imgui.CreateScintilla()
+	sv:SetTabWidth(4)
+	sv(false, do_reset_styles, lang)
 	return sv
 end
 

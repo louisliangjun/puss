@@ -188,7 +188,10 @@ function tabs_page_draw(page, active_page)
 		mode = page.dialog_mode
 	end
 
-	if active_page then imgui.SetNextWindowFocus() end
+	if active_page then
+		sci.reset_styles(page.sv, page.lang)
+		imgui.SetNextWindowFocus()
+	end
 
 	local height = mode and -(mode[3] * imgui.GetFrameHeightWithSpacing()) or nil
 	imgui.BeginChild(SOURCE_VIEW_LABEL, nil, height, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
@@ -231,6 +234,7 @@ local function new_doc(label, lang, filepath)
 	local page = app.create_page(label, _ENV)
 	local sv = sci.create(lang)
 	-- sv:SetViewWS(SCWS_VISIBLEALWAYS)
+	page.lang = lang
 	page.sv = sv
 	page.filepath = filepath
 	app.active_page(label)
