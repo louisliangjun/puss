@@ -210,28 +210,112 @@ static int float_array_create(lua_State* L) {
 ]]
 
 local callback_implements = [[
+#define TEXTEDIT_CALLBACK_DATA_NAME	"PussImguiTextEditCallbackData"
+
+static int textedit_callback_data_index(lua_State* L) {
+	ImGuiTextEditCallbackData* data = *(ImGuiTextEditCallbackData**)luaL_checkudata(L, 1, TEXTEDIT_CALLBACK_DATA_NAME);
+	const char* field = luaL_checkstring(L, 2);
+	if( !data ) return luaL_argerror(L, 1, "already free");
+	if( strcmp(field, "EventFlag")==0 ) {
+		lua_pushinteger(L, data->EventFlag);
+	} else if( strcmp(field, "Flags")==0 ) {
+		lua_pushinteger(L, data->Flags);
+	} else if( strcmp(field, "ReadOnly")==0 ) {
+		lua_pushinteger(L, data->ReadOnly);
+	} else if( strcmp(field, "EventChar")==0 ) {
+		lua_pushinteger(L, data->EventChar);
+	} else if( strcmp(field, "EventKey")==0 ) {
+		lua_pushinteger(L, data->EventKey);
+	} else if( strcmp(field, "Buf")==0 ) {
+		lua_pushlstring(L, data->Buf, data->BufTextLen);
+	} else if( strcmp(field, "BufTextLen")==0 ) {
+		lua_pushinteger(L, data->BufTextLen);
+	} else if( strcmp(field, "BufSize")==0 ) {
+		lua_pushinteger(L, data->BufSize);
+	} else if( strcmp(field, "BufDirty")==0 ) {
+		lua_pushboolean(L, data->BufDirty ? 1 : 0);
+	} else if( strcmp(field, "CursorPos")==0 ) {
+		lua_pushinteger(L, data->CursorPos);
+	} else if( strcmp(field, "SelectionStart")==0 ) {
+		lua_pushinteger(L, data->SelectionStart);
+	} else if( strcmp(field, "SelectionEnd")==0 ) {
+		lua_pushinteger(L, data->SelectionEnd);
+	} else {
+		luaL_error(L, "not support field: %s", field);
+	}
+	return 1;
+}
+
+static int textedit_callback_data_newindex(lua_State* L) {
+	ImGuiTextEditCallbackData* data = *(ImGuiTextEditCallbackData**)luaL_checkudata(L, 1, TEXTEDIT_CALLBACK_DATA_NAME);
+	const char* field = luaL_checkstring(L, 2);
+	if( !data ) return luaL_argerror(L, 1, "already free");
+	if( strcmp(field, "EventChar")==0 ) {
+		data->EventChar = (ImWchar)luaL_checkinteger(L, 3);
+	} else if( strcmp(field, "Buf")==0 ) {
+		size_t n = 0;
+		const char* s = luaL_checklstring(L, 3, &n);
+		if( n >= (size_t)(data->BufSize) )
+			luaL_error(L, "Buf over BufSize!");
+		memcpy(data->Buf, s, n+1);
+		data->BufTextLen = (int)n;
+	} else if( strcmp(field, "BufTextLen")==0 ) {
+		int n = (int)luaL_checkinteger(L, 3);
+		if( n>=0 && n<data->BufTextLen ) {
+			data->Buf[n] = '\0';
+			data->BufTextLen = n;
+		}
+	} else if( strcmp(field, "BufDirty")==0 ) {
+		data->BufDirty = lua_toboolean(L, 3) ? true : false;
+	} else if( strcmp(field, "CursorPos")==0 ) {
+		data->CursorPos = (int)luaL_checkinteger(L, 3);
+	} else if( strcmp(field, "SelectionStart")==0 ) {
+		data->SelectionStart = (int)luaL_checkinteger(L, 3);
+	} else if( strcmp(field, "SelectionEnd")==0 ) {
+		data->SelectionEnd = (int)luaL_checkinteger(L, 3);
+	} else {
+		luaL_error(L, "not support field: %s", field);
+	}
+	return 1;
+}
+
+static luaL_Reg textedit_callback_data_methods[] =
+	{ {"__index", textedit_callback_data_index}
+	, {"__newindex", textedit_callback_data_newindex}
+	, {NULL, NULL}
+	};
+
 struct ImGuiCallback_LuaWrapUserData {
 	lua_State*	L;
 	int			f;
 	int			n;
+	int			e;
 };
 
-static int ImGuiTextEditCallback_LuaWrap(ImGuiTextEditCallbackData *data) {
+static int ImGuiTextEditCallback_LuaWrap(ImGuiTextEditCallbackData* data) {
 	ImGuiCallback_LuaWrapUserData* ud = (ImGuiCallback_LuaWrapUserData*)(data->UserData);
 	lua_State* L = ud->L;
 	int res = 0;
 	int n = 0;
+	ImGuiTextEditCallbackData** pu;
 	luaL_checkstack(L, 4 + ud->n, NULL);
 	lua_pushvalue(L, ud->f);
-	lua_pushlightuserdata(L, data);
+	pu = (ImGuiTextEditCallbackData**)lua_newuserdata(L, sizeof(ImGuiTextEditCallbackData*));
+	*pu = data;
+	if( luaL_newmetatable(L, TEXTEDIT_CALLBACK_DATA_NAME) ) {
+		luaL_setfuncs(L, textedit_callback_data_methods, 0);
+	}
+	lua_setmetatable(L, -2);
 	for( n=1; n<=ud->n; ++n ) {
 		lua_pushvalue(L, ud->f + n);
 	}
 	if( lua_pcall(L, n, 1, 0) ) {
-		fprintf(stderr, "ImGuiTextEditCallback error: %s\n", lua_tostring(L, -1));
+		ud->e = 1;
+		lua_replace(L, 1);
 	} else {
 		res = (int)lua_tointeger(L, -1);
 	}
+	*pu = NULL;
 	lua_pop(L, 1);
 	return res;
 }
@@ -251,8 +335,9 @@ implements.InputText = [[	// bool InputText(const char* label, char* buf, size_t
 	ByteArrayLua* arr = (ByteArrayLua*)luaL_checkudata(L, 2, BYTE_ARRAY_NAME);
 	ImGuiInputTextFlags flags = (ImGuiInputTextFlags)luaL_optinteger(L, 3, 0);
 	ImGuiTextEditCallback callback = lua_isfunction(L, 4) ? &ImGuiTextEditCallback_LuaWrap : NULL;
-	ImGuiCallback_LuaWrapUserData callback_ud = { L, 4, top<=4 ? 0 : top-4 };
+	ImGuiCallback_LuaWrapUserData callback_ud = { L, 4, top<=4 ? 0 : top-4, 0 };
 	bool changed = ImGui::InputText(label, (char*)arr->buf, (size_t)arr->cap, flags, callback, &callback_ud);
+	if( callback_ud.e ) { lua_settop(L, 1); lua_error(L); }
 	lua_pushboolean(L, changed ? 1 : 0);
 	return 1;]]
 
@@ -263,8 +348,9 @@ implements.InputTextMultiline = [[	// bool InputTextMultiline(const char* label,
 	ImVec2 size( (float)luaL_optnumber(L, 3, 0.0), (float)luaL_optnumber(L, 4, 0.0) ); 
 	ImGuiInputTextFlags flags = (ImGuiInputTextFlags)luaL_optinteger(L, 5, 0);
 	ImGuiTextEditCallback callback = lua_isfunction(L, 6) ? &ImGuiTextEditCallback_LuaWrap : NULL;
-	ImGuiCallback_LuaWrapUserData callback_ud = { L, 6, top<=6 ? 0 : top-6 };
+	ImGuiCallback_LuaWrapUserData callback_ud = { L, 6, top<=6 ? 0 : top-6, 0 };
 	bool changed = ImGui::InputTextMultiline(label, (char*)arr->buf, (size_t)arr->cap, size, flags, callback, &callback_ud);
+	if( callback_ud.e ) { lua_settop(L, 1); lua_error(L); }
 	lua_pushboolean(L, changed ? 1 : 0);
 	return 1;]]
 

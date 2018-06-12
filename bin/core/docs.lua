@@ -12,7 +12,6 @@ local rebuf = _rebuf
 local SOURCE_VIEW_LABEL = '##SourceView'
 
 local function do_save_page(page)
-	print(page.unsaved)
 	page.unsaved = page.sv:GetModify()
 	if not page.unsaved then
 		return
@@ -70,13 +69,23 @@ local function page_call(page, cb, ...)
 	imgui.EndChild()
 end
 
+local function finish_show_dialog(page, active)
+	if imgui.IsWindowFocused() and imgui.IsKeyPressed(PUSS_IMGUI_KEY_ESCAPE) then
+		page.dialog_mode = nil
+		active = true
+	end
+	if active then
+		imgui.SetKeyboardFocusHere(-1)
+	end
+end
+
 local function show_dialog_jump(page, active)
 	if active then
 		local line = page.sv:LineFromPosition(page.sv:GetCurrentPos())
 		inbuf:strcpy(tostring(line+1))
 	end
 
-	if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue|ImGuiInputTextFlags_CharsDecimal) then
+	if imgui.InputText('##JumpText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue|ImGuiInputTextFlags_CharsDecimal) then
 		local line = tonumber(inbuf:str())
 		if line then
 			active = false
@@ -90,7 +99,44 @@ local function show_dialog_jump(page, active)
 			active = true
 		end
 	end
-	if active then imgui.SetKeyboardFocusHere(-1) end
+
+	finish_show_dialog(page, active)
+end
+
+local function do_search(sv, text, length)
+	local search_flags = 0
+	sv:SetSearchFlags(search_flags)
+
+	local ps = sv:GetSelectionStart()
+	local pe = sv:GetSelectionEnd()
+	if imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT) then
+		sv:SetTargetStart(ps)
+		sv:SetTargetEnd(0)
+		ps = sv:SearchInTarget(length, text)
+		if ps < 0 then
+			sv:SetTargetStart(sv:GetTextLength())
+			sv:SetTargetEnd(pe)
+			ps = sv:SearchInTarget(length, text)
+		end
+	else
+		sv:SetTargetStart(pe)
+		sv:SetTargetEnd(sv:GetTextLength())
+		pe = sv:SearchInTarget(length, text)
+		if pe < 0 then
+			sv:SetTargetStart(0)
+			sv:SetTargetEnd(ps)
+			ps = sv:SearchInTarget(length, text)
+		else
+			ps = pe
+		end
+	end
+	if ps < 0 then
+		sv:ClearSelections()
+	else
+		pe = ps + #text
+		sv:SetSelection(ps, pe)
+		sv:ScrollRange(ps, pe)
+	end
 end
 
 local function show_dialog_find(page, active)
@@ -103,57 +149,36 @@ local function show_dialog_find(page, active)
 
 	if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
 		local text = inbuf:str()
-		if #text > 0 then
-			page_call(page, function(sv)
-				local search_flags = 0
-				local ps = sv:GetSelectionStart()
-				local pe = sv:GetSelectionEnd()
-				if imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT) then
-					sv:SearchAnchor()
-					ps = sv:SearchPrev(search_flags, text)
-				else
-					sv:SetCurrentPos(pe)
-					sv:SearchAnchor()
-					ps = sv:SearchNext(search_flags, text)
-					if ps < 0 then
-						sv:SetCurrentPos(0)
-						sv:SearchAnchor()
-						ps = sv:SearchNext(search_flags, text)
-					end
-				end
-				if ps < 0 then
-					sv:ClearSelections()
-				else
-					pe = ps + #text
-					sv:SetSelection(ps, pe)
-					sv:ScrollRange(ps, pe)
-				end
-			end)
-		end
+		local length = #text
 		active = true
+		if length==0 then return end
+		page_call(page, do_search, text, length)
 	end
-	if active then imgui.SetKeyboardFocusHere(-1) end
+
+	finish_show_dialog(page, active)
 end
 
- function show_dialog_replace(page, active)
+local function show_dialog_find(page, active)
 	if active then
 		page_call(page, function(sv)
 			local len, txt = sv:GetSelText()
 			if len > 0 then inbuf:strcpy(txt) end
-			sv:TargetWholeDocument()
-			sv:SetSearchFlags(0)
 		end)
 	end
 
 	if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
-		print(mode, inbuf:str())
 		local text = inbuf:str()
-		page_call(page, function(sv)
-			print(sv:SearchInTarget(#text, text))
-		end)
+		local length = #text
 		active = true
+		if length==0 then return end
+		page_call(page, do_search, text, length)
 	end
-	if active then imgui.SetKeyboardFocusHere(-1) end
+
+	finish_show_dialog(page, active)
+end
+
+function show_dialog_replace(page, active)
+	show_dialog_find(page, active)
 
 	if imgui.InputText('##ReplaceText', rebuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
 		print(mode, rebuf:str())
@@ -173,9 +198,9 @@ function tabs_page_draw(page, active_page)
 
 	local active
 	if imgui.IsWindowFocused(ImGuiFocusedFlags_ChildWindows) then
-		for _,v in ipairs(dialog_modes) do
+		for i,v in ipairs(dialog_modes) do
 			if shotcuts.is_pressed(v[2]) then
-				active = v
+				active = i
 				break
 			end
 		end
@@ -187,6 +212,7 @@ function tabs_page_draw(page, active_page)
 	else
 		mode = page.dialog_mode
 	end
+	mode = mode and dialog_modes[mode]
 
 	if active_page then
 		sci.reset_styles(page.sv, page.lang)
