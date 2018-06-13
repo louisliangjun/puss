@@ -4,6 +4,7 @@
 
 #if defined(__WIN32__) || defined(_MSC_VER)
 	#include <windows.h>
+	#include <time.h>
 #else
 	#include <sys/time.h>
 	unsigned int GetCurrentTime(void) {
@@ -23,8 +24,8 @@
 #include <cstring>
 #include <cctype>
 #include <cstdio>
-#include <ctime>
 #include <cmath>
+#include <climits>
 
 #include <stdexcept>
 #include <new>
@@ -38,8 +39,11 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui_internal.h"
 
+class SurfaceImpl;
+
 #include "Platform.h"
 
+#include "ILoader.h"
 #include "ILexer.h"
 #include "Scintilla.h"
 #ifdef SCI_LEXER
@@ -59,7 +63,6 @@
 #include "CallTip.h"
 #include "KeyMap.h"
 #include "Indicator.h"
-#include "XPM.h"
 #include "LineMarker.h"
 #include "Style.h"
 #include "ViewStyle.h"
@@ -69,13 +72,13 @@
 #include "Document.h"
 #include "CaseConvert.h"
 #include "UniConversion.h"
-#include "UnicodeFromUTF8.h"
 #include "Selection.h"
 #include "PositionCache.h"
 #include "EditModel.h"
 #include "MarginView.h"
 #include "EditView.h"
 #include "Editor.h"
+
 #include "AutoComplete.h"
 #include "ScintillaBase.h"
 
@@ -83,9 +86,7 @@
 #include "ExternalLexer.h"
 #endif
 
-#ifdef SCI_NAMESPACE
 using namespace Scintilla;
-#endif
 
 // X has a 16 bit coordinate space, so stop drawing here to avoid wrapping
 static const int maxCoordinate = 32000;

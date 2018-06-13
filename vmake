@@ -175,7 +175,7 @@ end)
 -----------------------------
 -- scintilla iface
 
-SCINTILLA_ROOT_PATH = path_concat('3rd', 'scintilla-4.0.0')
+SCINTILLA_ROOT_PATH = path_concat('modules', 'puss_imgui', 'scintilla3')
 SCINTILLA_INCLUDE_PATH = path_concat(SCINTILLA_ROOT_PATH, 'include')
 
 vmake_target_add('scintilla_iface', function(target)
