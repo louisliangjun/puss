@@ -5,11 +5,9 @@ local sci = puss.import('core.sci')
 local shotcuts = puss.import('core.shotcuts')
 
 _inbuf = _inbuf or imgui.CreateByteArray(4*1024, 'find text')
-_rebuf = _rebuf or imgui.CreateByteArray(4*1024, 'replace text')
+_rebuf = _rebuf or imgui.CreateByteArray(4*1024, 'TODO : replace text')
 local inbuf = _inbuf
 local rebuf = _rebuf
-
-local SOURCE_VIEW_LABEL = '##SourceView'
 
 local function do_save_page(page)
 	page.unsaved = page.sv:GetModify()
@@ -64,7 +62,7 @@ local function draw_saving_bar(page)
 end
 
 local function page_call(page, cb, ...)
-	imgui.BeginChild(SOURCE_VIEW_LABEL)
+	imgui.BeginChild(page.label)
 		page.sv(false, cb, ...)
 	imgui.EndChild()
 end
@@ -220,7 +218,7 @@ function tabs_page_draw(page, active_page)
 	end
 
 	local height = mode and -(mode[3] * imgui.GetFrameHeightWithSpacing()) or nil
-	imgui.BeginChild(SOURCE_VIEW_LABEL, nil, height, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
+	imgui.BeginChild(page.label, nil, height, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
 		page.sv(true)
 		page.unsaved = page.sv:GetModify()
 	imgui.EndChild()
