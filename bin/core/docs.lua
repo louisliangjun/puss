@@ -1,6 +1,6 @@
 -- docs.lua
 
-local app = puss.import('core.app')
+local pages = puss.import('core.pages')
 local sci = puss.import('core.sci')
 local shotcuts = puss.import('core.shotcuts')
 
@@ -255,13 +255,13 @@ if puss._sep=='\\' then
 end
 
 local function new_doc(label, lang, filepath)
-	local page = app.create_page(label, _ENV)
+	local page = pages.create(label, _ENV)
 	local sv = sci.create(lang)
 	-- sv:SetViewWS(SCWS_VISIBLEALWAYS)
 	page.lang = lang
 	page.sv = sv
 	page.filepath = filepath
-	app.active_page(label)
+	pages.active(label)
 	return page
 end
 
@@ -270,7 +270,7 @@ __exports.new_page = function()
 	while true do
 		last_index = (last_index or 0) + 1
 		label = string.format('noname##%u', last_index)
-		if not app.lookup_page(label) then break end
+		if not pages.lookup(label) then break end
 	end
 	return new_doc(label, 'lua')
 end
@@ -281,9 +281,9 @@ __exports.open = function(filepath)
 	if not path then path, name = '', filepath end
 	local label = generate_label(name, filepath)
 
-	local page = app.lookup_page(label)
+	local page = pages.lookup(label)
 	if page then
-		app.active_page(label)
+		pages.active(label)
 	else
 		local f = io.open(puss.utf8_to_local(filepath))
 		if not f then return end

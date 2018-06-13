@@ -1,6 +1,6 @@
 -- demos.lua
 
-local app = puss.import('core.app')
+local pages = puss.import('core.app')
 
 function tabs_page_draw(page)
 	imgui.Text(page.label)
@@ -12,8 +12,8 @@ __exports.new_page = function()
 	while true do
 		last_index = (last_index or 0) + 1
 		label = string.format('demo:%u', last_index)
-		if not app.lookup_page(label) then break end
+		if not pages.lookup(label) then break end
 	end
-	return app.create_page(label, _ENV)
+	return pages.create(label, _ENV)
 end
 

@@ -1,6 +1,7 @@
 -- app.lua
 
 local shotcuts = puss.import('core.shotcuts')
+local pages = puss.import('core.pages')
 local docs = puss.import('core.docs')
 local demos = puss.import('core.demos')
 local filebrowser = puss.import('core.filebrowser')
@@ -13,13 +14,6 @@ show_imgui_demos = show_imgui_demos or false
 show_tabs_demo = show_tabs_demo or false
 show_console_window = show_console_window or false
 show_shutcut_window = show_shutcut_window or false
-
-_pages = _pages or {}
-_index = _index or setmetatable({}, {__mode='v'})
-local pages = _pages
-local index = _index
-local selected_page_label = nil
-local next_active_page_label = nil
 
 local function main_menu()
 	local active
@@ -64,68 +58,14 @@ local function main_menu()
 	if shotcuts.is_pressed('app/reload') then puss.reload() end
 end
 
+local function left_pane()
+	main_ui:protect_pcall(filebrowser.update)
+end
+
 local function pages_on_drop_files(files)
 	for path in files:gmatch('(.-)\n') do
 		docs.open(path)
 	end
-end
-
-local function tabs_bar()
-    imgui.BeginTabBar('PussMainTabsBar', ImGuiTabBarFlags_SizingPolicyFit)
-
-	-- set active, must after draw tabs
-	local active = next_active_page_label
-	if active then
-		next_active_page_label = nil
-		local page = index[active]
-		if page then imgui.SetTabItemSelected(active) end
-	end
-
-	-- draw tabs
-	local selected
-	for i, page in ipairs(pages) do
-		local label = page.label
-		page.was_open = page.open
-		selected, page.open = imgui.TabItem(label, page.open, page.unsaved and ImGuiTabItemFlags_UnsavedDocument or ImGuiTabItemFlags_None)
-		if selected then
-			local last = selected_page_label
-			selected_page_label = label
-			local draw = page.module.tabs_page_draw
-			if draw then main_ui:protect_pcall(draw, page, last~=label) end
-		end
-	end
-
-	imgui.EndTabBar()
-
-	-- close 
-	for i=#pages,1,-1 do
-		local page = pages[i]
-		if not page.open then
-			local close = page.module.tabs_page_close
-			if close then main_ui:protect_pcall(close, page) end
-		end
-		if not page.was_open then
-			local destroy = page.module.tabs_page_destroy
-			if destroy then main_ui:protect_pcall(destroy, page) end
-			index[page.label] = nil
-			table.remove(pages, i)
-		end
-	end
-end
-
-local function pages_save_all()
-	local all_saved = true
-	for _,page in ipairs(pages) do
-		local save = page.module.tabs_page_save
-		if save then save(page) end
-		if page.unsaved then all_saved = false end
-	end
-	print(all_saved)
-	return all_saved
-end
-
-local function left_pane()
-	main_ui:protect_pcall(filebrowser.update)
 end
 
 local function main_pane()
@@ -134,7 +74,7 @@ local function main_pane()
 		local files = imgui.GetDropFiles()
 		if files then pages_on_drop_files(files) end
 	end
-	tabs_bar()
+	pages.update(main_ui)
 	imgui.EndChild()
 end
 
@@ -166,14 +106,7 @@ end
 
 local function do_quit_update()
 	if run_sign and main_ui:should_close() then
-		local all_saved = true
-		for _, page in ipairs(pages) do
-			if page.unsaved then
-				all_saved = false
-				break
-			end
-		end
-		if all_saved then
+		if pages.save_all(false) then
 			run_sign = false
 		else
 			imgui.OpenPopup('Quit?')
@@ -185,7 +118,7 @@ local function do_quit_update()
 		imgui.Text('Quit?')
 		imgui.Separator()
 		if imgui.Button('Save all & Quit') then
-			if pages_save_all() then
+			if pages.save_all() then
 				run_sign = false
 			else
 				imgui.CloseCurrentPopup()
@@ -220,23 +153,6 @@ local function do_update(is_init)
 		show_shutcut_window = shotcuts.update(show_shutcut_window)
 	end
 	do_quit_update()
-end
-
-__exports.create_page = function(label, module)
-	local page = index[label]
-	if page then return page end
-	local page = {label=label, module=module, was_open=true, open=true}
-	table.insert(pages, page)
-	index[label] = page
-	return page
-end
-
-__exports.active_page = function(label)
-	next_active_page_label = label
-end
-
-__exports.lookup_page = function(label)
-	return index[label]
 end
 
 __exports.init = function()
