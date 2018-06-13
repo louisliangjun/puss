@@ -304,7 +304,7 @@
       <AdditionalDependencies>$(SolutionDir)3rd\glfw-3.2.1.bin.WIN64\lib-vc2015\glfw3.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
-      <Command>$(SolutionDir)vmake imgui_wrap</Command>
+      <Command>$(SolutionDir)vmake imgui_wrap scintilla_iface</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -321,7 +321,7 @@
       <AdditionalDependencies>$(SolutionDir)3rd\glfw-3.2.1.bin.WIN64\lib-vc2015\glfw3.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
-      <Command>$(SolutionDir)vmake imgui_wrap</Command>
+      <Command>$(SolutionDir)vmake imgui_wrap scintilla_iface</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
