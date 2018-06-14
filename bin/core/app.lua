@@ -46,9 +46,13 @@ local function main_menu()
 					os.execute(string.format('%s/%s %s/tools/debugger.lua &', puss._path, puss._self, puss._path))
 				end
 			end
-			if not puss._in_debug then
+			if puss.debug('running') then
+				if imgui.MenuItem('Stop debug') then
+					puss.debug(false)
+				end
+			else
 				if imgui.MenuItem('Start debug & wait connect...') then
-					puss._in_debug = puss.debug()
+					puss.debug(true)
 				end
 			end
 		else
@@ -169,7 +173,6 @@ __exports.init = function()
 end
 
 __exports.uninit = function()
-	print('uninit')
 	main_ui:destroy()
 	main_ui = nil
 end
@@ -181,7 +184,7 @@ end
 
 if puss.debug then
 	__exports.update = function()
-		puss._in_debug = puss._in_debug and puss.debug()
+		puss.debug()
 		main_ui(do_update)
 		return run_sign
 	end

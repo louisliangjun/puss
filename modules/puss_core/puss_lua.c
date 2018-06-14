@@ -1004,7 +1004,7 @@ void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, con
 	if( env ) {
 		puss_lua_init(env->debug_state, app_path, app_name, module_suffix);
 
-		lua_pushcfunction(L, lua_debugger_run);
+		lua_pushcfunction(L, lua_debugger_debug);
 		lua_setfield(L, 1, "debug");	// puss.debug
 	}
 
