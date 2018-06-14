@@ -3,6 +3,7 @@
 local pages = puss.import('core.pages')
 local sci = puss.import('core.sci')
 local shotcuts = puss.import('core.shotcuts')
+local fs = _fs
 
 _inbuf = _inbuf or imgui.CreateByteArray(4*1024, 'find text')
 _rebuf = _rebuf or imgui.CreateByteArray(4*1024, 'TODO : replace text')
@@ -19,14 +20,11 @@ local function do_save_page(page)
 		return
 	end
 	local len, ctx = page.sv:GetText(page.sv:GetTextLength())
-	local f = io.open(puss.utf8_to_local(page.filepath), 'w')
-	if not f then
+	if not fs.save(page.filepath, ctx) then
 		page.saving = true
 		page.saving_tips = 'save file failed, maybe readonly.'
 		return
 	end
-	f:write(ctx)
-	f:close()
 	page.sv:SetSavePoint()
 	page.saving = nil
 	page.saving_tip = nil
@@ -175,7 +173,7 @@ local function show_dialog_find(page, active)
 	finish_show_dialog(page, active)
 end
 
-function show_dialog_replace(page, active)
+local function show_dialog_replace(page, active)
 	show_dialog_find(page, active)
 
 	if imgui.InputText('##ReplaceText', rebuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
@@ -189,7 +187,7 @@ local dialog_modes =
 	, {'replace', 'docs/replace', 2, show_dialog_replace}
 	}
 
-function tabs_page_draw(page, active_page)
+function tabs_page_draw(page, acctxtive_page)
 	if (not page.saving) and shotcuts.is_pressed('docs/save') then do_save_page(page) end
 	if shotcuts.is_pressed('docs/close') then page.open = false end
 	if page.saving then draw_saving_bar(page) end
@@ -249,9 +247,8 @@ function tabs_page_destroy(page)
 	page.sv:destroy()
 end
 
-local generate_label = function(filename, filepath) return filename..'###'..filepath end
-if puss._sep=='\\' then
-	generate_label = function(filename, filepath) return filename..'###'..filepath:lower() end
+local generate_label = function(filename, filepath)
+	return filename..'###'..fs.filename_hash(filepath)
 end
 
 local function new_doc(label, lang, filepath)
@@ -276,8 +273,8 @@ __exports.new_page = function()
 end
 
 __exports.open = function(filepath)
-	filepath = puss.filename_format(filepath)
-	local path, name = filepath:match('^(.*)[/\\]([^/\\]+)$')
+	filepath = puss.filename_format(filepath, true)
+	local path, name = filepath:match('^(.*)/([^/]+)$')
 	if not path then path, name = '', filepath end
 	local label = generate_label(name, filepath)
 
@@ -285,16 +282,18 @@ __exports.open = function(filepath)
 	if page then
 		pages.active(label)
 	else
-		local f = io.open(puss.utf8_to_local(filepath))
-		if not f then return end
-		local ctx = f:read('*a')
-		f:close()
-		if not ctx then return end
-
-		page = new_doc(label, sci.guess_language(name), filepath)
-		page.sv:SetText(ctx)
-		page.sv:EmptyUndoBuffer()
+		local ctx = fs.load(filepath)
+		if ctx then
+			page = new_doc(label, sci.guess_language(name), filepath)
+			page.sv:SetText(ctx)
+			page.sv:EmptyUndoBuffer()
+		end
 	end
 	return page
+end
+
+__exports.setup = function(new_fs)
+	_fs = new_fs or fs
+	fs = _fs
 end
 

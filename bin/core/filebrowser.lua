@@ -2,6 +2,7 @@
 
 local app = puss.import('core.app')
 local docs = puss.import('core.docs')
+local fs = _fs
 
 --[[
 file {
@@ -25,14 +26,9 @@ root_dir : dir {
 _root_folders = _root_folders or {}
 local root_folders = _root_folders
 
-local gen_key = function(path) return path end
-if puss._sep=='\\' then
-	gen_key = function(path) return path:lower() end
-end
-
 __exports.append_folder = function(path)
 	path = puss.filename_format(path, true)
-	local skey = gen_key(path)
+	local skey = fs.filename_hash(path)
 	for _,v in ipairs(root_folders) do
 		if skey==v._key then return end
 	end
@@ -53,7 +49,7 @@ local function fill_folder(dir)
 	local index, dirs, files = {}, {}, {}
 	dir.index, dir.dirs, dir.files = index, dirs, files
 
-	local fs, ds = puss.file_list(dir.path)
+	local fs, ds = fs.list(dir.path)
 	table.sort(fs)
 	table.sort(ds)
 	for i,v in ipairs(ds) do
@@ -93,16 +89,8 @@ end
 
 local function on_drop_files(files)
 	for path in files:gmatch('(.-)\n') do
-		local local_path = puss.utf8_to_local(path)
-		local f = io.open(local_path, 'r')
-		if not f then
+		if not fs.exist(path) then
 			append_folder(path)
-		else
-			local ctx = f:read(64)
-			if ctx==nil then
-				append_folder(path)
-			end
-			f:close()
 		end
 	end
 end
@@ -128,5 +116,10 @@ __exports.update = function()
 		local files = imgui.GetDropFiles()
 		if files then on_drop_files(files) end
 	end
+end
+
+__exports.setup = function(new_fs)
+	_fs = new_fs or fs
+	fs = _fs
 end
 

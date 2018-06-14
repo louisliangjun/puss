@@ -6,6 +6,10 @@ local docs = puss.import('core.docs')
 local demos = puss.import('core.demos')
 local filebrowser = puss.import('core.filebrowser')
 local console = puss.import('core.console')
+local diskfs = puss.import('core.diskfs')
+
+filebrowser.setup(diskfs)
+docs.setup(diskfs)
 
 local run_sign = true
 local main_ui = _main_ui
@@ -42,8 +46,10 @@ local function main_menu()
 					os.execute(string.format('%s/%s %s/tools/debugger.lua &', puss._path, puss._self, puss._path))
 				end
 			end
-			if imgui.MenuItem('Start debug & wait connect...') then
-				puss.debug()
+			if not puss._in_debug then
+				if imgui.MenuItem('Start debug & wait connect...') then
+					puss._in_debug = puss.debug()
+				end
 			end
 		else
 			if imgui.MenuItem('Reboot As Debug Mode') then
@@ -163,6 +169,7 @@ __exports.init = function()
 end
 
 __exports.uninit = function()
+	print('uninit')
 	main_ui:destroy()
 	main_ui = nil
 end
@@ -170,5 +177,13 @@ end
 __exports.update = function()
 	main_ui(do_update)
 	return run_sign
+end
+
+if puss.debug then
+	__exports.update = function()
+		puss._in_debug = puss._in_debug and puss.debug()
+		main_ui(do_update)
+		return run_sign
+	end
 end
 

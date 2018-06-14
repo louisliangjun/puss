@@ -29,6 +29,7 @@ typedef struct _DebugEnv {
 	void*			frealloc_ud;
 	lua_State*		debug_state;
 	int				debug_handle;
+	int				run_sign;
 
 	void*			main_addr;
 	lua_State*		main_state;
@@ -225,6 +226,7 @@ static int lua_debug_reset(lua_State* L) {
 	DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
 	lua_Hook hook = script_hook;
 	int hook_count = (int)luaL_optinteger(L, 3, 0);
+	int need_update = lua_toboolean(L, 4);
 	int mask = (hook_count > 0) ? (LUA_MASKLINE | LUA_MASKCOUNT) : LUA_MASKLINE;
 	luaL_checktype(L, 2, LUA_TFUNCTION);
 
@@ -232,9 +234,10 @@ static int lua_debug_reset(lua_State* L) {
 		luaL_unref(L, LUA_REGISTRYINDEX, env->debug_handle);
 		env->debug_handle = LUA_NOREF;
 	}
-	lua_pushvalue(L, 2);
 
+	lua_pushvalue(L, 2);
 	env->debug_handle = luaL_ref(L, LUA_REGISTRYINDEX);
+	env->run_sign = need_update;
 	lua_sethook(env->main_state, hook, mask, hook_count);
 	return 0;
 }
@@ -402,14 +405,15 @@ static void lua_debugger_clear(DebugEnv* env) {
 		luaL_unref(L, LUA_REGISTRYINDEX, env->debug_handle);
 		env->debug_handle = LUA_NOREF;
 	}
+	env->run_sign = 0;
 	lua_settop(L, 0);
 	lua_gc(L, LUA_GCCOLLECT, 0);
 }
 
-static int lua_debugger_run(lua_State* hostL) {
+static int lua_debugger_start(lua_State* hostL) {
 	DebugEnv* env = debug_env_fetch(hostL);
-	const char* debugger_script = luaL_optstring(hostL, 1, NULL);
 	lua_State* L = env->debug_state;
+	const char* debugger_script = luaL_optstring(hostL, 1, NULL);
 	lua_debugger_clear(env);
 
 	*((DebugEnv**)lua_newuserdata(L, sizeof(DebugEnv*))) = env;
@@ -427,8 +431,31 @@ static int lua_debugger_run(lua_State* hostL) {
 	if( lua_pcall(L, 1, 0, 0) ) {
 		lua_pop(L, 1);
 	}
+	if( !env->run_sign ) {
+		lua_debugger_clear(env);
+	}
+	lua_pushboolean(hostL, env->run_sign);
+	return 1;
+}
 
-	lua_debugger_clear(env);
-	return 0;
+static int lua_debugger_run(lua_State* hostL) {
+	DebugEnv* env = debug_env_fetch(hostL);
+	if( env->run_sign ) {
+		lua_State* L = env->debug_state;
+		lua_settop(L, 0);
+		if( env->debug_handle!=LUA_NOREF ) {
+			puss_get_value(L, "puss.logerr_handle");
+			lua_rawgeti(L, LUA_REGISTRYINDEX, env->debug_handle);
+			if( lua_pcall(L, 1, 0, 1) ) {
+				lua_pop(L, 1);
+			}
+		} else {
+			env->run_sign = 0;
+		}
+		lua_pushboolean(hostL, env->run_sign);
+		return 1;
+	}
+
+	return lua_debugger_start(hostL);
 }
 
