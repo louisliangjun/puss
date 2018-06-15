@@ -1,6 +1,7 @@
 // scintilla_imgui_lua.inl
 
 #define LUA_IM_SCI_NAME		"ScintillaIM"
+#define LUA_IM_SCI_LEXERS	"ScintillaLexers"
 
 typedef enum _IFaceType
 	{ IFaceType_void			// void
@@ -54,6 +55,11 @@ typedef struct _IFaceVal {
 	const char*			name;
 	lua_Integer			val;
 } IFaceVal;
+
+typedef struct _IFaceLex {
+	const char*			name;
+	lua_Integer			lexer;
+} IFaceLex;
 
 static int im_scintilla_create(lua_State* L) {
 	ScintillaIM** ud;
@@ -326,5 +332,20 @@ static int im_scintilla_set_data(lua_State* L) {
 	lua_pushvalue(L, 3);
 	lua_settable(L, -3);
 	return 0;
+}
+
+static int im_scintilla_get_lexers(lua_State* L, IFaceLex* lexers) {
+	if( lua_getfield(L, LUA_REGISTRYINDEX, LUA_IM_SCI_LEXERS)==LUA_TTABLE )
+		return 1;
+	lua_pop(L, 1);
+
+	lua_newtable(L);
+	lua_pushvalue(L, -1);
+	lua_setfield(L, LUA_REGISTRYINDEX, LUA_IM_SCI_LEXERS);
+	for( IFaceLex* p=lexers; p->name; ++p ) {
+		lua_pushinteger(L, p->lexer);
+		lua_setfield(L, -2, p->name);
+	}
+	return 1;
 }
 

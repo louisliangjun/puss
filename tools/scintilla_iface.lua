@@ -80,13 +80,24 @@ local function ScintillaFaceReadFromFile(name)
 						}
 					self.features[name] = t
 
-				elseif featureType == "enu" or featureType == "lex" then
+				elseif featureType == "enu" then
 					local name, value = featureVal:match('^%s*([%w_]+)%s*=%s*(.-)%s*$')
 					if name==nil then error('Failed to decode :' .. line) end
 					table.insert(self.order, name)
 					local t = { FeatureType = featureType
 						, Category = currentCategory
 						, Value = value
+						}
+					self.features[name] = t
+
+				elseif featureType == "lex" then
+					local name, value, prefix = featureVal:match('^%s*([%w_]+)%s*=%s*([%w_]+)%s+(.-)%s*$')
+					if name==nil then error('Failed to decode :' .. line) end
+					table.insert(self.order, name)
+					local t = { FeatureType = featureType
+						, Category = currentCategory
+						, Value = value
+						, Prefix = prefix
 						}
 					self.features[name] = t
 				end
@@ -136,9 +147,19 @@ function main()
 		if not feature then
 			-- ignore
 		elseif feature.FeatureType=='val' then
-			output:write( strfmt( '{ "%s", %d }\n\t, ', name, feature.Value ) )
+			output:write( strfmt( '{ "%s", %s }\n\t, ', name, name ) )
 		elseif feature.FeatureType=='evt' then
-			output:write( strfmt( '{ "SCN_%s", %d }\n\t, ', name:upper(), feature.Value ) )
+			output:write( strfmt( '{ "SCN_%s", SCN_%s }\n\t, ', name:upper(), name:upper() ) )
+		end
+	end
+	output:write('{ NULL, 0 }\n\t};\n\n')
+
+	-- val
+	output:write('static IFaceLex sci_lexers[] =\n\t{ ')
+	for _, name in ipairs(iface.order) do
+		local feature = iface.features[name]
+		if feature and feature.FeatureType=='lex' then
+			output:write( strfmt( '{ "%s", %s }\n\t, ', name, feature.Value) )
 		end
 	end
 	output:write('{ NULL, 0 }\n\t};\n\n')

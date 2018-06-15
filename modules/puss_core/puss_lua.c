@@ -722,6 +722,37 @@ static int puss_lua_module_require(lua_State* L) {
 	return 1;
 }
 
+static int puss_lua_const_register(lua_State* L) {
+	const char* name = luaL_checkstring(L, 1);
+	switch( lua_type(L, 2) ) {
+	case LUA_TBOOLEAN:
+	case LUA_TNUMBER:
+	case LUA_TSTRING:
+		puss_push_const_table(L);
+		lua_pushvalue(L, 2);
+		if( lua_gettable(L, -2)==LUA_TNIL ) {
+			lua_pop(L, 1);
+			lua_pushvalue(L, 2);
+			lua_pushvalue(L, 3);
+			lua_rawset(L, -3);
+		} else if( !lua_rawequal(L, 3, -1) ) {
+			luaL_error(L, "const[%s] can not change!", name);
+		}
+		break;
+	default:
+		luaL_error(L, "const[%s] only support boolean/number/string type!", name);
+		break;
+	}
+	return 0;
+}
+
+static int puss_lua_const_lookup(lua_State* L) {
+	puss_push_const_table(L);
+	lua_pushvalue(L, 1);
+	lua_rawget(L, -2);
+	return 1;
+}
+
 static int puss_lua_pickle_pack(lua_State* L) {
 	size_t len = 0;
 	void* buf = puss_pickle_pack(&len, L, 1, -1);
@@ -864,6 +895,8 @@ static int puss_lua_file_list(lua_State* L) {
 
 static luaL_Reg puss_methods[] =
 	{ {"require",			puss_lua_module_require}
+	, {"const_register",	puss_lua_const_register}
+	, {"const_lookup",		puss_lua_const_lookup}
 	, {"pickle_pack",		puss_lua_pickle_pack}
 	, {"pickle_unpack",		puss_lua_pickle_unpack}
 	, {"filename_format",	puss_lua_filename_format}

@@ -889,6 +889,10 @@ static int imgui_get_drop_files_lua(lua_State* L) {
 #include "scintilla_imgui_lua.inl"
 #include "scintilla.iface.inl"
 
+static int im_scintilla_lexers(lua_State* L) {
+	return im_scintilla_get_lexers(L, sci_lexers);
+}
+
 static luaL_Reg imgui_lua_apis[] =
 	{ {"Create", imgui_create_lua}
 	, {"WaitEventsTimeout", imgui_wait_events_lua}
@@ -897,6 +901,7 @@ static luaL_Reg imgui_lua_apis[] =
 	, {"CreateByteArray", byte_array_create}
 	, {"CreateFloatArray", float_array_create}
 	, {"CreateScintilla", im_scintilla_create}
+	, {"GetScintillaLexers", im_scintilla_lexers}
 
 	, {"GetIODisplaySize", imgui_getio_display_size_lua}
 	, {"GetIODeltaTime", imgui_getio_delta_time_lua}
