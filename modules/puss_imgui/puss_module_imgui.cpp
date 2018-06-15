@@ -937,26 +937,6 @@ static void lua_register_imgui(lua_State* L) {
 	lua_setfield(L, -1, "__index");
 }
 
-static void im_scintilla_update_callback(ScintillaIM* sci, void* ud) {
-	lua_State* L = (lua_State*)ud;
-	ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData);
-	if( !env )	return;
-	lua_pushvalue(L, 3);	// function
-	lua_replace(L, 2);
-	lua_pushvalue(L, 1);	// self
-	lua_replace(L, 3);
-	lua_rawgeti(L, LUA_REGISTRYINDEX, env->g_ScriptErrorHandle);
-	lua_replace(L, 1);		// error handle
-	lua_pcall(L, lua_gettop(L)-2, 0, 1);
-}
-
-static int im_scintilla_update(lua_State* L) {
-	ScintillaIM** ud = (ScintillaIM**)luaL_checkudata(L, 1, LUA_IM_SCI_NAME);
-	bool draw = lua_toboolean(L, 2);
-	scintilla_imgui_update(*ud, draw, lua_isfunction(L, 3) ? im_scintilla_update_callback : NULL, L);
-	return 0;
-}
-
 static void lua_register_scintilla(lua_State* L) {
 	// consts
 	{
@@ -975,6 +955,8 @@ static void lua_register_scintilla(lua_State* L) {
 			, {"__call",im_scintilla_update}
 			, {"__gc",im_scintilla_destroy}
 			, {"destroy",im_scintilla_destroy}
+			, {"set",im_scintilla_set_data}
+			, {"get",im_scintilla_get_data}
 			, {NULL, NULL}
 			};
 		luaL_setfuncs(L, methods, 0);

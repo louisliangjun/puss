@@ -133,6 +133,18 @@ __exports.guess_language = function(filename)
 	if lang then return lang end
 end
 
+local function on_margin_click(sv, modifiers, pos, margin)
+	local line = sv:LineFromPosition(pos)
+	-- print(sv, modifiers, pos, margin, sv:MarkerGet(line))
+	if (sv:MarkerGet(line) & 0x01)==0 then
+		sv:MarkerAdd(line, 0)
+	else
+		sv:MarkerDelete(line, 0)
+	end
+end
+
+_STYLE_VER = (_STYLE_VER or 0) + 1
+
 local function do_reset_styles(sv, lang)
 	local keywords, styles = keywords_map[lang], styles_map[lang]
 	if keywords then
@@ -151,15 +163,42 @@ local function do_reset_styles(sv, lang)
 			sv:StyleSetFore(k, v)
 		end
 	end
+
+	sv:SetTabWidth(4)
+
+	sv:SetSelBack(true, 0xe8bb9f)
+
+	sv:SetCaretLineVisible(true)
+	sv:SetCaretLineBack(0xb0ffff)
+
+	sv:SetMarginTypeN(0, SC_MARGIN_NUMBER)
+	sv:SetMarginWidthN(0, sv:TextWidth(STYLE_LINENUMBER, "_99999"))
+	sv:SetMarginSensitiveN(0, true)
+
+	sv:SetMarginTypeN(1, SC_MARGIN_SYMBOL)
+	sv:SetMarginWidthN(1, 12)
+	sv:SetMarginMaskN(1, 0x01)
+	sv:SetMarginSensitiveN(1, true)
+
+	sv:MarkerSetFore(0, 0x808000)
+	sv:MarkerSetBack(0, 0x2000c0)
+	sv:MarkerDefine(0, SC_MARK_ROUNDRECT)
+
+	sv:set(SCN_MARGINCLICK, on_margin_click)
+
+	sv:set('sci.style', _STYLE_VER)
+	sv:set('sci.lang', lang)
 end
 
 __exports.reset_styles = function(sv, lang)
+	-- print('check reset_styles', sv:get('sci.style'), _STYLE_VER, sv:get('sci.lang'), lang)
+	if sv:get('sci.style')==_STYLE_VER and sv:get('sci.lang')==lang then return end
+	-- print('reset_styles', _STYLE_VER, lang)
 	sv(false, do_reset_styles, lang)
 end
 
 __exports.create = function(lang)
 	local sv = imgui.CreateScintilla()
-	sv:SetTabWidth(4)
 	sv(false, do_reset_styles, lang)
 	return sv
 end

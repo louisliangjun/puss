@@ -7,7 +7,7 @@ __exports.filename_hash = function(filepath)
 end
 
 __exports.save = function(filepath, ctx)
-	local f = io.open(puss.utf8_to_local(page.filepath), O_WRITE)
+	local f = io.open(puss.utf8_to_local(filepath), O_WRITE)
 	if not f then return false end
 	f:write(ctx)
 	f:close()

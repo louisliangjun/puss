@@ -187,7 +187,7 @@ local dialog_modes =
 	, {'replace', 'docs/replace', 2, show_dialog_replace}
 	}
 
-function tabs_page_draw(page, acctxtive_page)
+function tabs_page_draw(page, active_page)
 	if (not page.saving) and shotcuts.is_pressed('docs/save') then do_save_page(page) end
 	if shotcuts.is_pressed('docs/close') then page.open = false end
 	if page.saving then draw_saving_bar(page) end

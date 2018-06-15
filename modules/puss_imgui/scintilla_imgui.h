@@ -8,7 +8,7 @@
 
 class ScintillaIM;
 
-typedef void (*ScintillaIMCallback)(ScintillaIM* sci, void* ud);
+typedef void (*ScintillaIMCallback)(ScintillaIM* sci, const SCNotification* ev, void* ud);
 
 ScintillaIM*	scintilla_imgui_create();
 void			scintilla_imgui_destroy(ScintillaIM* sci);

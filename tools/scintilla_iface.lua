@@ -133,8 +133,12 @@ function main()
 	output:write('static IFaceVal sci_values[] =\n\t{ ')
 	for _, name in ipairs(iface.order) do
 		local feature = iface.features[name]
-		if feature and feature.FeatureType=='val' then
+		if not feature then
+			-- ignore
+		elseif feature.FeatureType=='val' then
 			output:write( strfmt( '{ "%s", %d }\n\t, ', name, feature.Value ) )
+		elseif feature.FeatureType=='evt' then
+			output:write( strfmt( '{ "SCN_%s", %d }\n\t, ', name:upper(), feature.Value ) )
 		end
 	end
 	output:write('{ NULL, 0 }\n\t};\n\n')

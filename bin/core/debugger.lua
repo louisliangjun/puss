@@ -83,7 +83,7 @@ local function debug_pane()
 			disconnect()
 			_sock = puss_socket.socket_create()
 			sock = _sock
-			sock:connect('127.0.0.1', 9999)
+			print(sock:connect('127.0.0.1', 9999))
 		end
 	end
 	imgui.SameLine()

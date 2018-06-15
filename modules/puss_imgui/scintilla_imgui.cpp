@@ -305,6 +305,7 @@ public:
 		float w = rc.Width();
 		float h = rc.Height();
 		float r = (w < h) ? w : h;
+		canvas->PathArcTo(ImVec2(cx, cy), r, 0.0f, (float)(2*kPi));
 		canvas->PathFillConvex(SetPenColour(back));
 		canvas->PathArcTo(ImVec2(cx, cy), r, 0.0f, (float)(2*kPi));
 		canvas->PathStroke(SetPenColour(fore), true, line_thickness);
@@ -745,6 +746,8 @@ public:
 	ScintillaIM()
 		: captureMouse(false)
 		, rectangularSelectionModifier(SCMOD_ALT)
+		, notify_callback(NULL)
+		, notify_callback_ud(0)
 	{
 		view.bufferedDraw = false;
 		wMain = (WindowID)&mainWindow;
@@ -975,8 +978,12 @@ public: 	// Public for scintilla_send_message
 	void Update(bool draw, ScintillaIMCallback cb, void* ud) {
 		ImGuiWindow* window = ImGui::GetCurrentWindow();
 		mainWindow.win = window;
-		if( cb )	cb(this, ud);
-		if( draw )	Draw(window);
+		notify_callback = cb;
+		notify_callback_ud = ud;
+		if( cb ) { cb(this, NULL, ud); }
+		if( draw) { Draw(window); }
+		notify_callback = NULL;
+		notify_callback_ud = NULL;
 		mainWindow.win = NULL;
 	}
 private:
@@ -1038,6 +1045,9 @@ private:
 	void NotifyChange() override {
 	}
 	void NotifyParent(SCNotification scn) override {
+		if( notify_callback ) {
+			notify_callback(this, &scn, notify_callback_ud);
+		}
 	}
 	void CopyToClipboard(const SelectionText &selectedText) override {
 		ImGui::SetClipboardText(selectedText.Data());
@@ -1069,6 +1079,8 @@ private:
 	bool captureMouse;
 	int rectangularSelectionModifier;
 	WindowIM mainWindow;
+	ScintillaIMCallback notify_callback;
+	void* notify_callback_ud;
 };
 
 ScintillaIM* scintilla_imgui_create() {
