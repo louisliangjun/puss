@@ -61,12 +61,14 @@ end
 local puss_socket = puss.require('puss_socket')
 local listen_sock = puss_socket.socket_create()
 local sock, addr
+local send_breaked_frame
+
 print('puss_socket.socket_create()', listen_sock)
 print('debug noblock:', listen_sock:set_nonblock(true))
 print('debug bind:', listen_sock:bind(nil, 9999))
 print('debug listen:', listen_sock:listen())
 
-local function response(cmd, ...)
+local function send_to_debugger_client(cmd, ...)
 	sock:send(puss.pickle_pack(cmd, ...))
 end
 
@@ -76,19 +78,26 @@ local function dispatch(cmd, ...)
 	if not handle then
 		error('unknown cmd('..tostring(cmd)..')')
 	end
-	return response(cmd, handle(puss_debug, ...))
+	return send_to_debugger_client(cmd, handle(puss_debug, ...))
 end
 
-return puss_debug:reset(function(ev, ...)
-	if ev then
-		print('event handle:', ...)
-	elseif sock then
+local function on_update()
+	if sock then
 		local res, msg = sock:recv()
 		if res < 0 then
-			-- print('recv error:', res, msg)
+			if msg==10035 then	-- WSAEWOULDBLOCK(10035)	-- TODO : now win32 test
+				return
+			end
+			-- WSAECONNRESET(10054)
+			print('recv error:', res, msg)
+			sock:close()
+			sock, addr = nil, nil
+			send_breaked_frame = nil
 		elseif res==0 then
 			print('detach:', sock, addr)
+			sock:close()
 			sock, addr = nil, nil
+			send_breaked_frame = nil
 		else
 			dispatch(puss.pickle_unpack(msg))
 		end
@@ -96,7 +105,23 @@ return puss_debug:reset(function(ev, ...)
 		sock, addr = listen_sock:accept()
 		if sock then
 			print('attached:', sock, addr)
+			send_breaked_frame = nil
 		end
 	end
+end
+
+return puss_debug:reset(function(breaked, frame)
+	if breaked and sock then
+		if send_breaked_frame ~= frame then
+			send_to_debugger_client('breaked')
+			send_breaked_frame = frame
+		else
+			-- breaked idle
+		end
+	else
+		puss_debug:continue()
+		send_breaked_frame = nil
+	end
+	on_update()
 end, 8192)
 

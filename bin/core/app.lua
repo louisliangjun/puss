@@ -184,11 +184,3 @@ __exports.update = function()
 	return run_sign
 end
 
-if puss.debug then
-	__exports.update = function()
-		puss.debug()
-		main_ui(do_update)
-		return run_sign
-	end
-end
-
