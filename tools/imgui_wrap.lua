@@ -1055,7 +1055,7 @@ function main()
 		overrides.IsRectVisible = [[ return lua_gettop(L)<=2 ? wrap_IsRectVisible_v2(L) : wrap_IsRectVisible_v2v2(L);]]
 		overrides.CollapsingHeader = [[return lua_type(L, 2)==LUA_TBOOLEAN ? wrap_CollapsingHeader_spbi(L) : wrap_CollapsingHeader_si(L);]]
 		wraps.Selectable = 'wrap_Selectable_spbiv2'
-		wraps.ListBoxHeader = 'wrap_ListBoxHeader_sv2'
+		overrides.ListBoxHeader = [[return lua_gettop(L)==2 ? wrap_ListBoxHeader_sii(L) : wrap_ListBoxHeader_sv2(L);]]
 		wraps.ListBoxHeader2 = 'wrap_ListBoxHeader_sii'
 		overrides.Value = [[return lua_type(L, 2)==LUA_TNUMBER ? (lua_isinteger(L, 2) ? wrap_Value_si(L) : wrap_Value_sfs(L)) : wrap_Value_sb(L);]]
 		wraps.ValueUnsigned = 'wrap_Value_su'

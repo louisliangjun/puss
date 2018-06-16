@@ -1,12 +1,13 @@
 -- debugger.lua
 
+local diskfs = puss.import('core.diskfs')
 local shotcuts = puss.import('core.shotcuts')
 local pages = puss.import('core.pages')
 local docs = puss.import('core.docs')
 local demos = puss.import('core.demos')
 local filebrowser = puss.import('core.filebrowser')
 local console = puss.import('core.console')
-local diskfs = puss.import('core.diskfs')
+local dbg = puss.import('core.dbg')
 
 filebrowser.setup(diskfs)
 docs.setup(diskfs)
@@ -36,7 +37,9 @@ local function main_menu()
 end
 
 local function left_pane()
+	imgui.BeginChild('PussLeftPane', 0, 0, false)
 	main_ui:protect_pcall(filebrowser.update)
+	imgui.EndChild()
 end
 
 local function pages_on_drop_files(files)
@@ -73,50 +76,6 @@ local function debug_call(cmd, ...)
 	end
 end
 
-local function debug_pane()
-	if sock then
-		if imgui.Button("disconnect") then
-			disconnect()
-		end
-	else
-		if imgui.Button("connect") then
-			disconnect()
-			_sock = puss_socket.socket_create()
-			sock = _sock
-			print(sock:connect('127.0.0.1', 9999))
-		end
-	end
-	imgui.SameLine()
-	if imgui.Button("step_into") then
-		debug_call('step_into')
-	end
-	imgui.SameLine()
-	if imgui.Button("continue") then
-		debug_call('continue')
-	end
-	imgui.SameLine()
-	if imgui.Button("dostring") then
-		debug_call('host_pcall', 'puss.trace_dostring', [[
-			for lv=6,1000 do
-				local info = debug.getinfo(lv, 'Slut')
-				if not info then break end
-				print('	LV:', lv)
-				for k,v in pairs(info) do print('	', k,v) end
-			end
-			print(debug.getlocal(6, 1))
-			print(debug.getlocal(9, -1))
-			do
-				local info = debug.getinfo(9, 'f')
-				print(debug.getupvalue(info.func, 2))
-			end
-		]])
-	end
-	imgui.SameLine()
-	if imgui.Button("stack") then
-		debug_call('host_pcall', 'puss._debug.fetch_stack')
-	end
-end
-
 local function main_pane()
 	imgui.BeginChild('PussPagesPane', 0, 0, false)
 	if imgui.IsWindowHovered(ImGuiHoveredFlags_ChildWindows) then
@@ -124,6 +83,12 @@ local function main_pane()
 		if files then pages_on_drop_files(files) end
 	end
 	pages.update(main_ui)
+	imgui.EndChild()
+end
+
+local function right_pane()
+	imgui.BeginChild('PussRightPane', 0, 0, false)
+	main_ui:protect_pcall(dbg.update, main_ui)
 	imgui.EndChild()
 end
 
@@ -143,12 +108,14 @@ local function show_main_window(is_init)
 	imgui.SetNextWindowSize(imgui.GetIODisplaySize())
 	imgui.Begin('PussMainWindow', nil, MAIN_WINDOW_FLAGS)
 	main_menu()
-	imgui.Columns(2)
+	imgui.Columns(3)
 	if is_init then imgui.SetColumnWidth(-1, 200) end
 	left_pane()
 	imgui.NextColumn()
-	debug_pane()
+	if is_init then imgui.SetColumnWidth(-1, imgui.GetWindowWidth()-400) end
 	main_pane()
+	imgui.NextColumn()
+	right_pane()
 	imgui.Columns(1)
 	imgui.End()
 end

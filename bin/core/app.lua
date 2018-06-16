@@ -51,7 +51,7 @@ local function main_menu()
 					puss.debug(false)
 				end
 			else
-				if imgui.MenuItem('Start debug & wait connect...') then
+				if imgui.MenuItem('Start debug ...') then
 					puss.debug(true)
 				end
 			end
@@ -69,7 +69,9 @@ local function main_menu()
 end
 
 local function left_pane()
+	imgui.BeginChild('PussLeftPane', 0, 0, false)
 	main_ui:protect_pcall(filebrowser.update)
+	imgui.EndChild()
 end
 
 local function pages_on_drop_files(files)

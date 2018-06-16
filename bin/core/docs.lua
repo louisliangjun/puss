@@ -154,25 +154,6 @@ local function show_dialog_find(page, active)
 	finish_show_dialog(page, active)
 end
 
-local function show_dialog_find(page, active)
-	if active then
-		page_call(page, function(sv)
-			local len, txt = sv:GetSelText()
-			if len > 0 then inbuf:strcpy(txt) end
-		end)
-	end
-
-	if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
-		local text = inbuf:str()
-		local length = #text
-		active = true
-		if length==0 then return end
-		page_call(page, do_search, text, length)
-	end
-
-	finish_show_dialog(page, active)
-end
-
 local function show_dialog_replace(page, active)
 	show_dialog_find(page, active)
 
