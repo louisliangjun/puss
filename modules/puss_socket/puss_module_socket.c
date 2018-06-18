@@ -99,6 +99,11 @@ static int lua_socket_close(lua_State* L) {
 	return 0;
 }
 
+static int lua_socket_valid(lua_State* L) {
+	Socket* ud = lua_check_socket(L, 1, 1);
+	return ud->fd != INVALID_SOCKET;
+}
+
 static int lua_socket_bind(lua_State* L) {
 	Socket* ud = lua_check_socket(L, 1, 1);
 	const char* ip = luaL_optstring(L, 2, "0.0.0.0");
@@ -199,6 +204,22 @@ static int lua_socket_recv(lua_State* L) {
 	return 2;
 }
 
+static int lua_socket_peek(lua_State* L) {
+	luaL_Buffer B;
+	Socket* ud = lua_check_socket(L, 1, 1);
+	int len = (int)luaL_checkinteger(L, 2);
+	int res;
+	luaL_buffinitsize(L, &B, len);
+	res = recv(ud->fd, B.b, len, MSG_PEEK);
+	lua_pushinteger(L, res);
+	if( res < 0 ) {
+		lua_pushinteger(L, get_last_error());
+	} else {
+		luaL_pushresultsize(&B, (size_t)res);
+	}
+	return 2;
+}
+
 static int lua_socket_sendto(lua_State* L) {
 	Socket* ud = lua_check_socket(L, 1, 1);
 	const char* ip = luaL_checkstring(L, 2);
@@ -249,9 +270,38 @@ static int lua_socket_set_nonblock(lua_State* L) {
 	return 1;
 }
 
+static int lua_socket_get_data(lua_State* L) {
+	lua_check_socket(L, 1, 1);
+	luaL_argcheck(L, !lua_isnoneornil(L, 2), 2, "key MUST exist");
+	if( lua_getuservalue(L, 1)==LUA_TTABLE ) {
+		lua_pushvalue(L, 2);
+		lua_gettable(L, -2);
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+static int lua_socket_set_data(lua_State* L) {
+	lua_check_socket(L, 1, 1);
+	luaL_argcheck(L, !lua_isnoneornil(L, 2), 2, "key MUST exist");
+	lua_pushnil(L);
+	if( lua_getuservalue(L, 1)!=LUA_TTABLE ) {
+		lua_pop(L, 1);
+		lua_newtable(L);
+		lua_pushvalue(L, -1);
+		lua_setuservalue(L, 1);
+	}
+	lua_pushvalue(L, 2);
+	lua_pushvalue(L, 3);
+	lua_settable(L, -3);
+	return 0;
+}
+
 static const luaL_Reg socket_methods[] =
 	{ {"__index",		NULL}
 	, {"__gc",			lua_socket_close}
+	, {"valid",			lua_socket_valid}
 	, {"close",			lua_socket_close}
 	, {"bind",			lua_socket_bind}
 	, {"listen",		lua_socket_listen}
@@ -259,9 +309,12 @@ static const luaL_Reg socket_methods[] =
 	, {"connect",		lua_socket_connect}
 	, {"send",			lua_socket_send}
 	, {"recv",			lua_socket_recv}
+	, {"peek",			lua_socket_peek}
 	, {"sendto",		lua_socket_sendto}
 	, {"recvfrom",		lua_socket_recvfrom}
 	, {"set_nonblock",	lua_socket_set_nonblock}
+	, {"get_data",		lua_socket_get_data}
+	, {"set_data",		lua_socket_set_data}
 	, {NULL, NULL}
 	};
 
