@@ -46,9 +46,9 @@ end
 local function sock_send()
 	if not send_queue[1] then return end
 	local pkt = send_queue[1]
-	print('send start:', send_offset)
+	print('dbg send start:', send_offset)
 	local res, err = sock:send(pkt, send_offset)
-	print('send end:', res, err)
+	print('dbg send end:', res, err)
 	if res > 0 then
 		send_offset = send_offset + res
 		if send_offset >= #pkt then
@@ -56,23 +56,23 @@ local function sock_send()
 			table.remove(send_queue, 1)
 		end
 	else
-		print('send:', res)
+		print('dbg send:', res)
 	end
 end
 
 local function sock_recv()
-	print('recv start:')
+	print('dbg recv start:')
 	local res, msg = sock:recv()
-	print('recv end:', res, msg)
+	print('dbg recv end:', res, msg)
 	if res < 0 then
 		if msg==11 then return end	-- linux
 		if msg==10035 then return end	-- WSAEWOULDBLOCK(10035)	-- TODO : now win32 test
 		-- WSAECONNRESET(10054)
-		print('recv error:', res, msg)
+		print('dbg recv error:', res, msg)
 		sock:close()
 		sock, addr = nil, nil
 	elseif res==0 then
-		print('detach:', sock, addr)
+		print('dbg detach:', sock, addr)
 		sock:close()
 		sock, addr = nil, nil
 	else

@@ -73,10 +73,10 @@ local function send_to_debugger_client(cmd, ...)
 end
 
 local function dispatch(cmd, ...)
-	print( 'recv result:', cmd, ... )
+	print( 'host recv result:', cmd, ... )
 	local handle = puss_debug[cmd]
 	if not handle then
-		error('unknown cmd('..tostring(cmd)..')')
+		error('host unknown cmd('..tostring(cmd)..')')
 	end
 	return send_to_debugger_client(cmd, handle(puss_debug, ...))
 end
@@ -85,16 +85,15 @@ local function on_update()
 	if sock then
 		local res, msg = sock:recv()
 		if res < 0 then
-			if msg==10035 then	-- WSAEWOULDBLOCK(10035)	-- TODO : now win32 test
-				return
-			end
+			if msg==11 then return end	-- linux
+			if msg==10035 then return end	-- WSAEWOULDBLOCK(10035)	-- TODO : now win32 test
 			-- WSAECONNRESET(10054)
-			print('recv error:', res, msg)
+			print('host recv error:', res, msg)
 			sock:close()
 			sock, addr = nil, nil
 			send_breaked_frame = nil
 		elseif res==0 then
-			print('detach:', sock, addr)
+			print('host detach:', sock, addr)
 			sock:close()
 			sock, addr = nil, nil
 			send_breaked_frame = nil
@@ -104,7 +103,7 @@ local function on_update()
 	else
 		sock, addr = listen_sock:accept()
 		if sock then
-			print('attached:', sock, addr)
+			print('host attached:', sock, addr)
 			send_breaked_frame = nil
 			sock:set_nonblock(true)
 		end
