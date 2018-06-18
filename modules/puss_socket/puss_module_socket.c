@@ -169,7 +169,12 @@ static int lua_socket_send(lua_State* L) {
 	Socket* ud = lua_check_socket(L, 1, 1);
 	size_t len = 0;
 	const char* msg = luaL_checklstring(L, 2, &len);
-	int res = send(ud->fd, msg, (int)len, 0);
+	int offset = (int)luaL_optinteger(L, 3, 0);
+	int res;
+	if( (offset < 0) || (offset >= len) ) {
+		return luaL_error(L, "offset(%d) out of range(%d)", offset, len);
+	}
+	res = send(ud->fd, msg+offset, (int)(len - offset), 0);
 	lua_pushinteger(L, res);
 	if( res < 0 ) {
 		lua_pushinteger(L, get_last_error());

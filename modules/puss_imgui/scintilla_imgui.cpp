@@ -329,7 +329,7 @@ public:
 		ImDrawList* canvas = ImGui::GetWindowDrawList();
 		ImVec2 pos(offset.x + rc.left, offset.y + rc.top);
 		ImVec4 rect(pos.x, pos.y, offset.x + rc.right, offset.y + rc.bottom);
-		ImFont* font = (ImFont*)(font_.fid);
+		ImFont* font = (ImFont*)(font_.GetID());
 		if( font ) {
 			canvas->AddText(font, font->FontSize, pos, SetPenColour(fore), s, s+len, 0.0f, &rect);
 		}
@@ -356,7 +356,7 @@ public:
 		}
 	}
 	static XYPOSITION DoMeasureWidths(Font &font_, const char *s, int len, XYPOSITION *positions) {
-		ImFont* font = (ImFont*)(font_.fid);
+		ImFont* font = (ImFont*)(font_.GetID());
 		XYPOSITION w = 0.0f;
 		unsigned int wch = 0;
 		float scale = font ? font->Scale : 1.0f;
@@ -392,18 +392,18 @@ public:
 		return DoMeasureWidths(font_, &ch, 1, NULL);
 	}
 	XYPOSITION Ascent(Font &font_) override {
-		ImFont* font = (ImFont*)(font_.fid);
+		ImFont* font = (ImFont*)(font_.GetID());
 		return font ? font->Ascent : 1.0f;
 	}
 	XYPOSITION Descent(Font &font_) override {
-		ImFont* font = (ImFont*)(font_.fid);
+		ImFont* font = (ImFont*)(font_.GetID());
 		return font ? -(font->Descent) : 1.0f;
 	}
 	XYPOSITION InternalLeading(Font &font_) override {
 		return 0.0f;
 	}
 	XYPOSITION Height(Font &font_) override {
-		ImFont* font = (ImFont*)(font_.fid);
+		ImFont* font = (ImFont*)(font_.GetID());
 		return font ? font->FontSize : 18.0f;
 	}
 	XYPOSITION AverageCharWidth(Font &font_) override {

@@ -106,6 +106,7 @@ local function on_update()
 		if sock then
 			print('attached:', sock, addr)
 			send_breaked_frame = nil
+			sock:set_nonblock(true)
 		end
 	end
 end

@@ -7,30 +7,76 @@ local sock = _sock
 local stack_list = {}
 local stack_clicked = nil
 local stack_current = 1
+local send_queue = {}
+local send_offset = 0
+
+local function send_to_debugger_host(cmd, ...)
+	if not sock then return end
+	table.insert(send_queue, puss.pickle_pack(cmd, ...))
+end
 
 local function disconnect()
-	if sock then
-		local s = sock
-		sock = nil
-		_sock = nil
-		s:close()
+	if not sock then return end
+	local s = sock
+	sock = nil
+	_sock = nil
+	s:close()
+end
+
+local stubs = {}
+
+stubs.breaked = function()
+	send_to_debugger_host('host_pcall', 'puss._debug.fetch_stack')
+end
+
+stubs.fetch_stack = function(ok, res)
+	stack_list = {} 
+	if not ok then return print('fetch_stack failed:', res) end
+	stack_list = res
+	stack_current = 1
+end
+
+local function dispatch(cmd, ...)
+	print(cmd, ...)
+	local h = stubs[cmd]
+	if not h then return print('unknown stub:', cmd) end
+	h(...)
+end
+
+local function sock_send()
+	if not send_queue[1] then return end
+	local pkt = send_queue[1]
+	print('send start:', send_offset)
+	local res, err = sock:send(pkt, send_offset)
+	print('send end:', res, err)
+	if res > 0 then
+		send_offset = send_offset + res
+		if send_offset >= #pkt then
+			send_offset = 0
+			table.remove(send_queue, 1)
+		end
+	else
+		print('send:', res)
 	end
 end
 
-local function debug_call(cmd, ...)
-	if not sock then
-		print('need connect')
-		return
-	end
-	sock:send(puss.pickle_pack(cmd, ...))
+local function sock_recv()
+	print('recv start:')
 	local res, msg = sock:recv()
+	print('recv end:', res, msg)
 	if res < 0 then
-		print('debugger recv error:', res, msg)
+		if msg==11 then return end	-- linux
+		if msg==10035 then return end	-- WSAEWOULDBLOCK(10035)	-- TODO : now win32 test
+		-- WSAECONNRESET(10054)
+		print('recv error:', res, msg)
+		sock:close()
+		sock, addr = nil, nil
 	elseif res==0 then
-		print('debugger disconnected')
-		disconnect()
+		print('detach:', sock, addr)
+		sock:close()
+		sock, addr = nil, nil
 	else
-		print('debugger recv:', puss.pickle_unpack(msg))
+		dispatch(puss.pickle_unpack(msg))
 	end
 end
 
@@ -44,20 +90,21 @@ local function debug_toolbar()
 			disconnect()
 			_sock = puss_socket.socket_create()
 			sock = _sock
+			sock:set_nonblock(true)
 			print(sock:connect('127.0.0.1', 9999))
 		end
 	end
 	imgui.SameLine()
 	if imgui.Button("step_into") then
-		debug_call('step_into')
+		send_to_debugger_host('step_into')
 	end
 	imgui.SameLine()
 	if imgui.Button("continue") then
-		debug_call('continue')
+		send_to_debugger_host('continue')
 	end
 	imgui.SameLine()
 	if imgui.Button("dostring") then
-		debug_call('host_pcall', 'puss.trace_dostring', [[
+		send_to_debugger_host('host_pcall', 'puss.trace_dostring', [[
 			for lv=6,1000 do
 				local info = debug.getinfo(lv, 'Slut')
 				if not info then break end
@@ -74,7 +121,7 @@ local function debug_toolbar()
 	end
 	imgui.SameLine()
 	if imgui.Button("stack") then
-		debug_call('host_pcall', 'puss._debug.fetch_stack')
+		send_to_debugger_host('host_pcall', 'puss._debug.fetch_stack')
 	end
 end
 
@@ -146,11 +193,16 @@ local function draw_vars()
 			imgui.TreeNodeEx(label, ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen, label)
 			if imgui.IsItemClicked() then print(label) end
 		end
+	else
+		info.locals = {}
+		send_to_debugger_host('host_pcall', 'puss._debug.fetch_vars', stack_current)
 	end
 end
 
 __exports.update = function(main_ui)
 	fetch_test_data()
+	if sock then sock_send() end
+	if sock then sock_recv() end
 
 	main_ui:protect_pcall(debug_toolbar)
 	if imgui.CollapsingHeader('Stack', ImGuiTreeNodeFlags_DefaultOpen) then

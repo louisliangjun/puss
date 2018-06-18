@@ -59,23 +59,6 @@ local function disconnect()
 	end
 end
 
-local function debug_call(cmd, ...)
-	if not sock then
-		print('need connect')
-		return
-	end
-	sock:send(puss.pickle_pack(cmd, ...))
-	local res, msg = sock:recv()
-	if res < 0 then
-		print('debugger recv error:', res, msg)
-	elseif res==0 then
-		print('debugger disconnected')
-		disconnect()
-	else
-		print('debugger recv:', puss.pickle_unpack(msg))
-	end
-end
-
 local function main_pane()
 	imgui.BeginChild('PussPagesPane', 0, 0, false)
 	if imgui.IsWindowHovered(ImGuiHoveredFlags_ChildWindows) then
