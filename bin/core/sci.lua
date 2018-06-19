@@ -176,16 +176,6 @@ do
 	end
 end
 
-local function on_margin_click(sv, modifiers, pos, margin)
-	local line = sv:LineFromPosition(pos)
-	-- print(sv, modifiers, pos, margin, sv:MarkerGet(line))
-	if (sv:MarkerGet(line) & 0x01)==0 then
-		sv:MarkerAdd(line, 0)
-	else
-		sv:MarkerDelete(line, 0)
-	end
-end
-
 _STYLE_VER = (_STYLE_VER or 0) + 1
 
 local function do_reset_styles(sv, lang)
@@ -235,8 +225,6 @@ local function do_reset_styles(sv, lang)
 		sv:MarkerSetFore(0, 0x808000)
 		sv:MarkerSetBack(0, 0x2000c0)
 		sv:MarkerDefine(0, SC_MARK_ROUNDRECT)
-
-		sv:set(SCN_MARGINCLICK, on_margin_click)
 	end
 
 	sv:set('sci.style', _STYLE_VER)

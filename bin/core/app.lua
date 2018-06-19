@@ -19,6 +19,8 @@ show_tabs_demo = show_tabs_demo or false
 show_console_window = show_console_window or false
 show_shutcut_window = show_shutcut_window or false
 
+shotcuts.register('app/reload', 'Reload scripts', 'F12', true, false, false, false)
+
 local function main_menu()
 	local active
 	if not imgui.BeginMenuBar() then return end

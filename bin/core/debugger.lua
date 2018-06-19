@@ -10,7 +10,11 @@ local console = puss.import('core.console')
 local sock = puss.import('core.sock')
 
 filebrowser.setup(diskfs)
-docs.setup(diskfs)
+
+docs.setup(diskfs, function(page, event, ...)
+	local f = _ENV[event]
+	if f then return f(page, ...) end
+end)
 
 local run_sign = true
 local main_ui = _main_ui
@@ -22,6 +26,15 @@ local stack_current = 1
 
 show_console_window = show_console_window or false
 
+shotcuts.register('app/reload', 'Reload scripts', 'F12', true, false, false, false)
+
+shotcuts.register('debugger/bp', 'set/unset bp', 'F9', false, false, false, false)
+
+shotcuts.register('debugger/continue', 'continue', 'F5', false, false, false, false)
+shotcuts.register('debugger/step_over', 'step over', 'F10', false, false, false, false)
+shotcuts.register('debugger/step_into', 'step into', 'F11', false, false, false, false)
+shotcuts.register('debugger/step_out', 'step out', 'F11', false, true, false, false)
+
 local stubs = {}
 
 stubs.breaked = function()
@@ -30,14 +43,15 @@ end
 
 stubs.fetch_stack = function(ok, res)
 	stack_list = {} 
-	if not ok then return print('fetch_stack failed:', res) end
+	if not ok then return print('fetch_stack failed:', ok, res) end
+	if type(res)~='table' then return print('fetch_stack failed:', ok, res) end
 	stack_list = res
 	stack_current = 1
 	local info = stack_list[stack_current]
 	if info then
 		sock.send(socket, 'fetch_vars', info.level)
 		local fname = info.source:match('^@(.+)$')
-		if fname then docs.open(fname, info.currentline) end
+		if fname then docs.open(fname, info.currentline-1) end
 	end
 end
 
@@ -57,6 +71,13 @@ local function dispatch(cmd, ...)
 	local h = stubs[cmd]
 	if not h then return print('unknown stub:', cmd) end
 	h(...)
+end
+
+local function shortcuts_update()
+	if shotcuts.is_pressed('debugger/step_over') then sock.send(socket, 'step_over') end
+	if shotcuts.is_pressed('debugger/step_into') then sock.send(socket, 'step_into') end
+	if shotcuts.is_pressed('debugger/step_out') then sock.send(socket, 'step_out') end
+	if shotcuts.is_pressed('debugger/continue') then sock.send(socket, 'continue') end
 end
 
 local function debug_toolbar()
@@ -93,7 +114,7 @@ local function draw_stack()
 	if clicked then
 		sock.send(socket, 'fetch_vars', clicked.level)
 		local fname = clicked.source:match('^@(.+)$')
-		if fname then docs.open(fname, clicked.currentline) end
+		if fname then docs.open(fname, clicked.currentline-1) end
 	end
 end
 
@@ -127,6 +148,8 @@ end
 
 local function debug_pane(main_ui)
 	sock.update(socket, dispatch)
+
+	shortcuts_update()
 
 	main_ui:protect_pcall(debug_toolbar)
 	if imgui.CollapsingHeader('Stack', ImGuiTreeNodeFlags_DefaultOpen) then
@@ -167,15 +190,33 @@ local function pages_on_drop_files(files)
 	end
 end
 
--- debugger client
--- 
-local function disconnect()
-	if sock then
-		local s = sock
-		sock = nil
-		_sock = nil
-		s:close()
+local function trigger_bp(page, line)
+	local sv = page.sv
+	if (sv:MarkerGet(line) & 0x01)==0 then
+		sv:MarkerAdd(line, 0)
+		sock.send(socket, 'set_bp', page.filepath, line+1)
+	else
+		sv:MarkerDelete(line, 0)
+		sock.send(socket, 'del_bp', page.filepath, line+1)
 	end
+end
+
+function docs_page_on_draw(page)
+	if shotcuts.is_pressed('debugger/bp') then
+		local line = page.sv:LineFromPosition(page.sv:GetCurrentPos())
+		trigger_bp(page, line)
+	end
+end
+
+function docs_page_on_create(page)
+	print('page create')
+end
+
+function docs_page_on_margin_click(page, modifiers, pos, margin)
+	print(page, modifiers, pos, margin)
+	-- print(page.sv, sv:MarkerGet(line))
+	local line = page.sv:LineFromPosition(pos)
+	trigger_bp(page, line)
 end
 
 local function main_pane()

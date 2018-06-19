@@ -3,12 +3,19 @@
 local pages = puss.import('core.pages')
 local sci = puss.import('core.sci')
 local shotcuts = puss.import('core.shotcuts')
+local hook = _hook or function(page, event) end
 local fs = _fs
 
 _inbuf = _inbuf or imgui.CreateByteArray(4*1024, 'find text')
 _rebuf = _rebuf or imgui.CreateByteArray(4*1024, 'TODO : replace text')
 local inbuf = _inbuf
 local rebuf = _rebuf
+
+shotcuts.register('docs/save', 'Save file', 'S', true, false, false, false)
+shotcuts.register('docs/close', 'Close file', 'W', true, false, false, false)
+shotcuts.register('docs/find', 'Find in file', 'F', true, false, false, false)
+shotcuts.register('docs/jump', 'Jump in file', 'G', true, false, false, false)
+shotcuts.register('docs/replace', 'Replace in file', 'H', true, false, false, false)
 
 local function do_save_page(page)
 	page.unsaved = page.sv:GetModify()
@@ -167,6 +174,7 @@ local dialog_modes =
 function tabs_page_draw(page, active_page)
 	if (not page.saving) and shotcuts.is_pressed('docs/save') then do_save_page(page) end
 	if shotcuts.is_pressed('docs/close') then page.open = false end
+	puss.trace_pcall(hook, page, 'docs_page_on_draw')
 	if page.saving then draw_saving_bar(page) end
 
 	local active
@@ -197,7 +205,7 @@ function tabs_page_draw(page, active_page)
 		page.scroll_to_line = nil
 
 		page_call(page, function(sv)
-			sv:GotoLine(line-1)
+			sv:GotoLine(line)
 			sv:ScrollCaret()
 			imgui.SetWindowFocus()
 		end)
@@ -235,18 +243,25 @@ function tabs_page_destroy(page)
 	page.sv:destroy()
 end
 
-local generate_label = function(filename, filepath)
+local function generate_label(filename, filepath)
 	return filename..'###'..fs.filename_hash(filepath)
+end
+
+local function on_margin_click(sv, modifiers, pos, margin)
+	puss.trace_pcall(hook, sv:get('page'), 'docs_page_on_margin_click', modifiers, pos, margin)
 end
 
 local function new_doc(label, lang, filepath)
 	local page = pages.create(label, _ENV)
 	local sv = sci.create(lang)
 	-- sv:SetViewWS(SCWS_VISIBLEALWAYS)
+	sv:set('page', page)
+	sv:set(SCN_MARGINCLICK, on_margin_click)
 	page.lang = lang
 	page.sv = sv
 	page.filepath = filepath
 	pages.active(label)
+	puss.trace_pcall(hook, page, 'docs_page_on_create')
 	return page
 end
 
@@ -277,14 +292,16 @@ __exports.open = function(filepath, line)
 			page.sv:EmptyUndoBuffer()
 		end
 	end
-	if page and line and line>0 then
+	if page and line then
 		page.scroll_to_line = line
 	end
 	return page
 end
 
-__exports.setup = function(new_fs)
+__exports.setup = function(new_fs, new_hook)
 	_fs = new_fs or fs
+	_hook = new_hook or _hook
 	fs = _fs
+	hook = _hook
 end
 

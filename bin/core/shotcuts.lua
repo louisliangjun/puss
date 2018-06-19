@@ -20,35 +20,6 @@ end
 _shotcuts = _shotcuts or {}
 local shotcuts = _shotcuts
 
-local function shotcut_register(name, desc, key, ctrl, shift, alt, super)
-	local code = keys[key]
-	if not code then error('shotcut_register() not support key:'..tostring(key)) end
-	shotcuts[name] = { name, desc or '', key, code, ctrl, shift, alt, super }
-end
-
--- shotcuts register start
--- 
-shotcut_register('app/reload', 'Reload scripts', 'F12', true, false, false, false)
-
-shotcut_register('docs/save', 'Save file', 'S', true, false, false, false)
-shotcut_register('docs/close', 'Close file', 'W', true, false, false, false)
-shotcut_register('docs/find', 'Find in file', 'F', true, false, false, false)
-shotcut_register('docs/jump', 'Jump in file', 'G', true, false, false, false)
-shotcut_register('docs/replace', 'Replace in file', 'H', true, false, false, false)
-
--- 
--- shotcuts register end
-
-local shotcut_sorted = {}
-do
-	local keys = {}
-	for k in pairs(shotcuts) do table.insert(keys, k) end
-	table.sort(keys)
-	for _, name in ipairs(keys) do
-		table.insert(shotcut_sorted, shotcuts[name])
-	end
-end
-
 local shotcut_columns = {'name', 'desc', 'key', 'code', 'ctrl', 'shift', 'alt', 'super'}
 local n_shotcut_columns = #shotcut_columns
 
@@ -59,7 +30,18 @@ local function shotcut_draw_row(row)
 	end
 end
 
+local shotcut_sorted = nil
+
 local function shotcut_update()
+	if not shotcut_sorted then
+		local keys = {}
+		for k in pairs(shotcuts) do table.insert(keys, k) end
+		table.sort(keys)
+		for _, name in ipairs(keys) do
+			table.insert(shotcut_sorted, shotcuts[name])
+		end
+	end
+
 	imgui.Columns(n_shotcut_columns)
 	imgui.Separator()
 	shotcut_draw_row(shotcut_columns)
@@ -69,6 +51,13 @@ local function shotcut_update()
 	end
 	imgui.Columns(1)
 	imgui.Separator()
+end
+
+__exports.register = function(name, desc, key, ctrl, shift, alt, super)
+	local code = keys[key]
+	if not code then error('shotcut_register() not support key:'..tostring(key)) end
+	shotcuts[name] = { name, desc or '', key, code, ctrl, shift, alt, super }
+	shotcut_sorted = nil
 end
 
 __exports.update = function(show)
