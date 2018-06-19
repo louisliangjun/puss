@@ -51,9 +51,6 @@ static const char* puss_push_parse_args(lua_State* L, int* is_script_file, int a
 		}
 	}
 
-	if( script_arg==0 )
-		return NULL;
-
 	for( i=1; i<argc; ++i ) {
 		if( i==script_arg ) {
 			if( is_exec ) {
@@ -71,7 +68,7 @@ static const char* puss_push_parse_args(lua_State* L, int* is_script_file, int a
 	}
 
 	*is_script_file = 1;
-	return argv[script_arg];
+	return script_arg==0 ? PUSS_DEFAULT_SCRIPT_FILE : argv[script_arg];
 }
 
 static int puss_dummy_main(lua_State* L) {
@@ -141,10 +138,6 @@ static int puss_init(lua_State* L) {
 
 	script = puss_push_parse_args(L, &is_script_file, argc, argv);
 	lua_setfield(L, -2, "_args");			// puss._args
-	if( !script ) {
-		is_script_file = 1;
-		script = PUSS_DEFAULT_SCRIPT_FILE;
-	}
 	lua_pushboolean(L, is_script_file);
 	lua_setfield(L, -2, "_is_script_file");	// puss._is_script_file
 	script = is_script_file ? puss_push_script_filename(L, script) : lua_pushstring(L, script);

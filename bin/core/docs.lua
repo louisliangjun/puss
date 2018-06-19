@@ -86,11 +86,7 @@ local function show_dialog_jump(page, active)
 		if line then
 			active = false
 			page.dialog_mode = nil	-- hide dialog
-			page_call(page, function(sv)
-				sv:GotoLine(line-1)
-				sv:ScrollCaret()
-				imgui.SetWindowFocus()
-			end)
+			page.scroll_to_line = line
 		else
 			active = true
 		end
@@ -196,6 +192,17 @@ function tabs_page_draw(page, active_page)
 		imgui.SetNextWindowFocus()
 	end
 
+	if page.scroll_to_line then
+		local line = page.scroll_to_line
+		page.scroll_to_line = nil
+
+		page_call(page, function(sv)
+			sv:GotoLine(line-1)
+			sv:ScrollCaret()
+			imgui.SetWindowFocus()
+		end)
+	end
+
 	local height = mode and -(mode[3] * imgui.GetFrameHeightWithSpacing()) or nil
 	imgui.BeginChild(page.label, nil, height, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
 		page.sv(true)
@@ -253,7 +260,7 @@ __exports.new_page = function()
 	return new_doc(label, 'lua')
 end
 
-__exports.open = function(filepath)
+__exports.open = function(filepath, line)
 	filepath = puss.filename_format(filepath, true)
 	local path, name = filepath:match('^(.*)/([^/]+)$')
 	if not path then path, name = '', filepath end
@@ -269,6 +276,9 @@ __exports.open = function(filepath)
 			page.sv:SetText(ctx)
 			page.sv:EmptyUndoBuffer()
 		end
+	end
+	if page and line and line>0 then
+		page.scroll_to_line = line
 	end
 	return page
 end

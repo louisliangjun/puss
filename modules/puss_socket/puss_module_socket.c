@@ -6,13 +6,13 @@
 	#include <mswsock.h>
 
 	typedef int	socklen_t;
-	#define get_last_error()	(int)WSAGetLastError()
+	#define get_last_error()		(int)WSAGetLastError()
+	#define can_ignore_error(err)	((err)==WSAEWOULDBLOCK)
 
 	static int socket_set_nonblock(SOCKET fd, int nonblock) {
 		u_long flag = nonblock ? 1 : 0;
 		return ioctlsocket(fd, FIONBIO, &flag);
 	}
-
 #else
 	#include <sys/socket.h>
 	#include <arpa/inet.h>
@@ -24,6 +24,7 @@
 	#define INVALID_SOCKET		-1
 	#define closesocket(fd)		close(fd)
 	#define get_last_error()	errno
+	#define can_ignore_error(err)	((err)==EAGAIN || (err)==EINTR)
 
 	static int socket_set_nonblock(SOCKET fd, int nonblock) {
 		int flags = fcntl(fd, F_GETFL, 0);
@@ -82,6 +83,13 @@ typedef struct Socket {
 
 #define PUSS_SOCKET_NAME	"[PussSocket]"
 
+static inline void socket_close(Socket* ud) {
+	if( socket_check_valid(ud->fd) ) {
+		closesocket(ud->fd);
+		ud->fd = INVALID_SOCKET;
+	}
+}
+
 static inline Socket* lua_check_socket(lua_State* L, int arg, int check_valid_fd) {
 	Socket* ud = (Socket*)luaL_checkudata(L, arg, PUSS_SOCKET_NAME);
 	if( check_valid_fd ) {
@@ -90,18 +98,26 @@ static inline Socket* lua_check_socket(lua_State* L, int arg, int check_valid_fd
 	return ud;
 }
 
-static int lua_socket_close(lua_State* L) {
+static int lua_socket_valid(lua_State* L) {
 	Socket* ud = lua_check_socket(L, 1, 0);
-	if( socket_check_valid(ud->fd) ) {
-		closesocket(ud->fd);
-		ud->fd = INVALID_SOCKET;
-	}
-	return 0;
+	lua_pushboolean(L, socket_check_valid(ud->fd));
+	return 1;
 }
 
-static int lua_socket_valid(lua_State* L) {
-	Socket* ud = lua_check_socket(L, 1, 1);
-	return ud->fd != INVALID_SOCKET;
+static int lua_socket_create(lua_State* L) {
+	Socket* ud = lua_check_socket(L, 1, 0);
+	int af = (int)luaL_optinteger(L, 2, AF_INET);
+	int type = (int)luaL_optinteger(L, 3, SOCK_STREAM);
+	int protocol = (int)luaL_optinteger(L, 4, IPPROTO_TCP);
+	ud->fd = socket(af, type, protocol);
+	lua_pushboolean(L, socket_check_valid(ud->fd));
+	return 1;
+}
+
+static int lua_socket_close(lua_State* L) {
+	Socket* ud = lua_check_socket(L, 1, 0);
+	socket_close(ud);
+	return 0;
 }
 
 static int lua_socket_bind(lua_State* L) {
@@ -151,7 +167,8 @@ static int lua_socket_accept(lua_State* L) {
 	sock = (Socket*)lua_newuserdata(L, sizeof(Socket));
 	sock->fd = fd;
 	luaL_setmetatable(L, PUSS_SOCKET_NAME);
-	return 1;
+	socket_addr_push(L, &addr);
+	return 2;
 }
 
 static int lua_socket_connect(lua_State* L) {
@@ -189,34 +206,54 @@ static int lua_socket_send(lua_State* L) {
 }
 
 static int lua_socket_recv(lua_State* L) {
-	luaL_Buffer B;
 	Socket* ud = lua_check_socket(L, 1, 1);
 	int len = (int)luaL_optinteger(L, 2, LUAL_BUFFERSIZE);
-	int res;
-	luaL_buffinitsize(L, &B, len);
-	res = recv(ud->fd, B.b, len, 0);
-	lua_pushinteger(L, res);
-	if( res < 0 ) {
-		lua_pushinteger(L, get_last_error());
-	} else {
-		luaL_pushresultsize(&B, (size_t)res);
-	}
-	return 2;
-}
-
-static int lua_socket_peek(lua_State* L) {
+	int recv_full = (int)lua_toboolean(L, 3);
 	luaL_Buffer B;
-	Socket* ud = lua_check_socket(L, 1, 1);
-	int len = (int)luaL_checkinteger(L, 2);
 	int res;
+	if( len <= 0 )
+		return 0;
 	luaL_buffinitsize(L, &B, len);
-	res = recv(ud->fd, B.b, len, MSG_PEEK);
-	lua_pushinteger(L, res);
-	if( res < 0 ) {
-		lua_pushinteger(L, get_last_error());
+	if( recv_full ) {
+		res = recv(ud->fd, B.b, len, MSG_PEEK);
+		if( res > 0 ) {
+			if( res < len )
+				return 0;
+			luaL_pushresultsize(&B, (size_t)res);
+			while( len > 0 ) {
+				int res = recv(ud->fd, B.b, len, 0);
+				if( res > 0 ) {
+					len -= res;
+				} else if( res==0 ) {
+					socket_close(ud);
+					break;
+				} else {
+					res = get_last_error();
+					if( !can_ignore_error(res) ) {
+						socket_close(ud);
+						break;
+					}
+				}
+			}
+			return 1;
+		}
 	} else {
-		luaL_pushresultsize(&B, (size_t)res);
+		res = recv(ud->fd, B.b, len, 0);
+		if( res > 0 ) {
+			luaL_pushresultsize(&B, (size_t)res);
+			return 1;
+		}
 	}
+	if( res==0 ) {
+		socket_close(ud);
+	} else {
+		res = get_last_error();
+		if( !can_ignore_error(res) ) {
+			socket_close(ud);
+		}
+	}
+	lua_pushnil(L);
+	lua_pushinteger(L, res);
 	return 2;
 }
 
@@ -248,14 +285,14 @@ static int lua_socket_recvfrom(lua_State* L) {
 	memset(&addr, 0, sizeof(addr));
 	luaL_buffinitsize(L, &B, len);
 	res = recvfrom(ud->fd, B.b, len, 0, &addr, &addr_len);
-	lua_pushinteger(L, res);
-	if( res < 0 ) {
+	if( res >= 0 ) {
+		lua_pushnil(L);
 		lua_pushinteger(L, get_last_error());
-		return 2;
+	} else {
+		luaL_pushresultsize(&B, (size_t)res);
+		socket_addr_push(L, &addr);
 	}
-	luaL_pushresultsize(&B, (size_t)res);
-	socket_addr_push(L, &addr);
-	return 3;
+	return 2;
 }
 
 static int lua_socket_set_nonblock(lua_State* L) {
@@ -270,38 +307,21 @@ static int lua_socket_set_nonblock(lua_State* L) {
 	return 1;
 }
 
-static int lua_socket_get_data(lua_State* L) {
-	lua_check_socket(L, 1, 1);
-	luaL_argcheck(L, !lua_isnoneornil(L, 2), 2, "key MUST exist");
-	if( lua_getuservalue(L, 1)==LUA_TTABLE ) {
-		lua_pushvalue(L, 2);
-		lua_gettable(L, -2);
-	} else {
-		lua_pushnil(L);
-	}
-	return 1;
-}
-
-static int lua_socket_set_data(lua_State* L) {
-	lua_check_socket(L, 1, 1);
-	luaL_argcheck(L, !lua_isnoneornil(L, 2), 2, "key MUST exist");
-	lua_pushnil(L);
+static int lua_socket_utable(lua_State* L) {
+	lua_check_socket(L, 1, 0);
 	if( lua_getuservalue(L, 1)!=LUA_TTABLE ) {
-		lua_pop(L, 1);
 		lua_newtable(L);
 		lua_pushvalue(L, -1);
 		lua_setuservalue(L, 1);
 	}
-	lua_pushvalue(L, 2);
-	lua_pushvalue(L, 3);
-	lua_settable(L, -3);
-	return 0;
+	return 1;
 }
 
 static const luaL_Reg socket_methods[] =
 	{ {"__index",		NULL}
 	, {"__gc",			lua_socket_close}
 	, {"valid",			lua_socket_valid}
+	, {"create",		lua_socket_create}
 	, {"close",			lua_socket_close}
 	, {"bind",			lua_socket_bind}
 	, {"listen",		lua_socket_listen}
@@ -309,40 +329,24 @@ static const luaL_Reg socket_methods[] =
 	, {"connect",		lua_socket_connect}
 	, {"send",			lua_socket_send}
 	, {"recv",			lua_socket_recv}
-	, {"peek",			lua_socket_peek}
 	, {"sendto",		lua_socket_sendto}
 	, {"recvfrom",		lua_socket_recvfrom}
 	, {"set_nonblock",	lua_socket_set_nonblock}
-	, {"get_data",		lua_socket_get_data}
-	, {"set_data",		lua_socket_set_data}
+	, {"utable",		lua_socket_utable}
 	, {NULL, NULL}
 	};
 
-static int lua_socket_create(lua_State* L) {
-	int af = (int)luaL_optinteger(L, 1, AF_INET);
-	int type = (int)luaL_optinteger(L, 2, SOCK_STREAM);
-	int protocol = (int)luaL_optinteger(L, 3, IPPROTO_TCP);
-	struct sockaddr addr;
-	socklen_t addr_len = sizeof(struct sockaddr);
+static int lua_socket_new(lua_State* L) {
 	Socket* ud = lua_newuserdata(L, sizeof(Socket));
-	ud->fd = socket(af, type, protocol);
+	ud->fd = INVALID_SOCKET;
 	luaL_setmetatable(L, PUSS_SOCKET_NAME);
-	if( !socket_check_valid(ud->fd) ) {
-		lua_pop(L, 1);
-		lua_pushnil(L);
-		lua_pushinteger(L, get_last_error());
-	} else if( getsockname(ud->fd, &addr, &addr_len) < 0 ) {
-		lua_pushnil(L);
-	} else {
-		socket_addr_push(L, &addr);
-	}
-	return 2;
+	return 1;
 }
 
 #define PUSS_SOCKET_LIB_NAME	"[PussSocketLib]"
 
 static const luaL_Reg socket_lib_methods[] =
-	{ {"socket_create",	lua_socket_create}
+	{ {"socket_new",	lua_socket_new}
 	, {NULL, NULL}
 	};
 

@@ -364,16 +364,18 @@ static int lua_debug_host_pcall(lua_State* L) {
 	size_t len = 0;
 	void* buf = puss_pickle_pack(&len, L, 3, -1);
 	HostInvokeUD ud = { func, len, buf };
+	int res;
 	if( !lua_checkstack(hostL, 8) )
 		return luaL_error(L, "host stack overflow");
 
 	lua_pushcfunction(hostL, do_host_invoke);
 	lua_pushlightuserdata(hostL, &ud);
-	lua_pcall(hostL, 1, LUA_MULTRET, 0);
+	res = lua_pcall(hostL, 1, LUA_MULTRET, 0);
 	buf = puss_pickle_pack(&len, hostL, top+1, -1);
 	lua_settop(hostL, top);
 
 	lua_settop(L, 0);
+	lua_pushboolean(L, res==LUA_OK);
 	puss_pickle_unpack(L, buf, len);
 	return lua_gettop(L);
 }
@@ -444,7 +446,7 @@ static int lua_debugger_debug(lua_State* hostL) {
 			lua_pushvalue(L, 2);
 		} else {
 			puss_get_value(L, "puss._path");
-			lua_pushstring(L, "/tools/debugger.lua");
+			lua_pushstring(L, "/core/dbgsvr.lua");
 			lua_concat(L, 2);
 		}
 		if( lua_pcall(L, 1, 0, 0) ) {

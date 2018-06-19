@@ -7,16 +7,135 @@ local docs = puss.import('core.docs')
 local demos = puss.import('core.demos')
 local filebrowser = puss.import('core.filebrowser')
 local console = puss.import('core.console')
-local dbg = puss.import('core.dbg')
+local sock = puss.import('core.sock')
 
 filebrowser.setup(diskfs)
 docs.setup(diskfs)
 
 local run_sign = true
 local main_ui = _main_ui
-local sock = _sock
+
+local socket = _socket
+
+local stack_list = {}
+local stack_current = 1
 
 show_console_window = show_console_window or false
+
+local stubs = {}
+
+stubs.breaked = function()
+	sock.send(socket, 'fetch_stack')
+end
+
+stubs.fetch_stack = function(ok, res)
+	stack_list = {} 
+	if not ok then return print('fetch_stack failed:', res) end
+	stack_list = res
+	stack_current = 1
+	local info = stack_list[stack_current]
+	if info then
+		sock.send(socket, 'fetch_vars', info.level)
+		local fname = info.source:match('^@(.+)$')
+		if fname then docs.open(fname, info.currentline) end
+	end
+end
+
+stubs.fetch_vars = function(level, ok, locals, ups, varargs)
+	if not ok then return print('fetch_vars failed:', locals, ups, varargs) end
+	for i,info in ipairs(stack_list) do
+		if info.level==level then
+			print('vars', level, #locals, #ups, #varargs)
+			info.locals, info.ups, info.varargs = locals, ups, varargs
+			break
+		end
+	end
+end
+
+local function dispatch(cmd, ...)
+	print('debugger recv:', cmd, ...)
+	local h = stubs[cmd]
+	if not h then return print('unknown stub:', cmd) end
+	h(...)
+end
+
+local function debug_toolbar()
+	if socket and socket:valid() then
+		if imgui.Button("disconnect") then
+			socket:close()
+		end
+	else
+		if imgui.Button("connect") then
+			_socket = sock.connect('127.0.0.1', 9999)
+			socket = _socket
+		end
+	end
+	imgui.SameLine()
+	if imgui.Button("step") then
+		sock.send(socket, 'step_into')
+	end
+	imgui.SameLine()
+	if imgui.Button("continue") then
+		sock.send(socket, 'continue')
+	end
+end
+
+local function draw_stack()
+	local clicked = nil
+	for i,info in ipairs(stack_list) do
+		local label = string.format('%s:%d', info.short_src, info.currentline)
+		imgui.TreeNodeEx(tostring(info), ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen, label)
+		if imgui.IsItemClicked() then
+			stack_current = i
+			clicked = info
+		end
+	end
+	if clicked then
+		sock.send(socket, 'fetch_vars', clicked.level)
+		local fname = clicked.source:match('^@(.+)$')
+		if fname then docs.open(fname, clicked.currentline) end
+	end
+end
+
+local function draw_vars()
+	local info = stack_list[stack_current]
+	if not info then
+		return imgui.Text('<empty>')
+	end
+	if info.locals then
+		for n,v in pairs(info.locals) do
+			local label = string.format('VAR %s: %s', n, v)
+			imgui.TreeNodeEx(label, ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen, label)
+			if imgui.IsItemClicked() then print(label) end
+		end
+	end
+	if info.ups then
+		for n,v in pairs(info.ups) do
+			local label = string.format('UPV %s: %s', n, v)
+			imgui.TreeNodeEx(label, ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen, label)
+			if imgui.IsItemClicked() then print(label) end
+		end
+	end
+	if info.varargs then
+		for n,v in pairs(info.varargs) do
+			local label = string.format('... %s: %s', n, v)
+			imgui.TreeNodeEx(label, ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen, label)
+			if imgui.IsItemClicked() then print(label) end
+		end
+	end
+end
+
+local function debug_pane(main_ui)
+	sock.update(socket, dispatch)
+
+	main_ui:protect_pcall(debug_toolbar)
+	if imgui.CollapsingHeader('Stack', ImGuiTreeNodeFlags_DefaultOpen) then
+		main_ui:protect_pcall(draw_stack)
+	end
+	if imgui.CollapsingHeader('Vars', ImGuiTreeNodeFlags_DefaultOpen) then
+		main_ui:protect_pcall(draw_vars)
+	end
+end
 
 local function main_menu()
 	local active
@@ -71,7 +190,7 @@ end
 
 local function right_pane()
 	imgui.BeginChild('PussRightPane', 0, 0, false)
-	main_ui:protect_pcall(dbg.update, main_ui)
+	main_ui:protect_pcall(debug_pane, main_ui)
 	imgui.EndChild()
 end
 
