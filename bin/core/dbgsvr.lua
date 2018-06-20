@@ -1,11 +1,12 @@
 -- host debug server
 -- 
 local puss_debug = __puss_debug__
+local sock = puss.import('core.sock')
 
 -- inject debug utils into host
-puss_debug:host_pcall('puss.trace_dostring', [[
-puss._debug = {}
-puss._debug.fetch_stack = function()
+-- 
+puss_debug:__host_pcall('puss.trace_dostring', [[
+puss._debug_fetch_stack = function()
 	local infos = {}
 	for level=3,256 do
 		local info = debug.getinfo(level, 'Slut')
@@ -15,7 +16,7 @@ puss._debug.fetch_stack = function()
 	end
 	return infos
 end
-puss._debug.fetch_vars = function(level)
+puss._debug_fetch_vars = function(level)
 	local locals, ups, varargs = {}, {}, {}
 	local info = debug.getinfo(level, 'uf')
 	for i=1,255 do
@@ -38,64 +39,45 @@ end
 ]], '<DebugInject>')
 
 local MT = getmetatable(puss_debug)
-
-function MT:fetch_stack()
-	return self:host_pcall('puss._debug.fetch_stack')
-end
-
-function MT:fetch_vars(level)
-	return level, self:host_pcall('puss._debug.fetch_vars', level)
-end
-
-local sock = puss.import('core.sock')
+function MT:fetch_stack() return self:__host_pcall('puss._debug_fetch_stack') end
+function MT:fetch_vars(level) return level, self:__host_pcall('puss._debug_fetch_vars', level) end
 
 local listen_sock = sock.listen(nil, 9999)
-local socket
-local address
+local socket, address
 local send_breaked_frame
 
 local function dispatch(cmd, ...)
 	print( 'host recv:', cmd, ... )
+	if not cmd:match('^%w[_%w]+$') then error('host command name('..tostring(cmd)..') error!') end
 	local handle = puss_debug[cmd]
-	if not handle then
-		error('host unknown cmd('..tostring(cmd)..')')
-	end
+	if not handle then error('host unknown cmd('..tostring(cmd)..')') end
 	return sock.send(socket, cmd, handle(puss_debug, ...))
 end
 
-local function on_update()
-	if socket then
-		if socket:valid() then
-			sock.update(socket, dispatch)
-		else
-			print('host detach', socket, address)
-			socket, address = nil, nil
-			send_breaked_frame = nil
-			puss_debug:continue()
-		end
-	else
+local function hook_main_update(breaked, frame)
+	if not socket then
 		socket, address = sock.accept(listen_sock)
 		if socket then
 			print('host attach', socket, address)
 		else
-			send_breaked_frame = nil
-			puss_debug:continue()
+			breaked = false
 		end
+	elseif not socket:valid() then
+		print('host detach', socket, address)
+		breaked, socket, address = false, nil, nil
+	else
+		if breaked and send_breaked_frame ~= frame then
+			sock.send(socket, 'breaked')
+			send_breaked_frame = frame
+		end
+		sock.update(socket, dispatch)
+	end
+
+	if not breaked then
+		send_breaked_frame = nil
+		puss_debug:continue()
 	end
 end
 
-return puss_debug:reset(function(breaked, frame)
-	if breaked and socket  then
-		if send_breaked_frame ~= frame then
-			sock.send(socket, 'breaked')
-			send_breaked_frame = frame
-		else
-			-- breaked idle
-		end
-	else
-		puss_debug:continue()
-		send_breaked_frame = nil
-	end
-	on_update()
-end, 8192)
+return puss_debug:__reset(hook_main_update, 8192)
 
