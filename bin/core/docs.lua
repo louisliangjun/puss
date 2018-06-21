@@ -93,7 +93,7 @@ local function show_dialog_jump(page, active)
 		if line then
 			active = false
 			page.dialog_mode = nil	-- hide dialog
-			page.scroll_to_line = line
+			page.scroll_to_line = line-1
 		else
 			active = true
 		end
@@ -300,7 +300,7 @@ end
 
 __exports.setup = function(new_fs, new_hook)
 	_fs = new_fs or fs
-	_hook = new_hook or _hook
+	_hook = new_hook or hook
 	fs = _fs
 	hook = _hook
 end
