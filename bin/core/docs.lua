@@ -225,6 +225,12 @@ function tabs_page_draw(page, active_page)
 		mode[4](page, active)
 		imgui.EndGroup()
 		imgui.EndGroup()
+
+		if not page.dialog_mode then
+			page_call(page, function(sv)
+				imgui.SetWindowFocus()
+			end)
+		end
 	end
 end
 
