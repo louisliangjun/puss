@@ -281,13 +281,17 @@ __exports.new_page = function()
 	return new_doc(label, 'lua')
 end
 
-__exports.open = function(filepath, line)
+local function lookup_page(filepath)
 	filepath = puss.filename_format(filepath, true)
 	local path, name = filepath:match('^(.*)/([^/]+)$')
 	if not path then path, name = '', filepath end
 	local label = generate_label(name, filepath)
-
 	local page = pages.lookup(label)
+	return filepath, name, label, page
+end
+
+__exports.open = function(file, line)
+	local filepath, name, label, page = lookup_page(file)
 	if page then
 		pages.active(label)
 	else
@@ -302,6 +306,21 @@ __exports.open = function(filepath, line)
 		page.scroll_to_line = line
 	end
 	return page
+end
+
+local function on_margin_set(sv, filepath, line, value)
+	print('on_set_bp', sv, filepath, line, value)
+	if value then
+		sv:MarkerAdd(line-1, 0)
+	else
+		sv:MarkerDelete(line-1, 0)
+	end
+end
+
+__exports.margin_set = function(file, line, value)
+	local filepath, name, label, page = lookup_page(file)
+	if not page then return end
+	page.sv(false, on_margin_set, filepath, line, value)
 end
 
 __exports.setup = function(new_fs, new_hook)

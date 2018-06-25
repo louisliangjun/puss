@@ -66,6 +66,11 @@ stubs.fetch_vars = function(level, ok, locals, ups, varargs)
 	end
 end
 
+stubs.set_bp = function(fname, line, bp)
+	fname = fname:match('^@(.-)%s*$') or fname
+	docs.margin_set(fname, line, bp)
+end
+
 local function dispatch(cmd, ...)
 	print('debugger recv:', cmd, ...)
 	local h = stubs[cmd]
@@ -192,13 +197,9 @@ end
 
 local function trigger_bp(page, line)
 	local sv = page.sv
-	if (sv:MarkerGet(line) & 0x01)==0 then
-		sv:MarkerAdd(line, 0)
-		sock.send(socket, 'set_bp', page.filepath, line+1)
-	else
-		sv:MarkerDelete(line, 0)
-		sock.send(socket, 'del_bp', page.filepath, line+1)
-	end
+	local bp = (sv:MarkerGet(line) & 0x01)==0
+	local fname = '@'..puss.filename_format(page.filepath)
+	sock.send(socket, 'set_bp', fname, line+1, bp)
 end
 
 function docs_page_on_draw(page)

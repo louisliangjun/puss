@@ -6,6 +6,7 @@ local sock = puss.import('core.sock')
 -- inject debug utils into host
 -- 
 puss_debug:__host_pcall('puss.trace_dostring', [[
+
 puss._debug_fetch_stack = function()
 	local infos = {}
 	for level=3,256 do
@@ -16,6 +17,7 @@ puss._debug_fetch_stack = function()
 	end
 	return infos
 end
+
 puss._debug_fetch_vars = function(level)
 	local locals, ups, varargs = {}, {}, {}
 	local info = debug.getinfo(level, 'uf')
@@ -36,6 +38,7 @@ puss._debug_fetch_vars = function(level)
 	end
 	return locals, ups, varargs
 end
+
 ]], '<DebugInject>')
 
 local MT = getmetatable(puss_debug)

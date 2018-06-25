@@ -9,7 +9,7 @@
 
 #define PUSS_DEBUG_NAME	"[PussDebugName]"
 
-#define BP_NOT_SET	0x00
+#define BP_NULL		0x00
 #define BP_ACTIVE	0x01
 #define BP_COND		0x02
 
@@ -67,6 +67,7 @@ static FileInfo* file_info_fetch(DebugEnv* env, const char* fname) {
 		return NULL;
 	if( lua_getfield(L, LUA_REGISTRYINDEX, fname)==LUA_TUSERDATA ) {
 		finfo = (FileInfo*)lua_touserdata(L, -1);
+		lua_pop(L, 1);
 		return finfo;
 	}
 	lua_pop(L, 1);
@@ -302,46 +303,54 @@ static int lua_debug_continue(lua_State* L) {
 	return 0;
 }
 
-static int debug_set_bp(DebugEnv* env, const char* fname, int line) {
-	FileInfo* finfo = file_info_fetch(env, fname);
-	if( !finfo )
-		return 0;
-	if( line < 1 || line > 100000 )	// not support 10w lines script
-		return 0;
-
-	if( line > finfo->line_num ) {
-		int num = line + 100;
-		finfo->bps = realloc(finfo->bps, sizeof(char) * num);
-		if( finfo->bps ) {
-			memset(finfo->bps + finfo->line_num, 0, sizeof(char) * (num - finfo->line_num));
-			finfo->line_num = num;
-		} else {
-			finfo->line_num = 0;
-			return 0;
-		}
+static int lua_debug_get_bps(lua_State* L) {
+	DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
+	if( lua_rawgetp(L, LUA_REGISTRYINDEX, env)!=LUA_TTABLE ) {
+		lua_pop(L, 1);
+		lua_newtable(L);
+		lua_pushvalue(L, -1);
+		lua_rawsetp(L, LUA_REGISTRYINDEX, env);
 	}
-
-	finfo->bps[line-1] = BP_ACTIVE;
 	return 1;
 }
 
 static int lua_debug_set_bp(lua_State* L) {
 	DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
-	const char* script = luaL_checkstring(L, 1);
-	int line = (int)luaL_checkinteger(L, 2);
-	lua_pushboolean(L, debug_set_bp(env, script, line));
-	return 1;
-}
-
-static int lua_debug_del_bp(lua_State* L) {
-	DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
-	const char* script = luaL_checkstring(L, 1);
-	int line = (int)luaL_checkinteger(L, 2);
+	const char* script = luaL_checkstring(L, 2);
+	int line = (int)luaL_checkinteger(L, 3);
+	char bp = lua_toboolean(L, 4) ? BP_ACTIVE : BP_NULL;
 	FileInfo* finfo = file_info_fetch(env, script);
-	if( finfo && line>=1 && line<=finfo->line_num ) {
-		finfo->bps[line-1] = BP_NOT_SET;
+	if( !finfo )
+		return 0;
+	if( line < 1 || line > 100000 )	// not support 10w+ lines script
+		return 0;
+	if( line > finfo->line_num ) {
+		int num = line + 100;
+		char* bps = (char*)malloc(sizeof(char) * num);
+		if( !bps )
+			return 0;
+		if( finfo->bps )
+			memcpy(bps, finfo->bps, sizeof(char) * finfo->line_num);
+		memset(bps + finfo->line_num, 0, sizeof(char) * (num - finfo->line_num));
+		finfo->bps = bps;
+		finfo->line_num = num;
 	}
-	return 0;
+	if( finfo->bps[line-1] != bp ) {
+		finfo->bps[line-1] = bp;
+		lua_debug_get_bps(L);
+		lua_pushfstring(L, "%s:%d", finfo->name, line);
+		if( bp==BP_NULL ) {
+			lua_pushnil(L);
+		} else {
+			lua_pushboolean(L, 1);
+		}
+		lua_settable(L, -3);
+		lua_pop(L, 1);
+	}
+	lua_pushvalue(L, 2);
+	lua_pushvalue(L, 3);
+	lua_pushboolean(L, finfo->bps[line-1]!=BP_NULL);
+	return 3;
 }
 
 static int lua_debug_step_into(lua_State* L) {
@@ -385,8 +394,8 @@ static luaL_Reg puss_debug_methods[] =
 	, {"__reset", lua_debug_reset}
 	, {"__host_pcall", lua_debug_host_pcall}
 	, {"continue", lua_debug_continue}
+	, {"get_bps", lua_debug_get_bps}
 	, {"set_bp", lua_debug_set_bp}
-	, {"del_bp", lua_debug_del_bp}
 	, {"step_into", lua_debug_step_into}
 	, {"step_over", lua_debug_step_over}
 	, {"step_out", lua_debug_step_out}
