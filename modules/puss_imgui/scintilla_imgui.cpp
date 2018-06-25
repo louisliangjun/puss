@@ -971,7 +971,7 @@ public: 	// Public for scintilla_send_message
 		std::unique_ptr<Surface> surfaceWindow(Surface::Allocate(SC_TECHNOLOGY_DEFAULT));
 		surfaceWindow->Init(0, wMain.GetID());
 
-		PRectangle rc(0.0f, 0.0f, window->Size.x, window->Size.y);
+		PRectangle rc = GetClientRectangle();
 		Paint(surfaceWindow.get(), rc);
 		surfaceWindow->Release();
 	}
