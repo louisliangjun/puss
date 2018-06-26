@@ -2,6 +2,8 @@
 
 local language_settings = {}
 
+local INDICATOR_FINDTEXT = 8
+
 local DEFAULT_STYLE_DEFAULT = 0x00000000
 local DEFAULT_STYLE_COMMENT = 0x00808080
 local DEFAULT_STYLE_NUMBER = 0x07008000
@@ -227,6 +229,8 @@ local function do_reset_styles(sv, lang)
 		sv:MarkerDefine(0, SC_MARK_ROUNDRECT)
 	end
 
+	sv:IndicSetStyle(INDICATOR_FINDTEXT, INDIC_FULLBOX)
+
 	sv:set('sci.style', _STYLE_VER)
 	sv:set('sci.lang', lang)
 end
@@ -236,6 +240,19 @@ __exports.reset_styles = function(sv, lang)
 	if sv:get('sci.style')==_STYLE_VER and sv:get('sci.lang')==lang then return end
 	-- print('reset_styles', _STYLE_VER, lang)
 	sv(false, do_reset_styles, lang)
+end
+
+__exports.find_text_fill_all_indicator = function(sv, text)
+	sv:SetIndicatorCurrent(INDICATOR_FINDTEXT)
+	sv:IndicatorClearRange(0, sv:GetLength())
+
+	local pos, rs, re = 0, 0, 0
+	while true do
+		pos, rs, re = sv:FindText(0, text, pos)
+		if pos < 0 then break end
+		sv:IndicatorFillRange(rs, re-rs)
+		pos = pos + 1
+	end
 end
 
 __exports.create = function(lang)

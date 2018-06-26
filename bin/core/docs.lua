@@ -103,6 +103,8 @@ local function show_dialog_jump(page, active)
 end
 
 local function do_search(sv, text, length)
+	sci.find_text_fill_all_indicator(sv, text, length)
+
 	local search_flags = 0
 	sv:SetSearchFlags(search_flags)
 
