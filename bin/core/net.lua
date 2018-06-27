@@ -1,4 +1,4 @@
--- sock.lua
+-- net.lua
 
 local puss_socket = puss.require('puss_socket')
 

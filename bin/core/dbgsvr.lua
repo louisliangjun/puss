@@ -1,7 +1,7 @@
 -- host debug server
 -- 
 local puss_debug = __puss_debug__
-local sock = puss.import('core.sock')
+local net = puss.import('core.net')
 
 -- inject debug utils into host
 -- 
@@ -45,7 +45,7 @@ local MT = getmetatable(puss_debug)
 function MT:fetch_stack() return self:__host_pcall('puss._debug_fetch_stack') end
 function MT:fetch_vars(level) return level, self:__host_pcall('puss._debug_fetch_vars', level) end
 
-local listen_sock = sock.listen(nil, 9999)
+local listen_sock = net.listen(nil, 9999)
 local socket, address
 local send_breaked_frame
 
@@ -54,12 +54,12 @@ local function dispatch(cmd, ...)
 	if not cmd:match('^%w[_%w]+$') then error('host command name('..tostring(cmd)..') error!') end
 	local handle = puss_debug[cmd]
 	if not handle then error('host unknown cmd('..tostring(cmd)..')') end
-	return sock.send(socket, cmd, handle(puss_debug, ...))
+	return net.send(socket, cmd, handle(puss_debug, ...))
 end
 
 local function hook_main_update(breaked, frame)
 	if not socket then
-		socket, address = sock.accept(listen_sock)
+		socket, address = net.accept(listen_sock)
 		if socket then
 			print('host attach', socket, address)
 		else
@@ -70,10 +70,10 @@ local function hook_main_update(breaked, frame)
 		breaked, socket, address = false, nil, nil
 	else
 		if breaked and send_breaked_frame ~= frame then
-			sock.send(socket, 'breaked')
+			net.send(socket, 'breaked')
 			send_breaked_frame = frame
 		end
-		sock.update(socket, dispatch)
+		net.update(socket, dispatch)
 	end
 
 	if not breaked then

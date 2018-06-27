@@ -37,6 +37,7 @@ local function shotcut_update()
 		local keys = {}
 		for k in pairs(shotcuts) do table.insert(keys, k) end
 		table.sort(keys)
+		shotcut_sorted = {}
 		for _, name in ipairs(keys) do
 			table.insert(shotcut_sorted, shotcuts[name])
 		end

@@ -7,7 +7,7 @@ local docs = puss.import('core.docs')
 local demos = puss.import('core.demos')
 local filebrowser = puss.import('core.filebrowser')
 local console = puss.import('core.console')
-local sock = puss.import('core.sock')
+local net = puss.import('core.net')
 
 filebrowser.setup(diskfs)
 
@@ -38,7 +38,7 @@ shotcuts.register('debugger/step_out', 'step out', 'F11', false, true, false, fa
 local stubs = {}
 
 stubs.breaked = function()
-	sock.send(socket, 'fetch_stack')
+	net.send(socket, 'fetch_stack')
 end
 
 stubs.fetch_stack = function(ok, res)
@@ -49,7 +49,7 @@ stubs.fetch_stack = function(ok, res)
 	stack_current = 1
 	local info = stack_list[stack_current]
 	if info then
-		sock.send(socket, 'fetch_vars', info.level)
+		net.send(socket, 'fetch_vars', info.level)
 		local fname = info.source:match('^@(.+)$')
 		if fname then docs.open(fname, info.currentline-1) end
 	end
@@ -79,10 +79,10 @@ local function dispatch(cmd, ...)
 end
 
 local function shortcuts_update()
-	if shotcuts.is_pressed('debugger/step_over') then sock.send(socket, 'step_over') end
-	if shotcuts.is_pressed('debugger/step_into') then sock.send(socket, 'step_into') end
-	if shotcuts.is_pressed('debugger/step_out') then sock.send(socket, 'step_out') end
-	if shotcuts.is_pressed('debugger/continue') then sock.send(socket, 'continue') end
+	if shotcuts.is_pressed('debugger/step_over') then net.send(socket, 'step_over') end
+	if shotcuts.is_pressed('debugger/step_into') then net.send(socket, 'step_into') end
+	if shotcuts.is_pressed('debugger/step_out') then net.send(socket, 'step_out') end
+	if shotcuts.is_pressed('debugger/continue') then net.send(socket, 'continue') end
 end
 
 local function debug_toolbar()
@@ -92,17 +92,17 @@ local function debug_toolbar()
 		end
 	else
 		if imgui.Button("connect") then
-			_socket = sock.connect('127.0.0.1', 9999)
+			_socket = net.connect('127.0.0.1', 9999)
 			socket = _socket
 		end
 	end
 	imgui.SameLine()
 	if imgui.Button("step") then
-		sock.send(socket, 'step_into')
+		net.send(socket, 'step_into')
 	end
 	imgui.SameLine()
 	if imgui.Button("continue") then
-		sock.send(socket, 'continue')
+		net.send(socket, 'continue')
 	end
 end
 
@@ -117,7 +117,7 @@ local function draw_stack()
 		end
 	end
 	if clicked then
-		sock.send(socket, 'fetch_vars', clicked.level)
+		net.send(socket, 'fetch_vars', clicked.level)
 		local fname = clicked.source:match('^@(.+)$')
 		if fname then docs.open(fname, clicked.currentline-1) end
 	end
@@ -152,7 +152,7 @@ local function draw_vars()
 end
 
 local function debug_pane(main_ui)
-	sock.update(socket, dispatch)
+	net.update(socket, dispatch)
 
 	shortcuts_update()
 
@@ -199,7 +199,7 @@ local function trigger_bp(page, line)
 	local sv = page.sv
 	local bp = (sv:MarkerGet(line) & 0x01)==0
 	local fname = '@'..puss.filename_format(page.filepath)
-	sock.send(socket, 'set_bp', fname, line+1, bp)
+	net.send(socket, 'set_bp', fname, line+1, bp)
 end
 
 function docs_page_on_draw(page)
