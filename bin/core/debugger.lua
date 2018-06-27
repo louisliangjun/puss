@@ -55,12 +55,24 @@ stubs.fetch_stack = function(ok, res)
 	end
 end
 
-stubs.fetch_vars = function(level, ok, locals, ups, varargs)
-	if not ok then return print('fetch_vars failed:', locals, ups, varargs) end
+stubs.fetch_vars = function(level, ok, vars)
+	if not ok then return print('fetch_vars failed:', vars) end
 	for i,info in ipairs(stack_list) do
 		if info.level==level then
-			print('vars', level, #locals, #ups, #varargs)
-			info.locals, info.ups, info.varargs = locals, ups, varargs
+			print('vars', level, #vars)
+			info.vars = vars
+			break
+		end
+	end
+end
+
+stubs.fetch_table = function(level, i, subs)
+	if not subs then return print('fetch_table failed:', subs) end
+	for i,info in ipairs(stack_list) do
+		if info.level==level then
+			print('subs', level, i, #subs)
+			local v = info.vars[i]
+			if v then v.subs = subs end
 			break
 		end
 	end
@@ -128,25 +140,18 @@ local function draw_vars()
 	if not info then
 		return imgui.Text('<empty>')
 	end
-	if info.locals then
-		for n,v in pairs(info.locals) do
-			local label = string.format('VAR %s: %s', n, v)
+	if info.vars then
+		local clicked = nil
+		for i,v in ipairs(info.vars) do
+			local label = string.format('%d [%s] %s: %s', table.unpack(v))
 			imgui.TreeNodeEx(label, ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen, label)
-			if imgui.IsItemClicked() then print(label) end
+			if imgui.IsItemClicked() then
+				print(i, label)
+				clicked = i
+			end
 		end
-	end
-	if info.ups then
-		for n,v in pairs(info.ups) do
-			local label = string.format('UPV %s: %s', n, v)
-			imgui.TreeNodeEx(label, ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen, label)
-			if imgui.IsItemClicked() then print(label) end
-		end
-	end
-	if info.varargs then
-		for n,v in pairs(info.varargs) do
-			local label = string.format('... %s: %s', n, v)
-			imgui.TreeNodeEx(label, ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen, label)
-			if imgui.IsItemClicked() then print(label) end
+		if clicked then
+			net.send(socket, 'fetch_table', stack_current, i)
 		end
 	end
 end

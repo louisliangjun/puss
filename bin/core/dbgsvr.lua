@@ -1,11 +1,8 @@
 -- host debug server
 -- 
 local puss_debug = __puss_debug__
-local net = puss.import('core.net')
 
--- inject debug utils into host
--- 
-puss_debug:__host_pcall('puss.trace_dostring', [[
+puss_debug:__host_pcall('puss.trace_dostring', '\n\n\n\n'..[[
 
 puss._debug_fetch_stack = function()
 	local infos = {}
@@ -18,32 +15,62 @@ puss._debug_fetch_stack = function()
 	return infos
 end
 
+puss._debug_current_vars = {}	-- array of {'local|upvalue|vaarg', 'name', value}
+
+local function do_ret(vars, ps, pe)
+	local ret = {}
+	for i=ps,pe do
+		local v = vars[i]
+		local vt, vv = type(v[3]), tostring(v[3])
+		if vt=='string' then vv = string.format('%q', vv) end
+		table.insert(ret, {i, v[1], tostring(v[2]), vv})
+	end
+	return ret
+end
 puss._debug_fetch_vars = function(level)
-	local locals, ups, varargs = {}, {}, {}
 	local info = debug.getinfo(level, 'uf')
+	local vars = {}
+	puss._debug_current_vars = vars
 	for i=1,255 do
 		local n,v = debug.getlocal(level, i)
 		if not n then break end
-		if n~='(*temporary)' then locals[n] = tostring(v) end
+		if n:match('^%(.+%)$')==nil then table.insert(vars, {'local', n, v}) end
 	end
 	for i=1,255 do
 		local n,v = debug.getupvalue(info.func, i)
 		if not n then break end
-		ups[n] = tostring(v)
+		table.insert(vars, {'upvalue', n, v})
 	end
 	for i=-1,-255,-1 do
 		local n,v = debug.getlocal(level, i)
 		if not n then break end
-		varargs[n] = tostring(v)
+		table.insert(vars, {'vaarg', n, v})
 	end
-	return locals, ups, varargs
+	return do_ret(vars, 1, #vars)
+end
+
+puss._debug_fetch_table = function(i)
+	local vars = puss._debug_current_vars
+	local v = vars[i]
+	if not v then return end
+	if v==vars then return end
+	local start = #vars
+	local vt, vv = type(v[3]), tostring(v[3])
+	if vt~='table' then return i end
+	for xk, xv in pairs(vt) do
+		table.insert(vars, {'field', xk, xv})
+	end
+	return do_ret(vars, start, #vars)
 end
 
 ]], '<DebugInject>')
 
+local net = puss.import('core.net')
+
 local MT = getmetatable(puss_debug)
 function MT:fetch_stack() return self:__host_pcall('puss._debug_fetch_stack') end
 function MT:fetch_vars(level) return level, self:__host_pcall('puss._debug_fetch_vars', level) end
+function MT:fetch_table(level, i) return level, i, self:__host_pcall('puss._debug_fetch_table', i) end
 
 local listen_sock = net.listen(nil, 9999)
 local socket, address
