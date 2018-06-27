@@ -16,6 +16,7 @@ shotcuts.register('docs/close', 'Close file', 'W', true, false, false, false)
 shotcuts.register('docs/find', 'Find in file', 'F', true, false, false, false)
 shotcuts.register('docs/jump', 'Jump in file', 'G', true, false, false, false)
 shotcuts.register('docs/replace', 'Replace in file', 'H', true, false, false, false)
+shotcuts.register('docs/quick_find', 'Quick find in file', 'F3', nil, nil, false, false)
 
 local function do_save_page(page)
 	page.unsaved = page.sv:GetModify()
@@ -103,8 +104,6 @@ local function show_dialog_jump(page, active)
 end
 
 local function do_search(sv, text, length)
-	sci.find_text_fill_all_indicator(sv, text, length)
-
 	local search_flags = 0
 	sv:SetSearchFlags(search_flags)
 
@@ -140,11 +139,16 @@ local function do_search(sv, text, length)
 	end
 end
 
-local function show_dialog_find(page, active)
+local function start_show_dialog_find_replace(page, active, has_replace)
 	if active then
 		page_call(page, function(sv)
 			local len, txt = sv:GetSelText()
-			if len > 0 then inbuf:strcpy(txt) end
+			if len==0 then return end
+			inbuf:strcpy(txt)
+			if page.find_text~= txt then
+				page.find_text = txt
+				sci.find_text_fill_all_indicator(page.sv, txt)
+			end
 		end)
 	end
 
@@ -153,23 +157,51 @@ local function show_dialog_find(page, active)
 		local length = #text
 		active = true
 		if length==0 then return end
+
+		if page.find_text~= text then
+			page.find_text = text
+			sci.find_text_fill_all_indicator(page.sv, text)
+		end
+
 		page_call(page, do_search, text, length)
 	end
 
+	if has_replace then
+		if imgui.InputText('##ReplaceText', rebuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
+			print(mode, rebuf:str())
+		end
+	end
+
+	return active
+end
+
+local function show_dialog_find(page, active)
+	active = start_show_dialog_find_replace(page, active)
 	finish_show_dialog(page, active)
 end
 
-local function show_dialog_replace(page, active)
-	show_dialog_find(page, active)
+local function show_dialog_quick_find(page, active)
+	start_show_dialog_find_replace(page, active and (imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_CONTROL) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_CONTROL)))
+	finish_show_dialog(page, false)
 
-	if imgui.InputText('##ReplaceText', rebuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
-		print(mode, rebuf:str())
+	if active then
+		page_call(page, function(sv)
+			local text = inbuf:str()
+			local length = #text
+			do_search(sv, text, length)
+		end)
 	end
+end
+
+local function show_dialog_replace(page, active)
+	active = start_show_dialog_find_replace(page, active, true)
+	finish_show_dialog(page, active)
 end
 
 local dialog_modes =
 	{ {'jump', 'docs/jump', 1, show_dialog_jump}
 	, {'find', 'docs/find', 1, show_dialog_find}
+	, {'find', 'docs/quick_find', 1, show_dialog_quick_find}
 	, {'replace', 'docs/replace', 2, show_dialog_replace}
 	}
 
