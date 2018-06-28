@@ -1,6 +1,5 @@
 -- filebrowser.lua
 
-local app = puss.import('core.app')
 local docs = puss.import('core.docs')
 local fs = _fs
 
