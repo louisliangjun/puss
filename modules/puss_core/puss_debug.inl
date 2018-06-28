@@ -440,15 +440,17 @@ static int lua_debugger_debug(lua_State* hostL) {
 			debug_handle_invoke(env, 0);
 		}
 	} else if( lua_type(hostL, 1)!=LUA_TBOOLEAN ) {
-		// do nothing
+		// do nothing, used for query debug status, return working
 	} else if( lua_toboolean(hostL, 1) ) {
 		lua_State* L = env->debug_state;
 		const char* debugger_script = luaL_optstring(hostL, 2, NULL);
 		lua_debugger_clear(env);
 
+		lua_getglobal(L, "puss");
+
 		*((DebugEnv**)lua_newuserdata(L, sizeof(DebugEnv*))) = env;
 		luaL_setmetatable(L, PUSS_DEBUG_NAME);
-		lua_setglobal(L, "__puss_debug__");
+		lua_setfield(L, -2, "_debug_proxy");
 
 		puss_get_value(L, "puss.trace_dofile");
 		if( debugger_script ) {
@@ -458,6 +460,8 @@ static int lua_debugger_debug(lua_State* hostL) {
 			lua_pushstring(L, "/core/dbgsvr.lua");
 			lua_concat(L, 2);
 		}
+		lua_pushvalue(L, -1);
+		lua_setfield(L, -4, "_debug_filename");
 		if( lua_pcall(L, 1, 0, 0) ) {
 			lua_pop(L, 1);
 		}

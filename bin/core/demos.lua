@@ -1,6 +1,6 @@
 -- demos.lua
 
-local pages = puss.import('core.app')
+local pages = puss.import('core.pages')
 
 function tabs_page_draw(page)
 	imgui.Text(page.label)

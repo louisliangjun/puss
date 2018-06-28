@@ -24,7 +24,7 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 	"puss.dostring = puss_dostring\n"
 	"\n"
 	"local logerr = function(err) print(debug.traceback(err,2)); return err; end\n"
-	"puss.logerr_handle = function(h) if h then logerr=h end; return logerr end\n"
+	"puss.logerr_handle = function(h) if type(h)=='function' then logerr=h end; return logerr end\n"
 	"puss.trace_pcall = function(f, ...) return xpcall(f, logerr, ...) end\n"
 	"puss.trace_dofile = function(name, env, ...) return xpcall(puss_dofile, logerr, name, env, ...) end\n"
 	"puss.trace_dostring = function(script, name, env, ...) return xpcall(puss_dostring, logerr, script, name, env, ...) end\n"
@@ -134,15 +134,15 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 
 #include "puss_debug.inl"
 
-#define PUSS_NAMESPACE(name)			"[" #name "]"
+#define PUSS_KEY(name)			"[" #name "]"
 
-#define PUSS_NAMESPACE_PUSS				PUSS_NAMESPACE(puss)
-#define PUSS_NAMESPACE_MODULES_LOADED	PUSS_NAMESPACE(modules)
-#define PUSS_NAMESPACE_INTERFACES		PUSS_NAMESPACE(interfaces)
-#define PUSS_NAMESPACE_APP_PATH			PUSS_NAMESPACE(app_path)
-#define PUSS_NAMESPACE_APP_NAME			PUSS_NAMESPACE(app_name)
-#define PUSS_NAMESPACE_MODULE_SUFFIX	PUSS_NAMESPACE(module_suffix)
-#define PUSS_NAMESPACE_PICKLE_CACHE		PUSS_NAMESPACE(pickle_cache)
+#define PUSS_KEY_PUSS			PUSS_KEY(puss)
+#define PUSS_KEY_MODULES_LOADED	PUSS_KEY(modules)
+#define PUSS_KEY_INTERFACES		PUSS_KEY(interfaces)
+#define PUSS_KEY_APP_PATH		PUSS_KEY(app_path)
+#define PUSS_KEY_APP_NAME		PUSS_KEY(app_name)
+#define PUSS_KEY_MODULE_SUFFIX	PUSS_KEY(module_suffix)
+#define PUSS_KEY_PICKLE_CACHE	PUSS_KEY(pickle_cache)
 
 int puss_get_value(lua_State* L, const char* name) {
 	int top = lua_gettop(L);
@@ -191,7 +191,7 @@ static void puss_module_require(lua_State* L, const char* name) {
 	if( !name ) {
 		luaL_error(L, "puss_module_require, module name MUST exist!");
 	}
-	lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_MODULES_LOADED);
+	lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_MODULES_LOADED);
 	if( lua_getfield(L, -1, name)==LUA_TNIL ) {
 		lua_pop(L, 1);
 		lua_pushstring(L, name);
@@ -205,7 +205,7 @@ static void puss_interface_register(lua_State* L, const char* name, void* iface)
 	if( !(name && iface) ) {
 		luaL_error(L, "puss_interface_register(%s), name and iface MUST exist!", name);
 	}
-	lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_INTERFACES);
+	lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_INTERFACES);
 	if( lua_getfield(L, -1, name)==LUA_TNIL ) {
 		lua_pop(L, 1);
 		lua_pushlightuserdata(L, iface);
@@ -219,7 +219,7 @@ static void puss_interface_register(lua_State* L, const char* name, void* iface)
 static void* puss_interface_check(lua_State* L, const char* name) {
 	void* iface = NULL;
 	if( name ) {
-		lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_INTERFACES);
+		lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_INTERFACES);
 		lua_getfield(L, -1, name);
 		iface = lua_touserdata(L, -1);
 		lua_pop(L, 2);
@@ -244,7 +244,7 @@ static void puss_push_const_table(lua_State* L) {
 }
 
 static const char* puss_app_path(lua_State* L) {
-	return lua_getfield_str(L, PUSS_NAMESPACE_APP_PATH, ".");
+	return lua_getfield_str(L, PUSS_KEY_APP_PATH, ".");
 }
 
 // pickle
@@ -488,7 +488,7 @@ void* puss_pickle_pack(size_t* plen, lua_State* L, int start, int end) {
 	LPacker* pac;
 	start = lua_absindex(L, start);
 	end = lua_absindex(L, end);
-	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_PICKLE_CACHE)==LUA_TUSERDATA ) {
+	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_PICKLE_CACHE)==LUA_TUSERDATA ) {
 		pac = (LPacker*)lua_touserdata(L, -1);
 	} else {
 		lua_pop(L, 1);
@@ -499,7 +499,7 @@ void* puss_pickle_pack(size_t* plen, lua_State* L, int start, int end) {
 		lua_setfield(L, -2, "__gc");
 		lua_setmetatable(L, -2);
 		lua_pushvalue(L, -1);
-		lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_PICKLE_CACHE);
+		lua_setfield(L, LUA_REGISTRYINDEX, PUSS_KEY_PICKLE_CACHE);
 	}
 	_pickle_reset(pac, L);
 	lua_pop(L, 1);
@@ -668,8 +668,8 @@ static PussInterface puss_iface =
 
 static int module_init_wrapper(lua_State* L) {
 	const char* name = (const char*)lua_tostring(L, lua_upvalueindex(1));
-	const char* app_path = lua_getfield_str(L, PUSS_NAMESPACE_APP_PATH, ".");
-	const char* module_suffix = lua_getfield_str(L, PUSS_NAMESPACE_MODULE_SUFFIX, ".so");
+	const char* app_path = lua_getfield_str(L, PUSS_KEY_APP_PATH, ".");
+	const char* module_suffix = lua_getfield_str(L, PUSS_KEY_MODULE_SUFFIX, ".so");
 	PussModuleInit f = NULL;
 	assert( lua_gettop(L)==0 );
 
@@ -703,7 +703,7 @@ static int module_init_wrapper(lua_State* L) {
 		lua_pushboolean(L, 1);
 	}
 
-	lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_MODULES_LOADED);
+	lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_MODULES_LOADED);
 	lua_pushvalue(L, -2);
 	lua_setfield(L, -2, name);
 	lua_pop(L, 1);
@@ -713,7 +713,7 @@ static int module_init_wrapper(lua_State* L) {
 
 static int puss_lua_module_require(lua_State* L) {
 	const char* name = luaL_checkstring(L, 1);
-	lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_MODULES_LOADED);
+	lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_MODULES_LOADED);
 	if( lua_getfield(L, -1, name) != LUA_TNIL )
 		return 1;
 	lua_settop(L, 1);
@@ -909,7 +909,7 @@ static luaL_Reg puss_methods[] =
 static void puss_module_setup(lua_State* L, const char* app_path, const char* app_name, const char* module_suffix) {
 	// fprintf(stderr, "!!!puss_module_setup %s %s %s\n", app_path, app_name, module_suffix);
 
-	lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_PUSS);
+	lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_PUSS);
 	assert( lua_type(L, -1)==LUA_TTABLE );
 
 	puss_push_const_table(L);
@@ -917,17 +917,17 @@ static void puss_module_setup(lua_State* L, const char* app_path, const char* ap
 
 	lua_pushstring(L, app_path ? app_path : ".");
 	lua_pushvalue(L, -1);
-	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_APP_PATH);
+	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_KEY_APP_PATH);
 	lua_setfield(L, -2, "_path");	// puss._path
 
 	lua_pushstring(L, app_name ? app_name : "puss");
 	lua_pushvalue(L, -1);
-	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_APP_NAME);
+	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_KEY_APP_NAME);
 	lua_setfield(L, -2, "_self");	// puss._self
 
 	lua_pushstring(L, module_suffix ? module_suffix : ".so");
 	lua_pushvalue(L, -1);
-	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_MODULE_SUFFIX);
+	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_KEY_MODULE_SUFFIX);
 	lua_setfield(L, -2, "_module_suffix");	// puss._module_suffix
 
 	lua_pushstring(L, PATH_SEP_STR);
@@ -975,7 +975,7 @@ static void puss_lua_init(lua_State* L, const char* app_path, const char* app_na
 	// puss namespace init
 	lua_newtable(L);	// puss
 	lua_pushvalue(L, -1);
-	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_PUSS);
+	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_KEY_PUSS);
 	puss_module_setup(L, app_path, app_name, module_suffix);
 
 	// puss modules["puss"] = puss-module
@@ -984,7 +984,7 @@ static void puss_lua_init(lua_State* L, const char* app_path, const char* app_na
 		lua_pushvalue(L, -2);
 		lua_setfield(L, -2, "puss");
 	}
-	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_MODULES_LOADED);
+	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_KEY_MODULES_LOADED);
 
 	// puss interfaces["PussInterface"] = puss_iface
 	lua_newtable(L);
@@ -992,7 +992,7 @@ static void puss_lua_init(lua_State* L, const char* app_path, const char* app_na
 		lua_pushlightuserdata(L, &puss_iface);
 		lua_setfield(L, -2, "PussInterface");
 	}
-	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_INTERFACES);
+	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_KEY_INTERFACES);
 
 	// set to _G.puss
 	lua_pushvalue(L, -1);
@@ -1017,7 +1017,7 @@ void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, con
 	DebugEnv* env;
 
 	// check already open
-	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAMESPACE_PUSS)==LUA_TTABLE ) {
+	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_PUSS)==LUA_TTABLE ) {
 		lua_setglobal(L, "puss");
 		return;
 	}

@@ -21,8 +21,11 @@ local main_ui = _main_ui
 
 local socket = _socket
 
-local stack_list = {}
-local stack_current = 1
+local dummy_vars = {}
+
+stack_list = stack_list or {}
+stack_vars = stack_vars or {}
+stack_current = stack_current or 1
 
 show_console_window = show_console_window or false
 
@@ -38,11 +41,12 @@ shotcuts.register('debugger/step_out', 'step out', 'F11', false, true, false, fa
 local stubs = {}
 
 stubs.breaked = function()
+	stack_vars = {}
 	net.send(socket, 'fetch_stack')
 end
 
 stubs.fetch_stack = function(ok, res)
-	stack_list = {} 
+	stack_list = {}
 	if not ok then return print('fetch_stack failed:', ok, res) end
 	if type(res)~='table' then return print('fetch_stack failed:', ok, res) end
 	stack_list = res
@@ -57,23 +61,29 @@ end
 
 stubs.fetch_vars = function(level, ok, vars)
 	if not ok then return print('fetch_vars failed:', vars) end
-	for i,info in ipairs(stack_list) do
-		if info.level==level then
-			print('vars', level, #vars)
-			info.vars = vars
+	local stack
+	for i,v in ipairs(stack_list) do
+		if v.level==level then
+			stack = v
 			break
+		end
+	end
+	if stack then
+		print('vars', level, #vars)
+		stack.vars = vars
+		for _,v in ipairs(vars) do
+			stack_vars[v[1]] = v
 		end
 	end
 end
 
-stubs.fetch_table = function(level, i, subs)
-	if not subs then return print('fetch_table failed:', subs) end
-	for i,info in ipairs(stack_list) do
-		if info.level==level then
-			print('subs', level, i, #subs)
-			local v = info.vars[i]
-			if v then v.subs = subs end
-			break
+stubs.fetch_subs = function(key, ok, subs)
+	if not ok then return print('fetch_subs failed:', subs) end
+	local var = stack_vars[key]
+	if var then
+		var.subs = subs
+		for _,v in ipairs(subs) do
+			stack_vars[v[1]] = v
 		end
 	end
 end
@@ -126,34 +136,54 @@ local function draw_stack()
 		if imgui.IsItemClicked() then
 			stack_current = i
 			clicked = info
+			if not info.vars then
+				info.vars = dummy_vars
+				net.send(socket, 'fetch_vars', clicked.level)
+			end
 		end
 	end
 	if clicked then
-		net.send(socket, 'fetch_vars', clicked.level)
 		local fname = clicked.source:match('^@(.+)$')
 		if fname then docs.open(fname, clicked.currentline-1) end
 	end
 end
 
-local function draw_vars()
-	local info = stack_list[stack_current]
-	if not info then
-		return imgui.Text('<empty>')
-	end
-	if info.vars then
-		local clicked = nil
-		for i,v in ipairs(info.vars) do
-			local label = string.format('%d [%s] %s: %s', table.unpack(v))
-			imgui.TreeNodeEx(label, ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen, label)
+local LEAF_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen
+local FOLD_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick
+
+local has_sub_types =
+	{ ['T'] = true
+	, ['U'] = true
+	}
+
+local function draw_subs(stack_current, subs)
+	for _,v in ipairs(subs) do
+		local label = string.format('%d [%s|%s|%s] %s', table.unpack(v))
+		if has_sub_types[v[3]] then
+			local show_subs = imgui.TreeNodeEx(label, FOLD_FLAGS, label)
 			if imgui.IsItemClicked() then
-				print(i, label)
-				clicked = i
+				print(label)
+				if not v.subs then
+					v.subs = dummy_vars
+					net.send(socket, 'fetch_subs', v[1])
+				end
+			end
+			if show_subs then
+				if v.subs then draw_subs(stack_current, v.subs) end
+				imgui.TreePop()
+			end
+		else
+			if imgui.TreeNodeEx(label, LEAF_FLAGS, label) then
+				imgui.TreePop()
 			end
 		end
-		if clicked then
-			net.send(socket, 'fetch_table', stack_current, i)
-		end
 	end
+end
+
+local function draw_vars()
+	local info = stack_list[stack_current]
+	if not info then return imgui.Text('<empty>') end
+	if info.vars then draw_subs(stack_current, info.vars) end
 end
 
 local function debug_pane(main_ui)
