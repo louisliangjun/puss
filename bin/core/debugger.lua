@@ -4,7 +4,6 @@ local diskfs = puss.import('core.diskfs')
 local shotcuts = puss.import('core.shotcuts')
 local pages = puss.import('core.pages')
 local docs = puss.import('core.docs')
-local demos = puss.import('core.demos')
 local filebrowser = puss.import('core.filebrowser')
 local console = puss.import('core.console')
 local net = puss.import('core.net')
@@ -82,8 +81,10 @@ stubs.fetch_subs = function(key, ok, subs)
 	local var = stack_vars[key]
 	if var then
 		var.subs = subs
-		for _,v in ipairs(subs) do
-			stack_vars[v[1]] = v
+		if subs then
+			for _,v in ipairs(subs) do
+				stack_vars[v[1]] = v
+			end
 		end
 	end
 end
@@ -158,8 +159,9 @@ local has_sub_types =
 
 local function draw_subs(stack_current, subs)
 	for _,v in ipairs(subs) do
-		local label = string.format('%d [%s|%s|%s] %s', table.unpack(v))
-		if has_sub_types[v[3]] then
+		-- TODO : now use debug label
+		local label = string.format('[%d|%s|%s]%s = %s', table.unpack(v))
+		if has_sub_types[ v[3] ] then
 			local show_subs = imgui.TreeNodeEx(label, FOLD_FLAGS, label)
 			if imgui.IsItemClicked() then
 				print(label)

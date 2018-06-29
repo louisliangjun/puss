@@ -11,7 +11,8 @@ if puss._debug_proxy then
 	local MT = getmetatable(puss_debug)
 	function MT:fetch_stack() return self:__host_pcall('puss._debug_fetch_stack') end
 	function MT:fetch_vars(level) return level, self:__host_pcall('puss._debug_fetch_vars', level) end
-	function MT:fetch_subs(key) return key, self:__host_pcall('puss._debug_fetch_subs', key) end
+	function MT:fetch_subs(idx) return idx, self:__host_pcall('puss._debug_fetch_subs', idx) end
+	function MT:modify_var(idx, val) return self:__host_pcall('puss._debug_modify_var', idx, val) end
 
 	local listen_sock = net.listen(nil, 9999)
 	local socket, address
@@ -90,58 +91,110 @@ local lua_types =
 	, ['function'] = 'F'
 	}
 
+local function do_ret_one(idx, var)
+	local s, n, v = var[1], var[2], var[3]
+	local vt, vv = type(v), tostring(v)
+	return {idx, s, lua_types[vt] or '?', tostring(n), vv}
+end
+
 local function do_ret(vars, ps, pe)
-	if ps > pe then return end
 	local ret = {}
 	for i=ps,pe do
-		local var = vars[i]
-		local vt, vv = type(var[3]), tostring(var[3])
-		if vt=='string' then vv = string.format('%q', vv) end
-		table.insert(ret, {i, var[1], lua_types[vt] or '?', tostring(var[2]), vv})
+		table.insert(ret, do_ret_one(i, vars[i]))
 	end
 	return ret
 end
 
-puss._debug_fetch_vars = function(level)
+local function var_modify_local(var, idx, val)
+	local level, i = var[4], var[5]
+	debug.setlocal(level, i, v)
+	local n, v = debug.getlocal(level, i)
+	var[3] = v
+	return do_ret_one(idx, var)
+end
+
+local function var_modify_upvalue(var, idx, val)
+	local level, i = var[4], var[5]
 	local info = debug.getinfo(level, 'uf')
+	debug.setupvalue(info.func, i, val)
+	local n, v = debug.getupvalue(info.func, i)
+	var[3] = v
+	return do_ret_one(idx, var)
+end
+
+local function var_modify_table(var, idx, val)
+	local t = val[4]
+	rawset(t, val)
+	var[3] = val
+	return do_ret_one(idx, var)
+end
+
+local function var_modify_uservalue(var, idx, val)
+	local u = val[4]
+	debug.setuservalue(u, val)
+	var[3] = debug.getuservalue(u)
+	return do_ret_one(idx, var)
+end
+
+puss._debug_fetch_vars = function(level)
 	local vars = puss._debug_stack_vars
+	local key = string.format('stack:%d', level)
+	local range = vars[key]
+	if range then return do_ret(vars, range[1], range[2]) end
+	local info = debug.getinfo(level, 'uf')
 	local start = #vars+1
 	for i=1,255 do
 		local n,v = debug.getlocal(level, i)
 		if not n then break end
-		if n:match('^%(.+%)$')==nil then table.insert(vars, {'L', n, v}) end
+		if n:match('^%(.+%)$')==nil then table.insert(vars, {'L', n, v, level, i, modify=var_modify_local}) end
 	end
 	for i=1,255 do
 		local n,v = debug.getupvalue(info.func, i)
 		if not n then break end
-		table.insert(vars, {'U', n, v})
+		table.insert(vars, {'U', n, v, level, i, modify=var_modify_upvalue})
 	end
 	for i=-1,-255,-1 do
 		local n,v = debug.getlocal(level, i)
 		if not n then break end
-		table.insert(vars, {'V', n, v})
+		table.insert(vars, {'V', n, v, level, i, modify=var_modify_local})
 	end
+	vars[key] = {start, #vars}
 	return do_ret(vars, start, #vars)
 end
 
-puss._debug_fetch_subs = function(i)
+puss._debug_fetch_subs = function(idx)
 	local vars = puss._debug_stack_vars
 	local start = #vars + 1
-	local var = vars[i]
+	local var = vars[idx]
 	if not var then return end
+	print('fetch_subs:', idx, var, table.unpack(var))
 	if var==vars then return end	-- no cache
 	local value = var[3]
 	local vt = type(value)
 	if vt=='table' then
+		local range = vars[value]
+		if range then return do_ret(vars, range[1], range[2]) end
 		local mt = getmetatable(value)
 		if mt then table.insert(vars, {'M', '@metatable', mt}) end
-		for k, v in pairs(value) do table.insert(vars, {'F', k, v}) end
+		for k, v in pairs(value) do table.insert(vars, {'T', k, v, value, modify=var_modify_table}) end
 	elseif vt=='userdata' then
+		local range = vars[value]
+		if range then return do_ret(vars, range[1], range[2]) end
 		local mt = getmetatable(value)
 		if mt then table.insert(vars, {'M', '@metatable', mt}) end
 		local uv = debug.getuservalue(value)
-		if uv then table.insert(vars, {'P', '@uservalue', uv}) end
+		if uv then table.insert(vars, {'P', '@uservalue', uv, value, modify=var_modify_uservalue}) end
+	else
+		return
 	end
+	vars[value] = {start, #vars}
 	return do_ret(vars, start, #vars)
+end
+
+puss._debug_modify_var = function(idx, val)
+	local var = vars[idx]
+	if not var then return end
+	if not var.modify then return end
+	return var.modify(var, idx, val)
 end
 
