@@ -175,9 +175,17 @@ local has_sub_types =
 	, ['U'] = true
 	}
 
+local has_modify_types =
+	{ ['-'] = true
+	, ['B'] = true
+	, ['N'] = true
+	, ['S'] = true
+	}
+
 local function draw_subs(stack_current, subs)
 	for _,v in ipairs(subs) do
-		local has_subs = has_sub_types[v[3]] and v.subs~=false
+		local vt = v[3]
+		local has_subs = has_sub_types[vt] and v.subs~=false
 		imgui.PushStyleColor(ImGuiCol_Text, 0.75, 0.75, 1, 1)
 		local show = imgui.TreeNodeEx(v, has_subs and FOLD_FLAGS or LEAF_FLAGS, v[4])
 		imgui.PopStyleColor()
@@ -189,6 +197,10 @@ local function draw_subs(stack_current, subs)
 		end
 		imgui.SameLine()
 		imgui.TextColored(1, 1, 0.75, 1, tostring(v[5]))
+		-- if has_modify_types[vt] then
+		-- 	imgui.SameLine()
+		-- 	imgui.SmallButton('modify')
+		-- end
 		if show then
 			if v.subs then draw_subs(stack_current, v.subs) end
 			imgui.TreePop()
