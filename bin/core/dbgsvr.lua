@@ -14,7 +14,7 @@ if puss._debug_proxy then
 	function MT:fetch_subs(idx) return idx, self:__host_pcall('puss._debug_fetch_subs', idx) end
 	function MT:modify_var(idx, val) return self:__host_pcall('puss._debug_modify_var', idx, val) end
 
-	local listen_sock = net.listen(nil, 9999)
+	local listen_sock = net.listen(nil, 9999, true)
 	local socket, address
 	local send_breaked_frame
 

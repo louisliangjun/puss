@@ -11,11 +11,11 @@ local function utable_init(sock)
 	utable.recv_cur = nil
 end
 
-__exports.listen = function(ip, port)
+__exports.listen = function(ip, port, reuse_addr)
 	local listen_sock = puss_socket.socket_new()
 	listen_sock:create()
 	listen_sock:set_nonblock(true)
-	listen_sock:bind(ip, port)
+	listen_sock:bind(ip, port, reuse_addr)
 	listen_sock:listen()
 	return listen_sock
 end

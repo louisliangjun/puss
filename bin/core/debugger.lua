@@ -37,15 +37,33 @@ shotcuts.register('debugger/step_over', 'step over', 'F10', false, false, false,
 shotcuts.register('debugger/step_into', 'step into', 'F11', false, false, false, false)
 shotcuts.register('debugger/step_out', 'step out', 'F11', false, true, false, false)
 
+local function stack_vars_replace(var)
+	local old = stack_vars[var[1]]
+	if old then
+		for i,v in ipairs(var) do old[i]=v end
+		var = old
+	else
+		stack_vars[var[1]] = var
+	end
+	return var
+end
+
+local function vars_sort_by_name(a, b)
+	local an, bn = a[4], b[4]
+	if an==bn then return a[1] < b[1] end
+	return an<bn
+end
+
 local stubs = {}
 
 stubs.breaked = function()
 	stack_vars = {}
+	stack_list = {}
+	stack_current = 1
 	net.send(socket, 'fetch_stack')
 end
 
 stubs.fetch_stack = function(ok, res)
-	stack_list = {}
 	if not ok then return print('fetch_stack failed:', ok, res) end
 	if type(res)~='table' then return print('fetch_stack failed:', ok, res) end
 	stack_list = res
@@ -60,19 +78,18 @@ end
 
 stubs.fetch_vars = function(level, ok, vars)
 	if not ok then return print('fetch_vars failed:', vars) end
-	local stack
+	local info
 	for i,v in ipairs(stack_list) do
 		if v.level==level then
-			stack = v
+			info = v
 			break
 		end
 	end
-	if stack then
-		print('vars', level, #vars)
-		stack.vars = vars
-		for _,v in ipairs(vars) do
-			stack_vars[v[1]] = v
-		end
+	if info then
+		-- print('vars', level, #vars)
+		info.vars = vars
+		for i=1,#vars do vars[i] = stack_vars_replace(vars[i]) end
+		table.sort(vars, vars_sort_by_name)
 	end
 end
 
@@ -80,11 +97,11 @@ stubs.fetch_subs = function(key, ok, subs)
 	if not ok then return print('fetch_subs failed:', subs) end
 	local var = stack_vars[key]
 	if var then
-		var.subs = subs
+		var.subs = (subs and next(subs)) and subs or false
+		-- print('fetch subs:', key, var.subs)
 		if subs then
-			for _,v in ipairs(subs) do
-				stack_vars[v[1]] = v
-			end
+			for i=1,#subs do subs[i] = stack_vars_replace(subs[i]) end
+			table.sort(subs, vars_sort_by_name)
 		end
 	end
 end
@@ -116,6 +133,7 @@ local function debug_toolbar()
 	else
 		if imgui.Button("connect") then
 			_socket = net.connect('127.0.0.1', 9999)
+			if socket then socket:close() end
 			socket = _socket
 		end
 	end
@@ -158,28 +176,24 @@ local has_sub_types =
 	}
 
 local function draw_subs(stack_current, subs)
+	imgui.PushStyleColor(ImGuiCol_Text, 0.75, 0.75, 1, 1)
 	for _,v in ipairs(subs) do
-		-- TODO : now use debug label
-		local label = string.format('[%d|%s|%s]%s = %s', table.unpack(v))
-		if has_sub_types[ v[3] ] then
-			local show_subs = imgui.TreeNodeEx(label, FOLD_FLAGS, label)
-			if imgui.IsItemClicked() then
-				print(label)
-				if not v.subs then
-					v.subs = dummy_vars
-					net.send(socket, 'fetch_subs', v[1])
-				end
-			end
-			if show_subs then
-				if v.subs then draw_subs(stack_current, v.subs) end
-				imgui.TreePop()
-			end
-		else
-			if imgui.TreeNodeEx(label, LEAF_FLAGS, label) then
-				imgui.TreePop()
+		local has_subs = has_sub_types[v[3]] and v.subs~=false
+		local show = imgui.TreeNodeEx(v, has_subs and FOLD_FLAGS or LEAF_FLAGS, v[4])
+		if has_subs and imgui.IsItemClicked() then
+			if v.subs==nil then
+				v.subs = dummy_vars
+				net.send(socket, 'fetch_subs', v[1])
 			end
 		end
+		imgui.SameLine()
+		imgui.TextColored(1, 1, 0.75, 1, v[5])
+		if show then
+			if v.subs then draw_subs(stack_current, v.subs) end
+			imgui.TreePop()
+		end
 	end
+	imgui.PopStyleColor()
 end
 
 local function draw_vars()

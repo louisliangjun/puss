@@ -37,7 +37,6 @@
 		}
 		return fcntl(fd, F_SETFL, flags);
 	}
-
 #endif
 
 #include <memory.h>
@@ -124,14 +123,19 @@ static int lua_socket_bind(lua_State* L) {
 	Socket* ud = lua_check_socket(L, 1, 1);
 	const char* ip = luaL_optstring(L, 2, "0.0.0.0");
 	unsigned port = (unsigned)luaL_optinteger(L, 3, 0);
+	int reuse_addr = (int)lua_toboolean(L, 4);
 	struct sockaddr addr;
 	socklen_t addr_len = sizeof(addr);
 	int res;
 	socket_addr_build(L, &addr, ip, port);
+	if( reuse_addr ) {
+		setsockopt(ud->fd, SOL_SOCKET, SO_REUSEADDR, (char*)&reuse_addr, sizeof(reuse_addr));
+	}
 	res = bind(ud->fd, &addr, sizeof(addr));
 	lua_pushinteger(L, res);
 	if( res < 0 ) {
 		lua_pushinteger(L, get_last_error());
+		socket_close(ud);
 	} else if( getsockname(ud->fd, &addr, &addr_len) < 0 ) {
 		lua_pushnil(L);
 	} else {
@@ -147,6 +151,7 @@ static int lua_socket_listen(lua_State* L) {
 	lua_pushinteger(L, res);
 	if( res < 0 ) {
 		lua_pushinteger(L, get_last_error());
+		socket_close(ud);
 		return 2;
 	}
 	return 1;
