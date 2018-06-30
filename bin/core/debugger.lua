@@ -176,10 +176,11 @@ local has_sub_types =
 	}
 
 local function draw_subs(stack_current, subs)
-	imgui.PushStyleColor(ImGuiCol_Text, 0.75, 0.75, 1, 1)
 	for _,v in ipairs(subs) do
 		local has_subs = has_sub_types[v[3]] and v.subs~=false
+		imgui.PushStyleColor(ImGuiCol_Text, 0.75, 0.75, 1, 1)
 		local show = imgui.TreeNodeEx(v, has_subs and FOLD_FLAGS or LEAF_FLAGS, v[4])
+		imgui.PopStyleColor()
 		if has_subs and imgui.IsItemClicked() then
 			if v.subs==nil then
 				v.subs = dummy_vars
@@ -187,19 +188,20 @@ local function draw_subs(stack_current, subs)
 			end
 		end
 		imgui.SameLine()
-		imgui.TextColored(1, 1, 0.75, 1, v[5])
+		imgui.TextColored(1, 1, 0.75, 1, tostring(v[5]))
 		if show then
 			if v.subs then draw_subs(stack_current, v.subs) end
 			imgui.TreePop()
 		end
 	end
-	imgui.PopStyleColor()
 end
 
 local function draw_vars()
 	local info = stack_list[stack_current]
 	if not info then return imgui.Text('<empty>') end
-	if info.vars then draw_subs(stack_current, info.vars) end
+	if info.vars then
+		draw_subs(stack_current, info.vars)
+	end
 end
 
 local function debug_pane(main_ui)

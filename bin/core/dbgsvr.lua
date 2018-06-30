@@ -80,21 +80,69 @@ puss._debug_fetch_stack = function()
 	return infos
 end
 
-local lua_types =
-	{ ['nil'] = '-'
-	, ['string'] = 'S'
-	, ['boolean'] = 'B'
-	, ['number'] = 'N'
-	, ['table'] = 'T'
-	, ['userdata'] = 'U'
-	, ['thread'] = 'H'
-	, ['function'] = 'F'
+local lua_type_unknown = {'?', tostring}
+local lua_types = {}
+
+local function lua_type_desc_of(v)
+	local tt = lua_types[type(v)] or lua_type_unknown
+	return tt[1], tt[2](v)
+end
+
+local function desc_of_string(v)
+	local s = string.format('%q', v)
+	if #s > 128 then
+		s = s:sub(1,128) .. '...'
+	end
+	return s
+end
+
+local function desc_of_table(t)
+	local out = {}
+	local mt = getmetatable(t)
+	local prefix = ''
+	if mt then
+		if mt.__tostring then
+			prefix = tostring(t)
+		elseif mt.__name then
+			prefix = string.format('<%s>', mt.__name)
+		end
+	end
+	local c = 3
+	if #t > 0 then
+		for i,v in ipairs(t) do
+			if c <= 0 then break end
+			c = c - 1
+			table.insert(out, tostring(v))
+		end
+	else
+		for k,v in pairs(t) do
+			if c <= 0 then break end
+			c = c - 1
+			table.insert(out, string.format('%s=%s', tostring(k), tostring(v)))
+		end
+	end
+	if c <= 0 then table.insert(out, '...') end
+	local ctx = table.concat(out, ',')
+	if #ctx > 128 then ctx = ctx:sub(1,128)..'...' end
+	return prefix..'{'..ctx..'}'
+end
+
+lua_types =
+	{ ['nil'] = {'-', function(v) return 'nil' end}
+	, ['string'] = {'S', desc_of_string}
+	, ['boolean'] = {'B', function(v) return v end}
+	, ['number'] = {'N', function(v) return v end}
+	, ['table'] = {'T', desc_of_table}
+	, ['userdata'] = {'U', tostring}
+	, ['thread'] = {'H', tostring}
+	, ['function'] = {'F', tostring}
 	}
+
 
 local function do_ret_one(idx, var)
 	local s, n, v = var[1], var[2], var[3]
-	local vt, vv = type(v), tostring(v)
-	return {idx, s, lua_types[vt] or '?', tostring(n), vv}
+	local vt, vv = lua_type_desc_of(v)
+	return {idx, s, vt, tostring(n), vv}
 end
 
 local function do_ret(vars, ps, pe)
