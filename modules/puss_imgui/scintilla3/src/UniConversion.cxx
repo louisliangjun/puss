@@ -98,7 +98,7 @@ size_t UTF16Length(const char *s, size_t len) {
 	return ulen;
 }
 
-constexpr unsigned char TrailByteValue(unsigned char c) {
+unsigned char TrailByteValue(unsigned char c) {
 	// The top 2 bits are 0b10 to indicate a trail byte.
 	// The lower 6 bits contain the value.
 	return c & 0x3F;

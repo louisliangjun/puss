@@ -22,7 +22,7 @@ typedef int Line;
 const Position invalidPosition = -1;
 
 template <typename T>
-inline constexpr T clamp(T val, T minVal, T maxVal) {
+inline T clamp(T val, T minVal, T maxVal) {
 	return (val > maxVal) ? maxVal : ((val < minVal) ? minVal : val);
 }
 
