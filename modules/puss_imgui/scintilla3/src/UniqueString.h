@@ -11,7 +11,7 @@
 
 namespace Scintilla {
 
-using UniqueString = std::unique_ptr<const char[]>;
+using UniqueString = std::unique_ptr<char[]>;
 
 /// Equivalent to strdup but produces a std::unique_ptr<const char[]> allocation to go
 /// into collections.
