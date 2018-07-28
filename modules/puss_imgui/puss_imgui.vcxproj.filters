@@ -1,10 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClCompile Include="puss_module_imgui.cpp" />
-    <ClCompile Include="gl3w\GL\gl3w.c">
-      <Filter>gl3w</Filter>
-    </ClCompile>
     <ClCompile Include="imgui\imgui_draw.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
@@ -459,21 +455,13 @@
     <ClCompile Include="scintilla3\src\CharClassify.cxx">
       <Filter>scintilla3\src</Filter>
     </ClCompile>
+    <ClCompile Include="puss_module_imgui.cpp" />
+    <ClCompile Include="gl3w\GL\gl3w.c">
+      <Filter>gl3w\GL</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="puss_module_imgui.h" />
-    <ClInclude Include="gl3w\GL\gl3w.h">
-      <Filter>gl3w</Filter>
-    </ClInclude>
-    <ClInclude Include="gl3w\GL\glcorearb.h">
-      <Filter>gl3w</Filter>
-    </ClInclude>
-    <ClInclude Include="glfw\include\GLFW\glfw3.h">
-      <Filter>glfw</Filter>
-    </ClInclude>
-    <ClInclude Include="glfw\include\GLFW\glfw3native.h">
-      <Filter>glfw</Filter>
-    </ClInclude>
     <ClInclude Include="imgui\imgui_internal.h">
       <Filter>imgui</Filter>
     </ClInclude>
@@ -674,16 +662,16 @@
     <ClInclude Include="scintilla3\src\CellBuffer.h">
       <Filter>scintilla3\src</Filter>
     </ClInclude>
+    <ClInclude Include="gl3w\GL\gl3w.h">
+      <Filter>gl3w\GL</Filter>
+    </ClInclude>
+    <ClInclude Include="gl3w\GL\glcorearb.h">
+      <Filter>gl3w\GL</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="imgui">
       <UniqueIdentifier>{3d6ae7a3-d10a-4b82-9297-503ad4ba2b27}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="gl3w">
-      <UniqueIdentifier>{868faf40-c1d7-4d83-801d-0d689974fffb}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="glfw">
-      <UniqueIdentifier>{e394e72c-22d5-420d-ba95-33581e03ac7a}</UniqueIdentifier>
     </Filter>
     <Filter Include="_gen">
       <UniqueIdentifier>{4ac8639d-2294-47c2-8a89-e3acd0d155c6}</UniqueIdentifier>
@@ -702,6 +690,12 @@
     </Filter>
     <Filter Include="scintilla3\src">
       <UniqueIdentifier>{d448ffea-0036-4c7b-ac41-74a4d6275b19}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="gl3w">
+      <UniqueIdentifier>{bfb0ed99-3578-430b-9e6c-78a14de504f1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="gl3w\GL">
+      <UniqueIdentifier>{dfb68fbd-d0f4-4ce4-936d-f584b2abbf07}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -724,5 +718,9 @@
     <None Include="scintilla3\src\SciTE.properties">
       <Filter>scintilla3\src</Filter>
     </None>
+    <None Include="imgui_impl_glfw.inl" />
+    <None Include="imgui_impl_opengl3.inl" />
+    <None Include="imgui_impl_win32.inl" />
+    <None Include="imgui_impl_dx11.inl" />
   </ItemGroup>
 </Project>

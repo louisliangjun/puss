@@ -1,12 +1,6 @@
 // dear imgui tabs
 // experimental/WIP feature, API will be reworked.
 
-#if defined(_MSC_VER) && !defined(_CRT_SECURE_NO_WARNINGS)
-#define _CRT_SECURE_NO_WARNINGS
-#endif
-
-#include <stdint.h>
-
 #include "imgui_tabs.h"
 #define IMGUI_DEFINE_MATH_OPERATORS
 #define IMGUI_DEFINE_PLACEMENT_NEW

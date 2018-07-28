@@ -203,7 +203,6 @@ local function draw_subs(stack_current, subs)
 		-- end
 		if show then
 			if v.subs then draw_subs(stack_current, v.subs) end
-			imgui.TreePop()
 		end
 	end
 end
