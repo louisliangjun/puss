@@ -6,16 +6,85 @@
 
 #include "puss_module_imgui.h"
 
-#undef PUSS_IMGUI_USE_DX11
-
 #ifdef PUSS_IMGUI_USE_DX11
 	#include <windows.h>
-	#include <tchar.h>
-
 	#include <d3d11.h>
+	#define DIRECTINPUT_VERSION 0x0800
+	#include <dinput.h>
 	#include <d3dcompiler.h>
 
+	#pragma comment(lib, "d3d11.lib")
+	#pragma comment(lib, "d3dcompiler.lib")
+	#pragma comment(lib, "dxgi.lib")
+
+	#define PUSS_IMGUI_WINDOW_CLASS	"PussImGuiWindow"
+
+	static LRESULT WINAPI PussImguiWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+	static WNDCLASSEXA puss_imgui_wc = { sizeof(WNDCLASSEXA), CS_CLASSDC, PussImguiWndProc, 0L, 0L, NULL, NULL, NULL, NULL, NULL, PUSS_IMGUI_WINDOW_CLASS, NULL };
+
+	// Data
+	static ID3D11Device*            g_pd3dDevice = NULL;
+	static ID3D11DeviceContext*     g_pd3dDeviceContext = NULL;
+	static IDXGISwapChain*          g_pSwapChain = NULL;
+	static ID3D11RenderTargetView*  g_mainRenderTargetView = NULL;
+
+	void CreateRenderTarget()
+	{
+		ID3D11Texture2D* pBackBuffer;
+		g_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBackBuffer);
+		g_pd3dDevice->CreateRenderTargetView(pBackBuffer, NULL, &g_mainRenderTargetView);
+		pBackBuffer->Release();
+	}
+
+	void CleanupRenderTarget()
+	{
+		if (g_mainRenderTargetView) { g_mainRenderTargetView->Release(); g_mainRenderTargetView = NULL; }
+	}
+
+	HRESULT CreateDeviceD3D(HWND hWnd)
+	{
+		// Setup swap chain
+		DXGI_SWAP_CHAIN_DESC sd;
+		ZeroMemory(&sd, sizeof(sd));
+		sd.BufferCount = 2;
+		sd.BufferDesc.Width = 0;
+		sd.BufferDesc.Height = 0;
+		sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		sd.BufferDesc.RefreshRate.Numerator = 60;
+		sd.BufferDesc.RefreshRate.Denominator = 1;
+		sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+		sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+		sd.OutputWindow = hWnd;
+		sd.SampleDesc.Count = 1;
+		sd.SampleDesc.Quality = 0;
+		sd.Windowed = TRUE;
+		sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+
+		UINT createDeviceFlags = 0;
+		//createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+		D3D_FEATURE_LEVEL featureLevel;
+		const D3D_FEATURE_LEVEL featureLevelArray[2] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0, };
+		if (D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &g_pSwapChain, &g_pd3dDevice, &featureLevel, &g_pd3dDeviceContext) != S_OK)
+			return E_FAIL;
+
+		CreateRenderTarget();
+
+		return S_OK;
+	}
+
+	void CleanupDeviceD3D()
+	{
+		CleanupRenderTarget();
+		if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = NULL; }
+		if (g_pd3dDeviceContext) { g_pd3dDeviceContext->Release(); g_pd3dDeviceContext = NULL; }
+		if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = NULL; }
+	}
+
 	static void do_platform_init(lua_State* L) {
+		// Create application window
+		puss_imgui_wc.hInstance = GetModuleHandle(NULL);
+		RegisterClassEx(&puss_imgui_wc);
 	}
 
 #else
@@ -40,6 +109,11 @@
 		GlfwClientApi_OpenGL,
 		GlfwClientApi_Vulkan
 	};
+
+#ifdef _WIN32
+	#pragma comment(lib, "opengl32.lib")
+	#pragma comment(lib, "glfw3.lib")
+#endif
 
 	static void error_callback(int e, const char *d) {
 		fprintf(stderr, "[GFLW] error %d: %s\n", e, d);
@@ -73,6 +147,7 @@ public:
 	#include "imgui_impl_win32.inl"
 	#include "imgui_impl_dx11.inl"
 
+public:
 	int g_SouldClose;
 
 	void set_should_close(int value) {
@@ -83,8 +158,84 @@ public:
 		return g_SouldClose;
 	}
 
-	void do_destroy_window() {
+	bool create_window(const char* title, int width, int height) {
+	   HWND hwnd = CreateWindowA(PUSS_IMGUI_WINDOW_CLASS, title, WS_OVERLAPPEDWINDOW, 100, 100, 1280, 800, NULL, NULL, puss_imgui_wc.hInstance, NULL);
+
+		// Initialize Direct3D
+		if (CreateDeviceD3D(hwnd) < 0) {
+			CleanupDeviceD3D();
+			return false;
+		}
+
+		// Show the window
+		ShowWindow(hwnd, SW_SHOWDEFAULT);
+		UpdateWindow(hwnd);
+
+		// Setup ImGui binding
+		g_Context = ImGui::CreateContext();
+		ImGuiIO& io = ImGui::GetIO();
+		io.UserData = this;
+		//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
+		//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;   // Enable Gamepad Controls
+
+		ImGui_ImplWin32_Init(hwnd);
+		ImGui_ImplDX11_Init(::g_pd3dDevice, ::g_pd3dDeviceContext);
+
+		return true;
 	}
+
+	void destroy_window() {
+		if( g_hWnd ) {
+			ImGui_ImplDX11_Shutdown();
+			ImGui_ImplWin32_Shutdown();
+			ImGui::DestroyContext(g_Context);
+			CleanupDeviceD3D();
+			DestroyWindow(g_hWnd);
+			g_hWnd = NULL;
+		}
+	}
+
+	bool prepare_newframe() {
+		if( !g_hWnd )
+			return false;
+		ImGui::SetCurrentContext(g_Context);
+
+		// input
+		MSG msg;
+		ZeroMemory(&msg, sizeof(msg));
+		while (msg.message != WM_QUIT)
+		{
+			// Poll and handle messages (inputs, window resize, etc.)
+			// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
+			// - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application.
+			// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application.
+			// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
+			if (PeekMessage(&msg, NULL, 0U, 0U, PM_REMOVE)) {
+				TranslateMessage(&msg);
+				DispatchMessage(&msg);
+				continue;
+			}
+			break;
+		}
+		ImGui_ImplDX11_NewFrame();
+		ImGui_ImplWin32_NewFrame();
+		return true;
+	}
+
+	bool prepare_render() {
+		if( !g_hWnd )
+			return false;
+		return true;
+	}
+
+	void render_drawdata() {
+		ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+        g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, NULL);
+        g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, (float*)&clear_color);
+        ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+        g_pSwapChain->Present(1, 0); // Present with vsync
+	}
+
 #else
 	#include "imgui_impl_glfw.inl"
 	#include "imgui_impl_opengl3.inl"
@@ -128,15 +279,7 @@ public:
 		return true;
 	}
 
-	void after_create_window() {
-        ImGui_ImplOpenGL3_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
-		ImGui::Render();
-		ImGui::EndFrame();
-	}
-
-	void do_destroy_window() {
+	void destroy_window() {
 		if( g_Window ) {
 			GLFWwindow* win = g_Window;
 			ImGui_ImplOpenGL3_Shutdown();
@@ -174,7 +317,7 @@ public:
 		return true;
 	}
 
-	void do_render_drawdata() {
+	void render_drawdata() {
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         glfwMakeContextCurrent(g_Window);
         glfwSwapBuffers(g_Window);
@@ -227,7 +370,7 @@ static int imgui_error_handle_default(lua_State* L) {
 
 static int imgui_destroy_lua(lua_State* L) {
 	ImguiEnv* env = (ImguiEnv*)luaL_checkudata(L, 1, IMGUI_MT_NAME);
-	env->do_destroy_window();
+	env->destroy_window();
 
 	if( env->g_DropFiles ) {
 		delete env->g_DropFiles;
@@ -304,7 +447,7 @@ static int imgui_update_lua(lua_State* L) {
 
 	if( env->prepare_render() ) {
 		ImGui::Render();
-		env->do_render_drawdata();
+		env->render_drawdata();
 		ImGui::EndFrame();
 	}
 	return 0;
@@ -367,12 +510,56 @@ static int imgui_fetch_extra_keys_lua(lua_State* L) {
 	return 0;
 }
 
+#ifdef PUSS_IMGUI_USE_DX11
+
+	static LRESULT WINAPI PussImguiWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+		ImguiEnv* env = ImGui::GetCurrentContext() ? (ImguiEnv*)(ImGui::GetIO().UserData) : NULL;
+		LRESULT res = env ? env->ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam) : 0;
+		if (res)
+			return res;
+
+		switch (msg)
+		{
+		case WM_SIZE:
+			if (g_pd3dDevice != NULL && wParam != SIZE_MINIMIZED)
+			{
+				if(env) env->ImGui_ImplDX11_InvalidateDeviceObjects();
+				CleanupRenderTarget();
+				g_pSwapChain->ResizeBuffers(0, (UINT)LOWORD(lParam), (UINT)HIWORD(lParam), DXGI_FORMAT_UNKNOWN, 0);
+				CreateRenderTarget();
+				if(env) env->ImGui_ImplDX11_CreateDeviceObjects();
+			}
+			return 0;
+		case WM_SYSCOMMAND:
+			if ((wParam & 0xfff0) == SC_KEYMENU) // Disable ALT application menu
+				return 0;
+			break;
+		case WM_DESTROY:
+			PostQuitMessage(0);
+			return 0;
+		}
+		return DefWindowProcA(hWnd, msg, wParam, lParam);
+	}
+
+	static int imgui_wait_events_lua(lua_State* L) {
+		// TODO:
+		Sleep(1);
+		return 0;
+	}
+
+#else
+	static int imgui_wait_events_lua(lua_State* L) {
+		double timeout = luaL_optnumber(L, 1, 0.01);
+		glfwWaitEventsTimeout(timeout);
+		return 0;
+	}
+#endif
+
 static int imgui_create_lua(lua_State* L) {
 	const char* title = luaL_optstring(L, 1, "imgui window");
 	int width = (int)luaL_optinteger(L, 2, 1024);
 	int height = (int)luaL_optinteger(L, 3, 768);
 	ImguiEnv* env = (ImguiEnv*)lua_newuserdata(L, sizeof(ImguiEnv));
-	GLFWwindow* win = NULL;
 	int err = 0;
 	memset(env, 0, sizeof(ImguiEnv));
 	env->g_ScriptErrorHandle = LUA_NOREF;
@@ -411,14 +598,14 @@ static int imgui_create_lua(lua_State* L) {
 	if( err )
 		return lua_error(L);
 
-	env->after_create_window();
-	return 1;
-}
+	// first frame
+	if( env->prepare_newframe() ) {
+        ImGui::NewFrame();
+		ImGui::Render();
+		ImGui::EndFrame();
+	}
 
-static int imgui_wait_events_lua(lua_State* L) {
-	double timeout = luaL_optnumber(L, 1, 0.01);
-	glfwWaitEventsTimeout(timeout);
-	return 0;
+	return 1;
 }
 
 static int imgui_get_drop_files_lua(lua_State* L) {

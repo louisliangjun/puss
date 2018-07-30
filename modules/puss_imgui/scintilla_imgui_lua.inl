@@ -308,7 +308,7 @@ static void im_scintilla_update_callback(ScintillaIM* sci, const SCNotification*
 
 static int im_scintilla_update(lua_State* L) {
 	ScintillaIM** ud = (ScintillaIM**)luaL_checkudata(L, 1, LUA_IM_SCI_NAME);
-	bool draw = lua_toboolean(L, 2);
+	bool draw = lua_toboolean(L, 2)!=0;
 	if( !draw ) luaL_checktype(L, 3, LUA_TFUNCTION);
 	scintilla_imgui_update(*ud, draw, im_scintilla_update_callback, L);
 	return 0;

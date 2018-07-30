@@ -456,9 +456,6 @@
       <Filter>scintilla3\src</Filter>
     </ClCompile>
     <ClCompile Include="puss_module_imgui.cpp" />
-    <ClCompile Include="gl3w\GL\gl3w.c">
-      <Filter>gl3w\GL</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="puss_module_imgui.h" />
@@ -662,12 +659,6 @@
     <ClInclude Include="scintilla3\src\CellBuffer.h">
       <Filter>scintilla3\src</Filter>
     </ClInclude>
-    <ClInclude Include="gl3w\GL\gl3w.h">
-      <Filter>gl3w\GL</Filter>
-    </ClInclude>
-    <ClInclude Include="gl3w\GL\glcorearb.h">
-      <Filter>gl3w\GL</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="imgui">
@@ -691,12 +682,6 @@
     <Filter Include="scintilla3\src">
       <UniqueIdentifier>{d448ffea-0036-4c7b-ac41-74a4d6275b19}</UniqueIdentifier>
     </Filter>
-    <Filter Include="gl3w">
-      <UniqueIdentifier>{bfb0ed99-3578-430b-9e6c-78a14de504f1}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="gl3w\GL">
-      <UniqueIdentifier>{dfb68fbd-d0f4-4ce4-936d-f584b2abbf07}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="scintilla_imgui_lua.inl" />
@@ -718,8 +703,6 @@
     <None Include="scintilla3\src\SciTE.properties">
       <Filter>scintilla3\src</Filter>
     </None>
-    <None Include="imgui_impl_glfw.inl" />
-    <None Include="imgui_impl_opengl3.inl" />
     <None Include="imgui_impl_win32.inl" />
     <None Include="imgui_impl_dx11.inl" />
   </ItemGroup>

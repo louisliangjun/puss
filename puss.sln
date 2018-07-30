@@ -16,6 +16,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "puss_socket", "modules\puss
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "puss_imgui", "modules\puss_imgui\puss_imgui.vcxproj", "{FBEAE7E3-3F48-484C-978A-516C31D18862}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "puss_imgui_glfw", "modules\puss_imgui\puss_imgui_glfw.vcxproj", "{5EED7033-AF66-45F1-A199-27561C719F38}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -38,6 +40,10 @@ Global
 		{FBEAE7E3-3F48-484C-978A-516C31D18862}.Debug|x64.Build.0 = Debug|x64
 		{FBEAE7E3-3F48-484C-978A-516C31D18862}.Release|x64.ActiveCfg = Release|x64
 		{FBEAE7E3-3F48-484C-978A-516C31D18862}.Release|x64.Build.0 = Release|x64
+		{5EED7033-AF66-45F1-A199-27561C719F38}.Debug|x64.ActiveCfg = Debug|x64
+		{5EED7033-AF66-45F1-A199-27561C719F38}.Debug|x64.Build.0 = Debug|x64
+		{5EED7033-AF66-45F1-A199-27561C719F38}.Release|x64.ActiveCfg = Release|x64
+		{5EED7033-AF66-45F1-A199-27561C719F38}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -46,6 +52,7 @@ Global
 		{0B22875A-0FAD-4859-9D67-99EA0AB8D3D2} = {EA77CC37-897E-41E8-B54C-552B5A7CAFF0}
 		{CF27D656-24A4-4A0D-B36E-E82F33257FD3} = {EA77CC37-897E-41E8-B54C-552B5A7CAFF0}
 		{FBEAE7E3-3F48-484C-978A-516C31D18862} = {EA77CC37-897E-41E8-B54C-552B5A7CAFF0}
+		{5EED7033-AF66-45F1-A199-27561C719F38} = {EA77CC37-897E-41E8-B54C-552B5A7CAFF0}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {4CAFCE2B-9E1E-4D1D-9979-781016886863}

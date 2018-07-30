@@ -11,7 +11,6 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="gl3w\GL\gl3w.c" />
     <ClCompile Include="imgui\imgui.cpp" />
     <ClCompile Include="imgui\imgui_demo.cpp" />
     <ClCompile Include="imgui\imgui_draw.cpp" />
@@ -167,8 +166,6 @@
     <ClCompile Include="scintilla_imgui.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="gl3w\GL\gl3w.h" />
-    <ClInclude Include="gl3w\GL\glcorearb.h" />
     <ClInclude Include="imgui\imconfig.h" />
     <ClInclude Include="imgui\imgui.h" />
     <ClInclude Include="imgui\imgui_internal.h" />
@@ -245,8 +242,6 @@
     <None Include="..\..\objs\gen\imgui_wraps.inl" />
     <None Include="..\..\objs\gen\scintilla.iface.inl" />
     <None Include="imgui_impl_dx11.inl" />
-    <None Include="imgui_impl_glfw.inl" />
-    <None Include="imgui_impl_opengl3.inl" />
     <None Include="imgui_impl_win32.inl" />
     <None Include="scintilla3\include\Scintilla.iface" />
     <None Include="scintilla3\src\SciTE.properties" />
@@ -297,7 +292,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <AdditionalIncludeDirectories>$(PussRoot)3rd\glfw-3.2.1.bin.WIN64\include\;$(ProjectDir)scintilla3\include\;$(ProjectDir)scintilla3\src\;$(ProjectDir)scintilla3\lexlib\;$(ProjectDir)gl3w\;$(ProjectDir)imgui\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(PussRoot)3rd\glfw-3.2.1.bin.WIN64\include\;$(ProjectDir)gl3w\;$(ProjectDir)scintilla3\include\;$(ProjectDir)scintilla3\src\;$(ProjectDir)scintilla3\lexlib\;$(ProjectDir)imgui\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>PUSS_IMGUI_USE_DX11;SCI_LEXER;_SCL_SECURE_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
     </ClCompile>
@@ -306,7 +301,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>$(SolutionDir)3rd\glfw-3.2.1.bin.WIN64\lib-vc2013\glfw3.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)3rd\glfw-3.2.1.bin.WIN64\lib-vc2013\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent>
       <Command>$(SolutionDir)vmake imgui_wrap scintilla_iface</Command>
@@ -316,14 +311,14 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(PussRoot)3rd\glfw-3.2.1.bin.WIN64\include\;$(ProjectDir)scintilla3\include\;$(ProjectDir)scintilla3\src\;$(ProjectDir)scintilla3\lexlib\;$(ProjectDir)gl3w\;$(ProjectDir)imgui\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(PussRoot)3rd\glfw-3.2.1.bin.WIN64\include\;$(ProjectDir)gl3w\;$(ProjectDir)scintilla3\include\;$(ProjectDir)scintilla3\src\;$(ProjectDir)scintilla3\lexlib\;$(ProjectDir)imgui\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>PUSS_IMGUI_USE_DX11;SCI_LEXER;_SCL_SECURE_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>$(SolutionDir)3rd\glfw-3.2.1.bin.WIN64\lib-vc2013\glfw3.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)3rd\glfw-3.2.1.bin.WIN64\lib-vc2013\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent>
       <Command>$(SolutionDir)vmake imgui_wrap scintilla_iface</Command>

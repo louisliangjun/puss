@@ -113,7 +113,6 @@ static bool ImGui_ImplWin32_UpdateMouseCursor()
         case ImGuiMouseCursor_ResizeNS:     win32_cursor = IDC_SIZENS; break;
         case ImGuiMouseCursor_ResizeNESW:   win32_cursor = IDC_SIZENESW; break;
         case ImGuiMouseCursor_ResizeNWSE:   win32_cursor = IDC_SIZENWSE; break;
-        case ImGuiMouseCursor_Hand:         win32_cursor = IDC_HAND; break;
         }
         ::SetCursor(::LoadCursor(NULL, win32_cursor));
     }
@@ -123,20 +122,22 @@ static bool ImGui_ImplWin32_UpdateMouseCursor()
 static void ImGui_ImplWin32_UpdateMousePos()
 {
     ImGuiIO& io = ImGui::GetIO();
+	ImguiEnv* self = (ImguiEnv*)(io.UserData);
+	if( !self ) return;
 
     // Set OS mouse position if requested (rarely used, only when ImGuiConfigFlags_NavEnableSetMousePos is enabled by user)
     if (io.WantSetMousePos)
     {
         POINT pos = { (int)io.MousePos.x, (int)io.MousePos.y };
-        ::ClientToScreen(g_hWnd, &pos);
+        ::ClientToScreen(self->g_hWnd, &pos);
         ::SetCursorPos(pos.x, pos.y);
     }
 
     // Set mouse position
     io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
     POINT pos;
-    if (::GetActiveWindow() == g_hWnd && ::GetCursorPos(&pos))
-        if (::ScreenToClient(g_hWnd, &pos))
+    if (::GetActiveWindow() == self->g_hWnd && ::GetCursorPos(&pos))
+        if (::ScreenToClient(self->g_hWnd, &pos))
             io.MousePos = ImVec2((float)pos.x, (float)pos.y);
 }
 
