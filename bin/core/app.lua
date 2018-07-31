@@ -120,7 +120,7 @@ end
 
 local function do_quit_update()
 	if run_sign and main_ui:should_close() then
-		if pages.save_all(false) then
+		if pages.save_all(true) then
 			run_sign = false
 		else
 			imgui.OpenPopup('Quit?')
