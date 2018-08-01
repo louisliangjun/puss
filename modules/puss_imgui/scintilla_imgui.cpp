@@ -86,6 +86,19 @@ class SurfaceImpl;
 #include "ExternalLexer.h"
 #endif
 
+#ifdef _WIN32
+	static CLIPFORMAT cfColumnSelect = static_cast<CLIPFORMAT>(
+		::RegisterClipboardFormat(TEXT("MSDEVColumnSelect")));
+	static CLIPFORMAT cfBorlandIDEBlockType = static_cast<CLIPFORMAT>(
+		::RegisterClipboardFormat(TEXT("Borland IDE Block Type")));
+
+	// Likewise for line-copy (copies a full line when no text is selected)
+	static CLIPFORMAT cfLineSelect = static_cast<CLIPFORMAT>(
+		::RegisterClipboardFormat(TEXT("MSDEVLineSelect")));
+	static CLIPFORMAT cfVSLineTag = static_cast<CLIPFORMAT>(
+		::RegisterClipboardFormat(TEXT("VisualStudioEditorOperationsLineCutCopyClipboardTag")));
+#endif
+
 using namespace Scintilla;
 
 // X has a 16 bit coordinate space, so stop drawing here to avoid wrapping
@@ -1049,6 +1062,236 @@ private:
 			notify_callback(this, &scn, notify_callback_ud);
 		}
 	}
+	
+#ifdef _WIN32
+	void Copy() override {
+		//Platform::DebugPrintf("Copy\n");
+		if (!sel.Empty()) {
+			SelectionText selectedText;
+			CopySelectionRange(&selectedText);
+			CopyToClipboard(selectedText);
+		}
+	}
+
+	void CopyAllowLine() override {
+		SelectionText selectedText;
+		CopySelectionRange(&selectedText, true);
+		CopyToClipboard(selectedText);
+	}
+
+	bool CanPaste() override {
+		if (!Editor::CanPaste())
+			return false;
+		if (::IsClipboardFormatAvailable(CF_TEXT))
+			return true;
+		if (IsUnicodeMode())
+			return ::IsClipboardFormatAvailable(CF_UNICODETEXT) != 0;
+		return false;
+	}
+
+	class GlobalMemory {
+		HGLOBAL hand;
+	public:
+		void *ptr;
+		GlobalMemory() : hand(0), ptr(0) {
+		}
+		explicit GlobalMemory(HGLOBAL hand_) : hand(hand_), ptr(0) {
+			if (hand) {
+				ptr = ::GlobalLock(hand);
+			}
+		}
+		~GlobalMemory() {
+			PLATFORM_ASSERT(!ptr);
+			assert(!hand);
+		}
+		void Allocate(size_t bytes) {
+			assert(!hand);
+			hand = ::GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, bytes);
+			if (hand) {
+				ptr = ::GlobalLock(hand);
+			}
+		}
+		HGLOBAL Unlock() {
+			PLATFORM_ASSERT(ptr);
+			HGLOBAL handCopy = hand;
+			::GlobalUnlock(hand);
+			ptr = 0;
+			hand = 0;
+			return handCopy;
+		}
+		void SetClip(UINT uFormat) {
+			::SetClipboardData(uFormat, Unlock());
+		}
+		operator bool() const {
+			return ptr != 0;
+		}
+		SIZE_T Size() {
+			return ::GlobalSize(hand);
+		}
+	};
+
+	// OpenClipboard may fail if another application has opened the clipboard.
+	// Try up to 8 times, with an initial delay of 1 ms and an exponential back off
+	// for a maximum total delay of 127 ms (1+2+4+8+16+32+64).
+	static bool OpenClipboardRetry(HWND hwnd) {
+		for (int attempt=0; attempt<8; attempt++) {
+			if (attempt > 0) {
+				::Sleep(1 << (attempt-1));
+			}
+			if (::OpenClipboard(hwnd)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void Paste() override {
+		HWND hWnd = (HWND)__scintilla_imgui_os_window();
+		if (!OpenClipboardRetry(hWnd)) {
+			return;
+		}
+		UndoGroup ug(pdoc);
+		const bool isLine = SelectionEmpty() &&
+			(::IsClipboardFormatAvailable(cfLineSelect) || ::IsClipboardFormatAvailable(cfVSLineTag));
+		ClearSelection(multiPasteMode == SC_MULTIPASTE_EACH);
+		bool isRectangular = (::IsClipboardFormatAvailable(cfColumnSelect) != 0);
+
+		if (!isRectangular) {
+			// Evaluate "Borland IDE Block Type" explicitly
+			GlobalMemory memBorlandSelection(::GetClipboardData(cfBorlandIDEBlockType));
+			if (memBorlandSelection) {
+				isRectangular = (memBorlandSelection.Size() == 1) && (static_cast<BYTE *>(memBorlandSelection.ptr)[0] == 0x02);
+				memBorlandSelection.Unlock();
+			}
+		}
+		const PasteShape pasteShape = isRectangular ? pasteRectangular : (isLine ? pasteLine : pasteStream);
+
+		// Always use CF_UNICODETEXT if available
+		GlobalMemory memUSelection(::GetClipboardData(CF_UNICODETEXT));
+		if (memUSelection) {
+			wchar_t *uptr = static_cast<wchar_t *>(memUSelection.ptr);
+			if (uptr) {
+				size_t len;
+				std::vector<char> putf;
+				// Default Scintilla behaviour in Unicode mode
+				if (IsUnicodeMode()) {
+					const size_t bytes = memUSelection.Size();
+					len = UTF8Length(uptr, bytes / 2);
+					putf.resize(len + 1);
+					UTF8FromUTF16(uptr, bytes / 2, &putf[0], len);
+				} else {
+					// CF_UNICODETEXT available, but not in Unicode mode
+					// Convert from Unicode to current Scintilla code page
+					len = ::WideCharToMultiByte(CP_UTF8, 0, uptr, -1,
+												NULL, 0, NULL, NULL) - 1; // subtract 0 terminator
+					putf.resize(len + 1);
+					::WideCharToMultiByte(CP_UTF8, 0, uptr, -1,
+											  &putf[0], static_cast<int>(len) + 1, NULL, NULL);
+				}
+
+				InsertPasteShape(&putf[0], static_cast<int>(len), pasteShape);
+			}
+			memUSelection.Unlock();
+		} else {
+			// CF_UNICODETEXT not available, paste ANSI text
+			GlobalMemory memSelection(::GetClipboardData(CF_TEXT));
+			if (memSelection) {
+				char *ptr = static_cast<char *>(memSelection.ptr);
+				if (ptr) {
+					const size_t bytes = memSelection.Size();
+					size_t len = bytes;
+					for (size_t i = 0; i < bytes; i++) {
+						if ((len == bytes) && (0 == ptr[i]))
+							len = i;
+					}
+					const int ilen = static_cast<int>(len);
+
+					// In Unicode mode, convert clipboard text to UTF-8
+					if (IsUnicodeMode()) {
+						std::vector<wchar_t> uptr(len+1);
+
+						const size_t ulen = ::MultiByteToWideChar(CP_ACP, 0,
+											ptr, ilen, &uptr[0], ilen +1);
+
+						const size_t mlen = UTF8Length(&uptr[0], ulen);
+						std::vector<char> putf(mlen+1);
+						UTF8FromUTF16(&uptr[0], ulen, &putf[0], mlen);
+
+						InsertPasteShape(&putf[0], static_cast<int>(mlen), pasteShape);
+					} else {
+						InsertPasteShape(ptr, ilen, pasteShape);
+					}
+				}
+				memSelection.Unlock();
+			}
+		}
+		::CloseClipboard();
+		Redraw();
+	}
+
+	void CopyToClipboard(const SelectionText &selectedText) override {
+		HWND hWnd = (HWND)__scintilla_imgui_os_window();
+		if (!OpenClipboardRetry(hWnd)) {
+			return;
+		}
+		::EmptyClipboard();
+
+		GlobalMemory uniText;
+
+		// Default Scintilla behaviour in Unicode mode
+		if (IsUnicodeMode()) {
+			size_t uchars = UTF16Length(selectedText.Data(),
+				selectedText.LengthWithTerminator());
+			uniText.Allocate(2 * uchars);
+			if (uniText) {
+				UTF16FromUTF8(selectedText.Data(), selectedText.LengthWithTerminator(),
+					static_cast<wchar_t *>(uniText.ptr), uchars);
+			}
+		} else {
+			// Not Unicode mode
+			// Convert to Unicode using the current Scintilla code page
+			int uLen = ::MultiByteToWideChar(CP_UTF8, 0, selectedText.Data(),
+				static_cast<int>(selectedText.LengthWithTerminator()), 0, 0);
+			uniText.Allocate(2 * uLen);
+			if (uniText) {
+				::MultiByteToWideChar(CP_UTF8, 0, selectedText.Data(),
+					static_cast<int>(selectedText.LengthWithTerminator()),
+					static_cast<wchar_t *>(uniText.ptr), uLen);
+			}
+		}
+
+		if (uniText) {
+			uniText.SetClip(CF_UNICODETEXT);
+		} else {
+			// There was a failure - try to copy at least ANSI text
+			GlobalMemory ansiText;
+			ansiText.Allocate(selectedText.LengthWithTerminator());
+			if (ansiText) {
+				memcpy(static_cast<char *>(ansiText.ptr), selectedText.Data(), selectedText.LengthWithTerminator());
+				ansiText.SetClip(CF_TEXT);
+			}
+		}
+
+		if (selectedText.rectangular) {
+			::SetClipboardData(cfColumnSelect, 0);
+
+			GlobalMemory borlandSelection;
+			borlandSelection.Allocate(1);
+			if (borlandSelection) {
+				static_cast<BYTE *>(borlandSelection.ptr)[0] = 0x02;
+				borlandSelection.SetClip(cfBorlandIDEBlockType);
+			}
+		}
+
+		if (selectedText.lineCopy) {
+			::SetClipboardData(cfLineSelect, 0);
+			::SetClipboardData(cfVSLineTag, 0);
+		}
+
+		::CloseClipboard();
+	}
+
+#else
 	void CopyToClipboard(const SelectionText &selectedText) override {
 		ImGui::SetClipboardText(selectedText.Data());
 	}
@@ -1069,6 +1312,7 @@ private:
 			}
 		}
 	}
+#endif
 	void CreateCallTipWindow(PRectangle rc) override {
 	}
 	void AddToPopUp(const char *label, int cmd = 0, bool enabled = true) override {

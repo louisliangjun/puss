@@ -15,5 +15,9 @@ void			scintilla_imgui_destroy(ScintillaIM* sci);
 void			scintilla_imgui_update(ScintillaIM* sci, bool draw, ScintillaIMCallback cb, void* ud);
 sptr_t			scintilla_imgui_send(ScintillaIM* sci, unsigned int iMessage, uptr_t wParam, sptr_t lParam);
 
+// need implements for platform
+// 
+void*			__scintilla_imgui_os_window(void);
+
 #endif//_INC_SCINTILLA_IMGUI_H_
 

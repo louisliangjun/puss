@@ -20,15 +20,7 @@
 
 	#define PUSS_IMGUI_WINDOW_CLASS	"PussImGuiWindow"
 
-	static LRESULT WINAPI PussImguiWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
-	static WNDCLASSEXA puss_imgui_wc = { sizeof(WNDCLASSEXA), CS_CLASSDC, PussImguiWndProc, 0L, 0L, NULL, NULL, NULL, NULL, NULL, PUSS_IMGUI_WINDOW_CLASS, NULL };
-
-	static void do_platform_init(lua_State* L) {
-		// Create application window
-		puss_imgui_wc.hInstance = GetModuleHandle(NULL);
-		RegisterClassEx(&puss_imgui_wc);
-	}
+	static WNDCLASSEXA puss_imgui_wc = { sizeof(WNDCLASSEXA), CS_CLASSDC, NULL, 0L, 0L, NULL, NULL, NULL, NULL, NULL, PUSS_IMGUI_WINDOW_CLASS, NULL };
 
 #else
 	// GL3W
@@ -53,31 +45,10 @@
 		GlfwClientApi_Vulkan
 	};
 
-#ifdef _WIN32
-	#pragma comment(lib, "opengl32.lib")
-	#pragma comment(lib, "glfw3.lib")
-#endif
-
-	static void error_callback(int e, const char *d) {
-		fprintf(stderr, "[GFLW] error %d: %s\n", e, d);
-	}
-
-	static int glfw_inited = 0;
-
-	static void do_platform_init(lua_State* L) {
-		if( !glfw_inited ) {
-    		glfw_inited = glfwInit();
-    		if( !glfw_inited ) luaL_error(L, "[GFLW] failed to init!\n");
-    		atexit(glfwTerminate);
-
-			glfwSetErrorCallback(error_callback);
-
-			glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-			glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-			//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
-			//glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
-		}
-	}
+	#ifdef _WIN32
+		#pragma comment(lib, "glfw3.lib")
+		#pragma comment(lib, "opengl32.lib")
+	#endif
 #endif
 
 #include "imgui.h"
@@ -218,7 +189,6 @@ public:
 
 		ImGui_ImplWin32_Init(hwnd);
 		ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
-
 		return true;
 	}
 
@@ -234,9 +204,8 @@ public:
 	}
 
 	bool prepare_newframe() {
-		if( !g_hWnd )
-			return false;
-		ImGui::SetCurrentContext(g_Context);
+		if( g_hWnd )
+			ImGui::SetCurrentContext(g_Context);
 
 		// input
 		MSG msg;
@@ -248,22 +217,26 @@ public:
 			// - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application.
 			// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application.
 			// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
-			if (PeekMessage(&msg, g_hWnd, 0U, 0U, PM_REMOVE)) {
+			if (PeekMessage(&msg, NULL, 0U, 0U, PM_REMOVE)) {
 				TranslateMessage(&msg);
 				DispatchMessage(&msg);
 				continue;
 			}
 			break;
 		}
+
+		if( !g_hWnd )
+			return false;
+
+		ImGui::SetCurrentContext(g_Context);
+
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplWin32_NewFrame();
 		return true;
 	}
 
 	bool prepare_render() {
-		if( !g_hWnd )
-			return false;
-		return true;
+		return g_hWnd!=NULL;
 	}
 
 	void render_drawdata() {
@@ -559,18 +532,52 @@ static int imgui_fetch_extra_keys_lua(lua_State* L) {
 		return env ? env->WndProc(hWnd, msg, wParam, lParam) : DefWindowProcA(hWnd, msg, wParam, lParam);
 	}
 
+	static void do_platform_init(lua_State* L) {
+		// Create application window
+		puss_imgui_wc.hInstance = GetModuleHandle(NULL);
+		puss_imgui_wc.lpfnWndProc = PussImguiWndProc;
+		RegisterClassEx(&puss_imgui_wc);
+	}
+
+	static VOID CALLBACK dummy_timer_handle(HWND, UINT, UINT_PTR, DWORD) {
+	}
+
 	static int imgui_wait_events_lua(lua_State* L) {
-		// TODO:
-		Sleep(1);
+		double timeout = luaL_optnumber(L, 1, 0.01);
+		UINT_PTR timer = SetTimer(NULL, 0, (UINT)(timeout*1000), dummy_timer_handle);
+		WaitMessage();
+		KillTimer(NULL, timer);
 		return 0;
 	}
 
 #else
+	static void error_callback(int e, const char *d) {
+		fprintf(stderr, "[GFLW] error %d: %s\n", e, d);
+	}
+
+	static int glfw_inited = 0;
+
+	static void do_platform_init(lua_State* L) {
+		if( !glfw_inited ) {
+    		glfw_inited = glfwInit();
+    		if( !glfw_inited ) luaL_error(L, "[GFLW] failed to init!\n");
+    		atexit(glfwTerminate);
+
+			glfwSetErrorCallback(error_callback);
+
+			glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+			glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+			//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
+			//glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
+		}
+	}
+
 	static int imgui_wait_events_lua(lua_State* L) {
 		double timeout = luaL_optnumber(L, 1, 0.01);
 		glfwWaitEventsTimeout(timeout);
 		return 0;
 	}
+
 #endif
 
 static int imgui_create_lua(lua_State* L) {
@@ -637,6 +644,18 @@ static int imgui_get_drop_files_lua(lua_State* L) {
 
 #include "scintilla_imgui_lua.inl"
 #include "scintilla.iface.inl"
+
+void* __scintilla_imgui_os_window(void) {
+	ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData);
+#ifdef PUSS_IMGUI_USE_DX11
+	if( env )	return env->g_hWnd;
+#else
+	#ifdef _WIN32
+		return glfwGetWin32Window(env->g_Window);
+	#endif
+#endif
+	return NULL;
+}
 
 static int im_scintilla_lexers(lua_State* L) {
 	return im_scintilla_get_lexers(L, sci_lexers);
