@@ -201,8 +201,9 @@ local function draw_subs(stack_current, subs)
 		-- 	imgui.SameLine()
 		-- 	imgui.SmallButton('modify')
 		-- end
-		if show then
+		if has_subs and show then
 			if v.subs then draw_subs(stack_current, v.subs) end
+			imgui.TreePop()
 		end
 	end
 end

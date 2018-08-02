@@ -52,6 +52,8 @@
 #endif
 
 #include "imgui.h"
+#define IMGUI_DEFINE_MATH_OPERATORS
+#include "imgui_internal.h"
 
 class ImguiEnv {
 public:
@@ -261,6 +263,50 @@ public:
 		return (g_Window==NULL || glfwWindowShouldClose(g_Window));
 	}
 
+	static void puss_imgui_key_set(ImGuiIO& io, int key, bool st) {
+		if( ((unsigned)key) <= PUSS_IMGUI_BASIC_KEY_LAST ) {
+			io.KeysDown[key] = st;
+		} else {
+			switch(key) {
+			#define _PUSS_IMGUI_KEY_REG(key)	case GLFW_KEY_ ## key: io.KeysDown[PUSS_IMGUI_KEY_ ## key] = st;	break;
+				#include "puss_module_imgui_keys.inl"
+			#undef _PUSS_IMGUI_KEY_REG
+			default:
+				break;
+			}
+		}
+	}
+
+	static void ImGui_Puss_KeyCallback(GLFWwindow* win, int key, int scancode, int action, int mods) {
+		ImGuiIO& io = ImGui::GetIO();
+		if (action == GLFW_PRESS) {
+			puss_imgui_key_set(io, key, true);
+		} else if (action == GLFW_RELEASE) {
+			puss_imgui_key_set(io, key, false);
+		}
+
+		(void)mods; // Modifiers are not reliable across systems
+		io.KeyCtrl = io.KeysDown[PUSS_IMGUI_KEY_LEFT_CONTROL] || io.KeysDown[PUSS_IMGUI_KEY_RIGHT_CONTROL];
+		io.KeyShift = io.KeysDown[PUSS_IMGUI_KEY_LEFT_SHIFT] || io.KeysDown[PUSS_IMGUI_KEY_RIGHT_SHIFT];
+		io.KeyAlt = io.KeysDown[PUSS_IMGUI_KEY_LEFT_ALT] || io.KeysDown[PUSS_IMGUI_KEY_RIGHT_ALT];
+		io.KeySuper = io.KeysDown[PUSS_IMGUI_KEY_LEFT_SUPER] || io.KeysDown[PUSS_IMGUI_KEY_RIGHT_SUPER];
+	}
+
+	static void ImGui_Puss_DropCallback(GLFWwindow* w, int count, const char** files) {
+		ImguiEnv* env = (ImguiEnv*)glfwGetWindowUserPointer(w);
+		if( env && env->g_DropFiles ) {
+			env->g_DropFiles->reserve(4096);
+			env->g_DropFiles->clear();
+			for(int i=0; i<count; ++i) {
+				for( const char* p=files[i]; *p; ++p ) {
+					env->g_DropFiles->push_back(*p);
+				}
+				env->g_DropFiles->push_back('\n');
+			}
+			glfwFocusWindow(w);
+		}
+	}
+
 	bool create_window(const char* title, int width, int height) {
 		g_Window = glfwCreateWindow(width, height, title, NULL, NULL);
 		if( !g_Window )
@@ -283,7 +329,12 @@ public:
 		io.UserData = this;
 		//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
 		//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;   // Enable Gamepad Controls
-		ImGui_ImplGlfw_InitForOpenGL(g_Window, true);
+		ImGui_ImplGlfw_InitForOpenGL(g_Window, false);
+		glfwSetMouseButtonCallback(g_Window, ImGui_ImplGlfw_MouseButtonCallback);
+		glfwSetScrollCallback(g_Window, ImGui_ImplGlfw_ScrollCallback);
+		glfwSetKeyCallback(g_Window, ImGui_Puss_KeyCallback);
+		glfwSetCharCallback(g_Window, ImGui_ImplGlfw_CharCallback);
+		glfwSetDropCallback(g_Window, ImGui_Puss_DropCallback);
 
 		const char* glsl_version = "#version 130";
 		ImGui_ImplOpenGL3_Init(glsl_version);
@@ -342,20 +393,6 @@ public:
 	int                     g_ScriptErrorHandle;
 	int                     g_StackProtected;
 	ImVector<char>*         g_Stack;
-
-	static inline void _wrap_stack_begin(char tp) {
-		ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData);
-		env->g_Stack->push_back(tp);
-	}
-
-	static inline void _wrap_stack_end(char tp) {
-		ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData);
-		int top_type = (env->g_Stack->size() > env->g_StackProtected) ? env->g_Stack->back() : -1;
-		if( top_type==tp ) {
-			env->g_Stack->pop_back();
-		}
-	}
-
 };
 
 #include "imgui_tabs.h"
@@ -366,8 +403,32 @@ public:
 	#pragma GCC diagnostic ignored "-Wunused-function"          // warning: 'xxxx' defined but not used
 #endif
 
-#define IMGUI_LUA_WRAP_STACK_BEGIN(tp)	ImguiEnv::_wrap_stack_begin(tp);
-#define IMGUI_LUA_WRAP_STACK_END(tp)	ImguiEnv::_wrap_stack_end(tp);
+
+static inline void _wrap_stack_begin(char tp) {
+	ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData);
+	if( env ) {
+		env->g_Stack->push_back(tp);
+	} else {
+		IM_ASSERT(0 && "stack push must have current context!");
+	}
+}
+
+static inline void _wrap_stack_end(char tp) {
+	ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData);
+	if( env ) {
+		int top_type = (env->g_Stack->size() > env->g_StackProtected) ? env->g_Stack->back() : -1;
+		if( top_type==tp ) {
+			env->g_Stack->pop_back();
+		} else {
+			IM_ASSERT(0 && "stack pop type not matched!");
+		}
+	} else {
+		IM_ASSERT(0 && "stack pop must have current context!");
+	}
+}
+
+#define IMGUI_LUA_WRAP_STACK_BEGIN(tp)	_wrap_stack_begin(tp);
+#define IMGUI_LUA_WRAP_STACK_END(tp)	_wrap_stack_end(tp);
 #include "imgui_lua.inl"
 #undef IMGUI_LUA_WRAP_STACK_BEGIN
 #undef IMGUI_LUA_WRAP_STACK_END

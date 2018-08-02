@@ -149,14 +149,11 @@ end)
 
 vmake_target_add('imgui_wrap', function(target)
 	local src = path_concat('modules', 'puss_imgui', 'imgui')
-	make_copy('imconfig.h', PUSS_INCLUDE_PATH, src)
-	make_copy('imgui.h', PUSS_INCLUDE_PATH, src)
-	make_copy('imgui_tabs.h', PUSS_INCLUDE_PATH, src)
 	local imgui_wrap = path_concat('tools', 'imgui_wrap.lua')
 	local deps =
 		{ imgui_wrap
-		, path_concat(PUSS_INCLUDE_PATH, 'imgui.h')
-		, path_concat(PUSS_INCLUDE_PATH, 'imgui_tabs.h')
+		, path_concat(src, 'imgui.h')
+		, path_concat(src, 'imgui_tabs.h')
 		}
 	if check_deps(path_concat(GEN_INCLUDE_PATH, 'imgui_enums.inl'), deps)
 		and check_deps(path_concat(GEN_INCLUDE_PATH, 'imgui_wraps.inl'), deps)
@@ -167,7 +164,7 @@ vmake_target_add('imgui_wrap', function(target)
 
 	make_target(path_concat(GEN_INCLUDE_PATH, '.dummy'), nil
 		, vlua.self, imgui_wrap
-		, '-src='..PUSS_INCLUDE_PATH
+		, '-src='..src
 		, '-out='..GEN_INCLUDE_PATH
 		)
 end)
@@ -230,8 +227,6 @@ vmake_target_add('puss_imgui', function(target)
 		, path_concat(src, 'gl3w')
 		, path_concat(src, 'imgui')
 		})
-	make_copy('puss_module_imgui.h', PUSS_INCLUDE_PATH, src)
-	make_copy('puss_module_imgui_keys.inl', PUSS_INCLUDE_PATH, src)
 	local cflags = array_pack(CFLAGS, '-DSCI_LEXER', shell('pkg-config --static --cflags glfw3'))
 	local libs = shell('pkg-config --static --libs glfw3')
 	if vlua.OS=='windows' then
