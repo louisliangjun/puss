@@ -1,6 +1,7 @@
 -- default.lua
 
 _ENV.imgui = puss.require('puss_imgui')	-- MUST require before require other modules who use imgui
+--_ENV.imgui = puss.require('puss_imgui_glfw')
 
 function __main__()
 	local app_module_name = 'core.app'

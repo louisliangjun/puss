@@ -929,13 +929,21 @@ function main()
 			local tp = name:match('^Begin(.*)$')
 			if tp then
 				tp = end_overrides[tp] or 'End'..tp
-			elseif name=='TreeNode' or name=='TreePush' then
+			elseif name=='TreeNode' or name=='TreeNodeEx' or name=='TreePush' then
 				tp = 'TreePop'
+				if name=='TreeNodeEx' then
+					dst:writeln('	if(__ret__ && ((flags & ImGuiTreeNodeFlags_Leaf)==0)) { IMGUI_LUA_WRAP_STACK_BEGIN(', fetch_stack_type(tp), ') }')
+					return
+				end
 			elseif name=='PushStyleVar' then
 				tp = 'PopStyleVar'
 			end
 			if not tp then return end
-			if ret=='bool' then
+			local check_ret = ret=='bool'
+			if name=='Begin' or name=='BeginChild' or name=='BeginChildFrame' then
+				check_ret = false
+			end
+			if check_ret then
 				dst:writeln('	if(__ret__) { IMGUI_LUA_WRAP_STACK_BEGIN(', fetch_stack_type(tp), ') }')
 			else
 				dst:writeln('	IMGUI_LUA_WRAP_STACK_BEGIN(', fetch_stack_type(tp), ')')

@@ -325,6 +325,7 @@ public:
 
 		// Setup ImGui binding
 		g_Context = ImGui::CreateContext();
+		glfwSetWindowUserPointer(g_Window, this);
 		ImGuiIO& io = ImGui::GetIO();
 		io.UserData = this;
 		//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
@@ -390,6 +391,7 @@ public:
 	ImVector<char>*         g_DropFiles;
 
 	// Script data
+	lua_State*				g_UpdateLuaState;
 	int                     g_ScriptErrorHandle;
 	int                     g_StackProtected;
 	ImVector<char>*         g_Stack;
@@ -425,6 +427,17 @@ static inline void _wrap_stack_end(char tp) {
 	} else {
 		IM_ASSERT(0 && "stack pop must have current context!");
 	}
+}
+
+int puss_imgui_assert_hook(const char* expr, const char* file, int line) {
+	ImGuiContext* ctx = ImGui::GetCurrentContext();
+	ImguiEnv* env = (ImguiEnv*)(ctx ? ctx->IO.UserData : NULL);
+	if( env && env->g_UpdateLuaState ) {
+		luaL_error(env->g_UpdateLuaState, "%s @%s:%d", expr, file, line);
+	} else {
+		fprintf(stderr, "%s @%s:%d\r\n", expr, file, line);
+	}
+	return 0;
 }
 
 #define IMGUI_LUA_WRAP_STACK_BEGIN(tp)	_wrap_stack_begin(tp);
@@ -503,10 +516,12 @@ static int imgui_update_lua(lua_State* L) {
 
 	// run
     ImGui::NewFrame();
+	env->g_UpdateLuaState = L;
 	lua_rawgeti(L, LUA_REGISTRYINDEX, env->g_ScriptErrorHandle);
 	lua_replace(L, 1);
 	if( lua_pcall(L, lua_gettop(L)-2, 0, 1) )
 		lua_pop(L, 1);
+	env->g_UpdateLuaState = NULL;
 
 	env->g_DropFiles->clear();
 	// check stack
@@ -695,7 +710,8 @@ static int imgui_create_lua(lua_State* L) {
 }
 
 static int imgui_get_drop_files_lua(lua_State* L) {
-	ImguiEnv* env = ImGui::GetCurrentContext() ? (ImguiEnv*)(ImGui::GetIO().UserData) : NULL;
+	ImGuiContext* ctx = ImGui::GetCurrentContext();
+	ImguiEnv* env = (ImguiEnv*)(ctx ? ctx->IO.UserData : NULL);
 	if( env && env->g_DropFiles && !(env->g_DropFiles->empty()) ) {
 		lua_pushlstring(L, env->g_DropFiles->Data, env->g_DropFiles->Size);
 		return 1;
