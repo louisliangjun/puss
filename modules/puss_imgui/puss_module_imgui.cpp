@@ -8,6 +8,7 @@
 
 #ifdef PUSS_IMGUI_USE_DX11
 	#include <windows.h>
+	#include <tchar.h>
 	#include <winuser.h>
 	#include <d3d11.h>
 	#define DIRECTINPUT_VERSION 0x0800
@@ -18,10 +19,28 @@
 	#pragma comment(lib, "d3dcompiler.lib")
 	#pragma comment(lib, "dxgi.lib")
 
-	#define PUSS_IMGUI_WINDOW_CLASS	"PussImGuiWindow"
+	#define PUSS_IMGUI_WINDOW_CLASS	_T("PussImGuiWindow")
 
-	static WNDCLASSEXA puss_imgui_wc = { sizeof(WNDCLASSEXA), CS_CLASSDC, NULL, 0L, 0L, NULL, NULL, NULL, NULL, NULL, PUSS_IMGUI_WINDOW_CLASS, NULL };
+	static WNDCLASSEX puss_imgui_wc = { sizeof(WNDCLASSEX), CS_CLASSDC, NULL, 0L, 0L, NULL, NULL, NULL, NULL, NULL, PUSS_IMGUI_WINDOW_CLASS, NULL };
 
+	static int _lua_utf8_to_utf16(lua_State* L) {
+		size_t len = 0;
+		const char* str = luaL_checklstring(L, 1, &len);
+		int wlen = MultiByteToWideChar(CP_UTF8, 0, str, (int)len, NULL, 0);
+		if( wlen > 0 ) {
+			luaL_Buffer B;
+			wchar_t* wstr = (wchar_t*)luaL_buffinitsize(L, &B, (size_t)(wlen<<1));
+			MultiByteToWideChar(CP_UTF8, 0, str, (int)len, wstr, wlen);
+			luaL_addsize(&B, (size_t)(wlen<<1));
+			luaL_addchar(&B, '\0');	// add more one byte for \u0000
+			luaL_pushresult(&B);
+		} else if( wlen==0 ) {
+			lua_pushliteral(L, "");
+		} else {
+			luaL_error(L, "utf8 to utf16 convert failed!");
+		}
+		return 1;
+	}
 #else
 	// GL3W
 	#include <GL/gl3w.h>    // This example is using gl3w to access OpenGL functions. You may use another OpenGL loader/header such as: glew, glext, glad, glLoadGen, etc.
@@ -170,17 +189,54 @@ public:
 		case WM_DESTROY:
 			// PostQuitMessage(0);
 			return 0;
+		case WM_DROPFILES:
+			if(g_hWnd==hWnd && wParam) {
+				UINT cap = 4096;
+				UINT len = 0;
+				TCHAR* buf = (TCHAR*)malloc(sizeof(TCHAR) * cap);
+				HDROP h = (HDROP)wParam;
+				UINT n = DragQueryFile(h, 0xFFFFFFFF, NULL, 0);
+				for( UINT i=0; i<n; ++i ) {
+					UINT sz = DragQueryFile(h, i, NULL, 0);
+					if( sz ) {
+						UINT nsz = len + sz + 1;
+						if( nsz >= cap ) {
+							cap *= 2;
+							if( nsz >= cap )
+								cap = nsz;
+							buf = (TCHAR*)realloc(buf, sizeof(TCHAR) * cap);
+						}
+						DragQueryFile(h, i, buf+len, sz + 1);
+						len += sz;
+						buf[len++] = _T('\n');
+					}
+				}
+				buf[len] = 0;
+				g_DropFiles->resize(len*3+1);
+				int res = WideCharToMultiByte(CP_UTF8, 0, buf, len, g_DropFiles->begin(), (int)(g_DropFiles->size()), NULL, NULL);
+				free(buf);
+				buf = NULL;
+
+				if( res > 0 ) {
+					g_DropFiles->resize(res);
+				} else {
+					g_DropFiles->clear();
+				}
+				DragFinish(h);
+			}
+			return 0;
 		}
-		return DefWindowProcA(hWnd, msg, wParam, lParam);
+		return DefWindowProc(hWnd, msg, wParam, lParam);
 	}
 
 public:
-	bool create_window(const char* title, int width, int height) {
-	   HWND hwnd = CreateWindowA(PUSS_IMGUI_WINDOW_CLASS, title, WS_OVERLAPPEDWINDOW, 100, 100, 1280, 800, NULL, NULL, puss_imgui_wc.hInstance, this);
+	bool create_window(const TCHAR* title, int width, int height) {
+		HWND hwnd = CreateWindow(PUSS_IMGUI_WINDOW_CLASS, title, WS_OVERLAPPEDWINDOW, 100, 100, 1280, 800, NULL, NULL, puss_imgui_wc.hInstance, this);
 
 		// Show the window
 		ShowWindow(hwnd, SW_SHOWDEFAULT);
 		UpdateWindow(hwnd);
+		DragAcceptFiles(hwnd, TRUE);
 
 		// Setup ImGui binding
 		g_Context = ImGui::CreateContext();
@@ -600,12 +656,12 @@ static int imgui_fetch_extra_keys_lua(lua_State* L) {
 #ifdef PUSS_IMGUI_USE_DX11
 
 	static LRESULT WINAPI PussImguiWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-		ImguiEnv* env = (ImguiEnv*)GetWindowLongPtrA(hWnd, GWLP_USERDATA);
+		ImguiEnv* env = (ImguiEnv*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
 		if( msg==WM_CREATE ) {
 			env = (ImguiEnv*)(((CREATESTRUCTA*)lParam)->lpCreateParams);
-			SetWindowLongPtrA(hWnd, GWLP_USERDATA, (LONG_PTR)env);
+			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)env);
 		}
-		return env ? env->WndProc(hWnd, msg, wParam, lParam) : DefWindowProcA(hWnd, msg, wParam, lParam);
+		return env ? env->WndProc(hWnd, msg, wParam, lParam) : DefWindowProc(hWnd, msg, wParam, lParam);
 	}
 
 	static void do_platform_init(lua_State* L) {
@@ -625,7 +681,6 @@ static int imgui_fetch_extra_keys_lua(lua_State* L) {
 		KillTimer(NULL, timer);
 		return 0;
 	}
-
 #else
 	static void error_callback(int e, const char *d) {
 		fprintf(stderr, "[GFLW] error %d: %s\n", e, d);
@@ -657,7 +712,7 @@ static int imgui_fetch_extra_keys_lua(lua_State* L) {
 #endif
 
 static int imgui_create_lua(lua_State* L) {
-	const char* title = luaL_optstring(L, 1, "imgui window");
+	const char* title = luaL_checkstring(L, 1);
 	int width = (int)luaL_optinteger(L, 2, 1024);
 	int height = (int)luaL_optinteger(L, 3, 768);
 	ImguiEnv* env = (ImguiEnv*)lua_newuserdata(L, sizeof(ImguiEnv));
@@ -671,9 +726,17 @@ static int imgui_create_lua(lua_State* L) {
 	lua_pushcfunction(L, imgui_error_handle_default);
 	env->g_ScriptErrorHandle = luaL_ref(L, LUA_REGISTRYINDEX);
 
+#ifdef PUSS_IMGUI_USE_DX11
+	lua_pushcfunction(L, _lua_utf8_to_utf16);
+	lua_pushvalue(L, 1);
+	lua_call(L, 1, 1);
+	lua_replace(L, 1);
+	if( !env->create_window((const TCHAR*)lua_tostring(L, 1), width, height) )
+		luaL_error(L, "create window failed!");
+#else
 	if( !env->create_window(title, width, height) )
 		luaL_error(L, "create window failed!");
- 
+#endif
 	// Setup style
     ImGui::StyleColorsDark();
     //ImGui::StyleColorsClassic();
