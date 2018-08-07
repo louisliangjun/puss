@@ -23,6 +23,8 @@
 
 	static WNDCLASSEX puss_imgui_wc = { sizeof(WNDCLASSEX), CS_CLASSDC, NULL, 0L, 0L, NULL, NULL, NULL, NULL, NULL, PUSS_IMGUI_WINDOW_CLASS, NULL };
 
+	static int _win32_vk_map[256];
+
 	static int _lua_utf8_to_utf16(lua_State* L) {
 		size_t len = 0;
 		const char* str = luaL_checklstring(L, 1, &len);
@@ -150,11 +152,142 @@ public:
 		if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = NULL; }
 	}
 
+	static int _win32_vk_convert(WPARAM wParam, LPARAM lParam) {
+		int key = _win32_vk_map[wParam];
+		if( key ) {
+			switch(wParam) {
+			case VK_SHIFT:
+				key = GetKeyState(VK_LSHIFT) ? PUSS_IMGUI_KEY_LEFT_SHIFT : PUSS_IMGUI_KEY_RIGHT_SHIFT;
+				break;
+			case VK_CONTROL:
+				key = GetKeyState(VK_LCONTROL) ? PUSS_IMGUI_KEY_LEFT_CONTROL : PUSS_IMGUI_KEY_RIGHT_CONTROL;
+				break;
+			case VK_MENU:
+				key = GetKeyState(VK_LMENU) ? PUSS_IMGUI_KEY_LEFT_ALT : PUSS_IMGUI_KEY_RIGHT_ALT;
+				break;
+			case VK_RETURN:
+				key = (lParam & (1<<24)) ? PUSS_IMGUI_KEY_KP_ENTER : PUSS_IMGUI_KEY_ENTER;
+				break;
+			}
+		}
+		return key;
+	}
+
 	LRESULT WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-		if( g_hWnd==hWnd ) {
-			LRESULT res = ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam);
-			if (res)
-				return res;
+		if( g_hWnd==hWnd && ImGui::GetCurrentContext() ) {
+			ImGuiIO& io = ImGui::GetIO();
+			switch (msg)
+			{
+			case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK:
+			case WM_RBUTTONDOWN: case WM_RBUTTONDBLCLK:
+			case WM_MBUTTONDOWN: case WM_MBUTTONDBLCLK:
+			{
+				int button = 0;
+				if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) button = 0;
+				if (msg == WM_RBUTTONDOWN || msg == WM_RBUTTONDBLCLK) button = 1;
+				if (msg == WM_MBUTTONDOWN || msg == WM_MBUTTONDBLCLK) button = 2;
+				if (!ImGui::IsAnyMouseDown() && ::GetCapture() == NULL)
+					::SetCapture(hWnd);
+				io.MouseDown[button] = true;
+				break;
+			}
+			case WM_LBUTTONUP:
+			case WM_RBUTTONUP:
+			case WM_MBUTTONUP:
+			{
+				int button = 0;
+				if (msg == WM_LBUTTONUP) button = 0;
+				if (msg == WM_RBUTTONUP) button = 1;
+				if (msg == WM_MBUTTONUP) button = 2;
+				io.MouseDown[button] = false;
+				if (!ImGui::IsAnyMouseDown() && ::GetCapture() == hWnd)
+					::ReleaseCapture();
+				break;
+			}
+			case WM_MOUSEWHEEL:
+				io.MouseWheel += (float)GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA;
+				break;
+			case WM_MOUSEHWHEEL:
+				io.MouseWheelH += (float)GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA;
+				break;
+			case WM_KEYDOWN:
+			case WM_SYSKEYDOWN:
+				if (wParam < 256) {
+					io.KeysDown[wParam] = 1;
+					if( wParam==VK_RETURN ) {
+						g_Context->IO.KeysDown[(lParam & (1<<24)) ? PUSS_IMGUI_KEY_KP_ENTER : PUSS_IMGUI_KEY_ENTER] = 1;
+					} else {
+						int key = _win32_vk_map[wParam];
+						if( key )	g_Context->IO.KeysDown[key] = 1;
+					}
+				}
+				break;
+			case WM_KEYUP:
+			case WM_SYSKEYUP:
+				if (wParam < 256) {
+					io.KeysDown[wParam] = 0;
+					if( wParam==VK_RETURN ) {
+						g_Context->IO.KeysDown[(lParam & (1<<24)) ? PUSS_IMGUI_KEY_KP_ENTER : PUSS_IMGUI_KEY_ENTER] = 0;
+					} else {
+						int key = _win32_vk_map[wParam];
+						if( key )	g_Context->IO.KeysDown[key] = 0;
+					}
+				}
+				break;
+			case WM_CHAR:
+				// You can also use ToAscii()+GetKeyboardState() to retrieve characters.
+				if( wParam==VK_ESCAPE )
+					break;
+				if (wParam > 0 && wParam < 0x10000)
+					io.AddInputCharacter((unsigned short)wParam);
+				break;
+			case WM_SETCURSOR:
+				if (LOWORD(lParam) == HTCLIENT && ImGui_ImplWin32_UpdateMouseCursor())
+					return 1;
+				break;
+			case WM_CLOSE:
+				if(g_hWnd==hWnd) {
+					set_should_close(1);
+					break;
+				}
+				break;
+			case WM_DROPFILES:
+				if(g_hWnd==hWnd && wParam) {
+					UINT cap = 4096;
+					UINT len = 0;
+					TCHAR* buf = (TCHAR*)malloc(sizeof(TCHAR) * cap);
+					HDROP h = (HDROP)wParam;
+					UINT n = DragQueryFile(h, 0xFFFFFFFF, NULL, 0);
+					for( UINT i=0; i<n; ++i ) {
+						UINT sz = DragQueryFile(h, i, NULL, 0);
+						if( sz ) {
+							UINT nsz = len + sz + 1;
+							if( nsz >= cap ) {
+								cap *= 2;
+								if( nsz >= cap )
+									cap = nsz;
+								buf = (TCHAR*)realloc(buf, sizeof(TCHAR) * cap);
+							}
+							DragQueryFile(h, i, buf+len, sz + 1);
+							len += sz;
+							buf[len++] = _T('\n');
+						}
+					}
+					buf[len] = 0;
+					g_DropFiles->resize(len*3+1);
+					int res = WideCharToMultiByte(CP_UTF8, 0, buf, len, g_DropFiles->begin(), (int)(g_DropFiles->size()), NULL, NULL);
+					free(buf);
+					buf = NULL;
+
+					if( res > 0 ) {
+						g_DropFiles->resize(res);
+					} else {
+						g_DropFiles->clear();
+					}
+					DragFinish(h);
+				}
+				break;
+			}
 		}
 
 		switch (msg) {
@@ -180,50 +313,8 @@ public:
 			if ((wParam & 0xfff0) == SC_KEYMENU) // Disable ALT application menu
 				return 0;
 			break;
-		case WM_CLOSE:
-			if(g_hWnd==hWnd) {
-				set_should_close(1);
-				return 0;
-			}
-			break;
 		case WM_DESTROY:
 			// PostQuitMessage(0);
-			return 0;
-		case WM_DROPFILES:
-			if(g_hWnd==hWnd && wParam) {
-				UINT cap = 4096;
-				UINT len = 0;
-				TCHAR* buf = (TCHAR*)malloc(sizeof(TCHAR) * cap);
-				HDROP h = (HDROP)wParam;
-				UINT n = DragQueryFile(h, 0xFFFFFFFF, NULL, 0);
-				for( UINT i=0; i<n; ++i ) {
-					UINT sz = DragQueryFile(h, i, NULL, 0);
-					if( sz ) {
-						UINT nsz = len + sz + 1;
-						if( nsz >= cap ) {
-							cap *= 2;
-							if( nsz >= cap )
-								cap = nsz;
-							buf = (TCHAR*)realloc(buf, sizeof(TCHAR) * cap);
-						}
-						DragQueryFile(h, i, buf+len, sz + 1);
-						len += sz;
-						buf[len++] = _T('\n');
-					}
-				}
-				buf[len] = 0;
-				g_DropFiles->resize(len*3+1);
-				int res = WideCharToMultiByte(CP_UTF8, 0, buf, len, g_DropFiles->begin(), (int)(g_DropFiles->size()), NULL, NULL);
-				free(buf);
-				buf = NULL;
-
-				if( res > 0 ) {
-					g_DropFiles->resize(res);
-				} else {
-					g_DropFiles->clear();
-				}
-				DragFinish(h);
-			}
 			return 0;
 		}
 		return DefWindowProc(hWnd, msg, wParam, lParam);
@@ -290,6 +381,14 @@ public:
 
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplWin32_NewFrame();
+		g_Context->IO.KeysDown[PUSS_IMGUI_KEY_LEFT_SHIFT] = (GetKeyState(VK_LSHIFT) & 0x8000) != 0;
+		g_Context->IO.KeysDown[PUSS_IMGUI_KEY_RIGHT_SHIFT] = (GetKeyState(VK_RSHIFT) & 0x8000) != 0;
+		g_Context->IO.KeysDown[PUSS_IMGUI_KEY_LEFT_CONTROL] = (GetKeyState(VK_LCONTROL) & 0x8000) != 0;
+		g_Context->IO.KeysDown[PUSS_IMGUI_KEY_RIGHT_CONTROL] = (GetKeyState(VK_RCONTROL) & 0x8000) != 0;
+		g_Context->IO.KeysDown[PUSS_IMGUI_KEY_LEFT_ALT] = (GetKeyState(VK_LMENU) & 0x8000) != 0;
+		g_Context->IO.KeysDown[PUSS_IMGUI_KEY_RIGHT_ALT] = (GetKeyState(VK_RMENU) & 0x8000) != 0;
+		g_Context->IO.KeysDown[PUSS_IMGUI_KEY_LEFT_SUPER] = (GetKeyState(VK_LWIN) & 0x8000) != 0;
+		g_Context->IO.KeysDown[PUSS_IMGUI_KEY_RIGHT_SUPER] = (GetKeyState(VK_RWIN) & 0x8000) != 0;
 		return true;
 	}
 
@@ -664,11 +763,63 @@ static int imgui_fetch_extra_keys_lua(lua_State* L) {
 		return env ? env->WndProc(hWnd, msg, wParam, lParam) : DefWindowProc(hWnd, msg, wParam, lParam);
 	}
 
+	static int win32_inited = 0;
+
 	static void do_platform_init(lua_State* L) {
+		if( win32_inited ) return;
+		win32_inited = 1;
 		// Create application window
 		puss_imgui_wc.hInstance = GetModuleHandle(NULL);
 		puss_imgui_wc.lpfnWndProc = PussImguiWndProc;
 		RegisterClassEx(&puss_imgui_wc);
+		memset(_win32_vk_map, 0, sizeof(_win32_vk_map));
+		_win32_vk_map[VK_ESCAPE] = PUSS_IMGUI_KEY_ESCAPE;
+		_win32_vk_map[VK_RETURN] = PUSS_IMGUI_KEY_ENTER;
+		_win32_vk_map[VK_TAB] = PUSS_IMGUI_KEY_TAB;
+		_win32_vk_map[VK_BACK] = PUSS_IMGUI_KEY_BACKSPACE;
+		_win32_vk_map[VK_INSERT] = PUSS_IMGUI_KEY_INSERT;
+		_win32_vk_map[VK_DELETE] = PUSS_IMGUI_KEY_DELETE;
+		_win32_vk_map[VK_RIGHT] = PUSS_IMGUI_KEY_RIGHT;
+		_win32_vk_map[VK_LEFT] = PUSS_IMGUI_KEY_LEFT;
+		_win32_vk_map[VK_DOWN] = PUSS_IMGUI_KEY_DOWN;
+		_win32_vk_map[VK_UP] = PUSS_IMGUI_KEY_UP;
+		_win32_vk_map[VK_PRIOR] = PUSS_IMGUI_KEY_PAGE_UP;
+		_win32_vk_map[VK_NEXT] = PUSS_IMGUI_KEY_PAGE_DOWN;
+		_win32_vk_map[VK_HOME] = PUSS_IMGUI_KEY_HOME;
+		_win32_vk_map[VK_END] = PUSS_IMGUI_KEY_END;
+		_win32_vk_map[VK_CAPITAL] = PUSS_IMGUI_KEY_CAPS_LOCK;
+		_win32_vk_map[VK_SCROLL] = PUSS_IMGUI_KEY_SCROLL_LOCK;
+		_win32_vk_map[VK_NUMLOCK] = PUSS_IMGUI_KEY_NUM_LOCK;
+		_win32_vk_map[VK_PRINT] = PUSS_IMGUI_KEY_PRINT_SCREEN;
+		_win32_vk_map[VK_PAUSE] = PUSS_IMGUI_KEY_PAUSE;
+		_win32_vk_map[VK_F1] = PUSS_IMGUI_KEY_F1;
+		_win32_vk_map[VK_F2] = PUSS_IMGUI_KEY_F2;
+		_win32_vk_map[VK_F3] = PUSS_IMGUI_KEY_F3;
+		_win32_vk_map[VK_F4] = PUSS_IMGUI_KEY_F4;
+		_win32_vk_map[VK_F5] = PUSS_IMGUI_KEY_F5;
+		_win32_vk_map[VK_F6] = PUSS_IMGUI_KEY_F6;
+		_win32_vk_map[VK_F7] = PUSS_IMGUI_KEY_F7;
+		_win32_vk_map[VK_F8] = PUSS_IMGUI_KEY_F8;
+		_win32_vk_map[VK_F9] = PUSS_IMGUI_KEY_F9;
+		_win32_vk_map[VK_F10] = PUSS_IMGUI_KEY_F10;
+		_win32_vk_map[VK_F11] = PUSS_IMGUI_KEY_F11;
+		_win32_vk_map[VK_F12] = PUSS_IMGUI_KEY_F12;
+		_win32_vk_map[VK_NUMPAD0] = PUSS_IMGUI_KEY_KP_0;
+		_win32_vk_map[VK_NUMPAD1] = PUSS_IMGUI_KEY_KP_1;
+		_win32_vk_map[VK_NUMPAD2] = PUSS_IMGUI_KEY_KP_2;
+		_win32_vk_map[VK_NUMPAD3] = PUSS_IMGUI_KEY_KP_3;
+		_win32_vk_map[VK_NUMPAD4] = PUSS_IMGUI_KEY_KP_4;
+		_win32_vk_map[VK_NUMPAD5] = PUSS_IMGUI_KEY_KP_5;
+		_win32_vk_map[VK_NUMPAD6] = PUSS_IMGUI_KEY_KP_6;
+		_win32_vk_map[VK_NUMPAD7] = PUSS_IMGUI_KEY_KP_7;
+		_win32_vk_map[VK_NUMPAD8] = PUSS_IMGUI_KEY_KP_8;
+		_win32_vk_map[VK_NUMPAD9] = PUSS_IMGUI_KEY_KP_9;
+		_win32_vk_map[VK_DECIMAL] = PUSS_IMGUI_KEY_KP_DECIMAL;
+		_win32_vk_map[VK_DIVIDE] = PUSS_IMGUI_KEY_KP_DIVIDE;
+		_win32_vk_map[VK_MULTIPLY] = PUSS_IMGUI_KEY_KP_MULTIPLY;
+		_win32_vk_map[VK_SUBTRACT] = PUSS_IMGUI_KEY_KP_SUBTRACT;
+		_win32_vk_map[VK_ADD] = PUSS_IMGUI_KEY_KP_ADD;
+		_win32_vk_map[VK_OEM_NEC_EQUAL] = PUSS_IMGUI_KEY_KP_EQUAL;
 	}
 
 	static VOID CALLBACK dummy_timer_handle(HWND, UINT, UINT_PTR, DWORD) {
