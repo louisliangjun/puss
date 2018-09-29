@@ -1,5 +1,7 @@
 -- debugger.lua
 
+local puss_system = puss.require('puss_system')
+
 local diskfs = puss.import('core.diskfs')
 local shotcuts = puss.import('core.shotcuts')
 local pages = puss.import('core.pages')
@@ -17,6 +19,14 @@ end)
 
 local run_sign = true
 local main_ui = _main_ui
+
+local BROADCAST_PORT = 9999
+local broadcast_udp = puss_system.socket_new()
+broadcast_udp:create(puss_system.AF_INET, puss_system.SOCK_DGRAM, puss_system.IPPROTO_UDP)
+broadcast_udp:bind(nil, BROADCAST_PORT)
+broadcast_udp:set_nonblock(true)
+
+local hosts = {}
 
 local socket = _socket
 
@@ -132,9 +142,18 @@ local function debug_toolbar()
 		end
 	else
 		if imgui.Button("connect") then
-			_socket = net.connect('127.0.0.1', 9999)
-			if socket then socket:close() end
-			socket = _socket
+			-- TODO : show hosts & select
+			for info in pairs(hosts) do
+				local port, title = info:match('^0%.0%.0%.0:(%d+)|?(.*)$')
+				print(info, port, title)
+				if port then
+					port = tonumber(port)
+					_socket = net.connect('127.0.0.1', port)
+					if socket then socket:close() end
+					socket = _socket
+					break
+				end
+			end
 		end
 	end
 	imgui.SameLine()
@@ -327,13 +346,24 @@ local function show_main_window(is_init)
 	right_pane()
 	imgui.Columns(1)
 	imgui.End()
-end
 
-local function do_update(is_init)
-	show_main_window(is_init)
 	if show_console_window then
 		show_console_window = console.update(show_console_window)
 	end
+end
+
+local function broadcast_udp_update()
+	local data, addr = broadcast_udp:recvfrom()
+	if data then
+		hosts[data] = os.time()
+	end
+end
+
+local function do_update()
+	main_ui:protect_pcall(show_main_window)
+
+	broadcast_udp_update()
+
 	if run_sign and main_ui:should_close() then
 		run_sign = false
 	end
@@ -343,7 +373,7 @@ __exports.init = function()
 	main_ui = imgui.Create('Puss - Debugger', 1024, 768)
 	_main_ui = main_ui
 	main_ui:set_error_handle(puss.logerr_handle())
-	main_ui(do_update, true)
+	main_ui(show_main_window, true)
 end
 
 __exports.uninit = function()

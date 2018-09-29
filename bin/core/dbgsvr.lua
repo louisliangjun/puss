@@ -1,6 +1,7 @@
 -- host debug server
 -- 
 if puss._debug_proxy then
+	local puss_system = puss.require('puss_system')
 	local net = puss.import('core.net')
 	local puss_debug = puss._debug_proxy
 	do
@@ -14,9 +15,21 @@ if puss._debug_proxy then
 	function MT:fetch_subs(idx) return idx, self:__host_pcall('puss._debug_fetch_subs', idx) end
 	function MT:modify_var(idx, val) return self:__host_pcall('puss._debug_modify_var', idx, val) end
 
-	local listen_sock = net.listen(nil, 9999, true)
+	local broadcast_udp = puss_system.socket_new()
+	broadcast_udp:create(AF_INET, puss_system.SOCK_DGRAM, puss_system.IPPROTO_UDP)
+	broadcast_udp:bind()
+
+	local listen_sock, listen_addr = net.listen(nil, 0, true)
 	local socket, address
 	local send_breaked_frame
+
+	local BROADCAST_IP = '127.0.0.255'
+	local BROADCAST_PORT = 9999
+	local BROADCAST_INFO = listen_addr
+	do
+		local ok, title = puss_debug:__host_pcall('puss._debug_fetch_title')
+		if ok then BROADCAST_INFO = string.format('%s|%s', listen_addr, title) end
+	end
 
 	local function dispatch(cmd, ...)
 		-- print( 'host recv:', cmd, ... )
@@ -28,8 +41,12 @@ if puss._debug_proxy then
 
 	local function hook_main_update(breaked, frame)
 		if not socket then
+			broadcast_udp:sendto(BROADCAST_IP, BROADCAST_PORT, BROADCAST_INFO)
+			print('broadcast', BROADCAST_IP, BROADCAST_PORT, BROADCAST_INFO)
+
 			socket, address = net.accept(listen_sock)
 			-- print('accept', listen_sock, socket, address)
+
 			if socket then
 				print('host attach', socket, address)
 			else
@@ -138,7 +155,6 @@ lua_types =
 	, ['function'] = {'F', tostring}
 	}
 
-
 local function do_ret_one(idx, var)
 	local s, n, v = var[1], var[2], var[3]
 	local vt, vv = lua_type_desc_of(v)
@@ -244,5 +260,9 @@ puss._debug_modify_var = function(idx, val)
 	if not var then return end
 	if not var.modify then return end
 	return var.modify(var, idx, val)
+end
+
+puss._debug_fetch_title = function()
+	return puss._app_title or 'noname'
 end
 

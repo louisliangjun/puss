@@ -1,4 +1,4 @@
-// puss_module_socket.c
+// puss_module_system.c
 
 #ifdef _WIN32
 	#include <winsock2.h>
@@ -44,6 +44,8 @@
 #include <errno.h>
 
 #include "puss_module.h"
+
+#define PUSS_SYSTEM_LIB_NAME	"[PussSystemLib]"
 
 #define socket_check_valid(fd)		((fd)!=INVALID_SOCKET)
 
@@ -290,7 +292,7 @@ static int lua_socket_recvfrom(lua_State* L) {
 	memset(&addr, 0, sizeof(addr));
 	luaL_buffinitsize(L, &B, len);
 	res = recvfrom(ud->fd, B.b, len, 0, &addr, &addr_len);
-	if( res >= 0 ) {
+	if( res < 0 ) {
 		lua_pushnil(L);
 		lua_pushinteger(L, get_last_error());
 	} else {
@@ -348,9 +350,8 @@ static int lua_socket_new(lua_State* L) {
 	return 1;
 }
 
-#define PUSS_SOCKET_LIB_NAME	"[PussSocketLib]"
 
-static const luaL_Reg socket_lib_methods[] =
+static const luaL_Reg system_lib_methods[] =
 	{ {"socket_new",	lua_socket_new}
 	, {NULL, NULL}
 	};
@@ -373,12 +374,15 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 		__puss_iface__ = puss;
 	}
 
-	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_SOCKET_LIB_NAME)==LUA_TTABLE ) {
+	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_SYSTEM_LIB_NAME)==LUA_TTABLE ) {
 		return 1;
 	}
 	lua_pop(L, 1);
 
-	puss_push_const_table(L);
+	lua_newtable(L);
+	lua_pushvalue(L, -1);
+	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_SYSTEM_LIB_NAME);
+
 	{
 		lua_pushinteger(L, AF_INET);		lua_setfield(L, -2, "AF_INET");
 		lua_pushinteger(L, AF_UNIX);		lua_setfield(L, -2, "AF_UNIX");
@@ -397,7 +401,6 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 		lua_pushinteger(L, IPPROTO_TCP);	lua_setfield(L, -2, "IPPROTO_TCP");
 		lua_pushinteger(L, IPPROTO_UDP);	lua_setfield(L, -2, "IPPROTO_UDP");
 	}
-	lua_pop(L, 1);
 
 	if( luaL_newmetatable(L, PUSS_SOCKET_NAME) ) {
 		luaL_setfuncs(L, socket_methods, 0);
@@ -406,7 +409,7 @@ PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
 	}
 	lua_pop(L, 1);
 
-	luaL_newlib(L, socket_lib_methods);
+	luaL_setfuncs(L, system_lib_methods, 0);
 	return 1;
 }
 

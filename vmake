@@ -136,7 +136,7 @@ vmake_target_add('puss_core', function(target)
 	return make_target(lib, objs, AR, lib, objs)
 end)
 
-vmake_target_add('puss_socket', function(target)
+vmake_target_add('puss_system', function(target)
 	vmake('puss_core')
 	local objs = make_c2objs(path_concat('modules', target), nil, INCLUDES, '-fPIC', '-fvisibility=hidden')
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')

@@ -43,7 +43,7 @@ local function main_menu()
 		if puss.debug then
 			if imgui.MenuItem('Load Debugger') then
 				if puss._sep=='\\' then
-					os.execute(string.format('start /B %s\\%s --main=core.debugger --Xconsole', puss._path, puss._self))
+					os.execute(string.format('start /B %s\\%s --main=core.debugger --console', puss._path, puss._self))
 				else
 					os.execute(string.format('%s/%s --main=core.debugger &', puss._path, puss._self))
 				end
@@ -171,7 +171,9 @@ local function do_update()
 end
 
 __exports.init = function()
-	main_ui = imgui.Create('Puss - Editor', 1024, 768)
+	local title = 'Puss - Editor'
+	puss._app_title = title
+	main_ui = imgui.Create(title, 1024, 768)
 	_main_ui = main_ui
 	main_ui:set_error_handle(puss.logerr_handle())
 	main_ui(show_main_window, true)
