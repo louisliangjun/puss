@@ -116,6 +116,19 @@ local function show_main_window(is_init)
 	imgui.NextColumn()
 	imgui.Columns(1)
 	imgui.End()
+
+	if show_imgui_demos then
+		show_imgui_demos = imgui.ShowDemoWindow(show_imgui_demos)
+	end
+	if show_tabs_demo then
+		show_tabs_demo = imgui.ShowTabsDemo('Tabs Demo', show_tabs_demo)
+	end
+	if show_console_window then
+		show_console_window = console.update(show_console_window)
+	end
+	if show_shutcut_window then
+		show_shutcut_window = shotcuts.update(show_shutcut_window)
+	end
 end
 
 local function do_quit_update()
@@ -152,20 +165,8 @@ local function do_quit_update()
 	end
 end
 
-local function do_update(is_init)
-	show_main_window(is_init)
-	if show_imgui_demos then
-		show_imgui_demos = imgui.ShowDemoWindow(show_imgui_demos)
-	end
-	if show_tabs_demo then
-		show_tabs_demo = imgui.ShowTabsDemo('Tabs Demo', show_tabs_demo)
-	end
-	if show_console_window then
-		show_console_window = console.update(show_console_window)
-	end
-	if show_shutcut_window then
-		show_shutcut_window = shotcuts.update(show_shutcut_window)
-	end
+local function do_update()
+	main_ui:protect_pcall(show_main_window)
 	do_quit_update()
 end
 
@@ -173,7 +174,7 @@ __exports.init = function()
 	main_ui = imgui.Create('Puss - Editor', 1024, 768)
 	_main_ui = main_ui
 	main_ui:set_error_handle(puss.logerr_handle())
-	main_ui(do_update, true)
+	main_ui(show_main_window, true)
 end
 
 __exports.uninit = function()
