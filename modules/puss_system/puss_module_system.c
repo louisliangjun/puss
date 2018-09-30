@@ -79,7 +79,9 @@ static void socket_addr_push(lua_State* L, const struct sockaddr* addr) {
 }
 
 typedef struct Socket {
-	SOCKET		fd;
+	SOCKET			fd;
+	struct sockaddr	addr;
+	struct sockaddr	peer;
 } Socket;
 
 #define PUSS_SOCKET_NAME	"[PussSocket]"
@@ -105,6 +107,18 @@ static int lua_socket_valid(lua_State* L) {
 	return 1;
 }
 
+static int lua_socket_addr(lua_State* L) {
+	Socket* ud = lua_check_socket(L, 1, 0);
+	socket_addr_push(L, &(ud->addr));
+	return 1;
+}
+
+static int lua_socket_peer(lua_State* L) {
+	Socket* ud = lua_check_socket(L, 1, 0);
+	socket_addr_push(L, &(ud->peer));
+	return 1;
+}
+
 static int lua_socket_create(lua_State* L) {
 	Socket* ud = lua_check_socket(L, 1, 0);
 	int af = (int)luaL_optinteger(L, 2, AF_INET);
@@ -126,22 +140,20 @@ static int lua_socket_bind(lua_State* L) {
 	const char* ip = luaL_optstring(L, 2, "0.0.0.0");
 	unsigned port = (unsigned)luaL_optinteger(L, 3, 0);
 	int reuse_addr = (int)lua_toboolean(L, 4);
-	struct sockaddr addr;
-	socklen_t addr_len = sizeof(addr);
+	struct sockaddr* addr = &(ud->addr);
+	socklen_t addr_len = sizeof(struct sockaddr);
 	int res;
-	socket_addr_build(L, &addr, ip, port);
+	socket_addr_build(L, addr, ip, port);
 	if( reuse_addr ) {
 		setsockopt(ud->fd, SOL_SOCKET, SO_REUSEADDR, (char*)&reuse_addr, sizeof(reuse_addr));
 	}
-	res = bind(ud->fd, &addr, sizeof(addr));
+	res = bind(ud->fd, addr, addr_len);
 	lua_pushinteger(L, res);
 	if( res < 0 ) {
 		lua_pushinteger(L, get_last_error());
-		socket_close(ud);
-	} else if( getsockname(ud->fd, &addr, &addr_len) < 0 ) {
-		lua_pushnil(L);
 	} else {
-		socket_addr_push(L, &addr);
+		getsockname(ud->fd, addr, &addr_len);
+		socket_addr_push(L, &(ud->addr));
 	}
 	return 2;
 }
@@ -153,7 +165,6 @@ static int lua_socket_listen(lua_State* L) {
 	lua_pushinteger(L, res);
 	if( res < 0 ) {
 		lua_pushinteger(L, get_last_error());
-		socket_close(ud);
 		return 2;
 	}
 	return 1;
@@ -161,9 +172,9 @@ static int lua_socket_listen(lua_State* L) {
 
 static int lua_socket_accept(lua_State* L) {
 	Socket* ud = lua_check_socket(L, 1, 1);
-	struct sockaddr addr;
-	socklen_t addr_len = sizeof(addr);
-	SOCKET fd = accept(ud->fd, &addr, &addr_len);
+	struct sockaddr* peer = &(ud->peer);
+	socklen_t addr_len = sizeof(struct sockaddr);
+	SOCKET fd = accept(ud->fd, peer, &addr_len);
 	Socket* sock;
 	if( !socket_check_valid(fd) ) {
 		lua_pushnil(L);
@@ -173,8 +184,12 @@ static int lua_socket_accept(lua_State* L) {
 	
 	sock = (Socket*)lua_newuserdata(L, sizeof(Socket));
 	sock->fd = fd;
+	sock->addr = ud->addr;
+	sock->peer = ud->peer;
 	luaL_setmetatable(L, PUSS_SOCKET_NAME);
-	socket_addr_push(L, &addr);
+	addr_len = sizeof(struct sockaddr);
+	getsockname(sock->fd, &(sock->addr), &addr_len);
+	socket_addr_push(L, peer);
 	return 2;
 }
 
@@ -266,14 +281,14 @@ static int lua_socket_recv(lua_State* L) {
 
 static int lua_socket_sendto(lua_State* L) {
 	Socket* ud = lua_check_socket(L, 1, 1);
-	const char* ip = luaL_checkstring(L, 2);
-	unsigned port = (unsigned)luaL_checkinteger(L, 3);
 	size_t len = 0;
-	const char* msg = luaL_checklstring(L, 4, &len);
-	struct sockaddr addr;
+	const char* msg = luaL_checklstring(L, 2, &len);
+	const char* ip = luaL_optstring(L, 3, NULL);
+	unsigned port = (unsigned)luaL_optinteger(L, 3, 0);
+	struct sockaddr* peer = &(ud->peer);
 	int res;
-	socket_addr_build(L, &addr, ip, port);
-	res = sendto(ud->fd, msg, (int)len, 0, &addr, sizeof(addr));
+	if( ip ) { socket_addr_build(L, peer, ip, port); }
+	res = sendto(ud->fd, msg, (int)len, 0, peer, sizeof(struct sockaddr));
 	lua_pushinteger(L, res);
 	if( res < 0 ) {
 		lua_pushinteger(L, get_last_error());
@@ -286,18 +301,18 @@ static int lua_socket_recvfrom(lua_State* L) {
 	Socket* ud = lua_check_socket(L, 1, 1);
 	int len = (int)luaL_optinteger(L, 2, LUAL_BUFFERSIZE);
 	int res = 0;
-	struct sockaddr addr;
+	struct sockaddr* peer = &(ud->peer);
 	socklen_t addr_len = sizeof(struct sockaddr);
 	luaL_Buffer B;
-	memset(&addr, 0, sizeof(addr));
+	memset(peer, 0, addr_len);
 	luaL_buffinitsize(L, &B, len);
-	res = recvfrom(ud->fd, B.b, len, 0, &addr, &addr_len);
+	res = recvfrom(ud->fd, B.b, len, 0, peer, &addr_len);
 	if( res < 0 ) {
 		lua_pushnil(L);
 		lua_pushinteger(L, get_last_error());
 	} else {
 		luaL_pushresultsize(&B, (size_t)res);
-		socket_addr_push(L, &addr);
+		socket_addr_push(L, peer);
 	}
 	return 2;
 }
@@ -314,6 +329,29 @@ static int lua_socket_set_nonblock(lua_State* L) {
 	return 1;
 }
 
+static int lua_socket_set_broadcast(lua_State* L) {
+	Socket* ud = lua_check_socket(L, 1, 1);
+	unsigned short port = (unsigned short)luaL_optinteger(L, 2, 0);
+	struct sockaddr_in* peer = (struct sockaddr_in*)&(ud->peer);
+	socklen_t addr_len = sizeof(struct sockaddr);
+	int opt = -1;
+	int res;
+	if( port ) {
+		memset(peer, 0, addr_len);
+		peer->sin_family = AF_INET;
+		peer->sin_addr.s_addr = htonl(INADDR_BROADCAST);
+		peer->sin_port = htons(port);
+	}
+	res = setsockopt(ud->fd, SOL_SOCKET, SO_BROADCAST, (const char*)&opt, sizeof(opt));
+	lua_pushinteger(L, res);
+	if( res < 0 ) {
+		lua_pushinteger(L, get_last_error());
+		return 2;
+	}
+	lua_pushnil(L);
+	return 2;
+}
+
 static int lua_socket_utable(lua_State* L) {
 	lua_check_socket(L, 1, 0);
 	if( lua_getuservalue(L, 1)!=LUA_TTABLE ) {
@@ -328,6 +366,8 @@ static const luaL_Reg socket_methods[] =
 	{ {"__index",		NULL}
 	, {"__gc",			lua_socket_close}
 	, {"valid",			lua_socket_valid}
+	, {"addr",			lua_socket_addr}
+	, {"peer",			lua_socket_peer}
 	, {"create",		lua_socket_create}
 	, {"close",			lua_socket_close}
 	, {"bind",			lua_socket_bind}
@@ -339,6 +379,7 @@ static const luaL_Reg socket_methods[] =
 	, {"sendto",		lua_socket_sendto}
 	, {"recvfrom",		lua_socket_recvfrom}
 	, {"set_nonblock",	lua_socket_set_nonblock}
+	, {"set_broadcast",	lua_socket_set_broadcast}
 	, {"utable",		lua_socket_utable}
 	, {NULL, NULL}
 	};

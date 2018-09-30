@@ -15,16 +15,17 @@ if puss._debug_proxy then
 	function MT:fetch_subs(idx) return idx, self:__host_pcall('puss._debug_fetch_subs', idx) end
 	function MT:modify_var(idx, val) return self:__host_pcall('puss._debug_modify_var', idx, val) end
 
+	local BROADCAST_PORT = 9999
 	local broadcast_udp = puss_system.socket_new()
 	broadcast_udp:create(AF_INET, puss_system.SOCK_DGRAM, puss_system.IPPROTO_UDP)
+	broadcast_udp:set_broadcast(BROADCAST_PORT)
 	broadcast_udp:bind()
+	broadcast_udp:set_nonblock(true)
 
 	local listen_sock, listen_addr = net.listen(nil, 0, true)
 	local socket, address
 	local send_breaked_frame
 
-	local BROADCAST_IP = '127.0.0.255'
-	local BROADCAST_PORT = 9999
 	local BROADCAST_INFO = listen_addr
 	do
 		local ok, title = puss_debug:__host_pcall('puss._debug_fetch_title')
@@ -41,8 +42,8 @@ if puss._debug_proxy then
 
 	local function hook_main_update(breaked, frame)
 		if not socket then
-			broadcast_udp:sendto(BROADCAST_IP, BROADCAST_PORT, BROADCAST_INFO)
-			print('broadcast', BROADCAST_IP, BROADCAST_PORT, BROADCAST_INFO)
+			broadcast_udp:sendto(BROADCAST_INFO)
+			print('broadcast', BROADCAST_PORT, BROADCAST_INFO)
 
 			socket, address = net.accept(listen_sock)
 			-- print('accept', listen_sock, socket, address)

@@ -21,11 +21,11 @@ __exports.listen = function(ip, port, reuse_addr)
 end
 
 __exports.accept = function(listen_sock)
-	local sock, addr = listen_sock:accept()
+	local sock = listen_sock:accept()
 	if not sock then return end
 	utable_init(sock)
 	sock:set_nonblock(true)
-	return sock, addr
+	return sock
 end
 
 __exports.connect = function(ip, port)

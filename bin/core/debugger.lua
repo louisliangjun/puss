@@ -23,7 +23,8 @@ local main_ui = _main_ui
 local BROADCAST_PORT = 9999
 local broadcast_udp = puss_system.socket_new()
 broadcast_udp:create(puss_system.AF_INET, puss_system.SOCK_DGRAM, puss_system.IPPROTO_UDP)
-broadcast_udp:bind(nil, BROADCAST_PORT)
+broadcast_udp:set_broadcast()
+broadcast_udp:bind(nil, BROADCAST_PORT, true)
 broadcast_udp:set_nonblock(true)
 
 local hosts = {}
