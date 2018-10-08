@@ -26,10 +26,10 @@ if puss._debug_proxy then
 	local socket, address
 	local send_breaked_frame
 
-	local BROADCAST_INFO = listen_addr
+	local BROADCAST_INFO = string.format('[PussDebug]|%s', listen_addr)
 	do
 		local ok, title = puss_debug:__host_pcall('puss._debug_fetch_title')
-		if ok then BROADCAST_INFO = string.format('%s|%s', listen_addr, title) end
+		if ok then BROADCAST_INFO = string.format('%s|%s', BROADCAST_INFO, title) end
 	end
 
 	local function dispatch(cmd, ...)
@@ -43,7 +43,7 @@ if puss._debug_proxy then
 	local function hook_main_update(breaked, frame)
 		if not socket then
 			broadcast_udp:sendto(BROADCAST_INFO)
-			print('broadcast', BROADCAST_PORT, BROADCAST_INFO)
+			-- print('broadcast', BROADCAST_PORT, BROADCAST_INFO)
 
 			socket, address = net.accept(listen_sock)
 			-- print('accept', listen_sock, socket, address)

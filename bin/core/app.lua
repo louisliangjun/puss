@@ -43,7 +43,7 @@ local function main_menu()
 		if puss.debug then
 			if imgui.MenuItem('Load Debugger') then
 				if puss._sep=='\\' then
-					os.execute(string.format('start /B %s\\%s --main=core.debugger --console', puss._path, puss._self))
+					os.execute(string.format('start /B %s\\%s --main=core.debugger -X-console', puss._path, puss._self))
 				else
 					os.execute(string.format('%s/%s --main=core.debugger &', puss._path, puss._self))
 				end

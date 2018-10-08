@@ -17,6 +17,9 @@ docs.setup(diskfs, function(page, event, ...)
 	if f then return f(page, ...) end
 end)
 
+local LEAF_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen
+local FOLD_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick
+
 local run_sign = true
 local main_ui = _main_ui
 
@@ -27,7 +30,7 @@ broadcast_udp:set_broadcast()
 broadcast_udp:bind(nil, BROADCAST_PORT, true)
 broadcast_udp:set_nonblock(true)
 
-local hosts = {}
+local hosts = nil
 
 local socket = _socket
 
@@ -136,25 +139,37 @@ local function shortcuts_update()
 	if shotcuts.is_pressed('debugger/continue') then net.send(socket, 'continue') end
 end
 
+local function broadcast_udp_update()
+	local data, addr = broadcast_udp:recvfrom()
+	if not data then return end
+	if not hosts then return end
+	--print(data, addr, hosts)
+
+	-- local machine, use addr
+	local ip, port, title = data:match('^%[PussDebug%]|(%d+%.%d+%.%d+%.%d+):(%d+)|?(.*)$')
+	if ip=='0.0.0.0' then ip = addr:match('^(%d+%.%d+%.%d+%.%d+):%d+') end
+	if not ip then return end
+	local key = ip .. ':' .. port
+	local info = hosts[key]
+	if info then
+		info.timestamp = os.time()
+	else
+		info = {label=string.format('%s:%s (%s)', ip, port, title), ip=ip, port=tonumber(port), title=title, timestamp=os.time()}
+		table.insert(hosts, info)
+		hosts[key] = info
+	end
+end
+
 local function debug_toolbar()
 	if socket and socket:valid() then
 		if imgui.Button("disconnect") then
 			socket:close()
 		end
 	else
-		if imgui.Button("connect") then
-			-- TODO : show hosts & select
-			for info in pairs(hosts) do
-				local port, title = info:match('^0%.0%.0%.0:(%d+)|?(.*)$')
-				print(info, port, title)
-				if port then
-					port = tonumber(port)
-					_socket = net.connect('127.0.0.1', port)
-					if socket then socket:close() end
-					socket = _socket
-					break
-				end
-			end
+		if imgui.Button("connect...") then
+			hosts = {}
+			imgui.OpenPopup('Connect ...')
+			imgui.SetNextWindowSize(430, 320)
 		end
 	end
 	imgui.SameLine()
@@ -164,6 +179,22 @@ local function debug_toolbar()
 	imgui.SameLine()
 	if imgui.Button("continue") then
 		net.send(socket, 'continue')
+	end
+
+	if imgui.BeginPopupModal('Connect ...') then
+		imgui.Text('wait hosts & click to connect ...')
+		imgui.Separator()
+		for _, info in ipairs(hosts) do
+			imgui.TreeNodeEx(v, LEAF_FLAGS, info.label)
+			if imgui.IsItemClicked() then
+				imgui.CloseCurrentPopup()
+				hosts = nil
+				_socket = net.connect(info.ip, info.port)
+				if socket then socket:close() end
+				socket = _socket
+			end
+		end
+		imgui.EndPopup()
 	end
 end
 
@@ -186,9 +217,6 @@ local function draw_stack()
 		if fname then docs.open(fname, clicked.currentline-1) end
 	end
 end
-
-local LEAF_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen
-local FOLD_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick
 
 local has_sub_types =
 	{ ['T'] = true
@@ -350,13 +378,6 @@ local function show_main_window(is_init)
 
 	if show_console_window then
 		show_console_window = console.update(show_console_window)
-	end
-end
-
-local function broadcast_udp_update()
-	local data, addr = broadcast_udp:recvfrom()
-	if data then
-		hosts[data] = os.time()
 	end
 end
 
