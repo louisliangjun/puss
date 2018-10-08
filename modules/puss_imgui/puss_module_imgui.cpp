@@ -248,7 +248,7 @@ public:
 			case WM_CLOSE:
 				if(g_hWnd==hWnd) {
 					set_should_close(1);
-					break;
+					return 1;
 				}
 				break;
 			case WM_DROPFILES:
