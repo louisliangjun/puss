@@ -102,7 +102,10 @@ local MAIN_WINDOW_FLAGS = ( ImGuiWindowFlags_NoTitleBar
 	)
 
 local function show_main_window(is_init)
-	imgui.SetNextWindowPos(0, 0)
+	if is_init then
+		local x, y = imgui.GetPlatformWindowRect()
+		imgui.SetNextWindowPos(x, y)
+	end
 	imgui.SetNextWindowSize(imgui.GetIODisplaySize())
 	imgui.Begin('PussMainWindow', nil, MAIN_WINDOW_FLAGS)
 	main_menu()

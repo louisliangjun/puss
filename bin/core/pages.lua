@@ -13,7 +13,7 @@ local TABSBAR_FLAGS = ( ImGuiTabBarFlags_Reorderable
 	)
 
 __exports.update = function(main_ui)
-    imgui.BeginTabBar('PussMainTabsBar', TABSBAR_FLAGS)
+    if not imgui.BeginTabBar('PussMainTabsBar', TABSBAR_FLAGS) then return end
 
 	-- set active, must after draw tabs
 	local active = next_active_page_label

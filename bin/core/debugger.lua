@@ -72,8 +72,8 @@ local stubs = {}
 
 stubs.breaked = function()
 	stack_vars = {}
-	stack_list = {}
-	stack_current = 1
+	--stack_list = {}
+	--stack_current = 1
 	net.send(socket, 'fetch_stack')
 end
 
@@ -258,7 +258,7 @@ end
 
 local function draw_vars()
 	local info = stack_list[stack_current]
-	if not info then return imgui.Text('<empty>') end
+	if not info then return end
 	if info.vars then
 		draw_subs(stack_current, info.vars)
 	end
@@ -358,10 +358,14 @@ local MAIN_WINDOW_FLAGS = ( ImGuiWindowFlags_NoTitleBar
 	| ImGuiWindowFlags_NoSavedSettings
 	| ImGuiWindowFlags_MenuBar
 	| ImGuiWindowFlags_NoBringToFrontOnFocus
+	| ImGuiWindowFlags_AlwaysAutoResize
 	)
 
 local function show_main_window(is_init)
-	imgui.SetNextWindowPos(0, 0)
+	if is_init then
+		local x, y = imgui.GetPlatformWindowRect()
+		imgui.SetNextWindowPos(x, y)
+	end
 	imgui.SetNextWindowSize(imgui.GetIODisplaySize())
 	imgui.Begin('PussMainWindow', nil, MAIN_WINDOW_FLAGS)
 	main_menu()

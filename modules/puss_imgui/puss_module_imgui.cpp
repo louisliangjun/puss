@@ -94,6 +94,30 @@ class ImguiEnv {
 public:
 	ImGuiContext*	g_Context;
 
+private:
+	void do_create_context() {
+		// Setup ImGui binding
+		g_Context = ImGui::CreateContext();
+		ImGuiIO& io = ImGui::GetIO();
+		io.UserData = this;
+
+		//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
+		//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;   // Enable Gamepad Controls
+		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;           // Enable Docking
+		io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;         // Enable Multi-Viewport / Platform Windows
+		//io.ConfigFlags |= ImGuiConfigFlags_ViewportsNoTaskBarIcons;
+		//io.ConfigFlags |= ImGuiConfigFlags_ViewportsNoMerge;
+		io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleFonts;     // FIXME-DPI: THIS CURRENTLY DOESN'T WORK AS EXPECTED. DON'T USE IN USER APP!
+		io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleViewports; // FIXME-DPI
+		io.ConfigResizeWindowsFromEdges = true;
+		io.ConfigDockingWithShift = true;
+
+		// Setup style
+		ImGui::GetStyle().WindowRounding = 0.0f;
+		ImGui::StyleColorsDark();
+		//ImGui::StyleColorsClassic();
+	}
+
 #ifdef PUSS_IMGUI_USE_DX11
 
 public:
@@ -310,14 +334,7 @@ public:
 		ShowWindow(hwnd, SW_SHOWDEFAULT);
 		UpdateWindow(hwnd);
 		DragAcceptFiles(hwnd, TRUE);
-
-		// Setup ImGui binding
-		g_Context = ImGui::CreateContext();
-		ImGuiIO& io = ImGui::GetIO();
-		io.UserData = this;
-		//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
-		//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;   // Enable Gamepad Controls
-
+		do_create_context();
 		ImGui_ImplWin32_Init(hwnd);
 		ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
 		g_hWnd = hwnd;
@@ -472,12 +489,9 @@ public:
 		glViewport(0, 0, width, height);
 
 		// Setup ImGui binding
-		g_Context = ImGui::CreateContext();
 		glfwSetWindowUserPointer(g_Window, this);
-		ImGuiIO& io = ImGui::GetIO();
-		io.UserData = this;
-		//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
-		//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;   // Enable Gamepad Controls
+		do_create_context();
+
 		ImGui_ImplGlfw_InitForOpenGL(g_Window, false);
 		glfwSetMouseButtonCallback(g_Window, ImGui_ImplGlfw_MouseButtonCallback);
 		glfwSetScrollCallback(g_Window, ImGui_ImplGlfw_ScrollCallback);
@@ -707,6 +721,17 @@ static int imgui_protect_pcall_lua(lua_State* L) {
 	return lua_gettop(L);
 }
 
+static int imgui_getplat_window_rect_lua(lua_State* L) {
+	ImGuiPlatformIO& plat = ImGui::GetPlatformIO();
+	ImVec2 pos = plat.Platform_GetWindowPos(plat.MainViewport);
+	ImVec2 size = plat.Platform_GetWindowSize(plat.MainViewport);
+	lua_pushnumber(L, pos.x);
+	lua_pushnumber(L, pos.y);
+	lua_pushnumber(L, size.x);
+	lua_pushnumber(L, size.y);
+	return 4;
+}
+
 static int imgui_getio_display_size_lua(lua_State* L) {
 	ImGuiIO& io = ImGui::GetIO();
 	lua_pushnumber(L, io.DisplaySize.x);
@@ -891,9 +916,6 @@ static int imgui_create_lua(lua_State* L) {
 	if( !env->create_window(title, width, height) )
 		luaL_error(L, "create window failed!");
 #endif
-	// Setup style
-    ImGui::StyleColorsDark();
-    //ImGui::StyleColorsClassic();
 
     // Load Fonts
     // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them. 
@@ -920,6 +942,12 @@ static int imgui_create_lua(lua_State* L) {
 	if( env->prepare_newframe() ) {
         ImGui::NewFrame();
 		ImGui::Render();
+        // Update and Render additional Platform Windows
+        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        {
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+        }
 		ImGui::EndFrame();
 	}
 
@@ -965,6 +993,7 @@ static luaL_Reg imgui_lua_apis[] =
 	, {"CreateScintilla", im_scintilla_create}
 	, {"GetScintillaLexers", im_scintilla_lexers}
 
+	, {"GetPlatformWindowRect", imgui_getplat_window_rect_lua}
 	, {"GetIODisplaySize", imgui_getio_display_size_lua}
 	, {"GetIODeltaTime", imgui_getio_delta_time_lua}
 	, {"IsShortcutPressed", imgui_is_shortcut_pressed_lua}
