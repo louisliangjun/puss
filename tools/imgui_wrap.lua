@@ -220,8 +220,6 @@ static int textedit_callback_data_index(lua_State* L) {
 		lua_pushinteger(L, data->EventFlag);
 	} else if( strcmp(field, "Flags")==0 ) {
 		lua_pushinteger(L, data->Flags);
-	} else if( strcmp(field, "ReadOnly")==0 ) {
-		lua_pushinteger(L, data->ReadOnly);
 	} else if( strcmp(field, "EventChar")==0 ) {
 		lua_pushinteger(L, data->EventChar);
 	} else if( strcmp(field, "EventKey")==0 ) {
@@ -536,7 +534,6 @@ function main()
 	end
 
 	load_header('imgui.h')
-	load_header('imgui_tabs.h')
 
 	local wraps, begins, ends = {}, {}, {}
 

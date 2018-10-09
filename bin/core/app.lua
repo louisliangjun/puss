@@ -15,7 +15,6 @@ local run_sign = true
 local main_ui = _main_ui
 
 show_imgui_demos = show_imgui_demos or false
-show_tabs_demo = show_tabs_demo or false
 show_console_window = show_console_window or false
 show_shutcut_window = show_shutcut_window or false
 
@@ -34,7 +33,6 @@ local function main_menu()
 	end
 	if imgui.BeginMenu('Help') then
 		active, show_imgui_demos = imgui.MenuItem('ImGUI Demos', nil, show_imgui_demos)
-		active, show_tabs_demo = imgui.MenuItem('Tabs Demo', nil, show_tabs_demo)
 		active, show_console_window = imgui.MenuItem('Conosle', nil, show_console_window)
 		active, show_shutcut_window = imgui.MenuItem('Shutcut', nil, show_shutcut_window)
 		imgui.Separator()
@@ -119,9 +117,6 @@ local function show_main_window(is_init)
 
 	if show_imgui_demos then
 		show_imgui_demos = imgui.ShowDemoWindow(show_imgui_demos)
-	end
-	if show_tabs_demo then
-		show_tabs_demo = imgui.ShowTabsDemo('Tabs Demo', show_tabs_demo)
 	end
 	if show_console_window then
 		show_console_window = console.update(show_console_window)

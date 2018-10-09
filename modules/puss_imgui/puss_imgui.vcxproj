@@ -14,7 +14,7 @@
     <ClCompile Include="imgui\imgui.cpp" />
     <ClCompile Include="imgui\imgui_demo.cpp" />
     <ClCompile Include="imgui\imgui_draw.cpp" />
-    <ClCompile Include="imgui\imgui_tabs.cpp" />
+    <ClCompile Include="imgui\imgui_widgets.cpp" />
     <ClCompile Include="puss_module_imgui.cpp" />
     <ClCompile Include="scintilla3\lexers\LexA68k.cxx" />
     <ClCompile Include="scintilla3\lexers\LexAbaqus.cxx" />
@@ -169,10 +169,11 @@
     <ClInclude Include="imgui\imconfig.h" />
     <ClInclude Include="imgui\imgui.h" />
     <ClInclude Include="imgui\imgui_internal.h" />
-    <ClInclude Include="imgui\imgui_tabs.h" />
-    <ClInclude Include="imgui\stb_rect_pack.h" />
-    <ClInclude Include="imgui\stb_textedit.h" />
-    <ClInclude Include="imgui\stb_truetype.h" />
+    <ClInclude Include="imgui\imstb_rectpack.h" />
+    <ClInclude Include="imgui\imstb_textedit.h" />
+    <ClInclude Include="imgui\imstb_truetype.h" />
+    <ClInclude Include="imgui_impl_dx11.h" />
+    <ClInclude Include="imgui_impl_win32.h" />
     <ClInclude Include="puss_module_imgui_keys.inl" />
     <ClInclude Include="puss_module_imgui.h" />
     <ClInclude Include="scintilla3\include\ILexer.h" />

@@ -7,8 +7,13 @@ local index = _index
 local selected_page_label = nil
 local next_active_page_label = nil
 
+local TABSBAR_FLAGS = ( ImGuiTabBarFlags_Reorderable
+	| ImGuiTabBarFlags_AutoSelectNewTabs
+	| ImGuiTabBarFlags_FittingPolicyScroll
+	)
+
 __exports.update = function(main_ui)
-    imgui.BeginTabBar('PussMainTabsBar', ImGuiTabBarFlags_SizingPolicyFit)
+    imgui.BeginTabBar('PussMainTabsBar', TABSBAR_FLAGS)
 
 	-- set active, must after draw tabs
 	local active = next_active_page_label
@@ -23,12 +28,13 @@ __exports.update = function(main_ui)
 	for i, page in ipairs(pages) do
 		local label = page.label
 		page.was_open = page.open
-		selected, page.open = imgui.TabItem(label, page.open, page.unsaved and ImGuiTabItemFlags_UnsavedDocument or ImGuiTabItemFlags_None)
+		selected, page.open = imgui.BeginTabItem(label, page.open, page.unsaved and ImGuiTabItemFlags_UnsavedDocument or ImGuiTabItemFlags_None)
 		if selected then
 			local last = selected_page_label
 			selected_page_label = label
 			local draw = page.module.tabs_page_draw
 			if draw then main_ui:protect_pcall(draw, page, last~=label) end
+			imgui.EndTabItem()
 		end
 	end
 

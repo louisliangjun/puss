@@ -6,6 +6,8 @@
 
 #include "puss_module_imgui.h"
 
+#include "imgui.h"
+
 #ifdef PUSS_IMGUI_USE_DX11
 	#include <windows.h>
 	#include <tchar.h>
@@ -13,11 +15,20 @@
 	#include <d3d11.h>
 	#define DIRECTINPUT_VERSION 0x0800
 	#include <dinput.h>
-	#include <d3dcompiler.h>
+	#include <tchar.h>
+
+	#ifndef WM_DPICHANGED
+	#define WM_DPICHANGED 0x02E0 // From Windows SDK 8.1+ headers
+	#endif
+
+	#include "imgui_impl_win32.inl"
+	#include "imgui_impl_dx11.inl"
 
 	#pragma comment(lib, "d3d11.lib")
 	#pragma comment(lib, "d3dcompiler.lib")
 	#pragma comment(lib, "dxgi.lib")
+
+	extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 	#define PUSS_IMGUI_WINDOW_CLASS	_T("PussImGuiWindow")
 
@@ -43,36 +54,39 @@
 		}
 		return 1;
 	}
+
 #else
-	// GL3W
-	#include <GL/gl3w.h>    // This example is using gl3w to access OpenGL functions. You may use another OpenGL loader/header such as: glew, glext, glad, glLoadGen, etc.
-	// GLFW
-	#include <GLFW/glfw3.h>
-	#ifdef _WIN32
-	#undef APIENTRY
-	#define GLFW_EXPOSE_NATIVE_WIN32
-	#include <GLFW/glfw3native.h>   // for glfwGetWin32Window
-	#endif
-	#define GLFW_HAS_WINDOW_TOPMOST     (GLFW_VERSION_MAJOR * 1000 + GLFW_VERSION_MINOR * 100 >= 3200) // 3.2+ GLFW_FLOATING
-	#define GLFW_HAS_WINDOW_HOVERED     (GLFW_VERSION_MAJOR * 1000 + GLFW_VERSION_MINOR * 100 >= 3300) // 3.3+ GLFW_HOVERED
-	#define GLFW_HAS_WINDOW_ALPHA       (GLFW_VERSION_MAJOR * 1000 + GLFW_VERSION_MINOR * 100 >= 3300) // 3.3+ glfwSetWindowOpacity
-	#define GLFW_HAS_PER_MONITOR_DPI    (GLFW_VERSION_MAJOR * 1000 + GLFW_VERSION_MINOR * 100 >= 3300) // 3.3+ glfwGetMonitorContentScale
-	#define GLFW_HAS_VULKAN             (GLFW_VERSION_MAJOR * 1000 + GLFW_VERSION_MINOR * 100 >= 3200) // 3.2+ glfwCreateWindowSurface
-	// Data
-	enum GlfwClientApi
-	{
-		GlfwClientApi_Unknown,
-		GlfwClientApi_OpenGL,
-		GlfwClientApi_Vulkan
-	};
+
+	#include "imgui_impl_opengl3.inl"
+	#include "imgui_impl_glfw.inl"
 
 	#ifdef _WIN32
 		#pragma comment(lib, "glfw3.lib")
 		#pragma comment(lib, "opengl32.lib")
 	#endif
+
+	// About OpenGL function loaders: modern OpenGL doesn't have a standard header file and requires individual function pointers to be loaded manually. 
+	// Helper libraries are often used for this purpose! Here we are supporting a few common ones: gl3w, glew, glad.
+	// You may use another loader/header of your choice (glext, glLoadGen, etc.), or chose to manually implement your own.
+	#if defined(IMGUI_IMPL_OPENGL_LOADER_GL3W)
+	#include <GL/gl3w.h>    // Initialize with gl3wInit()
+	#elif defined(IMGUI_IMPL_OPENGL_LOADER_GLEW)
+	#include <GL/glew.h>    // Initialize with glewInit()
+	#elif defined(IMGUI_IMPL_OPENGL_LOADER_GLAD)
+	#include <glad/glad.h>  // Initialize with gladLoadGL()
+	#else
+	#include IMGUI_IMPL_OPENGL_LOADER_CUSTOM
+	#endif
+
+	#include <GLFW/glfw3.h> // Include glfw3.h after our OpenGL definitions
+
+	#ifdef _WIN32
+	#undef APIENTRY
+	#define GLFW_EXPOSE_NATIVE_WIN32
+	#include <GLFW/glfw3native.h>   // for glfwGetWin32Window
+	#endif
 #endif
 
-#include "imgui.h"
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui_internal.h"
 
@@ -81,10 +95,9 @@ public:
 	ImGuiContext*	g_Context;
 
 #ifdef PUSS_IMGUI_USE_DX11
-	#include "imgui_impl_win32.inl"
-	#include "imgui_impl_dx11.inl"
 
 public:
+	HWND g_hWnd;
 	int g_SouldClose;
 
 	void set_should_close(int value) {
@@ -97,6 +110,8 @@ public:
 	}
 
 public:
+	ID3D11Device*            g_pd3dDevice;
+	ID3D11DeviceContext*     g_pd3dDeviceContext;
 	IDXGISwapChain*          g_pSwapChain;
 	ID3D11RenderTargetView*  g_mainRenderTargetView;
 
@@ -178,60 +193,18 @@ public:
 			ImGuiIO& io = ImGui::GetIO();
 			switch (msg)
 			{
-			case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK:
-			case WM_RBUTTONDOWN: case WM_RBUTTONDBLCLK:
-			case WM_MBUTTONDOWN: case WM_MBUTTONDBLCLK:
-			{
-				int button = 0;
-				if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) button = 0;
-				if (msg == WM_RBUTTONDOWN || msg == WM_RBUTTONDBLCLK) button = 1;
-				if (msg == WM_MBUTTONDOWN || msg == WM_MBUTTONDBLCLK) button = 2;
-				if (!ImGui::IsAnyMouseDown() && ::GetCapture() == NULL)
-					::SetCapture(hWnd);
-				io.MouseDown[button] = true;
-				break;
-			}
-			case WM_LBUTTONUP:
-			case WM_RBUTTONUP:
-			case WM_MBUTTONUP:
-			{
-				int button = 0;
-				if (msg == WM_LBUTTONUP) button = 0;
-				if (msg == WM_RBUTTONUP) button = 1;
-				if (msg == WM_MBUTTONUP) button = 2;
-				io.MouseDown[button] = false;
-				if (!ImGui::IsAnyMouseDown() && ::GetCapture() == hWnd)
-					::ReleaseCapture();
-				break;
-			}
-			case WM_MOUSEWHEEL:
-				io.MouseWheel += (float)GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA;
-				break;
-			case WM_MOUSEHWHEEL:
-				io.MouseWheelH += (float)GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA;
-				break;
 			case WM_KEYDOWN:
 			case WM_SYSKEYDOWN:
 				if (wParam < 256) {
 					io.KeysDown[wParam] = 1;
-					if( wParam==VK_RETURN ) {
-						g_Context->IO.KeysDown[(lParam & (1<<24)) ? PUSS_IMGUI_KEY_KP_ENTER : PUSS_IMGUI_KEY_ENTER] = 1;
-					} else {
-						int key = _win32_vk_map[wParam];
-						if( key )	g_Context->IO.KeysDown[key] = 1;
-					}
+					io.KeysDown[_win32_vk_convert(wParam, lParam)] = 1;
 				}
 				break;
 			case WM_KEYUP:
 			case WM_SYSKEYUP:
 				if (wParam < 256) {
 					io.KeysDown[wParam] = 0;
-					if( wParam==VK_RETURN ) {
-						g_Context->IO.KeysDown[(lParam & (1<<24)) ? PUSS_IMGUI_KEY_KP_ENTER : PUSS_IMGUI_KEY_ENTER] = 0;
-					} else {
-						int key = _win32_vk_map[wParam];
-						if( key )	g_Context->IO.KeysDown[key] = 0;
-					}
+					io.KeysDown[_win32_vk_convert(wParam, lParam)] = 0;
 				}
 				break;
 			case WM_CHAR:
@@ -240,10 +213,6 @@ public:
 					break;
 				if (wParam > 0 && wParam < 0x10000)
 					io.AddInputCharacter((unsigned short)wParam);
-				break;
-			case WM_SETCURSOR:
-				if (LOWORD(lParam) == HTCLIENT && ImGui_ImplWin32_UpdateMouseCursor())
-					return 1;
 				break;
 			case WM_CLOSE:
 				if(g_hWnd==hWnd) {
@@ -287,6 +256,10 @@ public:
 					DragFinish(h);
 				}
 				break;
+			default:
+				if( ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam) )
+					return 1;
+				break;
 			}
 		}
 
@@ -313,6 +286,15 @@ public:
 			if ((wParam & 0xfff0) == SC_KEYMENU) // Disable ALT application menu
 				return 0;
 			break;
+		case WM_DPICHANGED:
+			if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_DpiEnableScaleViewports)
+			{
+				//const int dpi = HIWORD(wParam);
+				//printf("WM_DPICHANGED to %d (%.0f%%)\n", dpi, (float)dpi / 96.0f * 100.0f);
+				const RECT* suggested_rect = (RECT*)lParam;
+				::SetWindowPos(hWnd, NULL, suggested_rect->left, suggested_rect->top, suggested_rect->right - suggested_rect->left, suggested_rect->bottom - suggested_rect->top, SWP_NOZORDER | SWP_NOACTIVATE);
+			}
+			break;
 		case WM_DESTROY:
 			// PostQuitMessage(0);
 			return 0;
@@ -322,7 +304,7 @@ public:
 
 public:
 	bool create_window(const TCHAR* title, int width, int height) {
-		HWND hwnd = CreateWindow(PUSS_IMGUI_WINDOW_CLASS, title, WS_OVERLAPPEDWINDOW, 100, 100, 1280, 800, NULL, NULL, puss_imgui_wc.hInstance, this);
+		HWND hwnd = CreateWindow(PUSS_IMGUI_WINDOW_CLASS, title, WS_OVERLAPPEDWINDOW, 100, 100, width, height, NULL, NULL, puss_imgui_wc.hInstance, this);
 
 		// Show the window
 		ShowWindow(hwnd, SW_SHOWDEFAULT);
@@ -338,17 +320,18 @@ public:
 
 		ImGui_ImplWin32_Init(hwnd);
 		ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
+		g_hWnd = hwnd;
 		return true;
 	}
 
 	void destroy_window() {
 		if( g_hWnd ) {
-			HWND hWnd = g_hWnd;
 			ImGui_ImplDX11_Shutdown();
 			ImGui_ImplWin32_Shutdown();
 			ImGui::DestroyContext(g_Context);
 			CleanupDeviceD3D();
-			DestroyWindow(hWnd);
+			DestroyWindow(g_hWnd);
+			g_hWnd = NULL;
 		}
 	}
 
@@ -401,12 +384,22 @@ public:
         g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, NULL);
         g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, (float*)&clear_color);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-        g_pSwapChain->Present(1, 0); // Present with vsync
+
+        // Update and Render additional Platform Windows
+        if (g_Context->IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        {
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+        }
+
+		g_pSwapChain->Present(1, 0); // Present with vsync
+        //g_pSwapChain->Present(0, 0); // Present without vsync
 	}
 
 #else
-	#include "imgui_impl_glfw.inl"
-	#include "imgui_impl_opengl3.inl"
+
+public:
+	GLFWwindow*      g_Window;
 
 	void set_should_close(int value) {
 		if( g_Window ) {
@@ -492,8 +485,11 @@ public:
 		glfwSetCharCallback(g_Window, ImGui_ImplGlfw_CharCallback);
 		glfwSetDropCallback(g_Window, ImGui_Puss_DropCallback);
 
-		const char* glsl_version = "#version 130";
-		ImGui_ImplOpenGL3_Init(glsl_version);
+		#if __APPLE__
+			ImGui_ImplOpenGL3_Init("#version 150");
+		#else
+			ImGui_ImplOpenGL3_Init("#version 130");
+		#endif
 		return true;
 	}
 
@@ -551,8 +547,6 @@ public:
 	int                     g_StackProtected;
 	ImVector<char>*         g_Stack;
 };
-
-#include "imgui_tabs.h"
 
 #include "scintilla_imgui.h"
 
@@ -841,16 +835,25 @@ static int imgui_fetch_extra_keys_lua(lua_State* L) {
 
 	static void do_platform_init(lua_State* L) {
 		if( !glfw_inited ) {
-    		glfw_inited = glfwInit();
+			glfwSetErrorCallback(error_callback);
+
+			glfw_inited = glfwInit();
     		if( !glfw_inited ) luaL_error(L, "[GFLW] failed to init!\n");
     		atexit(glfwTerminate);
 
-			glfwSetErrorCallback(error_callback);
-
-			glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-			glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-			//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
-			//glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
+			#if __APPLE__
+				// GL 3.2 + GLSL 150
+				glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+				glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+				glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
+				glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
+			#else
+				// GL 3.0 + GLSL 130
+				glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+				glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+				//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
+				//glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
+			#endif
 		}
 	}
 
@@ -941,7 +944,7 @@ void* __scintilla_imgui_os_window(void) {
 #ifdef PUSS_IMGUI_USE_DX11
 	if( env )	return env->g_hWnd;
 #else
-	#ifdef _WIN32
+	#ifdef GLFW_EXPOSE_NATIVE_WIN32
 		return glfwGetWin32Window(env->g_Window);
 	#endif
 #endif

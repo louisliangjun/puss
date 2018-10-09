@@ -5,6 +5,8 @@
 
 #include "puss_module.h"
 
+#define IMGUI_IMPL_API
+
 #define IMGUI_MT_NAME	"ImguiEnv"
 
 enum PussImGuiKeyType
