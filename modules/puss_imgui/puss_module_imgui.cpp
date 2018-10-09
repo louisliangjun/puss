@@ -118,6 +118,15 @@ private:
 		//ImGui::StyleColorsClassic();
 	}
 
+	void do_update_and_render_viewports() {
+		// Update and Render additional Platform Windows
+        if (g_Context->IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        {
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+        }
+	}
+
 #ifdef PUSS_IMGUI_USE_DX11
 
 public:
@@ -401,14 +410,7 @@ public:
         g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, NULL);
         g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, (float*)&clear_color);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-
-        // Update and Render additional Platform Windows
-        if (g_Context->IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-        {
-            ImGui::UpdatePlatformWindows();
-            ImGui::RenderPlatformWindowsDefault();
-        }
-
+		do_update_and_render_viewports();
 		g_pSwapChain->Present(1, 0); // Present with vsync
         //g_pSwapChain->Present(0, 0); // Present without vsync
 	}
@@ -547,6 +549,7 @@ public:
 
 	void render_drawdata() {
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		do_update_and_render_viewports();
         glfwMakeContextCurrent(g_Window);
         glfwSwapBuffers(g_Window);
 	}

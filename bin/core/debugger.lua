@@ -182,16 +182,21 @@ local function debug_toolbar()
 	end
 
 	if imgui.BeginPopupModal('Connect ...') then
-		imgui.Text('wait hosts & click to connect ...')
-		imgui.Separator()
-		for _, info in ipairs(hosts) do
-			imgui.TreeNodeEx(v, LEAF_FLAGS, info.label)
-			if imgui.IsItemClicked() then
-				imgui.CloseCurrentPopup()
-				hosts = nil
-				_socket = net.connect(info.ip, info.port)
-				if socket then socket:close() end
-				socket = _socket
+		if imgui.Button("Quit") then
+			imgui.CloseCurrentPopup()
+		else
+			imgui.SameLine()
+			imgui.Text('or wait hosts & click to connect ...')
+			imgui.Separator()
+			for _, info in ipairs(hosts) do
+				imgui.TreeNodeEx(v, LEAF_FLAGS, info.label)
+				if imgui.IsItemClicked() then
+					imgui.CloseCurrentPopup()
+					hosts = nil
+					_socket = net.connect(info.ip, info.port)
+					if socket then socket:close() end
+					socket = _socket
+				end
 			end
 		end
 		imgui.EndPopup()
