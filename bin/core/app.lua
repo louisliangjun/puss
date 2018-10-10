@@ -68,55 +68,64 @@ local function main_menu()
 	if shotcuts.is_pressed('app/reload') then puss.reload() end
 end
 
-local function left_pane()
-	imgui.BeginChild('PussLeftPane', 0, 0, false)
-	main_ui:protect_pcall(filebrowser.update)
-	imgui.EndChild()
-end
-
 local function pages_on_drop_files(files)
 	for path in files:gmatch('(.-)\n') do
 		docs.open(path)
 	end
 end
 
-local function main_pane()
-	imgui.BeginChild('PussPagesPane', 0, 0, false)
+local EDITOR_WINDOW_FLAGS = ( ImGuiWindowFlags_NoScrollbar
+	| ImGuiWindowFlags_NoScrollWithMouse
+	)
+
+local function editor_window()
+	imgui.Begin("Editor", nil, EDITOR_WINDOW_FLAGS)
 	if imgui.IsWindowHovered(ImGuiHoveredFlags_ChildWindows) then
 		local files = imgui.GetDropFiles()
 		if files then pages_on_drop_files(files) end
 	end
 	pages.update(main_ui)
-	imgui.EndChild()
+	imgui.End()
 end
 
-local MAIN_WINDOW_FLAGS = ( ImGuiWindowFlags_NoTitleBar
+local MAIN_DOCK_WINDOW_FLAGS = ( ImGuiWindowFlags_NoTitleBar
+	| ImGuiWindowFlags_NoCollapse
 	| ImGuiWindowFlags_NoResize
 	| ImGuiWindowFlags_NoMove
 	| ImGuiWindowFlags_NoScrollbar
 	| ImGuiWindowFlags_NoScrollWithMouse
-	| ImGuiWindowFlags_NoCollapse
 	| ImGuiWindowFlags_NoSavedSettings
-	| ImGuiWindowFlags_MenuBar
 	| ImGuiWindowFlags_NoBringToFrontOnFocus
+	| ImGuiWindowFlags_NoNavFocus
+	| ImGuiWindowFlags_NoDocking
+	| ImGuiWindowFlags_MenuBar
 	)
 
-local function show_main_window(is_init)
-	if is_init then
-		local x, y = imgui.GetPlatformWindowRect()
-		imgui.SetNextWindowPos(x, y)
-	end
-	imgui.SetNextWindowSize(imgui.GetIODisplaySize())
-	imgui.Begin('PussMainWindow', nil, MAIN_WINDOW_FLAGS)
+local function show_main_window()
+	local viewport = imgui.GetMainViewport()
+	imgui.SetNextWindowPos(viewport.PosX, viewport.PosY)
+	imgui.SetNextWindowSize(viewport.SizeX, viewport.SizeY)
+	imgui.SetNextWindowViewport(viewport.ID)
+
+	imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 0)
+	imgui.PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0)
+	imgui.PushStyleVar(ImGuiStyleVar_WindowPadding, 0, 0)
+	imgui.Begin('PussMainDockWindow', nil, MAIN_DOCK_WINDOW_FLAGS)
+	imgui.PopStyleVar(3)
+	imgui.DockSpace(imgui.GetID('#MainDockspace'))
 	main_menu()
-	imgui.Columns(2)
-	if is_init then imgui.SetColumnWidth(-1, 200) end
-	left_pane()
-	imgui.NextColumn()
-	main_pane()
-	imgui.NextColumn()
-	imgui.Columns(1)
 	imgui.End()
+
+	local menu_size = 24
+	local left_size = 260
+
+	imgui.SetNextWindowPos(viewport.PosX, viewport.PosY + menu_size, ImGuiCond_FirstUseEver)
+	imgui.SetNextWindowSize(left_size, viewport.SizeY - menu_size, ImGuiCond_FirstUseEver)
+	filebrowser.update()
+
+	imgui.SetNextWindowPos(viewport.PosX + left_size, viewport.PosY + menu_size, ImGuiCond_FirstUseEver)
+	imgui.SetNextWindowSize(viewport.SizeX - left_size, viewport.SizeY - menu_size, ImGuiCond_FirstUseEver)
+	editor_window()
 
 	if show_imgui_demos then
 		show_imgui_demos = imgui.ShowDemoWindow(show_imgui_demos)
@@ -171,10 +180,10 @@ end
 __exports.init = function()
 	local title = 'Puss - Editor'
 	puss._app_title = title
-	main_ui = imgui.Create(title, 1024, 768)
+	main_ui = imgui.Create(title, 1024, 768, 'puss_editor.ini')
 	_main_ui = main_ui
 	main_ui:set_error_handle(puss.logerr_handle())
-	main_ui(show_main_window, true)
+	main_ui(show_main_window)
 end
 
 __exports.uninit = function()

@@ -319,6 +319,58 @@ static int ImGuiTextEditCallback_LuaWrap(ImGuiTextEditCallbackData* data) {
 }
 ]]
 
+local viewport_implements = [[
+#define DOCK_FAMILY_NAME	"PussImguiDockFamily"
+
+static int dock_family_tostring(lua_State* L) {
+	ImGuiDockFamily* ud = (ImGuiDockFamily*)luaL_checkudata(L, 1, DOCK_FAMILY_NAME);
+	lua_pushfstring(L, "ImGuiDockFamily[%u] %p", ud->ID);
+	return 1;
+}
+
+static int dock_family_get_id(lua_State* L) {
+	ImGuiDockFamily* ud = (ImGuiDockFamily*)luaL_checkudata(L, 1, DOCK_FAMILY_NAME);
+	lua_pushinteger(L, ud->ID);
+	return 1;
+}
+
+static luaL_Reg dock_family_methods[] =
+	{ {"__tostring", dock_family_tostring}
+	, {"GetID", dock_family_get_id}
+	, {NULL, NULL}
+	};
+
+static int dock_family_create(lua_State* L) {
+	ImGuiID id = (ImGuiID)luaL_optinteger(L, 1, 0);
+	bool compatible_with_family_zero = (lua_gettop(L)<=1) || lua_toboolean(L, 2);
+	ImGuiDockFamily* ud = (ImGuiDockFamily*)lua_newuserdata(L, sizeof(ImGuiDockFamily));
+	ud->ID = id;
+	ud->CompatibleWithFamilyZero = compatible_with_family_zero;
+	if( luaL_newmetatable(L, DOCK_FAMILY_NAME) ) {
+		luaL_setfuncs(L, dock_family_methods, 0);
+		lua_pushvalue(L, -1);
+		lua_setfield(L, -2, "__index");
+	}
+	lua_setmetatable(L, -2);
+	return 1;
+}
+
+static void puss_imgui_viewport_push(lua_State* L, ImGuiViewport* v) {
+	if( v ) {
+		lua_createtable(L, 0, 7);
+		lua_pushinteger(L, v->ID);			lua_setfield(L, -2, "ID");
+		lua_pushinteger(L, v->Flags);		lua_setfield(L, -2, "Flags");
+		lua_pushnumber(L, v->Pos.x);		lua_setfield(L, -2, "PosX");
+		lua_pushnumber(L, v->Pos.y);		lua_setfield(L, -2, "PosY");
+		lua_pushnumber(L, v->Size.x);		lua_setfield(L, -2, "SizeX");
+		lua_pushnumber(L, v->Size.y);		lua_setfield(L, -2, "SizeY");
+		lua_pushnumber(L, v->DpiScale);		lua_setfield(L, -2, "DpiScale");
+	} else {
+		lua_pushnil(L);
+	}
+}
+]]
+
 local implements = {}
 
 implements.SetNextWindowSizeConstraints = [[	// void SetNextWindowSizeConstraints(const ImVec2& size_min, const ImVec2& size_max, ImGuiSizeCallback custom_callback = NULL, void* custom_callback_data = NULL);
@@ -600,6 +652,8 @@ function main()
 		local RE_CIMVEC2 = '^const%s+ImVec2%s*%&$'	-- const ImVec2&
 		local RE_RIMVEC4 = '^ImVec4%s*%&$'			-- ImVec4&
 		local RE_CIMVEC4 = '^const%s+ImVec4%s*%&$'	-- const ImVec4&
+		local RE_VIEWPORT = '^ImGuiViewport%s*%*$'	-- ImGuiViewport*
+		local RE_CDOCKFAMILY = '^const%s+ImGuiDockFamily%s*%*$'	-- const ImGuiDockFamily*
 
 		local function parse_arg(arg, brackets)
 			-- try fmt: type name[arr]
@@ -655,8 +709,8 @@ function main()
 				dst:writeln('	ImVec2 ', aname, ';')
 			elseif atype=='ImVec4' or atype:match(RE_CIMVEC4) then
 				dst:writeln('	ImVec4 ', aname, ';')
-			elseif atype=='ImTextureID' then
-				dst:writeln('	ImTextureID ', aname, ';')
+			elseif atype:match(RE_VIEWPORT) then
+				dst:writeln('	ImGuiViewport* ', aname, ';')
 			else
 				error(string.format('[NotSupport]	ret type(%s)', atype))
 			end
@@ -701,6 +755,8 @@ function main()
 					dst:writeln('	', atype, ' ', aname, ';')
 				elseif atype:match(RE_RFLOAT) then
 					dst:writeln('	float ', aname, ' = 0.0f;')
+				elseif atype:match(RE_CDOCKFAMILY) then
+					dst:writeln('	const ImGuiDockFamily* ', aname, ';')
 				else
 					local dt = atype:match(RE_PBOOL) or atype:match(RE_PINT) or atype:match(RE_PUINT) or atype:match(RE_PFLOAT) or atype:match(RE_PDOUBLE)
 					if dt then
@@ -796,6 +852,13 @@ function main()
 				elseif atype=='ImTextureID' then
 					iarg_use, fmt = true, fmt .. 'pv'
 					dst:writeln('	', aname, ' = ('..atype..')lua_topointer(L, ++__iarg__);')
+				elseif atype:match(RE_CDOCKFAMILY) then
+					iarg_use, fmt = true, fmt .. 'pv'
+					if a.def then
+						dst:writeln('	', aname, ' = ('..atype..')luaL_testudata(L, ++__iarg__, DOCK_FAMILY_NAME);')
+					else
+						dst:writeln('	', aname, ' = ('..atype..')luaL_checkudata(L, ++__iarg__, DOCK_FAMILY_NAME);')
+					end
 				else
 					error(string.format('[NotSupport]	arg type(%s)', atype))
 				end
@@ -853,6 +916,9 @@ function main()
 				elseif atype=='ImTextureID' then
 					nret = nret + 1
 					dst:writeln('	lua_pushlightuserdata(L, ', aname, ');')
+				elseif atype:match(RE_VIEWPORT) then
+					nret = nret + 1
+					dst:writeln('	puss_imgui_viewport_push(L, ', aname, ');')
 				else
 					error(string.format('ret type(%s)', atype))
 				end
@@ -932,8 +998,9 @@ function main()
 					dst:writeln('	if(__ret__ && ((flags & ImGuiTreeNodeFlags_Leaf)==0)) { IMGUI_LUA_WRAP_STACK_BEGIN(', fetch_stack_type(tp), ') }')
 					return
 				end
-			elseif name=='PushStyleVar' then
-				tp = 'PopStyleVar'
+			-- TODO if need, style var need use style_stack !!
+			-- elseif name=='PushStyleVar' then
+			-- 	tp = 'PopStyleVar'
 			end
 			if not tp then return end
 			local check_ret = ret=='bool'
@@ -948,14 +1015,17 @@ function main()
 		end
 
 		local function gen_end_wraps(name)
-			local tp = name:match('^End(.*)$')
-			if tp then
-				tp = end_overrides[tp] or 'End'..tp
-			elseif name=='TreePop' then
-				tp = 'TreePop'
-			elseif name=='PopStyleVar' then
-				tp = 'PopStyleVar'
+			-- TODO if need, style var need use style_stack !!
+			-- if name=='PopStyleVar' then
+			-- 	dst:writeln('	for(int i=0; i<count; ++i) { IMGUI_LUA_WRAP_STACK_END(', fetch_stack_type(name), ') }')
+			-- 	return
+			-- end
+			if name=='TreePop' then
+				dst:writeln('	IMGUI_LUA_WRAP_STACK_END(', fetch_stack_type(name), ')')
+				return
 			end
+			local tp = name:match('^End(.*)$')
+			if tp then tp = end_overrides[tp] or 'End'..tp end
 			if not tp then return end
 			dst:writeln('	IMGUI_LUA_WRAP_STACK_END(', fetch_stack_type(tp), ')')
 		end
@@ -1023,6 +1093,7 @@ function main()
 		dst:writeln()
 		dst:insert(buffer_implements)
 		dst:insert(callback_implements)
+		dst:insert(viewport_implements)
 
 		for _, v in ipairs(apis) do
 			gen_function(table.unpack(v))

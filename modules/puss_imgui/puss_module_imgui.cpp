@@ -337,7 +337,18 @@ public:
 
 public:
 	bool create_window(const TCHAR* title, int width, int height) {
-		HWND hwnd = CreateWindow(PUSS_IMGUI_WINDOW_CLASS, title, WS_OVERLAPPEDWINDOW, 100, 100, width, height, NULL, NULL, puss_imgui_wc.hInstance, this);
+		int sx = GetSystemMetrics(SM_CXSCREEN) - 64;
+		int sy = GetSystemMetrics(SM_CYSCREEN) - 64;
+		if( width > sx )	width = sx;
+		if( height > sy )	width = sy;
+		RECT rc;
+		rc.left = (sx - width) / 2;
+		rc.top = (sy - height) / 2;
+		rc.right = rc.left + width;
+		rc.bottom = rc.top + height;
+
+		AdjustWindowRectEx(&rc, WS_OVERLAPPEDWINDOW, FALSE, 0);
+		HWND hwnd = CreateWindow(PUSS_IMGUI_WINDOW_CLASS, title, WS_OVERLAPPEDWINDOW, rc.left, rc.top, rc.right-rc.left, rc.bottom-rc.top, NULL, NULL, puss_imgui_wc.hInstance, this);
 
 		// Show the window
 		ShowWindow(hwnd, SW_SHOWDEFAULT);
@@ -724,27 +735,9 @@ static int imgui_protect_pcall_lua(lua_State* L) {
 	return lua_gettop(L);
 }
 
-static int imgui_getplat_window_rect_lua(lua_State* L) {
-	ImGuiPlatformIO& plat = ImGui::GetPlatformIO();
-	ImVec2 pos = plat.Platform_GetWindowPos(plat.MainViewport);
-	ImVec2 size = plat.Platform_GetWindowSize(plat.MainViewport);
-	lua_pushnumber(L, pos.x);
-	lua_pushnumber(L, pos.y);
-	lua_pushnumber(L, size.x);
-	lua_pushnumber(L, size.y);
-	return 4;
-}
-
-static int imgui_getio_display_size_lua(lua_State* L) {
-	ImGuiIO& io = ImGui::GetIO();
-	lua_pushnumber(L, io.DisplaySize.x);
-	lua_pushnumber(L, io.DisplaySize.y);
-	return 2;
-}
-
 static int imgui_getio_delta_time_lua(lua_State* L) {
-	ImGuiIO& io = ImGui::GetIO();
-	lua_pushnumber(L, io.DeltaTime);
+	ImGuiContext* ctx = ImGui::GetCurrentContext();
+	lua_pushnumber(L, ctx ? ctx->IO.DeltaTime : 0.0f);
 	return 1;
 }
 
@@ -753,12 +746,13 @@ static bool shortcut_mod_check(lua_State* L, int arg, bool val) {
 }
 
 static int imgui_is_shortcut_pressed_lua(lua_State* L) {
-	ImGuiIO& io = ImGui::GetIO();
+	ImGuiContext* ctx = ImGui::GetCurrentContext();
 	int key = (int)luaL_checkinteger(L, 1);
-	bool pressed = shortcut_mod_check(L, 2, io.KeyCtrl)
-		&& shortcut_mod_check(L, 3, io.KeyShift)
-		&& shortcut_mod_check(L, 4, io.KeyAlt)
-		&& shortcut_mod_check(L, 5, io.KeySuper)
+	bool pressed = ctx
+		&& shortcut_mod_check(L, 2, ctx->IO.KeyCtrl)
+		&& shortcut_mod_check(L, 3, ctx->IO.KeyShift)
+		&& shortcut_mod_check(L, 4, ctx->IO.KeyAlt)
+		&& shortcut_mod_check(L, 5, ctx->IO.KeySuper)
 		&& (key>=0 && key<PUSS_IMGUI_TOTAL_KEY_LAST)
 		&& ImGui::IsKeyPressed(key)
 		;
@@ -897,6 +891,7 @@ static int imgui_create_lua(lua_State* L) {
 	const char* title = luaL_checkstring(L, 1);
 	int width = (int)luaL_optinteger(L, 2, 1024);
 	int height = (int)luaL_optinteger(L, 3, 768);
+	const char* ini_filename = luaL_optstring(L, 4, NULL);
 	ImguiEnv* env = (ImguiEnv*)lua_newuserdata(L, sizeof(ImguiEnv));
 	int err = 0;
 	memset(env, 0, sizeof(ImguiEnv));
@@ -919,6 +914,12 @@ static int imgui_create_lua(lua_State* L) {
 	if( !env->create_window(title, width, height) )
 		luaL_error(L, "create window failed!");
 #endif
+
+	if( ini_filename ) {
+		lua_pushvalue(L, 4);
+		luaL_ref(L, LUA_REGISTRYINDEX);
+		env->g_Context->IO.IniFilename = ini_filename;
+	}
 
     // Load Fonts
     // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them. 
@@ -993,11 +994,10 @@ static luaL_Reg imgui_lua_apis[] =
 
 	, {"CreateByteArray", byte_array_create}
 	, {"CreateFloatArray", float_array_create}
+	, {"CreateDockFamily", dock_family_create}
 	, {"CreateScintilla", im_scintilla_create}
 	, {"GetScintillaLexers", im_scintilla_lexers}
 
-	, {"GetPlatformWindowRect", imgui_getplat_window_rect_lua}
-	, {"GetIODisplaySize", imgui_getio_display_size_lua}
 	, {"GetIODeltaTime", imgui_getio_delta_time_lua}
 	, {"IsShortcutPressed", imgui_is_shortcut_pressed_lua}
 	, {"FetchExtraKeys", imgui_fetch_extra_keys_lua}

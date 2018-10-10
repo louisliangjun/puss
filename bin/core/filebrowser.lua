@@ -99,6 +99,7 @@ local function draw_blink_page()
 end
 
 __exports.update = function()
+	imgui.Begin("FileBrowser")
 	if #root_folders==0 then
 		draw_blink_page()
 	else
@@ -115,6 +116,7 @@ __exports.update = function()
 		local files = imgui.GetDropFiles()
 		if files then on_drop_files(files) end
 	end
+	imgui.End()
 end
 
 __exports.setup = function(new_fs)

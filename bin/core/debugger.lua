@@ -269,7 +269,8 @@ local function draw_vars()
 	end
 end
 
-local function debug_pane(main_ui)
+local function debug_window()
+	imgui.Begin('DebugWindow')
 	net.update(socket, dispatch)
 
 	shortcuts_update()
@@ -281,6 +282,7 @@ local function debug_pane(main_ui)
 	if imgui.CollapsingHeader('Vars', ImGuiTreeNodeFlags_DefaultOpen) then
 		main_ui:protect_pcall(draw_vars)
 	end
+	imgui.End()
 end
 
 local function main_menu()
@@ -299,12 +301,6 @@ local function main_menu()
 	imgui.EndMenuBar()
 
 	if shotcuts.is_pressed('app/reload') then puss.reload() end
-end
-
-local function left_pane()
-	imgui.BeginChild('PussLeftPane', 0, 0, false)
-	main_ui:protect_pcall(filebrowser.update)
-	imgui.EndChild()
 end
 
 local function pages_on_drop_files(files)
@@ -338,52 +334,66 @@ function docs_page_on_margin_click(page, modifiers, pos, margin)
 	trigger_bp(page, line)
 end
 
-local function main_pane()
-	imgui.BeginChild('PussPagesPane', 0, 0, false)
+local function pages_on_drop_files(files)
+	for path in files:gmatch('(.-)\n') do
+		docs.open(path)
+	end
+end
+
+local EDITOR_WINDOW_FLAGS = ( ImGuiWindowFlags_NoScrollbar
+	| ImGuiWindowFlags_NoScrollWithMouse
+	)
+
+local function editor_window()
+	imgui.Begin("Editor", nil, EDITOR_WINDOW_FLAGS)
 	if imgui.IsWindowHovered(ImGuiHoveredFlags_ChildWindows) then
 		local files = imgui.GetDropFiles()
 		if files then pages_on_drop_files(files) end
 	end
 	pages.update(main_ui)
-	imgui.EndChild()
+	imgui.End()
 end
 
-local function right_pane()
-	imgui.BeginChild('PussRightPane', 0, 0, false)
-	main_ui:protect_pcall(debug_pane, main_ui)
-	imgui.EndChild()
-end
-
-local MAIN_WINDOW_FLAGS = ( ImGuiWindowFlags_NoTitleBar
+local MAIN_DOCK_WINDOW_FLAGS = ( ImGuiWindowFlags_NoTitleBar
+	| ImGuiWindowFlags_NoCollapse
 	| ImGuiWindowFlags_NoResize
 	| ImGuiWindowFlags_NoMove
 	| ImGuiWindowFlags_NoScrollbar
 	| ImGuiWindowFlags_NoScrollWithMouse
-	| ImGuiWindowFlags_NoCollapse
 	| ImGuiWindowFlags_NoSavedSettings
-	| ImGuiWindowFlags_MenuBar
 	| ImGuiWindowFlags_NoBringToFrontOnFocus
-	| ImGuiWindowFlags_AlwaysAutoResize
+	| ImGuiWindowFlags_NoNavFocus
+	| ImGuiWindowFlags_NoDocking
+	| ImGuiWindowFlags_MenuBar
 	)
 
-local function show_main_window(is_init)
-	if is_init then
-		local x, y = imgui.GetPlatformWindowRect()
-		imgui.SetNextWindowPos(x, y)
-	end
-	imgui.SetNextWindowSize(imgui.GetIODisplaySize())
-	imgui.Begin('PussMainWindow', nil, MAIN_WINDOW_FLAGS)
+local function show_main_window()
+	local viewport = imgui.GetMainViewport()
+	imgui.SetNextWindowPos(viewport.PosX, viewport.PosY)
+	imgui.SetNextWindowSize(viewport.SizeX, viewport.SizeY)
+	imgui.SetNextWindowViewport(viewport.ID)
+
+	imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 0)
+	imgui.PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0)
+	imgui.PushStyleVar(ImGuiStyleVar_WindowPadding, 0, 0)
+	imgui.Begin('PussMainDockWindow', nil, MAIN_DOCK_WINDOW_FLAGS)
+	imgui.PopStyleVar(3)
+	imgui.DockSpace(imgui.GetID('#MainDockspace'))
 	main_menu()
-	imgui.Columns(3)
-	if is_init then imgui.SetColumnWidth(-1, 200) end
-	left_pane()
-	imgui.NextColumn()
-	if is_init then imgui.SetColumnWidth(-1, imgui.GetWindowWidth()-400) end
-	main_pane()
-	imgui.NextColumn()
-	right_pane()
-	imgui.Columns(1)
 	imgui.End()
+
+	local menu_size = 24
+	local left_size = 260
+
+	imgui.SetNextWindowPos(viewport.PosX, viewport.PosY + menu_size, ImGuiCond_FirstUseEver)
+	imgui.SetNextWindowSize(left_size, viewport.SizeY - menu_size, ImGuiCond_FirstUseEver)
+	filebrowser.update()
+
+	imgui.SetNextWindowPos(viewport.PosX + left_size, viewport.PosY + menu_size, ImGuiCond_FirstUseEver)
+	imgui.SetNextWindowSize(viewport.SizeX - left_size, viewport.SizeY - menu_size, ImGuiCond_FirstUseEver)
+	editor_window()
+
+	debug_window()
 
 	if show_console_window then
 		show_console_window = console.update(show_console_window)
@@ -401,7 +411,7 @@ local function do_update()
 end
 
 __exports.init = function()
-	main_ui = imgui.Create('Puss - Debugger', 1024, 768)
+	main_ui = imgui.Create('Puss - Debugger', 1024, 768, 'puss_debugger.ini')
 	_main_ui = main_ui
 	main_ui:set_error_handle(puss.logerr_handle())
 	main_ui(show_main_window, true)
