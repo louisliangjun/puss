@@ -1,7 +1,6 @@
 -- host debug server
 -- 
 if puss._debug_proxy then
-	local puss_system = puss.require('puss_system')
 	local net = puss.import('core.net')
 	local puss_debug = puss._debug_proxy
 	do
@@ -16,13 +15,9 @@ if puss._debug_proxy then
 	function MT:modify_var(idx, val) return self:__host_pcall('puss._debug_modify_var', idx, val) end
 
 	local BROADCAST_PORT = 9999
-	local broadcast_udp = puss_system.socket_new()
-	broadcast_udp:create(AF_INET, puss_system.SOCK_DGRAM, puss_system.IPPROTO_UDP)
-	broadcast_udp:set_broadcast(BROADCAST_PORT)
-	broadcast_udp:bind()
-	broadcast_udp:set_nonblock(true)
+	local broadcast = net.create_udp_broadcast_sender(BROADCAST_PORT)
 
-	local listen_socket, broadcast_info
+	local listen_socket, host_info
 	local socket, address
 	local send_breaked_frame
 
@@ -40,13 +35,13 @@ if puss._debug_proxy then
 				local s, a = net.listen(nil, 0, true)
 				if not s then return end
 
-				listen_socket, broadcast_info = s, string.format('[PussDebug]|%s', a)
+				listen_socket, host_info = s, string.format('[PussDebug]|%s', a)
 				local ok, title = puss_debug:__host_pcall('puss._debug_fetch_title')
-				if ok then broadcast_info = string.format('%s|%s', broadcast_info, title) end
+				if ok then host_info = string.format('%s|%s', host_info, title) end
 			end
 
-			broadcast_udp:sendto(broadcast_info)
-			-- print('broadcast', BROADCAST_PORT, broadcast_info)
+			broadcast(host_info)
+			-- print('broadcast', BROADCAST_PORT, host_info)
 
 			socket, address = net.accept(listen_socket)
 			-- print('accept', listen_socket, socket, address)

@@ -24,11 +24,7 @@ local run_sign = true
 local main_ui = _main_ui
 
 local BROADCAST_PORT = 9999
-local broadcast_udp = puss_system.socket_new()
-broadcast_udp:create(puss_system.AF_INET, puss_system.SOCK_DGRAM, puss_system.IPPROTO_UDP)
-broadcast_udp:set_broadcast()
-broadcast_udp:bind(nil, BROADCAST_PORT, true)
-broadcast_udp:set_nonblock(true)
+local broadcast_recv = net.create_udp_broadcast_recver(BROADCAST_PORT)
 
 local hosts = nil
 
@@ -139,8 +135,8 @@ local function shortcuts_update()
 	if shotcuts.is_pressed('debugger/continue') then net.send(socket, 'continue') end
 end
 
-local function broadcast_udp_update()
-	local data, addr = broadcast_udp:recvfrom()
+local function recver_update()
+	local data, addr = broadcast_recv()
 	if not data then return end
 	if not hosts then return end
 	--print(data, addr, hosts)
@@ -403,7 +399,7 @@ end
 local function do_update()
 	main_ui:protect_pcall(show_main_window)
 
-	broadcast_udp_update()
+	recver_update()
 
 	if run_sign and main_ui:should_close() then
 		run_sign = false

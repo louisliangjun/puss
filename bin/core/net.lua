@@ -120,3 +120,22 @@ __exports.update = function(sock, dispatch)
 	end
 end
 
+__exports.create_udp_broadcast_sender = function(port)
+	local udp = puss_system.socket_new()
+	udp:create(puss_system.AF_INET, puss_system.SOCK_DGRAM, puss_system.IPPROTO_UDP)
+	udp:set_broadcast(port)
+	udp:bind()
+	udp:set_nonblock(true)	return function(msg)
+		return udp:sendto(msg)	end
+end
+
+__exports.create_udp_broadcast_recver = function(port)
+	local udp = puss_system.socket_new()
+	udp:create(puss_system.AF_INET, puss_system.SOCK_DGRAM, puss_system.IPPROTO_UDP)
+	udp:set_broadcast()
+	udp:bind(nil, port, true)
+	udp:set_nonblock(true)
+	return function(msg)
+		return udp:recvfrom()
+	end
+end

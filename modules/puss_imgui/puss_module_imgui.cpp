@@ -21,20 +21,32 @@
 	#define WM_DPICHANGED 0x02E0 // From Windows SDK 8.1+ headers
 	#endif
 
-	#include "imgui_impl_win32.inl"
-	#include "imgui_impl_dx11.inl"
-
-	#pragma comment(lib, "d3d11.lib")
-	#pragma comment(lib, "d3dcompiler.lib")
-	#pragma comment(lib, "dxgi.lib")
-
-	extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
 	#define PUSS_IMGUI_WINDOW_CLASS	_T("PussImGuiWindow")
 
 	static WNDCLASSEX puss_imgui_wc = { sizeof(WNDCLASSEX), CS_CLASSDC, NULL, 0L, 0L, NULL, NULL, NULL, NULL, NULL, PUSS_IMGUI_WINDOW_CLASS, NULL };
 
 	static int _win32_vk_map[256];
+
+	static int _win32_vk_convert(WPARAM wParam, LPARAM lParam) {
+		int key = _win32_vk_map[wParam];
+		if( key ) {
+			switch(wParam) {
+			case VK_SHIFT:
+				key = GetKeyState(VK_LSHIFT) ? PUSS_IMGUI_KEY_LEFT_SHIFT : PUSS_IMGUI_KEY_RIGHT_SHIFT;
+				break;
+			case VK_CONTROL:
+				key = GetKeyState(VK_LCONTROL) ? PUSS_IMGUI_KEY_LEFT_CONTROL : PUSS_IMGUI_KEY_RIGHT_CONTROL;
+				break;
+			case VK_MENU:
+				key = GetKeyState(VK_LMENU) ? PUSS_IMGUI_KEY_LEFT_ALT : PUSS_IMGUI_KEY_RIGHT_ALT;
+				break;
+			case VK_RETURN:
+				key = (lParam & (1<<24)) ? PUSS_IMGUI_KEY_KP_ENTER : PUSS_IMGUI_KEY_ENTER;
+				break;
+			}
+		}
+		return key;
+	}
 
 	static int _lua_utf8_to_utf16(lua_State* L) {
 		size_t len = 0;
@@ -54,6 +66,13 @@
 		}
 		return 1;
 	}
+
+	#include "imgui_impl_win32.inl"
+	#include "imgui_impl_dx11.inl"
+
+	#pragma comment(lib, "d3d11.lib")
+	#pragma comment(lib, "d3dcompiler.lib")
+	#pragma comment(lib, "dxgi.lib")
 
 #else
 
@@ -130,16 +149,13 @@ private:
 #ifdef PUSS_IMGUI_USE_DX11
 
 public:
-	HWND g_hWnd;
-	int g_SouldClose;
-
 	void set_should_close(int value) {
-		if( g_hWnd )
-			g_SouldClose = value;
+		if( g_Context )
+			ImGui::GetMainViewport()->PlatformRequestClose = true;
 	}
 
 	int get_should_close() {
-		return g_hWnd==NULL || g_SouldClose;
+		return (g_Context==NULL || ImGui::GetMainViewport()->PlatformRequestClose) ? 1 : 0;
 	}
 
 public:
@@ -200,101 +216,9 @@ public:
 		if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = NULL; }
 	}
 
-	static int _win32_vk_convert(WPARAM wParam, LPARAM lParam) {
-		int key = _win32_vk_map[wParam];
-		if( key ) {
-			switch(wParam) {
-			case VK_SHIFT:
-				key = GetKeyState(VK_LSHIFT) ? PUSS_IMGUI_KEY_LEFT_SHIFT : PUSS_IMGUI_KEY_RIGHT_SHIFT;
-				break;
-			case VK_CONTROL:
-				key = GetKeyState(VK_LCONTROL) ? PUSS_IMGUI_KEY_LEFT_CONTROL : PUSS_IMGUI_KEY_RIGHT_CONTROL;
-				break;
-			case VK_MENU:
-				key = GetKeyState(VK_LMENU) ? PUSS_IMGUI_KEY_LEFT_ALT : PUSS_IMGUI_KEY_RIGHT_ALT;
-				break;
-			case VK_RETURN:
-				key = (lParam & (1<<24)) ? PUSS_IMGUI_KEY_KP_ENTER : PUSS_IMGUI_KEY_ENTER;
-				break;
-			}
-		}
-		return key;
-	}
-
 	LRESULT WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-		if( g_hWnd==hWnd && ImGui::GetCurrentContext() ) {
-			ImGuiIO& io = ImGui::GetIO();
-			switch (msg)
-			{
-			case WM_KEYDOWN:
-			case WM_SYSKEYDOWN:
-				if (wParam < 256) {
-					io.KeysDown[wParam] = 1;
-					io.KeysDown[_win32_vk_convert(wParam, lParam)] = 1;
-				}
-				break;
-			case WM_KEYUP:
-			case WM_SYSKEYUP:
-				if (wParam < 256) {
-					io.KeysDown[wParam] = 0;
-					io.KeysDown[_win32_vk_convert(wParam, lParam)] = 0;
-				}
-				break;
-			case WM_CHAR:
-				// You can also use ToAscii()+GetKeyboardState() to retrieve characters.
-				if( wParam==VK_ESCAPE )
-					break;
-				if (wParam > 0 && wParam < 0x10000)
-					io.AddInputCharacter((unsigned short)wParam);
-				break;
-			case WM_CLOSE:
-				if(g_hWnd==hWnd) {
-					set_should_close(1);
-					return 1;
-				}
-				break;
-			case WM_DROPFILES:
-				if(g_hWnd==hWnd && wParam) {
-					UINT cap = 4096;
-					UINT len = 0;
-					TCHAR* buf = (TCHAR*)malloc(sizeof(TCHAR) * cap);
-					HDROP h = (HDROP)wParam;
-					UINT n = DragQueryFile(h, 0xFFFFFFFF, NULL, 0);
-					for( UINT i=0; i<n; ++i ) {
-						UINT sz = DragQueryFile(h, i, NULL, 0);
-						if( sz ) {
-							UINT nsz = len + sz + 1;
-							if( nsz >= cap ) {
-								cap *= 2;
-								if( nsz >= cap )
-									cap = nsz;
-								buf = (TCHAR*)realloc(buf, sizeof(TCHAR) * cap);
-							}
-							DragQueryFile(h, i, buf+len, sz + 1);
-							len += sz;
-							buf[len++] = _T('\n');
-						}
-					}
-					buf[len] = 0;
-					g_DropFiles->resize(len*3+1);
-					int res = WideCharToMultiByte(CP_UTF8, 0, buf, len, g_DropFiles->begin(), (int)(g_DropFiles->size()), NULL, NULL);
-					free(buf);
-					buf = NULL;
-
-					if( res > 0 ) {
-						g_DropFiles->resize(res);
-					} else {
-						g_DropFiles->clear();
-					}
-					DragFinish(h);
-				}
-				break;
-			default:
-				if( ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam) )
-					return 1;
-				break;
-			}
-		}
+		if( ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam) )
+			return 1;
 
 		switch (msg) {
 		case WM_CREATE:
@@ -303,6 +227,12 @@ public:
 				CleanupDeviceD3D();
 			}
 			break;
+		case WM_CLOSE:
+			set_should_close(1);
+			return 1;
+		case WM_DESTROY:
+			// PostQuitMessage(0);
+			return 0;
 		case WM_SIZE:
 			if (g_pd3dDevice != NULL && wParam != SIZE_MINIMIZED)
 			{
@@ -328,9 +258,42 @@ public:
 				::SetWindowPos(hWnd, NULL, suggested_rect->left, suggested_rect->top, suggested_rect->right - suggested_rect->left, suggested_rect->bottom - suggested_rect->top, SWP_NOZORDER | SWP_NOACTIVATE);
 			}
 			break;
-		case WM_DESTROY:
-			// PostQuitMessage(0);
-			return 0;
+		case WM_DROPFILES:
+			if( wParam ) {
+				UINT cap = 4096;
+				UINT len = 0;
+				TCHAR* buf = (TCHAR*)malloc(sizeof(TCHAR) * cap);
+				HDROP h = (HDROP)wParam;
+				UINT n = DragQueryFile(h, 0xFFFFFFFF, NULL, 0);
+				for( UINT i=0; i<n; ++i ) {
+					UINT sz = DragQueryFile(h, i, NULL, 0);
+					if( sz ) {
+						UINT nsz = len + sz + 1;
+						if( nsz >= cap ) {
+							cap *= 2;
+							if( nsz >= cap )
+								cap = nsz;
+							buf = (TCHAR*)realloc(buf, sizeof(TCHAR) * cap);
+						}
+						DragQueryFile(h, i, buf+len, sz + 1);
+						len += sz;
+						buf[len++] = _T('\n');
+					}
+				}
+				buf[len] = 0;
+				g_DropFiles->resize(len*3+1);
+				int res = WideCharToMultiByte(CP_UTF8, 0, buf, len, g_DropFiles->begin(), (int)(g_DropFiles->size()), NULL, NULL);
+				free(buf);
+				buf = NULL;
+
+				if( res > 0 ) {
+					g_DropFiles->resize(res);
+				} else {
+					g_DropFiles->clear();
+				}
+				DragFinish(h);
+			}
+			break;
 		}
 		return DefWindowProc(hWnd, msg, wParam, lParam);
 	}
@@ -357,25 +320,21 @@ public:
 		do_create_context();
 		ImGui_ImplWin32_Init(hwnd);
 		ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
-		g_hWnd = hwnd;
 		return true;
 	}
 
 	void destroy_window() {
-		if( g_hWnd ) {
-			ImGui_ImplDX11_Shutdown();
-			ImGui_ImplWin32_Shutdown();
-			ImGui::DestroyContext(g_Context);
-			CleanupDeviceD3D();
-			DestroyWindow(g_hWnd);
-			g_hWnd = NULL;
-		}
+		if( !g_hWnd )
+			return;
+		HWND hWnd = g_hWnd;
+		ImGui_ImplDX11_Shutdown();
+		ImGui_ImplWin32_Shutdown();
+		ImGui::DestroyContext(g_Context);
+		CleanupDeviceD3D();
+		DestroyWindow(hWnd);
 	}
 
 	bool prepare_newframe() {
-		if( g_hWnd )
-			ImGui::SetCurrentContext(g_Context);
-
 		// input
 		MSG msg;
 		ZeroMemory(&msg, sizeof(msg));
@@ -394,21 +353,21 @@ public:
 			break;
 		}
 
-		if( !g_hWnd )
+		ImGuiContext* ctx = ImGui::GetCurrentContext();
+		if( !ctx )
 			return false;
 
-		ImGui::SetCurrentContext(g_Context);
-
+		ImGuiIO& io = ImGui::GetIO();
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplWin32_NewFrame();
-		g_Context->IO.KeysDown[PUSS_IMGUI_KEY_LEFT_SHIFT] = (GetKeyState(VK_LSHIFT) & 0x8000) != 0;
-		g_Context->IO.KeysDown[PUSS_IMGUI_KEY_RIGHT_SHIFT] = (GetKeyState(VK_RSHIFT) & 0x8000) != 0;
-		g_Context->IO.KeysDown[PUSS_IMGUI_KEY_LEFT_CONTROL] = (GetKeyState(VK_LCONTROL) & 0x8000) != 0;
-		g_Context->IO.KeysDown[PUSS_IMGUI_KEY_RIGHT_CONTROL] = (GetKeyState(VK_RCONTROL) & 0x8000) != 0;
-		g_Context->IO.KeysDown[PUSS_IMGUI_KEY_LEFT_ALT] = (GetKeyState(VK_LMENU) & 0x8000) != 0;
-		g_Context->IO.KeysDown[PUSS_IMGUI_KEY_RIGHT_ALT] = (GetKeyState(VK_RMENU) & 0x8000) != 0;
-		g_Context->IO.KeysDown[PUSS_IMGUI_KEY_LEFT_SUPER] = (GetKeyState(VK_LWIN) & 0x8000) != 0;
-		g_Context->IO.KeysDown[PUSS_IMGUI_KEY_RIGHT_SUPER] = (GetKeyState(VK_RWIN) & 0x8000) != 0;
+		io.KeysDown[PUSS_IMGUI_KEY_LEFT_SHIFT] = (GetKeyState(VK_LSHIFT) & 0x8000) != 0;
+		io.KeysDown[PUSS_IMGUI_KEY_RIGHT_SHIFT] = (GetKeyState(VK_RSHIFT) & 0x8000) != 0;
+		io.KeysDown[PUSS_IMGUI_KEY_LEFT_CONTROL] = (GetKeyState(VK_LCONTROL) & 0x8000) != 0;
+		io.KeysDown[PUSS_IMGUI_KEY_RIGHT_CONTROL] = (GetKeyState(VK_RCONTROL) & 0x8000) != 0;
+		io.KeysDown[PUSS_IMGUI_KEY_LEFT_ALT] = (GetKeyState(VK_LMENU) & 0x8000) != 0;
+		io.KeysDown[PUSS_IMGUI_KEY_RIGHT_ALT] = (GetKeyState(VK_RMENU) & 0x8000) != 0;
+		io.KeysDown[PUSS_IMGUI_KEY_LEFT_SUPER] = (GetKeyState(VK_LWIN) & 0x8000) != 0;
+		io.KeysDown[PUSS_IMGUI_KEY_RIGHT_SUPER] = (GetKeyState(VK_RWIN) & 0x8000) != 0;
 		return true;
 	}
 
@@ -918,7 +877,7 @@ static int imgui_create_lua(lua_State* L) {
 	if( ini_filename ) {
 		lua_pushvalue(L, 4);
 		luaL_ref(L, LUA_REGISTRYINDEX);
-		env->g_Context->IO.IniFilename = ini_filename;
+		ImGui::GetIO().IniFilename = ini_filename;
 	}
 
     // Load Fonts
@@ -972,15 +931,14 @@ static int imgui_get_drop_files_lua(lua_State* L) {
 #include "scintilla.iface.inl"
 
 void* __scintilla_imgui_os_window(void) {
-	ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData);
 #ifdef PUSS_IMGUI_USE_DX11
-	if( env )	return env->g_hWnd;
+	return g_hWnd;
+#elif defined(GLFW_EXPOSE_NATIVE_WIN32)
+	ImguiEnv* env = (ImguiEnv*)(ImGui::GetIO().UserData);
+	return glfwGetWin32Window(env->g_Window);
 #else
-	#ifdef GLFW_EXPOSE_NATIVE_WIN32
-		return glfwGetWin32Window(env->g_Window);
-	#endif
-#endif
 	return NULL;
+#endif
 }
 
 static int im_scintilla_lexers(lua_State* L) {

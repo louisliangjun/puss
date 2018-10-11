@@ -900,12 +900,30 @@ public: 	// Public for scintilla_send_message
             // Process text input (before we check for Return because using some IME will effectively send a Return?)
             // We ignore CTRL inputs, but need to allow ALT+CTRL as some keyboards (e.g. German) use AltGR (which _is_ Alt+Ctrl) to input certain characters.
             if( !(io.KeyCtrl && !io.KeyAlt) && (!pdoc->IsReadOnly()) ) {
+#if 0
+				ImWchar imws[IM_ARRAYSIZE(io.InputCharacters)];
+				ImWchar* endp = imws;
+				// remove backspace & escape
+				{
+					ImWchar* ps = io.InputCharacters;
+					ImWchar* pe = ps + IM_ARRAYSIZE(io.InputCharacters);
+					for( ; ps<pe; ++ps ) {
+						ImWchar c = *ps;
+						if( c==0 )	break;
+						if( c==SCK_ESCAPE || c==SCK_BACK )	continue;
+						*endp++ = (char)c;
+					}
+				}
+				char utf8[IM_ARRAYSIZE(io.InputCharacters)*6+8];
+				int len = ImTextStrToUtf8(utf8, IM_ARRAYSIZE(io.InputCharacters)*6, imws, endp);
+#else
 				char utf8[IM_ARRAYSIZE(io.InputCharacters)*6+8];
 				ImWchar* text_end = io.InputCharacters;
                 for (int n = 0; n < IM_ARRAYSIZE(io.InputCharacters) && io.InputCharacters[n]; n++) {
 					++text_end;
 				}
 				int len = ImTextStrToUtf8(utf8, IM_ARRAYSIZE(io.InputCharacters)*6, io.InputCharacters, text_end);
+#endif
 				ClearSelection();
 				const int inserted = pdoc->InsertString(CurrentPosition(), utf8, len);
 				if(inserted > 0) {
