@@ -1036,6 +1036,8 @@ static void puss_module_setup(lua_State* L, const char* app_path, const char* ap
 
 	lua_pushstring(L, PATH_SEP_STR);
 	lua_setfield(L, -2, "_sep");	// puss._sep
+
+	lua_pop(L, 1);
 }
 
 static void *_default_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {

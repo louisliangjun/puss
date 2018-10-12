@@ -49,7 +49,7 @@ struct PussInterface {
 #endif
 
 // puss module usage :
-//   local module = puss.require(module_name, p1, p2, ...)
+//   local module = puss.require(module_name)
 // 
 // puss module implements example :
 //   struct ModuleIFace {
