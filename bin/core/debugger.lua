@@ -408,7 +408,16 @@ local function do_update()
 end
 
 __exports.init = function()
-	main_ui = imgui.Create('Puss - Debugger', 1024, 768, 'puss_debugger.ini')
+	main_ui = imgui.Create('Puss - Debugger', 1024, 768, 'puss_debugger.ini', function()
+		local font_path = string.format('%s%sfonts', puss._path, puss._sep)
+		local files = puss.file_list(font_path)
+		for _, name in ipairs(files) do
+			if name:match('^.+%.[tT][tT][fF]$') then
+				local lang = name:match('^.-%.(%w+)%.%w+$')
+				imgui.AddFontFromFileTTF(string.format('%s%s%s', font_path, puss._sep, name), 14, lang)
+			end
+		end
+	end)
 	_main_ui = main_ui
 	main_ui:set_error_handle(puss.logerr_handle())
 	main_ui(show_main_window, true)
