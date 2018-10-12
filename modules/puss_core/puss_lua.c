@@ -1,43 +1,29 @@
 // puss_lua.c
 
 const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
-	"local _loadfile = loadfile\n"
-	"\n"
-	"local function puss_loadfile(name, env)\n"
-	"	local f, err = _loadfile(name, 'bt', env or _ENV)\n"
-	"	if not f then return f, string.format('load script(%s) failed: %s', name, err) end\n"
-	"	return f\n"
-	"end\n"
-	"\n"
-	"local function puss_dofile(name, env, ...)\n"
-	"	local f, err = puss_loadfile(name, env)\n"
-	"	if not f then error(err) end\n"
+	"puss.dofile = function(name, env, ...)\n"
+	"	local f, err = loadfile(name, 'bt', env or _ENV)\n"
+	"	if not f then error(string.format('dofile (%s) failed: %s', name, err)) end\n"
 	"	return f(...)\n"
 	"end\n"
-	"\n"
-	"local function puss_dostring(script, name, env, ...)\n"
-	"	local f, err = load(script, name, 'bt', env or _ENV)\n"
-	"	if f==nil then error(err) end\n"
-	"	return f(...)\n"
-	"end\n"
-	"\n"
-	"puss.loadfile_handle = function(h) if type(h)=='function' then _loadfile=h end; return _loadfile end\n"
-	"puss.loadfile = puss_loadfile\n"
-	"puss.dofile = puss_dofile\n"
-	"puss.dostring = puss_dostring\n"
 	"\n"
 	"local _logerr = function(err) print(debug.traceback(err,2)); return err; end\n"
 	"puss.logerr_handle = function(h) if type(h)=='function' then _logerr=h end; return _logerr end\n"
 	"puss.trace_pcall = function(f, ...) return xpcall(f, _logerr, ...) end\n"
-	"puss.trace_dofile = function(name, env, ...) return xpcall(puss_dofile, _logerr, name, env, ...) end\n"
-	"puss.trace_dostring = function(script, name, env, ...) return xpcall(puss_dostring, _logerr, script, name, env, ...) end\n"
+	"puss.trace_dofile = function(name, env, ...) return xpcall(puss.dofile, _logerr, name, env, ...) end\n"
+	"\n"
+	"puss._module_path = puss._path\n"
+	"local _loadmodule = function(name, env)\n"
+	"	local f, err = puss.loadfile_in_path(puss._module_path, name:gsub('%.', '/') .. '.lua', 'bt', env or _ENV)\n"
+	"	if not f then error(string.format('load module(%s) failed: %s', name, err)) end\n"
+	"	return f()\n"
+	"end\n"
+	"puss.loadmodule_handle = function(h) if type(h)=='function' then _loadmodule=h end; return _loadmodule end\n"
 	"\n"
 	"local modules = {}\n"
 	"local modules_base_mt = { __index=_ENV }\n"
 	"puss._modules = modules\n"
 	"puss._modules_base_mt = modules_base_mt\n"
-	"local _loadmodule = function(name, env) return puss.dofile(puss._path .. puss._sep .. name:gsub('%.', puss._sep) .. '.lua', env) end\n"
-	"puss.loadmodule_handle = function(h) if type(h)=='function' then _loadmodule=h end; return _loadmodule end\n"
 	"puss.import = function(name, reload)\n"
 	"	local env = modules[name]\n"
 	"	local interface\n"
@@ -878,6 +864,138 @@ static int puss_lua_filename_format(lua_State* L) {
 	}
 #endif
 
+typedef struct LoadF {
+  int n;  /* number of pre-read characters */
+  FILE *f;  /* file being read */
+  char buff[BUFSIZ];  /* area for reading file */
+} LoadF;
+
+static const char *getF (lua_State *L, void *ud, size_t *size) {
+  LoadF *lf = (LoadF *)ud;
+  (void)L;  /* not used */
+  if (lf->n > 0) {  /* are there pre-read characters to be read? */
+    *size = lf->n;  /* return them (chars already in buffer) */
+    lf->n = 0;  /* no more pre-read characters */
+  }
+  else {  /* read a block from file */
+    /* 'fread' can return > 0 *and* set the EOF flag. If next call to
+       'getF' called 'fread', it might still wait for user input.
+       The next check avoids this problem. */
+    if (feof(lf->f)) return NULL;
+    *size = fread(lf->buff, 1, sizeof(lf->buff), lf->f);  /* read block */
+  }
+  return lf->buff;
+}
+
+static int errfile (lua_State *L, const char *what, int fnameindex) {
+  const char *serr = strerror(errno);
+  const char *filename = lua_tostring(L, fnameindex) + 1;
+  lua_pushfstring(L, "cannot %s %s: %s", what, filename, serr);
+  lua_remove(L, fnameindex);
+  return LUA_ERRFILE;
+}
+
+static int skipBOM (LoadF *lf) {
+	const char *p = "\xEF\xBB\xBF";  /* UTF-8 BOM mark */
+	int c;
+	lf->n = 0;
+	do {
+		c = getc(lf->f);
+		if (c == EOF || c != *(const unsigned char *)p++) return c;
+		lf->buff[lf->n++] = c;  /* to be read by the parser */
+	} while (*p != '\0');
+	lf->n = 0;  /* prefix matched; discard it */
+	return getc(lf->f);  /* return next character */
+}
+
+/*
+** reads the first character of file 'f' and skips an optional BOM mark
+** in its beginning plus its first line if it starts with '#'. Returns
+** true if it skipped the first line.  In any case, '*cp' has the
+** first "valid" character of the file (after the optional BOM and
+** a first-line comment).
+*/
+static int skipcomment (LoadF *lf, int *cp) {
+	int c = *cp = skipBOM(lf);
+	if (c == '#') {  /* first line is a comment (Unix exec. file)? */
+		do {  /* skip first line */
+			c = getc(lf->f);
+		} while (c != EOF && c != '\n');
+		*cp = getc(lf->f);  /* skip end-of-line, if present */
+		return 1;  /* there was a comment */
+	}
+	else return 0;  /* no comment */
+}
+
+static int luaL_loadfilex2 (lua_State *L, const char *filename,
+                                          const char *mode,
+                                          const char *source) {
+  LoadF lf;
+  int status, readstatus;
+  int c;
+  int fnameindex = lua_gettop(L) + 1;  /* index of filename on the stack */
+  if (filename == NULL) {
+    lua_pushliteral(L, "=stdin");
+    lf.f = stdin;
+  }
+  else {
+    lua_pushfstring(L, "@%s", source ? source : filename);
+    lf.f = fopen(filename, "r");
+    if (lf.f == NULL) return errfile(L, "open", fnameindex);
+  }
+  if (skipcomment(&lf, &c))  /* read initial portion */
+    lf.buff[lf.n++] = '\n';  /* add line to correct line numbers */
+  if (c == LUA_SIGNATURE[0] && filename) {  /* binary file? */
+    lf.f = freopen(filename, "rb", lf.f);  /* reopen in binary mode */
+    if (lf.f == NULL) return errfile(L, "reopen", fnameindex);
+    skipcomment(&lf, &c);  /* re-read initial portion */
+  }
+  if (c != EOF)
+    lf.buff[lf.n++] = c;  /* 'c' is the first character of the stream */
+  status = lua_load(L, getF, &lf, lua_tostring(L, -1), mode);
+  readstatus = ferror(lf.f);
+  if (filename) fclose(lf.f);  /* close file (even in case of errors) */
+  if (readstatus) {
+    lua_settop(L, fnameindex);  /* ignore results from 'lua_load' */
+    return errfile(L, "read", fnameindex);
+  }
+  lua_remove(L, fnameindex);
+  return status;
+}
+
+static int load_aux (lua_State *L, int status, int envidx) {
+  if (status == LUA_OK) {
+    if (envidx != 0) {  /* 'env' parameter? */
+      lua_pushvalue(L, envidx);  /* environment for loaded function */
+      if (!lua_setupvalue(L, -2, 1))  /* set it as 1st upvalue */
+        lua_pop(L, 1);  /* remove 'env' if not used by previous call */
+    }
+    return 1;
+  }
+  else {  /* error (message is on top of the stack) */
+    lua_pushnil(L);
+    lua_insert(L, -2);  /* put before error message */
+    return 2;  /* return nil plus error message */
+  }
+}
+
+static int puss_lua_loadfile_in_path (lua_State *L) {
+  size_t fpath_len = 0;
+  const char *fpath = luaL_checklstring(L, 1, &fpath_len);
+  const char *fname = luaL_checkstring(L, 2);
+  const char *mode = luaL_optstring(L, 3, NULL);
+  int env = (!lua_isnone(L, 4) ? 4 : 0);  /* 'env' index or 0 if no 'env' */
+  int status;
+  lua_pushvalue(L, 1);
+  lua_pushstring(L, PATH_SEP_STR);
+  lua_pushvalue(L, 2);
+  lua_concat(L, 3);
+  lua_replace(L, 2);
+  fname = lua_tostring(L, 2);
+  status = luaL_loadfilex2(L, fname, mode, fname+fpath_len+1);
+  return load_aux(L, status, env);
+}
+
 static luaL_Reg puss_methods[] =
 	{ {"require",			puss_lua_module_require}
 	, {"const_register",	puss_lua_const_register}
@@ -888,6 +1006,7 @@ static luaL_Reg puss_methods[] =
 	, {"file_list",			puss_lua_file_list}
 	, {"local_to_utf8",		puss_lua_local_to_utf8}
 	, {"utf8_to_local",		puss_lua_utf8_to_local}
+	, {"loadfile_in_path",	puss_lua_loadfile_in_path}
 	, {NULL, NULL}
 	};
 

@@ -68,7 +68,7 @@ static const char* puss_push_parse_args(lua_State* L, int* is_script_file, int a
 	}
 
 	*is_script_file = 1;
-	return script_arg==0 ? PUSS_DEFAULT_SCRIPT_FILE : argv[script_arg];
+	return script_arg==0 ? NULL : argv[script_arg];
 }
 
 static int puss_dummy_main(lua_State* L) {
@@ -103,25 +103,12 @@ static int puss_dummy_main(lua_State* L) {
 #endif
 
 static const char* puss_push_script_filename(lua_State* L, const char* script) {
-	int is_abs_path = 0;
-	// check script filename
-#ifdef _WIN32
-	if( ((script[0]>='a' && script[1]<='z') || (script[0]>='A' && script[1]<='Z')) && (script[1]==':') ) {
-		is_abs_path = 1;
-	} else if( is_path_sep(script[0]) && is_path_sep(script[1]) ) {
-		is_abs_path = 1;
-	}
-#else
-	if( is_path_sep(*script) ) {
-		is_abs_path = 1;
-	}
-#endif
-	if( is_abs_path ) {
+	if( script ) {
 		lua_pushstring(L, script);
 	} else {
 		puss_get_value(L, "puss._path");
 		puss_get_value(L, "puss._sep");
-		lua_pushstring(L, script);
+		lua_pushstring(L, PUSS_DEFAULT_SCRIPT_FILE);
 		lua_concat(L, 3);
 		script = lua_tostring(L, -1);
 	}

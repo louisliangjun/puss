@@ -454,7 +454,7 @@ static int lua_debugger_debug(lua_State* hostL) {
 
 		puss_get_value(L, "puss.trace_dofile");
 		if( debugger_script ) {
-			lua_pushvalue(L, 2);
+			lua_pushstring(L, debugger_script);
 		} else {
 			puss_get_value(L, "puss._path");
 			lua_pushstring(L, "/core/dbgsvr.lua");

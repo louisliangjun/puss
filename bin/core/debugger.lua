@@ -64,6 +64,13 @@ local function vars_sort_by_name(a, b)
 	return an<bn
 end
 
+local function locate_to_file(fname, line)
+	if docs.open(fname, line) then return end
+
+	fname = puss._path .. '/' .. fname
+	if docs.open(fname, line) then return end
+end
+
 local stubs = {}
 
 stubs.breaked = function()
@@ -82,7 +89,7 @@ stubs.fetch_stack = function(ok, res)
 	if info then
 		net.send(socket, 'fetch_vars', info.level)
 		local fname = info.source:match('^@(.+)$')
-		if fname then docs.open(fname, info.currentline-1) end
+		if fname then locate_to_file(fname, info.currentline-1) end
 	end
 end
 
@@ -215,7 +222,7 @@ local function draw_stack()
 	end
 	if clicked then
 		local fname = clicked.source:match('^@(.+)$')
-		if fname then docs.open(fname, clicked.currentline-1) end
+		if fname then locate_to_file(fname, clicked.currentline-1) end
 	end
 end
 
@@ -297,12 +304,6 @@ local function main_menu()
 	imgui.EndMenuBar()
 
 	if shotcuts.is_pressed('app/reload') then puss.reload() end
-end
-
-local function pages_on_drop_files(files)
-	for path in files:gmatch('(.-)\n') do
-		docs.open(path)
-	end
 end
 
 local function trigger_bp(page, line)
