@@ -180,9 +180,18 @@ end
 __exports.init = function()
 	local title = 'Puss - Editor'
 	puss._app_title = title
-	main_ui = imgui.Create(title, 1024, 768, 'puss_editor.ini')
-	_main_ui = main_ui
+	main_ui = imgui.Create(title, 1024, 768, 'puss_editor.ini', function()
+		local font_path = string.format('%s%sfonts', puss._path, puss._sep)
+		local files = puss.file_list(font_path)
+		for _, name in ipairs(files) do
+			if name:match('^.+%.[tT][tT][fF]$') then
+				local lang = name:match('^.-%.(%w+)%.%w+$')
+				imgui.AddFontFromFileTTF(string.format('%s%s%s', font_path, puss._sep, name), 14, lang)
+			end
+		end
+	end)
 	main_ui:set_error_handle(puss.logerr_handle())
+	_main_ui = main_ui
 	main_ui(show_main_window)
 end
 

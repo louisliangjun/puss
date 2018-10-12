@@ -18,11 +18,6 @@ typedef struct PussInterface	PussInterface;
 	#define puss_interface_register		(*(__puss_iface__->interface_register))
 	#define puss_interface_check(L, I)	((I*)((*(__puss_iface__->interface_check))((L), #I)))
 	#define puss_push_const_table		(*(__puss_iface__->push_const_table))
-	#define puss_pickle_pack			(*(__puss_iface__->pickle_pack))
-	#define puss_pickle_unpack			(*(__puss_iface__->pickle_unpack))
-	#define puss_app_path				(*(__puss_iface__->app_path))
-	#define puss_get_value				(*(__puss_iface__->get_value))
-	#define puss_filename_format		(*(__puss_iface__->filename_format))
 
 	#define	__lua_proxy__(sym)			(*(__puss_iface__->luaproxy.sym))
 #endif
@@ -34,24 +29,10 @@ PUSS_DECLS_END
 PUSS_DECLS_BEGIN
 
 struct PussInterface {
-	// module
 	void		(*module_require)		(lua_State* L, const char* name);				// [-0,+1,e]
 	void		(*interface_register)	(lua_State* L, const char* name, void* iface);	// [-0,+0,e]
 	void*		(*interface_check)		(lua_State* L, const char* name);				// [-0,+0,e]
-
-	// consts
 	void        (*push_const_table)		(lua_State* L);	// [-0,+1,-]
-
-	// simple pickle
-	void*		(*pickle_pack)			(size_t* plen, lua_State* L, int start, int end);
-	int			(*pickle_unpack)		(lua_State* L, const void* pkt, size_t len);
-
-	// misc
-	const char*	(*app_path)				(lua_State* L);	// [-0,+0,-]
-	int			(*get_value)			(lua_State* L, const char* name);	// [-0,+1,-]
-	size_t		(*filename_format)		(char* fname, int convert_to_unix_path_sep);
-
-	// luaproxy
 	LuaProxy	luaproxy;
 };
 

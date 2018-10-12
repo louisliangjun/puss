@@ -851,8 +851,8 @@ static int imgui_create_lua(lua_State* L) {
 	int width = (int)luaL_optinteger(L, 2, 1024);
 	int height = (int)luaL_optinteger(L, 3, 768);
 	const char* ini_filename = luaL_optstring(L, 4, NULL);
+	int has_init_cb = lua_isfunction(L, 5);
 	ImguiEnv* env = (ImguiEnv*)lua_newuserdata(L, sizeof(ImguiEnv));
-	int err = 0;
 	memset(env, 0, sizeof(ImguiEnv));
 	env->g_ScriptErrorHandle = LUA_NOREF;
 	env->g_DropFiles = new ImVector<char>();
@@ -880,26 +880,13 @@ static int imgui_create_lua(lua_State* L) {
 		ImGui::GetIO().IniFilename = ini_filename;
 	}
 
-    // Load Fonts
-    // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them. 
-    // - AddFontFromFileTTF() will return the ImFont* so you can store it if you need to select the font among multiple. 
-    // - If the file cannot be loaded, the function will return NULL. Please handle those errors in your application (e.g. use an assertion, or display an error and quit).
-    // - The fonts will be rasterized at a given size (w/ oversampling) and stored into a texture when calling ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame below will call.
-    // - Read 'misc/fonts/README.txt' for more instructions and details.
-    // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/ProggyTiny.ttf", 10.0f);
-    //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
-    //IM_ASSERT(font != NULL);
-
-	// char pth[4096];
-	// sprintf(pth, "%s/fonts/wqy-micro-hei.ttf", puss_app_path(L));
-	// io.Fonts->AddFontFromFileTTF(pth, 18.0f, 0, io.Fonts->GetGlyphRangesChinese());
-
-	if( err )
-		return lua_error(L);
+	if( has_init_cb ) {
+		lua_pushvalue(L, 5);
+		if( lua_pcall(L, 0, 0, 0) ) {
+			fprintf(stderr, "[ImGui] init callback error: %s\n", lua_tostring(L, -1));
+			lua_pop(L, 1);
+		}
+	}
 
 	// first frame
 	if( env->prepare_newframe() ) {
@@ -927,6 +914,38 @@ static int imgui_get_drop_files_lua(lua_State* L) {
 	return 0;
 }
 
+static int add_ttf_font_file_lua(lua_State* L) {
+	ImGuiContext* ctx = ImGui::GetCurrentContext();
+	const char* fname = luaL_checkstring(L, 1);
+	float size_pixel = (float)luaL_checknumber(L, 2);
+	const char* language = luaL_optstring(L, 3, NULL);
+	const ImWchar* glyph_ranges = NULL;
+	ImFont* font = NULL;
+	if( !ctx )	luaL_error(L, "ImGui::GetCurrentContext MUST exist!");
+	if( language ) {
+		if( strcmp(language, "Korean")==0 ) {
+			glyph_ranges = ctx->IO.Fonts->GetGlyphRangesKorean();
+		} else if( strcmp(language, "Japanese")==0 ) {
+			glyph_ranges = ctx->IO.Fonts->GetGlyphRangesJapanese();
+		} else if( strcmp(language, "Japanese")==0 ) {
+			glyph_ranges = ctx->IO.Fonts->GetGlyphRangesJapanese();
+		} else if( strcmp(language, "Chinese")==0 ) {
+			glyph_ranges = ctx->IO.Fonts->GetGlyphRangesChineseFull();
+		} else if( strcmp(language, "ChineseSimplified")==0 ) {
+			glyph_ranges = ctx->IO.Fonts->GetGlyphRangesChineseSimplifiedCommon();
+		} else if( strcmp(language, "Cyrillic")==0 ) {
+			glyph_ranges = ctx->IO.Fonts->GetGlyphRangesCyrillic();
+		} else if( strcmp(language, "Thai")==0 ) {
+			glyph_ranges = ctx->IO.Fonts->GetGlyphRangesThai();
+		} else {
+			luaL_error(L, "Not support font language: %s", language);
+		}
+	}
+	font = ctx->IO.Fonts->AddFontFromFileTTF(fname, size_pixel, NULL, glyph_ranges);
+	lua_pushboolean(L, font ? 1 : 0);
+	return 1;
+}
+
 #include "scintilla_imgui_lua.inl"
 #include "scintilla.iface.inl"
 
@@ -949,6 +968,7 @@ static luaL_Reg imgui_lua_apis[] =
 	{ {"Create", imgui_create_lua}
 	, {"WaitEventsTimeout", imgui_wait_events_lua}
 	, {"GetDropFiles", imgui_get_drop_files_lua}
+	, {"AddFontFromFileTTF", add_ttf_font_file_lua}
 
 	, {"CreateByteArray", byte_array_create}
 	, {"CreateFloatArray", float_array_create}

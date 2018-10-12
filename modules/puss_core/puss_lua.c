@@ -1,8 +1,10 @@
 // puss_lua.c
 
 const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
+	"local _loadfile = loadfile\n"
+	"\n"
 	"local function puss_loadfile(name, env)\n"
-	"	local f, err = loadfile(name, 'bt', env or _ENV)\n"
+	"	local f, err = _loadfile(name, 'bt', env or _ENV)\n"
 	"	if not f then return f, string.format('load script(%s) failed: %s', name, err) end\n"
 	"	return f\n"
 	"end\n"
@@ -19,26 +21,23 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 	"	return f(...)\n"
 	"end\n"
 	"\n"
+	"puss.loadfile_handle = function(h) if type(h)=='function' then _loadfile=h end; return _loadfile end\n"
 	"puss.loadfile = puss_loadfile\n"
 	"puss.dofile = puss_dofile\n"
 	"puss.dostring = puss_dostring\n"
 	"\n"
-	"local logerr = function(err) print(debug.traceback(err,2)); return err; end\n"
-	"puss.logerr_handle = function(h) if type(h)=='function' then logerr=h end; return logerr end\n"
-	"puss.trace_pcall = function(f, ...) return xpcall(f, logerr, ...) end\n"
-	"puss.trace_dofile = function(name, env, ...) return xpcall(puss_dofile, logerr, name, env, ...) end\n"
-	"puss.trace_dostring = function(script, name, env, ...) return xpcall(puss_dostring, logerr, script, name, env, ...) end\n"
-	"\n"
+	"local _logerr = function(err) print(debug.traceback(err,2)); return err; end\n"
+	"puss.logerr_handle = function(h) if type(h)=='function' then _logerr=h end; return _logerr end\n"
+	"puss.trace_pcall = function(f, ...) return xpcall(f, _logerr, ...) end\n"
+	"puss.trace_dofile = function(name, env, ...) return xpcall(puss_dofile, _logerr, name, env, ...) end\n"
+	"puss.trace_dostring = function(script, name, env, ...) return xpcall(puss_dostring, _logerr, script, name, env, ...) end\n"
 	"\n"
 	"local modules = {}\n"
 	"local modules_base_mt = { __index=_ENV }\n"
 	"puss._modules = modules\n"
 	"puss._modules_base_mt = modules_base_mt\n"
-	"\n"
-	"local function load_module(name, env)\n"
-	"	return puss.dofile(puss._path .. puss._sep .. name:gsub('%.', puss._sep) .. '.lua', env)\n"
-	"end\n"
-	"\n"
+	"local _loadmodule = function(name, env) return puss.dofile(puss._path .. puss._sep .. name:gsub('%.', puss._sep) .. '.lua', env) end\n"
+	"puss.loadmodule_handle = function(h) if type(h)=='function' then _loadmodule=h end; return _loadmodule end\n"
 	"puss.import = function(name, reload)\n"
 	"	local env = modules[name]\n"
 	"	local interface\n"
@@ -46,20 +45,19 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 	"		interface = getmetatable(env)\n"
 	"		if not reload then return interface end\n"
 	"	else\n"
-	"		interface = {__name=name }\n"
+	"		interface = {__name=name}\n"
 	"		interface.__exports = interface\n"
 	"		interface.__index = interface\n"
 	"		local module_env = setmetatable(interface, modules_base_mt)\n"
 	"		env = setmetatable({}, module_env)\n"
 	"		modules[name] = env\n"
 	"	end\n"
-	"	load_module(name, env)\n"
+	"	_loadmodule(name, env)\n"
 	"	return interface\n"
 	"end\n"
-	"\n"
 	"puss.reload = function()\n"
 	"	for name, env in pairs(modules) do\n"
-	"		puss.trace_pcall(load_module, name, env)\n"
+	"		puss.trace_pcall(_loadmodule, name, env)\n"
 	"	end\n"
 	"end\n"
 	"\n"
@@ -117,14 +115,6 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 			luaL_error(L, "utf16 to %s convert failed!", code_page_name);
 		}
 		return 1;
-	}
-
-	static int _lua_utf8_to_utf16(lua_State* L) {
-		return _lua_mbcs2wch(L, 1, CP_UTF8, "utf8");
-	}
-
-	static int _lua_utf16_to_utf8(lua_State* L) {
-		return _lua_wch2mbcs(L, 1, CP_UTF8, "utf8");
 	}
 #else
 	#include <unistd.h>
@@ -241,10 +231,6 @@ static void puss_push_const_table(lua_State* L) {
 #else
 	lua_pushglobaltable(L);
 #endif
-}
-
-static const char* puss_app_path(lua_State* L) {
-	return lua_getfield_str(L, PUSS_KEY_APP_PATH, ".");
 }
 
 // pickle
@@ -562,7 +548,7 @@ static inline char* skip_seps(char* s) {
 	return s;
 }
 
-static inline char* copy_filestr(char* dst, char* src, size_t n) {
+static inline char* copy_str(char* dst, char* src, size_t n) {
 	if( dst != src ) {
 		size_t i;
 		for( i=0; i<n; ++i ) {
@@ -572,7 +558,7 @@ static inline char* copy_filestr(char* dst, char* src, size_t n) {
 	return dst + n;
 }
 
-size_t puss_filename_format(char* fname, int convert_to_unix_path_sep) {
+static size_t format_filename(char* fname, int convert_to_unix_path_sep) {
 	FileStr strs[258];
 	FileStr* start = strs;
 	FileStr* cur = strs;
@@ -641,13 +627,13 @@ size_t puss_filename_format(char* fname, int convert_to_unix_path_sep) {
 	end = cur;
 	s = fname;
 	if( start!=strs ) {	// root C: or C:\ or \\ or / 
-		s = copy_filestr(s, strs[0].s, strs[0].n);
+		s = copy_str(s, strs[0].s, strs[0].n);
 	}
 	if( start < end ) {
-		s = copy_filestr(s, start->s, start->n);
+		s = copy_str(s, start->s, start->n);
 		for( cur=start+1; cur < end; ++cur) {
 			*s++ = sep;
-			s = copy_filestr(s, cur->s, cur->n);
+			s = copy_str(s, cur->s, cur->n);
 		}
 	}
 	*s = '\0';
@@ -659,11 +645,6 @@ static PussInterface puss_iface =
 	, puss_interface_register
 	, puss_interface_check
 	, puss_push_const_table
-	, puss_pickle_pack
-	, puss_pickle_unpack
-	, puss_app_path
-	, puss_get_value
-	, puss_filename_format
 	};
 
 static int module_init_wrapper(lua_State* L) {
@@ -783,94 +764,70 @@ static int puss_lua_filename_format(lua_State* L) {
 	luaL_Buffer B;
 	luaL_buffinitsize(L, &B, n+1);
 	memcpy(B.b, s, n+1);
-	n = puss_filename_format(B.b, convert_to_unix_path_sep);
+	n = format_filename(B.b, convert_to_unix_path_sep);
 	luaL_pushresultsize(&B, n);
 	return 1;
 }
 
-static int puss_lua_file_list(lua_State* L) {
 #ifdef _WIN32
-	const WCHAR* wpath;
-	lua_Integer nfile = 0;
-	lua_Integer ndir = 0;
-	HANDLE h = INVALID_HANDLE_VALUE;
-	WIN32_FIND_DATAW fdata;
+	static int _lua_utf8_to_utf16(lua_State* L) { return _lua_mbcs2wch(L, 1, CP_UTF8, "utf8"); }
+	static int _lua_utf16_to_utf8(lua_State* L) { return _lua_wch2mbcs(L, 1, CP_UTF8, "utf8"); }
+	static int _lua_local_to_utf16(lua_State* L) { return _lua_mbcs2wch(L, 1, 0, "local"); }
+	static int _lua_utf16_to_local(lua_State* L) { return _lua_wch2mbcs(L, 1, 0, "local"); }
 
-	// replace arg1 with(append \\*.* & convert to utf16)
-	lua_pushcfunction(L, _lua_utf8_to_utf16);
-	lua_pushvalue(L, 1);
-	lua_pushstring(L, "\\*.*");
-	lua_concat(L, 2);
-	lua_call(L, 1, 1);
-	lua_replace(L, 1);
-	wpath = (const WCHAR*)luaL_checkstring(L, 1);
+	static int puss_lua_file_list(lua_State* L) {
+		BOOL utf8 = lua_toboolean(L, 2);
+		const WCHAR* wpath;
+		lua_Integer nfile = 0;
+		lua_Integer ndir = 0;
+		HANDLE h = INVALID_HANDLE_VALUE;
+		WIN32_FIND_DATAW fdata;
 
-	lua_newtable(L);	// files
-	lua_newtable(L);	// dirs
-
-	h = FindFirstFileW(wpath, &fdata);
-	if( h == INVALID_HANDLE_VALUE )
-		return 2;
-	while( h != INVALID_HANDLE_VALUE ) {
-		if( fdata.cFileName[0]==L'.' ) {
-			if( fdata.cFileName[1]==L'\0' ) {
-				goto next_label;
-			} else if( fdata.cFileName[1]==L'.' && fdata.cFileName[2]==L'\0' ) {
-				goto next_label;
-			}
-		}
-
-		lua_pushcfunction(L, _lua_utf16_to_utf8);
-		lua_pushlstring(L, (const char*)(fdata.cFileName), wcslen(fdata.cFileName)*2 + 1);	// add more one byte for \u0000
+		// replace arg1 with(append \\*.* & convert to utf16)
+		lua_pushcfunction(L, utf8 ? _lua_utf8_to_utf16 : _lua_local_to_utf16);
+		lua_pushvalue(L, 1);
+		lua_pushstring(L, "\\*.*");
+		lua_concat(L, 2);
 		lua_call(L, 1, 1);
+		lua_replace(L, 1);
+		wpath = (const WCHAR*)luaL_checkstring(L, 1);
 
-		if( fdata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) {
-			lua_rawseti(L, -2, ++ndir);
-		} else {
-			lua_rawseti(L, -3, ++nfile);
+		lua_newtable(L);	// files
+		lua_newtable(L);	// dirs
+
+		h = FindFirstFileW(wpath, &fdata);
+		if( h == INVALID_HANDLE_VALUE )
+			return 2;
+		while( h != INVALID_HANDLE_VALUE ) {
+			if( fdata.cFileName[0]==L'.' ) {
+				if( fdata.cFileName[1]==L'\0' ) {
+					goto next_label;
+				} else if( fdata.cFileName[1]==L'.' && fdata.cFileName[2]==L'\0' ) {
+					goto next_label;
+				}
+			}
+
+			lua_pushcfunction(L, utf8 ? _lua_utf16_to_utf8 : _lua_utf16_to_local);
+			lua_pushlstring(L, (const char*)(fdata.cFileName), wcslen(fdata.cFileName)*2 + 1);	// add more one byte for \u0000
+			lua_call(L, 1, 1);
+
+			if( fdata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) {
+				lua_rawseti(L, -2, ++ndir);
+			} else {
+				lua_rawseti(L, -3, ++nfile);
+			}
+
+		next_label:
+			if( !FindNextFileW(h, &fdata) )
+				break;
 		}
-
-	next_label:
-		if( !FindNextFileW(h, &fdata) )
-			break;
-	}
-	FindClose(h);
-#else
-	const char* dirpath = luaL_checkstring(L, 1);
-	lua_Integer nfile = 0;
-	lua_Integer ndir = 0;
-	DIR* dir = opendir(dirpath);
-	struct dirent* finfo = NULL;
-	lua_newtable(L);	// files
-	lua_newtable(L);	// dirs
-
-	if( !dir )
+		FindClose(h);
 		return 2;
-	
-	while( (finfo = readdir(dir)) != NULL ) {
-		if( finfo->d_name[0]=='.' ) {
-			if( finfo->d_name[1]=='\0' )
-				continue;
-			if( finfo->d_name[1]=='.' && finfo->d_name[2]=='\0' )
-				continue;
-		}
-
-		lua_pushstring(L, finfo->d_name);
-		if( finfo->d_type==DT_DIR ) {
-			lua_rawseti(L, -2, ++ndir);
-		} else {
-			lua_rawseti(L, -3, ++nfile);
-		}
 	}
-	closedir(dir);
-#endif
-	return 2;
-}
 
-#ifdef _WIN32
 	static int puss_lua_local_to_utf8(lua_State* L) {
-		_lua_mbcs2wch(L, 1, 0, "utf8");
-		return _lua_wch2mbcs(L, -1, CP_UTF8, "local");
+		_lua_mbcs2wch(L, 1, 0, "local");
+		return _lua_wch2mbcs(L, -1, CP_UTF8, "utf8");
 	}
 
 	static int puss_lua_utf8_to_local(lua_State* L) {
@@ -878,6 +835,34 @@ static int puss_lua_file_list(lua_State* L) {
 		return _lua_wch2mbcs(L, -1, 0, "local");
 	}
 #else
+	static int puss_lua_file_list(lua_State* L) {
+		const char* dirpath = luaL_checkstring(L, 1);
+		lua_Integer nfile = 0;
+		lua_Integer ndir = 0;
+		DIR* dir = opendir(dirpath);
+		struct dirent* finfo = NULL;
+		lua_newtable(L);	// files
+		lua_newtable(L);	// dirs
+		if( !dir )
+			return 2;
+		while( (finfo = readdir(dir)) != NULL ) {
+			if( finfo->d_name[0]=='.' ) {
+				if( finfo->d_name[1]=='\0' )
+					continue;
+				if( finfo->d_name[1]=='.' && finfo->d_name[2]=='\0' )
+					continue;
+			}
+			lua_pushstring(L, finfo->d_name);
+			if( finfo->d_type==DT_DIR ) {
+				lua_rawseti(L, -2, ++ndir);
+			} else {
+				lua_rawseti(L, -3, ++nfile);
+			}
+		}
+		closedir(dir);
+		return 2;
+	}
+
 	static int puss_lua_local_to_utf8(lua_State* L) {
 		// TODO if need, now locale==UTF8 
 		luaL_checkstring(L, 1);
@@ -891,7 +876,7 @@ static int puss_lua_file_list(lua_State* L) {
 		lua_settop(L, 1);
 		return 1;
 	}
-#endif//_WIN32
+#endif
 
 static luaL_Reg puss_methods[] =
 	{ {"require",			puss_lua_module_require}

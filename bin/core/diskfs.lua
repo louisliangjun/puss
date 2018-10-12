@@ -23,7 +23,7 @@ __exports.load = function(filepath)
 end
 
 __exports.list = function(dir)
-	return puss.file_list(dir)
+	return puss.file_list(dir, true)	-- list file & convert name to utf8
 end
 
 __exports.exist = function(filepath)

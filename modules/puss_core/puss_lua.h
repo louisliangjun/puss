@@ -31,7 +31,6 @@ int  puss_get_value(lua_State* L, const char* name);
 
 void* puss_pickle_pack(size_t* plen, lua_State* L, int start, int end);
 int puss_pickle_unpack(lua_State* L, const void* pkt, size_t len);
-size_t puss_filename_format(char* fname, int convert_to_unix_path_sep);
 
 PUSS_DECLS_END
 
