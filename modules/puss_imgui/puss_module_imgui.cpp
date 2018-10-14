@@ -303,10 +303,11 @@ public:
 		int sx = GetSystemMetrics(SM_CXSCREEN) - 64;
 		int sy = GetSystemMetrics(SM_CYSCREEN) - 64;
 		if( width > sx )	width = sx;
-		if( height > sy )	width = sy;
+		if( height > sy )	height = sy;
 		RECT rc;
 		rc.left = (sx - width) / 2;
 		rc.top = (sy - height) / 2;
+		if( rc.top < 64 ) rc.top = 64;
 		rc.right = rc.left + width;
 		rc.bottom = rc.top + height;
 
@@ -988,7 +989,7 @@ static luaL_Reg imgui_lua_apis[] =
 
 static void lua_register_imgui(lua_State* L) {
 	// consts
-	puss_push_const_table(L);
+	puss_push_consts_table(L);
 #define __REG_ENUM(e)	lua_pushinteger(L, e);	lua_setfield(L, -2, #e);
 	#include "imgui_enums.inl"
 #undef __REG_ENUM
@@ -1017,7 +1018,7 @@ static void lua_register_imgui(lua_State* L) {
 static void lua_register_scintilla(lua_State* L) {
 	// consts
 	{
-		puss_push_const_table(L);
+		puss_push_consts_table(L);
 		for( IFaceVal* p=sci_values; p->name; ++p ) {
 			lua_pushinteger(L, p->val);
 			lua_setfield(L, -2, p->name);
@@ -1047,10 +1048,10 @@ static void lua_register_scintilla(lua_State* L) {
 	lua_setfield(L, -1, "__index");
 }
 
-PussInterface* __puss_iface__ = NULL;
+LuaProxy* __lua_proxy__ = NULL;
 
-PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
-	__puss_iface__= puss;
+PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, LuaProxy* lua) {
+	__lua_proxy__= lua;
 	do_platform_init(L);
 
 	if( lua_getfield(L, LUA_REGISTRYINDEX, IMGUI_LIB_NAME)==LUA_TTABLE )

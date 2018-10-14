@@ -11,6 +11,10 @@ PUSS_DECLS_BEGIN
 #include "lualib.h"
 #include "lauxlib.h"
 
+#define PUSS_KEY(name)			"[" #name "]"
+
+#define PUSS_KEY_PUSS			PUSS_KEY(puss)
+
 // puss newstate
 //  debug=0 mean NOT support debug
 //  f==NULL, means use default lua_Alloc
@@ -24,13 +28,6 @@ void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, con
 // puss_lua_open_default(L, argv[0], ".so")
 // 
 void puss_lua_open_default(lua_State* L, const char* arg0, const char* module_suffix);
-
-// for example : puss_get_value(L, "system.test.foo")
-// 
-int  puss_get_value(lua_State* L, const char* name);
-
-void* puss_pickle_pack(size_t* plen, lua_State* L, int start, int end);
-int puss_pickle_unpack(lua_State* L, const void* pkt, size_t len);
 
 PUSS_DECLS_END
 

@@ -12,6 +12,7 @@
 *.ipch
 *.suo
 *.sdf
+*.opensdf
 *.vcxproj.user
 *.lib
 *.ttf

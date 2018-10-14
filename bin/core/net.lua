@@ -41,7 +41,7 @@ __exports.send = function(sock, ...)
 	if not (sock and sock:valid()) then return end
 	local utable = sock:utable()
 	local squeue = utable.squeue
-	local pkt = puss.pickle_pack(...)
+	local pkt = puss.pack(...)
 	local hdr = string.pack('<I4', #pkt)
 	-- print(string.format('send: %u %q', #pkt, pkt))
 	table.insert(squeue, hdr)
@@ -115,7 +115,7 @@ __exports.update = function(sock, dispatch)
 	local pkt = table.remove(rqueue, 1)
 	while pkt do
 		-- print(string.format('recv: %u %q', #pkt, pkt))
-		dispatch(puss.pickle_unpack(pkt))
+		dispatch(puss.unpack(pkt))
 		pkt = table.remove(rqueue, 1)
 	end
 end

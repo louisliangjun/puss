@@ -12,6 +12,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="puss_debug.inl" />
+    <None Include="puss_sys.inl" />
+    <None Include="puss_pickle.inl" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\3rd\lua-5.3.4\src\lapi.c" />

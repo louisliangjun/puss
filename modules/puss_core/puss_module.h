@@ -5,36 +5,26 @@
 
 #include "puss_macros.h"
 
-PUSS_DECLS_BEGIN
-
-typedef struct PussInterface	PussInterface;
+typedef struct LuaProxy	LuaProxy;
 
 #ifdef _PUSS_MODULE_IMPLEMENT
 	#define _LUAPROXY_NOT_USE_SYMBOL_MACROS
 #else
-	extern PussInterface* __puss_iface__;
-
-	#define puss_module_require			(*(__puss_iface__->module_require))
-	#define puss_interface_register		(*(__puss_iface__->interface_register))
-	#define puss_interface_check(L, I)	((I*)((*(__puss_iface__->interface_check))((L), #I)))
-	#define puss_push_const_table		(*(__puss_iface__->push_const_table))
-
-	#define	__lua_proxy__(sym)			(*(__puss_iface__->luaproxy.sym))
+	extern struct LuaProxy*			__lua_proxy__;
+	#define	__lua_proxy_sym__(sym)	(*(__lua_proxy__->sym))
+	
+	#define puss_push_consts_table(L)				(*((PussInterface*)(__lua_proxy__->userdata))->push_consts_table)((L))
+	#define puss_interface_register(L,name,iface)	(*((PussInterface*)(__lua_proxy__->userdata))->interface_register)((L),(name),(iface))
+	#define puss_interface_check(L,IFace)			((IFace*)((*((PussInterface*)(__lua_proxy__->userdata))->interface_check)((L), #IFace)
 #endif
-
-PUSS_DECLS_END
 
 #include "luaproxy.h"
 
-PUSS_DECLS_BEGIN
-
-struct PussInterface {
-	void		(*module_require)		(lua_State* L, const char* name);				// [-0,+1,e]
-	void		(*interface_register)	(lua_State* L, const char* name, void* iface);	// [-0,+0,e]
-	void*		(*interface_check)		(lua_State* L, const char* name);				// [-0,+0,e]
-	void        (*push_const_table)		(lua_State* L);	// [-0,+1,-]
-	LuaProxy	luaproxy;
-};
+typedef struct PussInterface {
+	void (*push_consts_table)(lua_State* L);
+	void (*interface_register)(lua_State* L, const char* name, void* iface);
+	void* (*interface_check)(lua_State* L, const char* name);
+} PussInterface;
 
 #ifdef __cplusplus
 	#define PUSS_EXTERN_C	extern "C"
@@ -58,18 +48,16 @@ struct PussInterface {
 //   
 //   static struct ModuleIFace module_iface = { foo };
 //   
-//   PussInterface* __puss_iface__ = NULL;
+//   LuaProxy* __lua_proxy__ = NULL;
 //   
-//   PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
-//     __puss_iface__ = puss;
+//   PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, LuaProxy* lua) {
+//     __lua_proxy__ = lua;
 //     puss_interface_register(L, "ModuleIFace", &module_iface); // register C interface
 //     luaL_newlib(L, module_methods); // lua interface
 //     reutrn 1;
 //   }
 // 
-typedef int (*PussModuleInit)(lua_State* L, PussInterface* puss);
-
-PUSS_DECLS_END
+typedef int (*PussModuleInit)(lua_State* L, LuaProxy* lua);
 
 #endif//_INC_PUSS_LUA_MODULE_H_
 

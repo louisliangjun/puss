@@ -76,38 +76,44 @@ static int puss_dummy_main(lua_State* L) {
 	return 0;
 }
 
-#ifdef _WIN32
-	#define is_path_sep(ch) ((ch)=='/' || (ch)=='\\')
-	static int puss_error_handle_win32(lua_State* L) {
-		puss_get_value(L, "debug.traceback");
+static void push_error_str(lua_State* L) {
+	if( lua_getglobal(L, "debug")==LUA_TTABLE && lua_getfield(L, -1, "traceback")==LUA_TFUNCTION ) {
 		lua_pushvalue(L, 1);
 		lua_call(L, 1, 1);
+	} else {
+		lua_pushvalue(L, 1);
+	}
+}
+
+static int puss_error_handle(lua_State* L) {
+	int top = lua_gettop(L);
+	push_error_str(L);
+	fprintf(stderr, "[Error] %s\n", luaL_tolstring(L, -1, NULL));
+	lua_settop(L, top);
+	return lua_gettop(L);
+}
+
+#ifdef _WIN32
+	#define is_path_sep(ch) ((ch)=='/' || (ch)=='\\')
+	static int puss_error_handle_win(lua_State* L) {
+		int top = lua_gettop(L);
+		push_error_str(L);
 		MessageBoxA(NULL, lua_tostring(L, -1), "ERROR", MB_OK|MB_ICONERROR);
-		lua_pop(L, 1);
+		lua_settop(L, top);
 		return lua_gettop(L);
 	}
-	static void puss_push_error_handle(lua_State* L, int console_mode) {
-		if( console_mode ) {
-			puss_get_value(L, "puss.logerr_handle");
-			lua_call(L, 0, 1);
-		} else {
-			lua_pushcfunction(L, puss_error_handle_win32);
-		} 
-	}
 #else
-	#define is_path_sep(ch) ((ch)=='/')
-	static void puss_push_error_handle(lua_State* L, int console_mode) {
-		puss_get_value(L, "puss.logerr_handle");
-		lua_call(L, 0, 1);
-	}
+	#define puss_error_handle_win	puss_error_handle
 #endif
 
 static const char* puss_push_script_filename(lua_State* L, const char* script) {
 	if( script ) {
 		lua_pushstring(L, script);
 	} else {
-		puss_get_value(L, "puss._path");
-		puss_get_value(L, "puss._sep");
+		lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_PUSS);
+		lua_getfield(L, -1, "_path");
+		lua_getfield(L, -2, "_sep");
+		lua_remove(L, -3);
 		lua_pushstring(L, PUSS_DEFAULT_SCRIPT_FILE);
 		lua_concat(L, 3);
 		script = lua_tostring(L, -1);
@@ -131,9 +137,7 @@ static int puss_init(lua_State* L) {
 	lua_setfield(L, -2, "_script");			// puss._script
 
 	if( is_script_file ) {
-		puss_get_value(L, "puss.dofile");
-		puss_get_value(L, "puss._script");
-		lua_call(L, 1, 0);
+		luaL_dostring(L, "puss.dofile(puss._script)");
 		if( lua_getglobal(L, "__main__")!=LUA_TFUNCTION ) {
 			lua_pop(L, 1);
 			lua_pushcfunction(L, puss_dummy_main);
@@ -168,7 +172,7 @@ restart_label:
 
 	lua_getglobal(L, "xpcall");
 	lua_pushcfunction(L, puss_init);
-	puss_push_error_handle(L, console_mode);
+	lua_pushcfunction(L, console_mode ? puss_error_handle : puss_error_handle_win);
 	lua_pushinteger(L, argc);
 	lua_pushlightuserdata(L, argv);
 	lua_call(L, 4, 2);
@@ -178,17 +182,19 @@ restart_label:
 	} else {
 		lua_getglobal(L, "xpcall");
 		lua_replace(L, -3);
-		puss_push_error_handle(L, console_mode);
+		lua_pushcfunction(L, console_mode ? puss_error_handle : puss_error_handle_win);
 		lua_call(L, 2, 1);
 		res = lua_toboolean(L, -1) ? 0 : 2;
 	}
 	if( reboot_as_debug_level ) {
-		puss_get_value(L, "puss._reboot_as_debug_level");
-		debug_level = (int)lua_tointeger(L, -1);
-		reboot_as_debug_level = debug_level ? 1 : 0;
-		if( reboot_as_debug_level ) {
-		
+		int top = lua_gettop(L);
+		debug_level = 0;
+		if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_PUSS)==LUA_TTABLE ) {
+			lua_getfield(L, -1, "_reboot_as_debug_level");
+			debug_level = (int)lua_tointeger(L, -1);
 		}
+		lua_settop(L, top);
+		reboot_as_debug_level = debug_level ? 1 : 0;
 	}
 	lua_close(L);
 

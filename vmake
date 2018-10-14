@@ -16,6 +16,8 @@ GEN_INCLUDE_PATH = path_concat('objs', 'gen')
 PUSS_MODULE_SUFFIX = ''
 INCLUDES = { '3rd', PUSS_INCLUDE_PATH, GEN_INCLUDE_PATH }
 
+LUA_SRC_PATH = path_concat('3rd', 'lua-5.3.5', 'src')
+
 -- debug && asan
 do
 	if vlua.match_arg('^%-debug$') then
@@ -86,14 +88,13 @@ vmake_target_add('puss', function(target)
 end)
 
 vmake_target_add('luaproxy', function(target)
-	local luapath = path_concat('3rd', 'lua-5.3.4', 'src')
 	local luaproxy_lua = path_concat('tools', 'luaproxy.lua')
 	local deps =
 		{ luaproxy_lua
-		, make_copy('luaconf.h', PUSS_INCLUDE_PATH, luapath)
-		, make_copy('lua.h', PUSS_INCLUDE_PATH, luapath)
-		, make_copy('lualib.h', PUSS_INCLUDE_PATH, luapath)
-		, make_copy('lauxlib.h', PUSS_INCLUDE_PATH, luapath)
+		, make_copy('luaconf.h', PUSS_INCLUDE_PATH, LUA_SRC_PATH)
+		, make_copy('lua.h', PUSS_INCLUDE_PATH, LUA_SRC_PATH)
+		, make_copy('lualib.h', PUSS_INCLUDE_PATH, LUA_SRC_PATH)
+		, make_copy('lauxlib.h', PUSS_INCLUDE_PATH, LUA_SRC_PATH)
 		}
 	if check_deps(path_concat(PUSS_INCLUDE_PATH, 'luaproxy.h'), deps)
 		and check_deps(path_concat(GEN_INCLUDE_PATH, 'luaproxy.symbols'), deps)
@@ -110,8 +111,7 @@ end)
 
 vmake_target_add('lua53', function(target)
 	local cflags = vlua.OS=='windows' and '' or '-DLUA_USE_LINUX'
-	local luapath = path_concat('3rd', 'lua-5.3.4', 'src')
-	local srcs = scan_files(luapath, function(f)
+	local srcs = scan_files(LUA_SRC_PATH, function(f)
 		if f=='lua.c' then return end
 		if f=='luac.c' then return end
 		return f:match('^.+%.c$')
@@ -124,13 +124,12 @@ end)
 vmake_target_add('puss_core', function(target)
 	vmake('luaproxy')
 
-	local luapath = path_concat('3rd', 'lua-5.3.4', 'src')
 	local srcpath = path_concat('modules', target)
 	vmake('luaproxy')
 	make_copy('puss_macros.h', PUSS_INCLUDE_PATH, srcpath)
 	make_copy('puss_module.h', PUSS_INCLUDE_PATH, srcpath)
 
-	local incs = array_pack(INCLUDES, luapath)
+	local incs = array_pack(INCLUDES, LUA_SRC_PATH)
 	local objs = make_c2objs(srcpath, nil, incs)
 	local lib = path_concat(OBJPATH, 'lib'..target..'.a')
 	return make_target(lib, objs, AR, lib, objs)

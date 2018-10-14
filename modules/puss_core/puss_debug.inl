@@ -46,6 +46,38 @@ typedef struct _DebugEnv {
 	int				runto_line;
 } DebugEnv;
 
+static int get_value(lua_State* L, const char* path) {
+	int top = lua_gettop(L);
+	const char* ps = path;
+	const char* pe = ps;
+	int tp = LUA_TTABLE;
+
+	lua_pushglobaltable(L);
+	for( ; *pe; ++pe ) {
+		if( *pe=='.' ) {
+			if( tp!=LUA_TTABLE )
+				goto not_found;
+			lua_pushlstring(L, ps, pe-ps);
+			tp = lua_rawget(L, -2);
+			lua_remove(L, -2);
+			ps = pe+1;
+		}
+	}
+
+	if( ps!=pe && tp==LUA_TTABLE ) {
+		lua_pushlstring(L, ps, pe-ps);
+		tp = lua_rawget(L, -2);
+		lua_remove(L, -2);
+		return tp;
+	}
+
+not_found:
+	lua_settop(L, top);
+	lua_pushnil(L);
+	tp = LUA_TNIL;
+	return tp;
+}
+
 static int file_info_free(lua_State* L) {
 	FileInfo* finfo = (FileInfo*)lua_touserdata(L, 1);
 	if( finfo->script ) {
@@ -100,7 +132,7 @@ static int file_info_bp_hit_test(DebugEnv* env, FileInfo* finfo, int line){
 static void debug_handle_invoke(DebugEnv* env, int breaked) {
 	lua_State* L = env->debug_state;
 	lua_settop(L, 0);
-	puss_get_value(L, "puss.logerr_handle");
+	get_value(L, "puss.logerr_handle");
 	lua_rawgeti(L, LUA_REGISTRYINDEX, env->debug_handle);
 	lua_pushboolean(L, breaked);
 	lua_pushinteger(L, env->breaked_frame);
@@ -265,8 +297,8 @@ typedef struct _HostInvokeUD {
 static int do_host_invoke(lua_State* L) {
 	HostInvokeUD* ud = lua_touserdata(L, 1);
 	lua_settop(L, 0);
-	puss_get_value(L, ud->func);
-	puss_pickle_unpack(L, ud->args, ud->size);
+	get_value(L, ud->func);
+	puss_lua_unpack(L, ud->args, ud->size);
 	lua_call(L, lua_gettop(L)-1, LUA_MULTRET);
 	return lua_gettop(L);
 }
@@ -277,7 +309,7 @@ static int lua_debug_host_pcall(lua_State* L) {
 	const char* func = luaL_checkstring(L, 2);
 	int top = lua_gettop(hostL);
 	size_t len = 0;
-	void* buf = puss_pickle_pack(&len, L, 3, -1);
+	void* buf = puss_lua_pack(&len, L, 3, -1);
 	HostInvokeUD ud = { func, len, buf };
 	int res;
 	if( !lua_checkstack(hostL, 8) )
@@ -286,12 +318,12 @@ static int lua_debug_host_pcall(lua_State* L) {
 	lua_pushcfunction(hostL, do_host_invoke);
 	lua_pushlightuserdata(hostL, &ud);
 	res = lua_pcall(hostL, 1, LUA_MULTRET, 0);
-	buf = puss_pickle_pack(&len, hostL, top+1, -1);
+	buf = puss_lua_pack(&len, hostL, top+1, -1);
 	lua_settop(hostL, top);
 
 	lua_settop(L, 0);
 	lua_pushboolean(L, res==LUA_OK);
-	puss_pickle_unpack(L, buf, len);
+	puss_lua_unpack(L, buf, len);
 	return lua_gettop(L);
 }
 
@@ -452,11 +484,11 @@ static int lua_debugger_debug(lua_State* hostL) {
 		luaL_setmetatable(L, PUSS_DEBUG_NAME);
 		lua_setfield(L, -2, "_debug_proxy");
 
-		puss_get_value(L, "puss.trace_dofile");
+		get_value(L, "puss.trace_dofile");
 		if( debugger_script ) {
 			lua_pushstring(L, debugger_script);
 		} else {
-			puss_get_value(L, "puss._path");
+			get_value(L, "puss._path");
 			lua_pushstring(L, "/core/dbgsvr.lua");
 			lua_concat(L, 2);
 		}
