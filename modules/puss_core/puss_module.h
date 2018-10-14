@@ -13,17 +13,17 @@ typedef struct LuaProxy	LuaProxy;
 	extern struct LuaProxy*			__lua_proxy__;
 	#define	__lua_proxy_sym__(sym)	(*(__lua_proxy__->sym))
 	
-	#define puss_push_consts_table(L)				(*((PussInterface*)(__lua_proxy__->userdata))->push_consts_table)((L))
 	#define puss_interface_register(L,name,iface)	(*((PussInterface*)(__lua_proxy__->userdata))->interface_register)((L),(name),(iface))
 	#define puss_interface_check(L,IFace)			((IFace*)((*((PussInterface*)(__lua_proxy__->userdata))->interface_check)((L), #IFace)
+	#define puss_push_consts_table(L)				(*((PussInterface*)(__lua_proxy__->userdata))->push_consts_table)((L))
 #endif
 
 #include "luaproxy.h"
 
 typedef struct PussInterface {
-	void (*push_consts_table)(lua_State* L);
-	void (*interface_register)(lua_State* L, const char* name, void* iface);
-	void* (*interface_check)(lua_State* L, const char* name);
+	void*	(*interface_check)(lua_State* L, const char* name);
+	void	(*interface_register)(lua_State* L, const char* name, void* iface);
+	void	(*push_consts_table)(lua_State* L);
 } PussInterface;
 
 #ifdef __cplusplus

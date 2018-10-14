@@ -64,21 +64,6 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 #include "puss_pickle.inl"
 #include "puss_debug.inl"
 
-// consts
-// 
-static void puss_push_consts_table(lua_State* L) {
-#ifdef LUA_USE_OPTIMIZATION_WITH_CONST
-	if (lua_getfield(L, LUA_REGISTRYINDEX, LUA_USE_OPTIMIZATION_WITH_CONST)!=LUA_TTABLE) {
-		lua_pop(L, 1);
-		lua_newtable(L);
-		lua_pushvalue(L, -1);
-		lua_setfield(L, LUA_REGISTRYINDEX, LUA_USE_OPTIMIZATION_WITH_CONST);
-	}
-#else
-	lua_pushglobaltable(L);
-#endif
-}
-
 // interface
 // 
 #define PUSS_KEY_INTERFACES		PUSS_KEY(interfaces)
@@ -113,10 +98,16 @@ static void* puss_interface_check(lua_State* L, const char* name) {
 	return iface;
 }
 
+// consts
+// 
+static void puss_push_consts_table(lua_State* L) {
+	lua_pushglobaltable(L);
+}
+
 static PussInterface puss_interface = {
-	puss_push_consts_table,
 	puss_interface_register,
-	puss_interface_check
+	puss_interface_check,
+	puss_push_consts_table
 };
 
 static struct LuaProxy puss_lua_proxy = {
