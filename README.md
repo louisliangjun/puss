@@ -13,14 +13,16 @@ project file struct
   |
   +-- <bin>
   |     |
-  |     +-- <include>         # puss module headers
-  |     +-- <modules>         # plugin moudles
+  |     +-- <plugins>         # plugin plugins
   |
-  +-- <modules>    # puss modules source
+  +-- <include>    # puss core headers
   |     |
-  |     +-- <puss_core>       # puss core module headers
+  |     +-- puss_macros.h
+  |     +-- puss_plugin.h
+  |
+  +-- <plugins>    # puss plugins source
   |     |
-  |     +-- <...module...>    # plugin moudles
+  |     +-- <...plugin...>    # plugin plugins
   |
   +-- <puss>       # puss exe project source
   |
