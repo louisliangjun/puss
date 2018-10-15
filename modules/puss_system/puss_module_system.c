@@ -397,7 +397,7 @@ static const luaL_Reg system_lib_methods[] =
 	, {NULL, NULL}
 	};
 
-LuaProxy* __lua_proxy__ = NULL;
+PussInterface* __puss_iface__ = NULL;
 
 #ifdef _WIN32
 	static void wsa_cleanup(void) {
@@ -405,14 +405,14 @@ LuaProxy* __lua_proxy__ = NULL;
 	}
 #endif
 
-PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, LuaProxy* lua) {
-	if( !__lua_proxy__ ) {
+PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
+	if( !__puss_iface__ ) {
 #ifdef _WIN32
 		WSADATA wsa_data;
 		WSAStartup(MAKEWORD(2,0),&wsa_data);
 		atexit(wsa_cleanup);
 #endif
-		__lua_proxy__ = lua;
+		__puss_iface__ = puss;
 	}
 
 	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_SYSTEM_LIB_NAME)==LUA_TTABLE ) {

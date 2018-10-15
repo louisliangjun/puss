@@ -1048,10 +1048,10 @@ static void lua_register_scintilla(lua_State* L) {
 	lua_setfield(L, -1, "__index");
 }
 
-LuaProxy* __lua_proxy__ = NULL;
+PussInterface* __puss_iface__ = NULL;
 
-PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, LuaProxy* lua) {
-	__lua_proxy__= lua;
+PUSS_MODULE_EXPORT int __puss_module_init__(lua_State* L, PussInterface* puss) {
+	__puss_iface__ = puss;
 	do_platform_init(L);
 
 	if( lua_getfield(L, LUA_REGISTRYINDEX, IMGUI_LIB_NAME)==LUA_TTABLE )

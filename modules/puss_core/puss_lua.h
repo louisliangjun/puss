@@ -15,6 +15,11 @@ PUSS_DECLS_BEGIN
 
 #define PUSS_KEY_PUSS			PUSS_KEY(puss)
 
+// lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_PUSS);
+
+void* puss_interface_check(lua_State* L, const char* name);
+void puss_interface_register(lua_State* L, const char* name, void* iface);
+
 // puss newstate
 //  debug=0 mean NOT support debug
 //  f==NULL, means use default lua_Alloc

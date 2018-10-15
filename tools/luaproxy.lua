@@ -1,8 +1,5 @@
 -- luaproxy.lua
 
-local table_insert = table.insert
-local table_concat = table.concat
-
 local function pasre_header(gen, fname)
 	local s = ''
 	for line in io.lines(fname) do
@@ -27,7 +24,7 @@ local function pasre_header(gen, fname)
 							vaargs = true
 						else
 							local aname = av:match('^.-([%w_]+)[%s%[%]]*$')
-							if aname then table_insert(anames, aname) end
+							if aname then table.insert(anames, aname) end
 						end
 					end
 				end
@@ -48,7 +45,7 @@ function main()
 		-- NOTICE : not use LUA_COMPAT_MODULE
 		if name=='luaL_pushmodule' then return end
 		if name=='luaL_openlib' then return end
-		table_insert(apis, {ret, name, args, anames, vaargs})
+		table.insert(apis, {ret, name, args, anames, vaargs})
 	end
 
 	local root = vlua.match_arg('^%-path=(.+)$') or '.'
@@ -62,14 +59,14 @@ function main()
 		local output_lines = {}
 
 		local function writeln(...)
-			local line = table_concat({...})
-			table_insert(output_lines, line)
+			local line = table.concat({...})
+			table.insert(output_lines, line)
 		end
 
 		cb(writeln)
 
 		local f = io.open(filename, 'w')
-		f:write( table_concat(output_lines, '\n') )
+		f:write( table.concat(output_lines, '\n') )
 		f:close()
 	end
 
@@ -89,10 +86,6 @@ function main()
 		writeln('extern "C" {')
 		writeln('#endif')
 		writeln()
-		writeln('#include "lua.h"')
-		writeln('#include "lualib.h"')
-		writeln('#include "lauxlib.h"')
-		writeln()
 		writeln('#define __LUA_PROXY_FINISH_DUMMY__ "lua_proxy_dummy"')
 		writeln()
 		writeln('struct LuaProxy {')
@@ -102,7 +95,6 @@ function main()
 		end
 		writeln('')
 		writeln('  const char* __lua_proxy_finish_dummy__;')
-		writeln('  void* userdata;')
 		writeln('};')
 		writeln()
 		writeln('#ifdef __cplusplus')
@@ -153,7 +145,7 @@ function main()
 			if not vaargs then
 				writeln(ret .. ' ' .. name .. '(' .. args .. ') {')
 					if ret~='void' then writeln(' return') end
-					writeln(' __lua_proxy_imp__->' .. name .. '(' .. table_concat(anames, ',') .. '); ')
+					writeln(' __lua_proxy_imp__->' .. name .. '(' .. table.concat(anames, ',') .. '); ')
 				writeln('}')
 			end
 		end

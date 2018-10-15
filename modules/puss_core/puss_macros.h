@@ -4,11 +4,19 @@
 #define _INC_PUSS_MACROS_H_
 
 #ifdef __cplusplus
-	#define PUSS_DECLS_BEGIN   extern "C" {
-	#define PUSS_DECLS_END     }
+	#define PUSS_EXTERN_C       extern "C"
+	#define PUSS_DECLS_BEGIN    PUSS_EXTERN_C {
+	#define PUSS_DECLS_END      }
 #else
+	#define PUSS_EXTERN_C	    extern
 	#define PUSS_DECLS_BEGIN
 	#define PUSS_DECLS_END
+#endif
+
+#ifdef _WIN32
+	#define PUSS_MODULE_EXPORT	PUSS_EXTERN_C __declspec(dllexport)
+#else
+	#define PUSS_MODULE_EXPORT	PUSS_EXTERN_C __attribute__ ((visibility("default"))) 
 #endif
 
 // C inline

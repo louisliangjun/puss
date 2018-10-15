@@ -49,9 +49,9 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 	"\n"
 	;
 
+#include "puss_lua.h"
 #define _PUSS_MODULE_IMPLEMENT
 #include "puss_module.h"
-#include "puss_lua.h"
 
 #include <assert.h>
 #include <stdint.h>
@@ -68,7 +68,17 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 // 
 #define PUSS_KEY_INTERFACES		PUSS_KEY(interfaces)
 
-static void puss_interface_register(lua_State* L, const char* name, void* iface) {
+void* puss_interface_check(lua_State* L, const char* name) {
+	int top = lua_gettop(L);
+	void* iface = ( name && lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_INTERFACES)==LUA_TTABLE
+			&& lua_getfield(L, -1, name)==LUA_TUSERDATA ) ? lua_touserdata(L, -1) : NULL;
+	if( !iface )
+		luaL_error(L, "puss_interface_check(%s), iface not found!", name);
+	lua_settop(L, top);
+	return iface;
+}
+
+void puss_interface_register(lua_State* L, const char* name, void* iface) {
 	int top = lua_gettop(L);
 	if( !(name && iface) ) {
 		luaL_error(L, "puss_interface_register(%s), name and iface MUST exist!", name);
@@ -88,35 +98,24 @@ static void puss_interface_register(lua_State* L, const char* name, void* iface)
 	lua_settop(L, top);
 }
 
-static void* puss_interface_check(lua_State* L, const char* name) {
-	int top = lua_gettop(L);
-	void* iface = ( name && lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_INTERFACES)==LUA_TTABLE
-			&& lua_getfield(L, -1, name)==LUA_TUSERDATA ) ? lua_touserdata(L, -1) : NULL;
-	if( !iface )
-		luaL_error(L, "puss_interface_check(%s), iface not found!", name);
-	lua_settop(L, top);
-	return iface;
-}
-
 // consts
 // 
 static void puss_push_consts_table(lua_State* L) {
 	lua_pushglobaltable(L);
 }
 
-static PussInterface puss_interface = {
-	puss_interface_register,
-	puss_interface_check,
-	puss_push_consts_table
-};
-
-static struct LuaProxy puss_lua_proxy = {
+static PussInterface puss_interface =
+	{
+		{
 #define __LUAPROXY_SYMBOL(sym)	sym,
-	#include "luaproxy.symbols"
+		#include "luaproxy.symbols"
 #undef __LUAPROXY_SYMBOL
-	__LUA_PROXY_FINISH_DUMMY__,
-	&puss_interface
-};
+		__LUA_PROXY_FINISH_DUMMY__
+		}
+	, puss_interface_check
+	, puss_interface_register
+	, puss_push_consts_table
+	};
 
 static int puss_lua_module_require(lua_State* L) {
 	const char* name = luaL_checkstring(L, 1);
@@ -140,12 +139,12 @@ static int puss_lua_module_require(lua_State* L) {
 		luaL_error(L, "load module fetch init function failed!");
 	lua_settop(L, 0);
 
-	assert( strcmp(puss_lua_proxy.__lua_proxy_finish_dummy__, __LUA_PROXY_FINISH_DUMMY__)==0 );
+	assert( strcmp(puss_interface.lua_proxy.__lua_proxy_finish_dummy__, __LUA_PROXY_FINISH_DUMMY__)==0 );
 
 	// __puss_module_init__()
 	// puss_module_loaded[name] = <last return value> or true
 	// 
-	if( (f(L, &puss_lua_proxy)<=0) || lua_isnoneornil(L, -1) ) {
+	if( (f(L, &puss_interface)<=0) || lua_isnoneornil(L, -1) ) {
 		lua_settop(L, 0);
 		lua_pushboolean(L, 1);
 	}
