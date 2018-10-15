@@ -3,6 +3,7 @@
 #ifdef _WIN32
 	#define WIN32_LEAN_AND_MEAN
 	#include <windows.h>
+	#include <wchar.h>
 	#define PATH_SEP_STR	"\\"
 
 	static int _lua_mbcs2wch(lua_State* L, int stridx, UINT code_page, const char* code_page_name) {

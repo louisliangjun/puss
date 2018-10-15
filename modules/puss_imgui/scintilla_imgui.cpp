@@ -2,7 +2,7 @@
 
 #include "scintilla_imgui.h"
 
-#if defined(__WIN32__) || defined(_MSC_VER)
+#if defined(_WIN32)
 	#include <windows.h>
 	#include <time.h>
 #else

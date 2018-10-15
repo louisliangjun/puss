@@ -15,7 +15,6 @@
 	#include <d3d11.h>
 	#define DIRECTINPUT_VERSION 0x0800
 	#include <dinput.h>
-	#include <tchar.h>
 
 	#ifndef WM_DPICHANGED
 	#define WM_DPICHANGED 0x02E0 // From Windows SDK 8.1+ headers
@@ -79,7 +78,7 @@
 	#include "imgui_impl_opengl3.inl"
 	#include "imgui_impl_glfw.inl"
 
-	#ifdef _WIN32
+	#ifdef _MSC_VER
 		#pragma comment(lib, "glfw3.lib")
 		#pragma comment(lib, "opengl32.lib")
 	#endif

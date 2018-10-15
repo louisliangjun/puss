@@ -306,7 +306,7 @@
       <AdditionalDependencies>$(ProjectDir)glfw\lib-vc2010-64\glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
-      <Command>$(SolutionDir)vmake imgui_wrap scintilla_iface</Command>
+      <Command>$(PussRoot)vmake imgui_wrap scintilla_iface</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -323,7 +323,7 @@
       <AdditionalDependencies>$(ProjectDir)glfw\lib-vc2010-64\glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
-      <Command>$(SolutionDir)vmake imgui_wrap scintilla_iface</Command>
+      <Command>$(PussRoot)vmake imgui_wrap scintilla_iface</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

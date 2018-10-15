@@ -9,11 +9,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "puss_core/puss_lua.h"
-
 #ifndef _PUSS_MODULE_SUFFIX
-	#define _PUSS_MODULE_SUFFIX	".so"
+	#define _PUSS_MODULE_SUFFIX
 #endif
+
+#ifdef _WIN32
+#define PLATFORM_SUFFIX(suffix)	#suffix ".dll"
+#else
+#define PLATFORM_SUFFIX(suffix)	#suffix ".so"
+#endif
+
+#include "puss_lua.inl"
 
 #define PUSS_DEFAULT_SCRIPT_FILE "default.lua"
 
@@ -137,7 +143,9 @@ static int puss_init(lua_State* L) {
 	lua_setfield(L, -2, "_script");			// puss._script
 
 	if( is_script_file ) {
-		luaL_dostring(L, "puss.dofile(puss._script)");
+		if( luaL_dostring(L, "puss.dofile(puss._script)") ) {
+			lua_error(L);
+		}
 		if( lua_getglobal(L, "__main__")!=LUA_TFUNCTION ) {
 			lua_pop(L, 1);
 			lua_pushcfunction(L, puss_dummy_main);
@@ -168,7 +176,7 @@ restart_label:
 	reboot_as_debug_level = (debug_level==0);
 
 	luaL_openlibs(L);
-	puss_lua_open_default(L, argv[0], _PUSS_MODULE_SUFFIX);
+	puss_lua_open_default(L, argv[0], PLATFORM_SUFFIX(_PUSS_MODULE_SUFFIX));
 
 	lua_getglobal(L, "xpcall");
 	lua_pushcfunction(L, puss_init);

@@ -13,7 +13,7 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>$(PussRoot)3rd\;$(PussRoot)include\;$(PussRoot)modules\;$(PussRoot)objs\gen\;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_PUSS_MODULE_SUFFIX="$(PussSuffix).dll"</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_PUSS_MODULE_SUFFIX=$(PussSuffix)</PreprocessorDefinitions>
     </ClCompile>
     <PreBuildEvent>
       <Command>

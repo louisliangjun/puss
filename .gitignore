@@ -3,8 +3,9 @@
 /bin/modules
 /bin/*.so
 /bin/puss*
-/include
 /objs
+/include/lua*.h
+/include/lauxlib.h
 *.VC.opendb
 *.VC.db-wal
 *.VC.db-shm
