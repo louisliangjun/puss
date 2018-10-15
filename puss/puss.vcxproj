@@ -73,6 +73,8 @@
     <ClInclude Include="..\3rd\lua-5.3.5\src\lundump.h" />
     <ClInclude Include="..\3rd\lua-5.3.5\src\lvm.h" />
     <ClInclude Include="..\3rd\lua-5.3.5\src\lzio.h" />
+    <ClInclude Include="..\include\puss_macros.h" />
+    <ClInclude Include="..\include\puss_plugin.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="puss_debug.inl" />

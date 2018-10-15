@@ -14,9 +14,9 @@
 #endif
 
 #ifdef _WIN32
-	#define PUSS_MODULE_EXPORT	PUSS_EXTERN_C __declspec(dllexport)
+	#define PUSS_PLUGIN_EXPORT	PUSS_EXTERN_C __declspec(dllexport)
 #else
-	#define PUSS_MODULE_EXPORT	PUSS_EXTERN_C __attribute__ ((visibility("default"))) 
+	#define PUSS_PLUGIN_EXPORT	PUSS_EXTERN_C __attribute__ ((visibility("default"))) 
 #endif
 
 // C inline

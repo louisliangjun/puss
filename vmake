@@ -9,7 +9,7 @@ DLL_SUFFIX = '.so'
 EXE_SUFFIX = ''
 CFLAGS  = {'-Wall'}
 CXX_CFLAGS = {}
-OBJPATH = path_concat('objs', 'r')
+PUSS_CONFIG = 'release'
 
 if vlua.OS=='windows' then
 	EXE_SUFFIX = '.exe'
@@ -18,7 +18,6 @@ end
 
 PUSS_INCLUDE_PATH = 'include'
 GEN_INCLUDE_PATH = path_concat('objs', 'gen')
-PUSS_MODULE_SUFFIX = ''
 INCLUDES = { PUSS_INCLUDE_PATH, GEN_INCLUDE_PATH }
 
 LUA_SRC_PATH = path_concat('3rd', 'lua-5.3.5', 'src')
@@ -27,18 +26,21 @@ LUA_SRC_PATH = path_concat('3rd', 'lua-5.3.5', 'src')
 do
 	if vlua.match_arg('^%-debug$') then
 		array_push(CFLAGS, '-g', '-O0', '-D_DEBUG')
-		OBJPATH = path_concat('objs', 'd')
-		PUSS_MODULE_SUFFIX = PUSS_MODULE_SUFFIX .. '_d'
+		PUSS_CONFIG = 'debug'
 	else
 		array_push(CFLAGS, '-s', '-O2', '-DNDEBUG')
 	end
 
 	if vlua.match_arg('^%-asan$') then
 		array_push(CFLAGS, '-ggdb', '-fsanitize=address', '-fno-omit-frame-pointer')
-		OBJPATH = OBJPATH .. 'a'
-		PUSS_MODULE_SUFFIX = PUSS_MODULE_SUFFIX .. '_asan'
+		PUSS_CONFIG = PUSS_CONFIG .. '_asan'
 	end
 end
+
+local PUSS_CONFIG_SHORTNAME = PUSS_CONFIG:gsub('^(%w)%w*_?(%w?)%w*$', '%1%2')
+OBJPATH = path_concat('objs', PUSS_CONFIG_SHORTNAME)
+
+PUSS_CONFIG_SUFFIX = PUSS_CONFIG=='release' and '' or ('.'..PUSS_CONFIG)
 
 -----------------------------
 -- common utils
@@ -85,11 +87,11 @@ end)
 vmake_target_add('puss', function(target)
 	vmake('luaproxy')
 	local slibs = vmake('lua53')
-	local suffix_flag = '-D_PUSS_MODULE_SUFFIX='..PUSS_MODULE_SUFFIX
-	local incs = array_pack(INCLUDES, LUA_SRC_PATH, 'modules')
+	local suffix_flag = '-DPUSS_CONFIG=\\"'..PUSS_CONFIG..'\\"'
+	local incs = array_pack(INCLUDES, LUA_SRC_PATH, 'plugins')
 	local libs = vlua.OS=='windows' and '' or '-lm -ldl'
 	local objs = make_c2objs(target, nil, incs, suffix_flag)
-	local output = path_concat('bin', target..PUSS_MODULE_SUFFIX..EXE_SUFFIX)
+	local output = path_concat('bin', target..PUSS_CONFIG_SUFFIX..EXE_SUFFIX)
 	return make_target(output, {objs, slibs}, CC, CFLAGS, '-o', output, objs, slibs, libs)
 end)
 
@@ -129,8 +131,8 @@ end)
 
 vmake_target_add('puss_system', function(target)
 	vmake('luaproxy')
-	local objs = make_c2objs(path_concat('modules', target), nil, INCLUDES, '-fPIC', '-fvisibility=hidden')
-	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
+	local objs = make_c2objs(path_concat('plugins', target), nil, INCLUDES, '-fPIC', '-fvisibility=hidden')
+	local output = path_concat('bin', 'plugins', target..PUSS_CONFIG_SUFFIX..'.so')
 	local libs = vlua.OS=='windows' and '-lwsock32' or ''
 	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs, libs)
 end)
@@ -139,7 +141,7 @@ end)
 -- imgui lua wrapper
 
 vmake_target_add('imgui_wrap', function(target)
-	local src = path_concat('modules', 'puss_imgui', 'imgui')
+	local src = path_concat('plugins', 'puss_imgui', 'imgui')
 	local imgui_wrap = path_concat('tools', 'imgui_wrap.lua')
 	local deps =
 		{ imgui_wrap
@@ -162,7 +164,7 @@ end)
 -----------------------------
 -- scintilla iface
 
-SCINTILLA_ROOT_PATH = path_concat('modules', 'puss_imgui', 'scintilla3')
+SCINTILLA_ROOT_PATH = path_concat('plugins', 'puss_imgui', 'scintilla3')
 SCINTILLA_INCLUDE_PATH = path_concat(SCINTILLA_ROOT_PATH, 'include')
 
 vmake_target_add('scintilla_iface', function(target)
@@ -211,7 +213,7 @@ end)
 vmake_target_add('puss_imgui', function(target)
 	vmake('luaproxy', 'imgui_wrap', 'scintilla_iface')
 	local slibs = vmake('scintilla')
-	local src = path_concat('modules', target)
+	local src = path_concat('plugins', target)
 	local incs = array_pack(
 		{ INCLUDES
 		, SCINTILLA_INCLUDE_PATH
@@ -232,7 +234,7 @@ vmake_target_add('puss_imgui', function(target)
 	local gl3wobjs = make_c2objs(path_concat(src, 'gl3w'), nil, incs, '-fPIC', '-fvisibility=hidden')
 	local imguiobjs = make_cpp2objs(path_concat(src, 'imgui'), nil, incs, '-fPIC', '-fvisibility=hidden', flags)
 	local objs = make_cpp2objs(srcs, nil, incs, '-fPIC', '-fvisibility=hidden', '-DSCI_LEXER', flags)
-	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
+	local output = path_concat('bin', 'plugins', target..PUSS_CONFIG_SUFFIX..'.so')
 	return make_target(output, {objs, imguiobjs, gl3wobjs}, CXX, CFLAGS, flags, '-shared', '-o', output, objs, imguiobjs, gl3wobjs, slibs, libs)
 end)
 

@@ -25,7 +25,7 @@ function __main__()
 end
 
 if not imgui then
-	_ENV.imgui = puss.require('puss_imgui')
-	--_ENV.imgui = puss.require('puss_imgui_glfw')
+	_ENV.imgui = puss.load_plugin('puss_imgui')
+	--_ENV.imgui = puss.load_plugin('puss_imgui_glfw')
 	puss.dofile(puss._script)	-- for use nk symbols & enums
 end

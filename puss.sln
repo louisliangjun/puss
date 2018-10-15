@@ -5,13 +5,13 @@ VisualStudioVersion = 15.0.27428.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "puss", "puss\puss.vcxproj", "{C9A46A5F-2AB1-40DE-A134-A37346E47E9C}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "modules", "modules", "{EA77CC37-897E-41E8-B54C-552B5A7CAFF0}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "plugins", "plugins", "{EA77CC37-897E-41E8-B54C-552B5A7CAFF0}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "puss_imgui", "modules\puss_imgui\puss_imgui.vcxproj", "{FBEAE7E3-3F48-484C-978A-516C31D18862}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "puss_imgui", "plugins\puss_imgui\puss_imgui.vcxproj", "{FBEAE7E3-3F48-484C-978A-516C31D18862}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "puss_imgui_glfw", "modules\puss_imgui\puss_imgui_glfw.vcxproj", "{5EED7033-AF66-45F1-A199-27561C719F38}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "puss_imgui_glfw", "plugins\puss_imgui\puss_imgui_glfw.vcxproj", "{5EED7033-AF66-45F1-A199-27561C719F38}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "puss_system", "modules\puss_system\puss_system.vcxproj", "{CF27D656-24A4-4A0D-B36E-E82F33257FD3}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "puss_system", "plugins\puss_system\puss_system.vcxproj", "{CF27D656-24A4-4A0D-B36E-E82F33257FD3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

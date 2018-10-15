@@ -1,0 +1,12 @@
+/bin
+/cocoa
+/curses
+/doc
+/gtk
+/lexlua
+/lua
+/qt
+/scripts
+/test
+/win32
+/.hg*

@@ -3,17 +3,19 @@
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros">
     <PussRoot>$(MSBuildThisFileDirectory)</PussRoot>
-    <PussSuffix>$(Configuration.Replace('Debug','_d').Replace('Release',''))</PussSuffix>
+    <PussConfig>$(Configuration.ToLower())</PussConfig>
+    <_PussProjectName>$(ProjectName).$(PussConfig)</_PussProjectName>
+    <PussProjectName>$(_PussProjectName.Replace(".release", ""))</PussProjectName>
   </PropertyGroup>
   <PropertyGroup>
-    <OutDir>$(PussRoot)bin\modules\</OutDir>
+    <OutDir>$(PussRoot)bin\plugins\</OutDir>
     <IntDir>$(SolutionDir)objs\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
-    <TargetName>$(ProjectName)$(PussSuffix)</TargetName>
+    <TargetName>$(PussProjectName)</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>$(PussRoot)3rd\;$(PussRoot)include\;$(PussRoot)modules\;$(PussRoot)objs\gen\;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_PUSS_MODULE_SUFFIX=$(PussSuffix)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>PUSS_CONFIG="$(PussConfig)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <PreBuildEvent>
       <Command>
@@ -24,8 +26,14 @@
     <BuildMacro Include="PussRoot">
       <Value>$(PussRoot)</Value>
     </BuildMacro>
-    <BuildMacro Include="PussSuffix">
-      <Value>$(PussSuffix)</Value>
+    <BuildMacro Include="PussConfig">
+      <Value>$(PussConfig)</Value>
+    </BuildMacro>
+    <BuildMacro Include="_PussProjectName">
+      <Value>$(_PussProjectName)</Value>
+    </BuildMacro>
+    <BuildMacro Include="PussProjectName">
+      <Value>$(PussProjectName)</Value>
     </BuildMacro>
   </ItemGroup>
 </Project>

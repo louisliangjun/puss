@@ -1,6 +1,6 @@
 -- debugger.lua
 
-local puss_system = puss.require('puss_system')
+local puss_system = puss.load_plugin('puss_system')
 
 local diskfs = puss.import('core.diskfs')
 local shotcuts = puss.import('core.shotcuts')

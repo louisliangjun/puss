@@ -51,8 +51,8 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 
 #include "puss_macros.h"
 
-#define _PUSS_MODULE_IMPLEMENT
-#include "puss_module.h"
+#define _PUSS_IMPLEMENT
+#include "puss_plugin.h"
 
 #include <assert.h>
 #include <stdint.h>
@@ -122,32 +122,32 @@ static PussInterface puss_interface =
 	, puss_push_consts_table
 	};
 
-static int puss_lua_module_require(lua_State* L) {
+static int puss_lua_plugin_load(lua_State* L) {
 	const char* name = luaL_checkstring(L, 1);
-	PussModuleInit f = NULL;
+	PussPluginInit f = NULL;
 	if( lua_getfield(L, lua_upvalueindex(1), name) != LUA_TNIL )
 		return 1;
 
-	// local f, err = package.loadlib(module_filename, '__puss_module_init__')
+	// local f, err = package.loadlib(plugin_filename, '__puss_plugin_init__')
 	// 
 	lua_pushvalue(L, lua_upvalueindex(2));	// package.loadlib
 	lua_pushvalue(L, lua_upvalueindex(3));	// prefix
 	lua_pushvalue(L, 1);					// name
-	lua_pushvalue(L, lua_upvalueindex(4));	// suffix
+	lua_pushvalue(L, lua_upvalueindex(4));	// prefix
 	lua_concat(L, 3);
-	lua_pushstring(L, "__puss_module_init__");
+	lua_pushstring(L, "__puss_plugin_init__");
 	lua_call(L, 2, 2);
 	if( lua_type(L, -2)!=LUA_TFUNCTION )
 		lua_error(L);
-	f = (PussModuleInit)lua_tocfunction(L, -2);
+	f = (PussPluginInit)lua_tocfunction(L, -2);
 	if( !f )
-		luaL_error(L, "load module fetch init function failed!");
+		luaL_error(L, "load plugin fetch init function failed!");
 	lua_settop(L, 0);
 
 	assert( strcmp(puss_interface.lua_proxy.__lua_proxy_finish_dummy__, __LUA_PROXY_FINISH_DUMMY__)==0 );
 
-	// __puss_module_init__()
-	// puss_module_loaded[name] = <last return value> or true
+	// __puss_plugin_init__()
+	// puss_plugin_loaded[name] = <last return value> or true
 	// 
 	if( (f(L, &puss_interface)<=0) || lua_isnoneornil(L, -1) ) {
 		lua_settop(L, 0);
@@ -205,7 +205,7 @@ static luaL_Reg puss_methods[] =
 	, {NULL, NULL}
 	};
 
-static void puss_module_setup(lua_State* L, const char* app_path, const char* app_name, const char* module_suffix) {
+static void puss_module_setup(lua_State* L, const char* app_path, const char* app_name, const char* app_config) {
 	int puss_index = lua_gettop(L) + 1;
 	lua_newtable(L);	// puss
 
@@ -213,10 +213,7 @@ static void puss_module_setup(lua_State* L, const char* app_path, const char* ap
 	lua_pushvalue(L, -1);
 	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_KEY_PUSS);
 
-	// fprintf(stderr, "!!!puss_module_setup %s %s %s\n", app_path, app_name, module_suffix);
-
-	lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_PUSS);
-	assert( lua_type(L, -1)==LUA_TTABLE );
+	// fprintf(stderr, "!!!puss_module_setup %s %s %s\n", app_path, app_name, app_config);
 
 	lua_pushstring(L, app_path ? app_path : ".");
 	lua_setfield(L, puss_index, "_path");	// puss._path
@@ -227,23 +224,30 @@ static void puss_module_setup(lua_State* L, const char* app_path, const char* ap
 	lua_pushstring(L, PATH_SEP_STR);
 	lua_setfield(L, puss_index, "_sep");	// puss._sep
 
-	lua_pushstring(L, module_suffix ? module_suffix : ".so");
-	lua_setfield(L, puss_index, "_module_suffix");	// puss._module_suffix
-
-	lua_newtable(L);								// up[1]: modules
+	lua_newtable(L);								// up[1]: plugins
 	lua_pushvalue(L, puss_index);
-	lua_setfield(L, -2, "puss");	// puss modules["puss"] = puss-module
+	lua_setfield(L, -2, "puss");	// puss plugins["puss"] = puss-self
 	lua_getglobal(L, "package");
 	assert( lua_type(L, -1)==LUA_TTABLE );
 	lua_getfield(L, -1, "loadlib");					// up[2]: package.loadlib
 	assert( lua_type(L, -1)==LUA_TFUNCTION );
 	lua_remove(L, -2);
 	lua_getfield(L, puss_index, "_path");
-	lua_pushstring(L, PATH_SEP_STR "modules" PATH_SEP_STR);
-	lua_concat(L, 2);								// up[3]: module_prefix
-	lua_getfield(L, puss_index, "_module_suffix");	// up[4]: module_suffix
-	lua_pushcclosure(L, puss_lua_module_require, 4);
-	lua_setfield(L, puss_index, "require");			// puss.require
+	lua_pushstring(L, PATH_SEP_STR "plugins" PATH_SEP_STR);
+	lua_concat(L, 2);								// up[3]: plugin_prefix
+	if( app_config==NULL || strcmp(app_config, "release")==0 ) {
+		lua_pushstring(L, "");
+	} else {
+		lua_pushfstring(L, ".%s", app_config);
+	}
+#ifdef _WIN32
+	lua_pushstring(L, ".dll");
+#else
+	lua_pushstring(L, ".so");
+#endif
+	lua_concat(L, 2);								// up[4]: plugin_suffix
+	lua_pushcclosure(L, puss_lua_plugin_load, 4);
+	lua_setfield(L, puss_index, "load_plugin");		// puss.load_plugin
 
 	lua_settop(L, puss_index);
 	luaL_setfuncs(L, puss_methods, 0);
@@ -256,7 +260,7 @@ static void puss_module_setup(lua_State* L, const char* app_path, const char* ap
 	lua_call(L, 0, 0);
 }
 
-static void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, const char* module_suffix) {
+static void puss_lua_open(lua_State* L, const char* app_path, const char* app_name, const char* app_config) {
 	DebugEnv* env;
 
 	// check already open
@@ -266,12 +270,12 @@ static void puss_lua_open(lua_State* L, const char* app_path, const char* app_na
 	}
 	lua_pop(L, 1);
 
-	puss_module_setup(L, app_path, app_name, module_suffix);
+	puss_module_setup(L, app_path, app_name, app_config);
 
 	// debugger
 	env = debug_env_fetch(L);
 	if( env ) {
-		puss_module_setup(env->debug_state, app_path, app_name, module_suffix);
+		puss_module_setup(env->debug_state, app_path, app_name, app_config);
 
 		lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_PUSS);
 		lua_pushcfunction(L, lua_debugger_debug);
@@ -280,7 +284,7 @@ static void puss_lua_open(lua_State* L, const char* app_path, const char* app_na
 	}
 }
 
-static void puss_lua_open_default(lua_State* L, const char* arg0, const char* module_suffix) {
+static void puss_lua_open_default(lua_State* L, const char* arg0, const char* app_config) {
 	char pth[4096];
 	int len;
 	const char* app_path = NULL;
@@ -310,6 +314,6 @@ static void puss_lua_open_default(lua_State* L, const char* arg0, const char* mo
 		app_name = pth+len+1;
 	}
 
-	puss_lua_open(L, app_path, app_name, module_suffix);
+	puss_lua_open(L, app_path, app_name, app_config);
 }
 
