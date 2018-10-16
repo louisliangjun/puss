@@ -180,6 +180,7 @@ end
 __exports.init = function()
 	local title = 'Puss - Editor'
 	puss._app_title = title
+	run_sign = true
 	main_ui = imgui.Create(title, 1024, 768, 'puss_editor.ini', function()
 		local font_path = string.format('%s%sfonts', puss._path, puss._sep)
 		local files = puss.file_list(font_path)
