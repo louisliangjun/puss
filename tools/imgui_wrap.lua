@@ -100,7 +100,7 @@ static int byte_array_create(lua_State* L) {
 typedef struct _FloatArrayLua {
 	int		cap;
 	int		len;
-	float	buf[0];
+	float	buf[1];
 } FloatArrayLua;
 
 static int float_array_tostring(lua_State* L) {

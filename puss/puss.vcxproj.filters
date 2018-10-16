@@ -186,7 +186,6 @@
     <ClInclude Include="..\3rd\lua-5.3.5\src\lzio.h">
       <Filter>lua</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\puss_macros.h" />
     <ClInclude Include="..\include\puss_plugin.h" />
   </ItemGroup>
   <ItemGroup>

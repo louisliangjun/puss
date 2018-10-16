@@ -3,7 +3,15 @@
 #ifndef _INC_PUSS_LUA_PLUGIN_H_
 #define _INC_PUSS_LUA_PLUGIN_H_
 
-#include "puss_macros.h"
+#ifdef __cplusplus
+	#define PUSS_EXTERN_C       extern "C"
+	#define PUSS_DECLS_BEGIN    PUSS_EXTERN_C {
+	#define PUSS_DECLS_END      }
+#else
+	#define PUSS_EXTERN_C	    extern
+	#define PUSS_DECLS_BEGIN
+	#define PUSS_DECLS_END
+#endif
 
 PUSS_DECLS_BEGIN
 	#include "lua.h"
@@ -27,6 +35,17 @@ typedef struct _PussInterface	PussInterface;
 
 #include "luaproxy.h"
 
+// C inline
+// 
+#ifndef  __cplusplus
+	#ifdef _MSC_VER
+		#ifdef inline
+			#undef inline
+		#endif
+		#define inline __forceinline
+	#endif
+#endif
+
 PUSS_DECLS_BEGIN
 
 struct _PussInterface {
@@ -36,6 +55,12 @@ struct _PussInterface {
 	void	(*interface_register)(lua_State* L, const char* name, void* iface);
 	void	(*push_consts_table)(lua_State* L);
 };
+
+#ifdef _WIN32
+	#define PUSS_PLUGIN_EXPORT	PUSS_EXTERN_C __declspec(dllexport)
+#else
+	#define PUSS_PLUGIN_EXPORT	PUSS_EXTERN_C __attribute__ ((visibility("default"))) 
+#endif
 
 // puss plugin usage :
 //   local plugin = puss.require(plugin_name)

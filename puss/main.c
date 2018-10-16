@@ -9,10 +9,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef PUSS_CONFIG
-	#define PUSS_CONFIG ""
-#endif
-
 #include "puss_lua.inl"
 
 #define PUSS_DEFAULT_SCRIPT_FILE "default.lua"
@@ -170,7 +166,7 @@ restart_label:
 	reboot_as_debug_level = (debug_level==0);
 
 	luaL_openlibs(L);
-	puss_lua_open_default(L, argv[0], PUSS_CONFIG);
+	puss_lua_open_default(L, argv[0]);
 	lua_getglobal(L, "xpcall");
 	lua_pushcfunction(L, puss_init);
 	lua_pushcfunction(L, console_mode ? puss_error_handle : puss_error_handle_win);

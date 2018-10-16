@@ -49,6 +49,10 @@
 
 #define socket_check_valid(fd)		((fd)!=INVALID_SOCKET)
 
+#ifdef _MSC_VER
+	#pragma warning(disable: 4996)		// VC++ depart functions warning
+#endif
+
 static void socket_addr_build(lua_State* L, struct sockaddr* addr, const char* ip, unsigned port) {
 	struct sockaddr_in* ipv4_addr = (struct sockaddr_in*)addr;
 	unsigned ip_addr;

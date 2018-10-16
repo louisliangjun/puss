@@ -49,8 +49,6 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 	"\n"
 	;
 
-#include "puss_macros.h"
-
 #define _PUSS_IMPLEMENT
 #include "puss_plugin.h"
 
@@ -64,6 +62,10 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 #define PUSS_KEY(name)			"[" #name "]"
 
 #define PUSS_KEY_PUSS			PUSS_KEY(puss)
+
+#ifdef _MSC_VER
+	#pragma warning(disable: 4996)		// VC++ depart functions warning
+#endif
 
 #include "puss_sys.inl"
 #include "puss_pickle.inl"
@@ -235,17 +237,11 @@ static void puss_module_setup(lua_State* L, const char* app_path, const char* ap
 	lua_getfield(L, puss_index, "_path");
 	lua_pushstring(L, PATH_SEP_STR "plugins" PATH_SEP_STR);
 	lua_concat(L, 2);								// up[3]: plugin_prefix
-	if( app_config==NULL || strcmp(app_config, "release")==0 ) {
-		lua_pushstring(L, "");
-	} else {
-		lua_pushfstring(L, ".%s", app_config);
-	}
 #ifdef _WIN32
-	lua_pushstring(L, ".dll");
+	lua_pushfstring(L, "%s.dll", app_config);		// up[4]: plugin_suffix
 #else
-	lua_pushstring(L, ".so");
+	lua_pushfstring(L, "%s.so", app_config);
 #endif
-	lua_concat(L, 2);								// up[4]: plugin_suffix
 	lua_pushcclosure(L, puss_lua_plugin_load, 4);
 	lua_setfield(L, puss_index, "load_plugin");		// puss.load_plugin
 
@@ -284,11 +280,12 @@ static void puss_lua_open(lua_State* L, const char* app_path, const char* app_na
 	}
 }
 
-static void puss_lua_open_default(lua_State* L, const char* arg0, const char* app_config) {
+static void puss_lua_open_default(lua_State* L, const char* arg0) {
 	char pth[4096];
 	int len;
 	const char* app_path = NULL;
 	const char* app_name = NULL;
+	char app_config[16] = { 0 };
 #ifdef _WIN32
 	len = (int)GetModuleFileNameA(0, pth, 4096);
 #else
@@ -312,6 +309,36 @@ static void puss_lua_open_default(lua_State* L, const char* arg0, const char* ap
 	if( len > 0 ) {
 		app_path = pth;
 		app_name = pth+len+1;
+	}
+
+	{
+
+		const char* ps = app_name;
+		const char* pe = app_name + strlen(app_name);
+		const char* p;
+
+		// fetch config from filename <app.CONFIG>, in win32 <app.CONFIG.exe>
+#ifdef _WIN32
+		// skip .exe
+		for( p=pe-1; p>ps; --p ) {
+			if( *(p-1)=='.' && (pe-p)==3 && (p[0]=='e' || p[0]=='E') && (p[1]=='x' || p[1]=='X') && (p[2]=='e' || p[2]=='E') ) {
+				pe = --p;
+				break;
+			}
+		}
+#endif
+		for( p=pe-1; p>ps; --p ) {
+			if( *p == '.' ) {
+				size_t n = pe - p;
+				if( n >= sizeof(app_config) ) {
+					// too long CONFIG, use default config ""
+				} else {
+					memcpy(app_config, p, n);
+					app_config[n] = '\0';
+				}
+				break;
+			}
+		}
 	}
 
 	puss_lua_open(L, app_path, app_name, app_config);

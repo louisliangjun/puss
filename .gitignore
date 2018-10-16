@@ -1,11 +1,10 @@
 /3rd/glfw-3.2.1.bin.WIN64
 /tools/vlua
-/bin/modules
-/bin/*.so
+/bin/plugins
 /bin/puss*
-/objs
 /include/lua*.h
 /include/lauxlib.h
+/objs
 *.VC.opendb
 *.VC.db-wal
 *.VC.db-shm
