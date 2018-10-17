@@ -119,6 +119,62 @@ language_builders.cpp = function(setting)
 		}
 end
 
+language_builders.sql = function(setting)
+	setting.suffix = { 'sql' }
+
+	setting.keywords = [[
+		add all alter analyze and as asc asensitive before between bigint binary blob
+		both by call cascade case change char character check collate column condition
+		connection constraint continue convert create cross current_date current_time
+		current_timestamp current_user cursor database databases day_hour
+		day_microsecond day_minute day_second dec decimal declare default delayed
+		delete desc describe deterministic distinct distinctrow div double drop dual
+		each else elseif enclosed escaped exists exit explain false fetch float for
+		force foreign from fulltext goto grant group having high_priority
+		hour_microsecond hour_minute hour_second if ignore in index infile inner inout
+		insensitive insert int integer interval into is iterate join key keys kill
+		leading leave left like limit lines load localtime localtimestamp lock long
+		longblob longtext loop low_priority match mediumblob mediumint mediumtext
+		middleint minute_microsecond minute_second mod modifies natural not
+		no_write_to_binlog null numeric on optimize option optionally or order out
+		outer outfile precision primary procedure purge read reads real references
+		regexp rename repeat replace require restrict return revoke right rlike schema
+		schemas second_microsecond select sensitive separator set show smallint soname
+		spatial specific sql sqlexception sqlstate sqlwarning sql_big_result
+		sql_calc_found_rows sql_small_result ssl starting straight_join table
+		terminated text then tinyblob tinyint tinytext to trailing trigger true undo
+		union unique unlock unsigned update usage use using utc_date utc_time
+		utc_timestamp values varbinary varchar varcharacter varying when where while
+		with write xor year_month zerofill
+	]]
+
+	setting.styles =
+		{ [SCE_SQL_DEFAULT] = DEFAULT_STYLE_DEFAULT
+		, [SCE_SQL_COMMENT] = DEFAULT_STYLE_COMMENT
+		, [SCE_SQL_COMMENTLINE] = DEFAULT_STYLE_COMMENT
+		, [SCE_SQL_COMMENTDOC] = DEFAULT_STYLE_COMMENT
+		, [SCE_SQL_NUMBER] = DEFAULT_STYLE_NUMBER
+		, [SCE_SQL_WORD] = DEFAULT_STYLE_WORD
+		, [SCE_SQL_STRING] = DEFAULT_STYLE_STRING
+		, [SCE_SQL_CHARACTER] = DEFAULT_STYLE_STRING
+		, [SCE_SQL_SQLPLUS] = DEFAULT_STYLE_IDENTIFIER
+		, [SCE_SQL_SQLPLUS_PROMPT] = DEFAULT_STYLE_IDENTIFIER
+		, [SCE_SQL_OPERATOR] = DEFAULT_STYLE_OPERATOR
+		, [SCE_SQL_IDENTIFIER] = DEFAULT_STYLE_IDENTIFIER
+		, [SCE_SQL_SQLPLUS_COMMENT] = DEFAULT_STYLE_COMMENT
+		, [SCE_SQL_COMMENTLINEDOC] = DEFAULT_STYLE_COMMENT
+		, [SCE_SQL_WORD2] = DEFAULT_STYLE_DEFAULT
+		, [SCE_SQL_COMMENTDOCKEYWORD] = DEFAULT_STYLE_COMMENT
+		, [SCE_SQL_COMMENTDOCKEYWORDERROR] = DEFAULT_STYLE_COMMENT
+		, [SCE_SQL_USER1] = DEFAULT_STYLE_DEFAULT
+		, [SCE_SQL_USER2] = DEFAULT_STYLE_DEFAULT
+		, [SCE_SQL_USER3] = DEFAULT_STYLE_DEFAULT
+		, [SCE_SQL_USER4] = DEFAULT_STYLE_DEFAULT
+		, [SCE_SQL_QUOTEDIDENTIFIER] = DEFAULT_STYLE_IDENTIFIER
+		, [SCE_SQL_QOPERATOR] = DEFAULT_STYLE_OPERATOR
+		}
+end
+
 do
 	local setting_mt = { __index=default_setting, __newindex=error }
 
@@ -239,7 +295,7 @@ __exports.reset_styles = function(sv, lang)
 	-- print('check reset_styles', sv:get('sci.style'), _STYLE_VER, sv:get('sci.lang'), lang)
 	if sv:get('sci.style')==_STYLE_VER and sv:get('sci.lang')==lang then return end
 	-- print('reset_styles', _STYLE_VER, lang)
-	sv(false, do_reset_styles, lang)
+	sv(do_reset_styles, lang)
 end
 
 __exports.find_text_fill_all_indicator = function(sv, text)
@@ -257,7 +313,7 @@ end
 
 __exports.create = function(lang)
 	local sv = imgui.CreateScintilla()
-	sv(false, do_reset_styles, lang)
+	sv(do_reset_styles, lang)
 	return sv
 end
 

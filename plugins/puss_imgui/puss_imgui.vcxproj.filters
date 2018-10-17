@@ -456,6 +456,9 @@
     <ClCompile Include="imgui\imgui.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
+    <ClCompile Include="metrics_gui\metrics_gui.cpp">
+      <Filter>metrics_gui</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="puss_module_imgui.h" />
@@ -658,6 +661,9 @@
     </ClInclude>
     <ClInclude Include="imgui_impl_win32.h" />
     <ClInclude Include="imgui_impl_dx11.h" />
+    <ClInclude Include="metrics_gui\metrics_gui.h">
+      <Filter>metrics_gui</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="imgui">
@@ -680,6 +686,9 @@
     </Filter>
     <Filter Include="scintilla3\src">
       <UniqueIdentifier>{d448ffea-0036-4c7b-ac41-74a4d6275b19}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="metrics_gui">
+      <UniqueIdentifier>{e4a4cd4d-4634-408a-b113-f8b7c2572824}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -704,5 +713,6 @@
     </None>
     <None Include="imgui_impl_win32.inl" />
     <None Include="imgui_impl_dx11.inl" />
+    <None Include="metrics_gui_lua.inl" />
   </ItemGroup>
 </Project>

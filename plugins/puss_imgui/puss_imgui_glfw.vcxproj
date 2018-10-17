@@ -16,6 +16,7 @@
     <ClCompile Include="imgui\imgui_demo.cpp" />
     <ClCompile Include="imgui\imgui_draw.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
+    <ClCompile Include="metrics_gui\metrics_gui.cpp" />
     <ClCompile Include="puss_module_imgui.cpp" />
     <ClCompile Include="scintilla3\lexers\LexA68k.cxx" />
     <ClCompile Include="scintilla3\lexers\LexAbaqus.cxx" />
@@ -175,6 +176,7 @@
     <ClInclude Include="imgui\imstb_truetype.h" />
     <ClInclude Include="imgui_impl_glfw.h" />
     <ClInclude Include="imgui_impl_opengl3.h" />
+    <ClInclude Include="metrics_gui\metrics_gui.h" />
     <ClInclude Include="puss_module_imgui_keys.inl" />
     <ClInclude Include="puss_module_imgui.h" />
     <ClInclude Include="scintilla3\include\ILexer.h" />
@@ -245,6 +247,7 @@
     <None Include="..\..\objs\gen\scintilla.iface.inl" />
     <None Include="imgui_impl_glfw.inl" />
     <None Include="imgui_impl_opengl3.inl" />
+    <None Include="metrics_gui_lua.inl" />
     <None Include="scintilla3\include\Scintilla.iface" />
     <None Include="scintilla3\src\SciTE.properties" />
     <None Include="scintilla_imgui_lua.inl" />

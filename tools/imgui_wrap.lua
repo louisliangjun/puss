@@ -170,12 +170,10 @@ static int float_array_push(lua_State* L) {
 		ud->buf[ud->len] = value;
 		ud->len++;
 	} else {
-		float* a = ud->buf;
-		int i = 0;
-		for( i=1; i<ud->len; ++i ) {
-			a[i-1] = a[i];
-		}
-		a[i] = value;
+		float* p = ud->buf;
+		int n = ud->len - 1;
+		memmove(p, p+1, sizeof(float)*n);
+		p[n] = value;
 	}
 	return 0;
 }
@@ -412,8 +410,8 @@ implements.PlotLines = [[	// void PlotLines(const char* label, const float* valu
 	int values_count = (int)luaL_optinteger(L, 3, arr->len);
 	int values_offset = (int)(luaL_optinteger(L, 4, 1) - 1);
 	const char* overlay_text = luaL_optstring(L, 5, NULL);
-	float scale_min = (float)((nargs<6) ? FLT_MAX : luaL_checknumber(L, 6));
-	float scale_max = (float)((nargs<7) ? FLT_MAX : luaL_checknumber(L, 7));
+	float scale_min = lua_isnumber(L, 6) ? (float)lua_tonumber(L, 6) : FLT_MAX;
+	float scale_max = lua_isnumber(L, 7) ? (float)lua_tonumber(L, 7) : FLT_MAX;
 	ImVec2 graph_size = ImVec2((float)luaL_optnumber(L, 8, 0.0), (float)luaL_optnumber(L, 9, 0.0));
 	if( values_offset < 0 ) { values_offset = 0; }
 	if( (values_offset + values_count) > arr->len ) { values_count = (arr->len - values_offset); }
@@ -429,8 +427,8 @@ implements.PlotHistogram = [[	// void PlotHistogram(const char* label, const flo
 	int values_count = (int)luaL_optinteger(L, 3, arr->len);
 	int values_offset = (int)(luaL_optinteger(L, 4, 1) - 1);
 	const char* overlay_text = luaL_optstring(L, 5, NULL);
-	float scale_min = (float)((nargs<6) ? FLT_MAX : luaL_checknumber(L, 6));
-	float scale_max = (float)((nargs<7) ? FLT_MAX : luaL_checknumber(L, 7));
+	float scale_min = lua_isnumber(L, 6) ? (float)lua_tonumber(L, 6) : FLT_MAX;
+	float scale_max = lua_isnumber(L, 7) ? (float)lua_tonumber(L, 7) : FLT_MAX;
 	ImVec2 graph_size = ImVec2((float)luaL_optnumber(L, 8, 0.0), (float)luaL_optnumber(L, 9, 0.0));
 	if( values_offset < 0 ) { values_offset = 0; }
 	if( (values_offset + values_count) > arr->len ) { values_count = (arr->len - values_offset); }

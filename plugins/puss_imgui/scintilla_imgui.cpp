@@ -129,7 +129,7 @@ void Font::Release() {
 
 inline ImFont* im_font_cast(Font& font) {
 	// NOTICE imgui maybe free, but SciFont unknown this: return (ImFont*)font.GetID();
-	return ImGui::GetFont();
+	return ImGui::GetCurrentContext() ? ImGui::GetFont() : NULL;
 }
 
 class WindowIM {
@@ -1045,11 +1045,13 @@ private:
 	PRectangle GetClientRectangle() const override {
 		Window win = wMain;
 		PRectangle rc = win.GetClientPosition();
-		ImGuiStyle& style = ImGui::GetStyle();
-		if (verticalScrollBarVisible)
-			rc.right -= style.ScrollbarSize;
-		if (horizontalScrollBarVisible && !Wrapping())
-			rc.bottom -= style.ScrollbarSize;
+		if( ImGui::GetCurrentContext() ) {
+			ImGuiStyle& style = ImGui::GetStyle();
+			if (verticalScrollBarVisible)
+				rc.right -= style.ScrollbarSize;
+			if (horizontalScrollBarVisible && !Wrapping())
+				rc.bottom -= style.ScrollbarSize;
+		}
 		// Move to origin
 		rc.right -= rc.left;
 		rc.bottom -= rc.top;

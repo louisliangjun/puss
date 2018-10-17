@@ -964,6 +964,8 @@ static int im_scintilla_lexers(lua_State* L) {
 	return im_scintilla_get_lexers(L, sci_lexers);
 }
 
+#include "metrics_gui_lua.inl"
+
 static luaL_Reg imgui_lua_apis[] =
 	{ {"Create", imgui_create_lua}
 	, {"WaitEventsTimeout", imgui_wait_events_lua}
@@ -974,6 +976,7 @@ static luaL_Reg imgui_lua_apis[] =
 	, {"CreateFloatArray", float_array_create}
 	, {"CreateDockFamily", dock_family_create}
 	, {"CreateScintilla", im_scintilla_create}
+	, {"CreateMetricsGuiPlot", metrics_gui_plot_create}
 	, {"GetScintillaLexers", im_scintilla_lexers}
 
 	, {"GetIODeltaTime", imgui_getio_delta_time_lua}

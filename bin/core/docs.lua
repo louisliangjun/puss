@@ -69,7 +69,7 @@ end
 
 local function page_call(page, cb, ...)
 	imgui.BeginChild(page.label)
-		page.sv(false, cb, ...)
+		page.sv(cb, ...)
 	imgui.EndChild()
 end
 
@@ -103,13 +103,13 @@ local function show_dialog_jump(page, active)
 	finish_show_dialog(page, active)
 end
 
-local function do_search(sv, text, length)
+local function do_search(sv, text, length, search_prev)
 	local search_flags = 0
 	sv:SetSearchFlags(search_flags)
 
 	local ps = sv:GetSelectionStart()
 	local pe = sv:GetSelectionEnd()
-	if imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT) then
+	if search_prev then
 		sv:SetTargetStart(ps)
 		sv:SetTargetEnd(0)
 		ps = sv:SearchInTarget(length, text)
@@ -163,7 +163,8 @@ local function start_show_dialog_find_replace(page, active, has_replace)
 			sci.find_text_fill_all_indicator(page.sv, text)
 		end
 
-		page_call(page, do_search, text, length)
+		local search_prev = imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT)
+		page_call(page, do_search, text, length, search_prev)
 	end
 
 	if has_replace then
@@ -188,7 +189,8 @@ local function show_dialog_quick_find(page, active)
 		page_call(page, function(sv)
 			local text = inbuf:str()
 			local length = #text
-			do_search(sv, text, length)
+			local search_prev = imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT)
+			do_search(sv, text, length, search_prev)
 		end)
 	end
 end
@@ -247,7 +249,7 @@ function tabs_page_draw(page, active_page)
 
 	local height = mode and -(mode[3] * imgui.GetFrameHeightWithSpacing()) or nil
 	imgui.BeginChild(page.label, nil, height, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
-		page.sv(true)
+		page.sv()
 		page.unsaved = page.sv:GetModify()
 	imgui.EndChild()
 
@@ -354,7 +356,7 @@ end
 __exports.margin_set = function(file, line, value)
 	local filepath, name, label, page = lookup_page(file)
 	if not page then return end
-	page.sv(false, on_margin_set, filepath, line, value)
+	page.sv(on_margin_set, filepath, line, value)
 end
 
 __exports.setup = function(new_fs, new_hook)
