@@ -247,7 +247,7 @@ void MetricsGuiPlot::WidthInfo::Initialize()
         return;
     }
 
-    assert(ImGui::GetWindowFont() != nullptr && "Cannot call MetricsGuiPlot::WidthInfo::Initialize() before ImGui font is loaded");
+    // assert(ImGui::GetWindowFont() != nullptr && "Cannot call MetricsGuiPlot::WidthInfo::Initialize() before ImGui font is loaded");
 
     auto prefixWidth = ImGui::CalcTextSize("XXX").x;
     auto sepWidth    = ImGui::CalcTextSize(": ").x;
