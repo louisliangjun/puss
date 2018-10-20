@@ -403,7 +403,6 @@ implements.InputTextMultiline = [[	// bool InputTextMultiline(const char* label,
 	return 1;]]
 
 implements.PlotLines = [[	// void PlotLines(const char* label, const float* values, int values_count, int values_offset = 0, const char* overlay_text = NULL, float scale_min = FLT_MAX, float scale_max = FLT_MAX, ImVec2 graph_size = ImVec2(0,0), int stride = sizeof(float));
-	int nargs = lua_gettop(L);
 	const char* label = luaL_checkstring(L, 1);
 	FloatArrayLua* arr = (FloatArrayLua*)luaL_checkudata(L, 2, FLOAT_ARRAY_NAME);
 	const float* values = arr->buf;
@@ -420,7 +419,6 @@ implements.PlotLines = [[	// void PlotLines(const char* label, const float* valu
 	return 0;]]
 
 implements.PlotHistogram = [[	// void PlotHistogram(const char* label, const float* values, int values_count, int values_offset = 0, const char* overlay_text = NULL, float scale_min = FLT_MAX, float scale_max = FLT_MAX, ImVec2 graph_size = ImVec2(0,0), int stride = sizeof(float));
-	int nargs = lua_gettop(L);
 	const char* label = luaL_checkstring(L, 1);
 	FloatArrayLua* arr = (FloatArrayLua*)luaL_checkudata(L, 2, FLOAT_ARRAY_NAME);
 	const float* values = arr->buf;

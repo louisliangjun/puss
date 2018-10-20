@@ -223,6 +223,7 @@ vmake_target_add('puss_imgui', function(target)
 		, path_concat(src, 'gl3w')
 		, path_concat(src, 'imgui')
 		})
+	local sci_flags = { '-DSCI_LEXER' }
 	local flags = shell('pkg-config --static --cflags glfw3')
 	local libs = shell('pkg-config --static --libs glfw3')
 	if vlua.OS=='windows' then
@@ -233,7 +234,7 @@ vmake_target_add('puss_imgui', function(target)
 	local srcs = {path_concat(src, 'scintilla_imgui.cpp'), path_concat(src, 'puss_module_imgui.cpp')}
 	local gl3wobjs = make_c2objs(path_concat(src, 'gl3w'), nil, incs, '-fPIC', '-fvisibility=hidden')
 	local imguiobjs = make_cpp2objs(path_concat(src, 'imgui'), nil, incs, '-fPIC', '-fvisibility=hidden', flags)
-	local objs = make_cpp2objs(srcs, nil, incs, '-fPIC', '-fvisibility=hidden', '-DSCI_LEXER', flags)
+	local objs = make_cpp2objs(srcs, nil, incs, '-fPIC', '-fvisibility=hidden', '-DFOX', '-DSCI_LEXER', flags)
 	local output = path_concat('bin', 'plugins', target..PUSS_CONFIG_SUFFIX..'.so')
 	return make_target(output, {objs, imguiobjs, gl3wobjs}, CXX, CFLAGS, flags, '-shared', '-o', output, objs, imguiobjs, gl3wobjs, slibs, libs)
 end)
