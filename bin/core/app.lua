@@ -130,7 +130,7 @@ local function show_main_window()
 		show_imgui_demos = imgui.ShowDemoWindow(show_imgui_demos)
 	end
 	if show_samples_window then
-		show_imgui_demos = samples.update(show_imgui_demos, main_ui)
+		show_samples_window = samples.update(show_samples_window, main_ui)
 	end
 	if show_console_window then
 		show_console_window = console.update(show_console_window)

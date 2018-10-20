@@ -22,19 +22,21 @@ end
 
 local function samples_update(main_ui)
 	local refresh, selected
-	imgui.BeginChild('##Stage', nil, imgui.GetWindowHeight() / 2, false, 0)
+	imgui.Columns(2)
+	imgui.BeginChild('##Stage')
 		main_ui:protect_pcall(sample_draw)
 	imgui.EndChild()
-	imgui.Separator()
-	imgui.Columns(2)
-	imgui.BeginChild('##Select')
-		refresh = imgui.Button('Refresh[F5] reload ...')
-		imgui.Separator()
+	imgui.NextColumn()
+	imgui.BeginChild('##Select', nil, 150, false)
+		local count = 8
+		imgui.Columns( (#samples + count -1) // count )
 		for i,v in ipairs(samples) do
 			if imgui.Selectable(v.label) then selected = v end
+			if i%count==0 then imgui.NextColumn() end
 		end
+		imgui.Columns(1)
 	imgui.EndChild()
-	imgui.NextColumn()
+	refresh = imgui.Button('Press[F5] reload & preview ...')
 	imgui.BeginChild('##Code', nil, nil, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
 		if not code_sv then code_sv, selected = sci.create('lua'), samples[1] end
 		if selected then
@@ -65,6 +67,7 @@ end
 
 __exports.update = function(show, main_ui)
 	local res = false
+	imgui.SetNextWindowSize(800, 600, ImGuiCond_FirstUseEver)
 	res, show = imgui.Begin("SamplesWindow", show, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)
 	if res then samples_update(main_ui) end
 	imgui.End()
@@ -76,6 +79,19 @@ end
 -- append_sample('SampleLabel', source=[[
 -- imgui.Text('Sample source')
 -- ]]})
+
+append_sample('Imgui Samples Usage', [[
+function draw()
+	imgui.Text('dear imgui,')
+	imgui.Separator()
+	imgui.Text('Dear ImGui is a bloat-free graphical user interface library for C++.')
+	imgui.Spacing()
+	imgui.Text('Puss: Lua plugin library & interface.')
+	imgui.Spacing()
+	imgui.Text('PussImgui: Lua binding for imgui and implementations.')
+	imgui.Spacing()
+end
+]])
 
 append_sample('Texts', [[
 function draw()
@@ -110,10 +126,10 @@ function draw()
 		click_count = click_count + 3
 	end
 
-	imgui.ArrowButton('left',  ImGuiDir_Left);  imgui.SameLine()
-	imgui.ArrowButton('right', ImGuiDir_Right); imgui.SameLine()
-	imgui.ArrowButton('up',    ImGuiDir_Up);    imgui.SameLine()
-	imgui.ArrowButton('down',  ImGuiDir_Down);  imgui.SameLine()
+	imgui.ArrowButton('left',  ImGuiDir_Left)
+	imgui.ArrowButton('right', ImGuiDir_Right)
+	imgui.ArrowButton('up',    ImGuiDir_Up)
+	imgui.ArrowButton('down',  ImGuiDir_Down)
 end
 ]])
 
@@ -186,12 +202,26 @@ function draw()
 	clicked, v1, v2, v3, v4 = imgui.SliderFloat4('SliderFloat4', v1, v2, v3, v4, 0, 1000, '%.1f')
 
 	clicked, n1, n2 = imgui.SliderInt2('SliderInt2', n1, n2, 0, 1000, '%04d')
-
-	clicked, n1, n2 = imgui.SliderInt2('SliderInt2', n1, n2, 0, 1000, '%04d')
-
 	clicked, v1 = imgui.VSliderFloat('VSliderFloat', 40, 200, v1, 0, 1000)
 	imgui.SameLine()
 	clicked, n1 = imgui.VSliderInt('VSliderInt', 40, 200, n1, 0, 1000)
+end
+]])
+
+append_sample('Input Numbers', [[
+local v1, v2, v3, v4 = 10, 20, 30, 40
+local n1, n2 = 10, 20
+
+function draw()
+	local res
+	imgui.Text(string.format('v1=%.1f v2=%.1f v3=%.1f v4=%.1f', v1, v2, v3, v4))
+
+	res, v1 = imgui.InputFloat('InputFloat', v1)
+	res, v1, v2 = imgui.InputFloat2('InputFloat2 Readonly', v1, v2)
+	res, v1, v2, v3 = imgui.InputFloat3('InputFloat3', v1, v2, v3)
+	res, v1, v2, v3, v4 = imgui.InputFloat4('InputFloat4', v1, v2, v3, v4)
+
+	res, n1, n2 = imgui.InputInt2('InputInt2', n1, n2)
 end
 ]])
 
@@ -274,6 +304,24 @@ function draw()
 
 	imgui.SameLine()
 	imgui.Button('AfterGroup')
+end
+]])
+
+append_sample('Colunmns Layout', [[
+function draw()
+	local n = 3
+	imgui.Columns(3)
+	local n = imgui.GetColumnsCount()
+	imgui.SetColumnOffset(1, 100)
+	imgui.SetColumnWidth(1, 80)
+	for row=1,5 do
+		for i=1,n do
+			local col = imgui.GetColumnIndex()
+			imgui.Button(string.format('R%d:C%d', row, col))
+			imgui.NextColumn()
+		end
+	end
+	imgui.Columns(1)
 end
 ]])
 
