@@ -499,6 +499,7 @@ local ignore_apis =
 	, EndFrame = true
 	, PushFont = true
 	, PopFont = true
+	, TextUnformatted = true
 	}
 
 function main()

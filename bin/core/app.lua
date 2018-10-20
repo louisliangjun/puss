@@ -3,9 +3,9 @@
 local shotcuts = puss.import('core.shotcuts')
 local pages = puss.import('core.pages')
 local docs = puss.import('core.docs')
-local demos = puss.import('core.demos')
 local filebrowser = puss.import('core.filebrowser')
 local console = puss.import('core.console')
+local samples = puss.import('core.samples')
 local diskfs = puss.import('core.diskfs')
 
 filebrowser.setup(diskfs)
@@ -15,44 +15,23 @@ local run_sign = true
 local main_ui = _main_ui
 
 show_imgui_demos = show_imgui_demos or false
+show_samples_window = show_samples_window or false
 show_console_window = show_console_window or false
 show_shutcut_window = show_shutcut_window or false
 
 shotcuts.register('app/reload', 'Reload scripts', 'F12', true, false, false, false)
-
-local demos = {}
-for i,v in ipairs(diskfs.list(puss._path .. '/samples')) do
-	v = v:match('^(.+)%.lua$')
-	if v then table.insert(demos, 'samples.' .. v:gsub('[%/%\\]', '.')) end
-end
 
 local function main_menu()
 	local active
 	if not imgui.BeginMenuBar() then return end
 	if imgui.BeginMenu('File') then
 		if imgui.MenuItem('Add puss path FileBrowser') then filebrowser.append_folder(puss.local_to_utf8(puss._path)) end
-		if imgui.MenuItem('Add Demo Tab') then demos.new_page() end
 		if imgui.MenuItem('New page') then docs.new_page() end
-		if imgui.MenuItem('Open app.lua') then docs.open(puss._path .. '/core/app.lua') end
-		if imgui.MenuItem('Open console.lua') then docs.open(puss._path .. '/core/console.lua') end
-		imgui.EndMenu()
-	end
-	if imgui.BeginMenu('Samples') then
-		for _,f in ipairs(demos) do
-			if imgui.MenuItem(f) then
-				local label = f .. '##samples'
-				if pages.lookup(label) then
-					pages.active(label)
-				else
-					local m = puss.import(f, true) -- reload
-					if m then pages.create(label, m) end
-				end
-			end
-		end
 		imgui.EndMenu()
 	end
 	if imgui.BeginMenu('Help') then
 		active, show_imgui_demos = imgui.MenuItem('ImGUI Demos', nil, show_imgui_demos)
+		active, show_samples_window = imgui.MenuItem('Samples', nil, show_samples_window)
 		active, show_console_window = imgui.MenuItem('Conosle', nil, show_console_window)
 		active, show_shutcut_window = imgui.MenuItem('Shutcut', nil, show_shutcut_window)
 		imgui.Separator()
@@ -149,6 +128,9 @@ local function show_main_window()
 
 	if show_imgui_demos then
 		show_imgui_demos = imgui.ShowDemoWindow(show_imgui_demos)
+	end
+	if show_samples_window then
+		show_imgui_demos = samples.update(show_imgui_demos, main_ui)
 	end
 	if show_console_window then
 		show_console_window = console.update(show_console_window)

@@ -34,7 +34,7 @@ static int metrics_gui_plot_select(lua_State* L) {
 	luaL_argcheck(L, i<count, 2, "out of range");
 	lua_pushboolean(L, ud->metrics[i]->mSelected ? 1 : 0);
 	if( change ) {
-		ud->metrics[i]->mSelected = lua_toboolean(L, 3);
+		ud->metrics[i]->mSelected = lua_toboolean(L, 3) ? true : false;
 	}
 	return 1;
 }
