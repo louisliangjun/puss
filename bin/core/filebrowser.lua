@@ -112,10 +112,8 @@ __exports.update = function()
 		if remove_id then table.remove(root_folders, remove_id) end
 	end
 
-	if imgui.IsWindowHovered() then
-		local files = imgui.GetDropFiles()
-		if files then on_drop_files(files) end
-	end
+	local drop_files_here = imgui.GetDropFiles(true)
+	if drop_files_here then on_drop_files(drop_files_here) end
 	imgui.End()
 end
 

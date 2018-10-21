@@ -15,6 +15,8 @@ local run_sign = true
 local main_ui = _main_ui
 
 show_imgui_demos = show_imgui_demos or false
+show_imgui_metrics = show_imgui_metrics or false
+
 show_samples_window = show_samples_window or false
 show_console_window = show_console_window or false
 show_shutcut_window = show_shutcut_window or false
@@ -31,6 +33,7 @@ local function main_menu()
 	end
 	if imgui.BeginMenu('Help') then
 		active, show_imgui_demos = imgui.MenuItem('ImGUI Demos', nil, show_imgui_demos)
+		active, show_imgui_metrics = imgui.MenuItem('ImGUI Metrics', nil, show_imgui_metrics)
 		active, show_samples_window = imgui.MenuItem('Samples', nil, show_samples_window)
 		active, show_console_window = imgui.MenuItem('Conosle', nil, show_console_window)
 		active, show_shutcut_window = imgui.MenuItem('Shutcut', nil, show_shutcut_window)
@@ -79,10 +82,8 @@ local EDITOR_WINDOW_FLAGS = ( ImGuiWindowFlags_NoScrollbar
 
 local function editor_window()
 	imgui.Begin("Editor", nil, EDITOR_WINDOW_FLAGS)
-	if imgui.IsWindowHovered(ImGuiHoveredFlags_ChildWindows) then
-		local files = imgui.GetDropFiles()
-		if files then pages_on_drop_files(files) end
-	end
+	local drop_files_here = imgui.GetDropFiles(true)
+	if drop_files_here then pages_on_drop_files(drop_files_here) end
 	pages.update(main_ui)
 	imgui.End()
 end
@@ -128,6 +129,9 @@ local function show_main_window()
 
 	if show_imgui_demos then
 		show_imgui_demos = imgui.ShowDemoWindow(show_imgui_demos)
+	end
+	if show_imgui_metrics then
+		show_imgui_metrics = imgui.ShowMetricsWindow(show_imgui_metrics)
 	end
 	if show_samples_window then
 		show_samples_window = samples.update(show_samples_window, main_ui)

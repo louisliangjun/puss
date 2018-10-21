@@ -286,7 +286,19 @@ public:
 				buf = NULL;
 
 				if( res > 0 ) {
+					POINT pos;
 					g_DropFiles->resize(res);
+					g_DropPos = ImVec2(-FLT_MAX, -FLT_MAX);
+					if (!::GetCursorPos(&pos))
+						break;
+					// Our back-end can tell which window is under the mouse cursor (not every back-end can), so pass that info to imgui
+					if (HWND hovered_hwnd = ::WindowFromPoint(pos)) {
+						if (ImGuiViewport* viewport = ImGui::FindViewportByPlatformHandle((void*)hovered_hwnd)) {
+							POINT client_pos = pos;
+							::ScreenToClient(hovered_hwnd, &client_pos);
+							g_DropPos = ImVec2(viewport->Pos.x + (float)client_pos.x, viewport->Pos.y + (float)client_pos.y);
+						}
+					}
 				} else {
 					g_DropFiles->clear();
 				}
@@ -526,6 +538,7 @@ public:
 #endif
 
 public:
+	ImVec2					g_DropPos;
 	ImVector<char>*         g_DropFiles;
 
 	// Script data
@@ -905,13 +918,20 @@ static int imgui_create_lua(lua_State* L) {
 }
 
 static int imgui_get_drop_files_lua(lua_State* L) {
+	int check_drop_pos_in_window = lua_toboolean(L, 1);
 	ImGuiContext* ctx = ImGui::GetCurrentContext();
 	ImguiEnv* env = (ImguiEnv*)(ctx ? ctx->IO.UserData : NULL);
-	if( env && env->g_DropFiles && !(env->g_DropFiles->empty()) ) {
-		lua_pushlstring(L, env->g_DropFiles->Data, env->g_DropFiles->Size);
-		return 1;
+	if( !(env && env->g_DropFiles) )
+		return 0;
+	if( env->g_DropFiles->empty() )
+		return 0;
+	if( check_drop_pos_in_window ) { 
+		ImGuiWindow* win = ImGui::GetCurrentWindowRead();
+		if( !(win && win->Rect().Contains(env->g_DropPos)) )
+			return 0;
 	}
-	return 0;
+	lua_pushlstring(L, env->g_DropFiles->Data, env->g_DropFiles->Size);
+	return 1;
 }
 
 static int add_ttf_font_file_lua(lua_State* L) {
