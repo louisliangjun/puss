@@ -268,15 +268,17 @@ IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARA
         return 0;
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
-        if (wParam < 256)
+        if (wParam < 256) {
             io.KeysDown[wParam] = 1;
-		io.KeysDown[_win32_vk_convert(wParam, lParam)] = 1;
+			io.KeysDown[_win32_vk_convert(wParam, lParam)] = 1;
+		}
         return 0;
     case WM_KEYUP:
     case WM_SYSKEYUP:
-        if (wParam < 256)
+        if (wParam < 256) {
             io.KeysDown[wParam] = 0;
-		io.KeysDown[_win32_vk_convert(wParam, lParam)] = 0;
+			io.KeysDown[_win32_vk_convert(wParam, lParam)] = 0;
+		}
 		return 0;
     case WM_CHAR:
 		if( wParam==VK_ESCAPE || wParam==VK_BACK || wParam==VK_TAB || wParam==VK_RETURN )

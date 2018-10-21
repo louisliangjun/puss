@@ -2,7 +2,9 @@
 
 _output = _output or {}
 _outbuf = _outbuf or imgui.CreateByteArray(32*1024)
-_inbuf = _inbuf or imgui.CreateByteArray(4*1024, 'print("hello console") -- press Ctrl+Enter or KP_Enter run script')
+_inbuf = _inbuf or imgui.CreateByteArray(4*1024, [[-- press Ctrl+Enter run script
+print("hello console")
+]])
 
 local output = _output
 local outbuf = _outbuf
@@ -87,8 +89,6 @@ local function console_update()
 	if imgui.InputTextMultiline('##ConsoleInput', inbuf, -1, -1, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AllowTabInput) then
 		reclaim_focus = true
 		active = true
-	elseif imgui.IsItemActive() then
-		active = imgui.IsShortcutPressed(PUSS_IMGUI_KEY_KP_ENTER)
 	end
 	if active then puss.trace_pcall(console_execute, inbuf:str()) end
 	if reclaim_focus then imgui.SetKeyboardFocusHere(-1) end

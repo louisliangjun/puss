@@ -1003,6 +1003,15 @@ public: 	// Public for scintilla_send_message
 			ImGui::Dummy(total_sz);
 		}
 
+		// ime
+		{
+			ImGuiContext* ctx = ImGui::GetCurrentContext();
+			const Point pos = PointMainCaret();
+			ctx->PlatformImePos.x = window->Pos.x + pos.x - 1;
+			ctx->PlatformImePos.y = window->Pos.y + pos.y;
+			ctx->PlatformImePosViewport = window->Viewport;
+		}
+
 		// render
 		std::unique_ptr<Surface> surfaceWindow(Surface::Allocate(SC_TECHNOLOGY_DEFAULT));
 		surfaceWindow->Init(0, wMain.GetID());
@@ -1012,12 +1021,12 @@ public: 	// Public for scintilla_send_message
 		surfaceWindow->Release();
 	}
 	void Update(bool draw, ScintillaIMCallback cb, void* ud) {
-		ImGuiWindow* window = ImGui::GetCurrentWindow();
+		ImGuiWindow* window = ImGui::GetCurrentContext() ? ImGui::GetCurrentWindow() : NULL;
 		mainWindow.win = window;
 		notify_callback = cb;
 		notify_callback_ud = ud;
 		if( cb ) { cb(this, NULL, ud); }
-		if( draw) { Draw(window); }
+		if( draw && window ) { Draw(window); }
 		notify_callback = NULL;
 		notify_callback_ud = NULL;
 		mainWindow.win = NULL;
