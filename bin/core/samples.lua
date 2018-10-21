@@ -373,8 +373,8 @@ function draw()
 	imgui.SameLine(); BOOL_OPT('mShowInlineGraphs')     -- show history plot in DrawList('')
 	imgui.SameLine(); BOOL_OPT('mShowLegendDesc')       -- show series description in legend
 	imgui.SameLine(); BOOL_OPT('mShowLegendColor')      -- use series color in legend
-	imgui.SameLine(); BOOL_OPT('mShowLegendUnits')      -- show units in legend values
-	BOOL_OPT('mShowLegendAverage')    -- show series average in legend
+	BOOL_OPT('mShowLegendUnits')      -- show units in legend values
+	imgui.SameLine(); BOOL_OPT('mShowLegendAverage')    -- show series average in legend
 	imgui.SameLine(); BOOL_OPT('mShowLegendMin')        -- show plot y-axis minimum in legend
 	imgui.SameLine(); BOOL_OPT('mShowLegendMax')        -- show plot y-axis maximum in legend
 	BOOL_OPT('mBarGraph')             -- use bars to draw history
