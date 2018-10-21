@@ -481,7 +481,7 @@ void DrawMetrics(
         frame_bb.Max - style.FramePadding);
 
     ImGui::ItemSize(frame_bb, style.FramePadding.y);
-    if (!ImGui::ItemAdd(frame_bb, NULL)) {
+    if (!ImGui::ItemAdd(frame_bb, 0)) {
         return;
     }
 

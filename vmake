@@ -13,6 +13,7 @@ PUSS_CONFIG = 'release'
 
 if vlua.OS=='windows' then
 	EXE_SUFFIX = '.exe'
+	DLL_SUFFIX = '.dll'
 	array_push(CFLAGS, '-D_WIN32')
 end
 
@@ -132,7 +133,7 @@ end)
 vmake_target_add('puss_system', function(target)
 	vmake('luaproxy')
 	local objs = make_c2objs(path_concat('plugins', target), nil, INCLUDES, '-fPIC', '-fvisibility=hidden')
-	local output = path_concat('bin', 'plugins', target..PUSS_CONFIG_SUFFIX..'.so')
+	local output = path_concat('bin', 'plugins', target..PUSS_CONFIG_SUFFIX..DLL_SUFFIX)
 	local libs = vlua.OS=='windows' and '-lwsock32' or ''
 	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs, libs)
 end)
@@ -223,19 +224,21 @@ vmake_target_add('puss_imgui', function(target)
 		, path_concat(src, 'gl3w')
 		, path_concat(src, 'imgui')
 		})
-	local sci_flags = { '-DSCI_LEXER' }
 	local flags = shell('pkg-config --static --cflags glfw3')
 	local libs = shell('pkg-config --static --libs glfw3')
+	flags = array_pack(flags, '-DSCI_LEXER')
 	if vlua.OS=='windows' then
 		libs = array_pack(libs, '-lopengl32')
 	else
+		flags = array_pack(flags, '-DFOX')
 		libs = array_pack(libs, '-lGL')
 	end
 	local srcs = {path_concat(src, 'scintilla_imgui.cpp'), path_concat(src, 'puss_module_imgui.cpp')}
 	local gl3wobjs = make_c2objs(path_concat(src, 'gl3w'), nil, incs, '-fPIC', '-fvisibility=hidden')
 	local imguiobjs = make_cpp2objs(path_concat(src, 'imgui'), nil, incs, '-fPIC', '-fvisibility=hidden', flags)
-	local objs = make_cpp2objs(srcs, nil, incs, '-fPIC', '-fvisibility=hidden', '-DFOX', '-DSCI_LEXER', flags)
-	local output = path_concat('bin', 'plugins', target..PUSS_CONFIG_SUFFIX..'.so')
-	return make_target(output, {objs, imguiobjs, gl3wobjs}, CXX, CFLAGS, flags, '-shared', '-o', output, objs, imguiobjs, gl3wobjs, slibs, libs)
+	local metricsobjs = make_cpp2objs(path_concat(src, 'metrics_gui'), nil, incs, '-fPIC', '-fvisibility=hidden', flags)
+	local objs = make_cpp2objs(srcs, nil, incs, '-fPIC', '-fvisibility=hidden', flags)
+	local output = path_concat('bin', 'plugins', target..PUSS_CONFIG_SUFFIX..DLL_SUFFIX)
+	return make_target(output, {objs, metricsobjs, imguiobjs, gl3wobjs}, CXX, CFLAGS, flags, '-shared', '-o', output, objs, metricsobjs, imguiobjs, gl3wobjs, slibs, libs)
 end)
 

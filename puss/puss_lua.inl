@@ -124,6 +124,13 @@ static PussInterface puss_interface =
 	, puss_push_consts_table
 	};
 
+static void _push_plugin_filename(lua_State* L) {
+	lua_pushvalue(L, lua_upvalueindex(3));	// prefix
+	lua_pushvalue(L, 1);					// name
+	lua_pushvalue(L, lua_upvalueindex(4));	// prefix
+	lua_concat(L, 3);
+}
+
 static int puss_lua_plugin_load(lua_State* L) {
 	const char* name = luaL_checkstring(L, 1);
 	PussPluginInit f = NULL;
@@ -133,14 +140,15 @@ static int puss_lua_plugin_load(lua_State* L) {
 	// local f, err = package.loadlib(plugin_filename, '__puss_plugin_init__')
 	// 
 	lua_pushvalue(L, lua_upvalueindex(2));	// package.loadlib
-	lua_pushvalue(L, lua_upvalueindex(3));	// prefix
-	lua_pushvalue(L, 1);					// name
-	lua_pushvalue(L, lua_upvalueindex(4));	// prefix
-	lua_concat(L, 3);
+	_push_plugin_filename(L);
 	lua_pushstring(L, "__puss_plugin_init__");
 	lua_call(L, 2, 2);
-	if( lua_type(L, -2)!=LUA_TFUNCTION )
+	if( lua_type(L, -2)!=LUA_TFUNCTION ) {
+		lua_pushfstring(L, "plugin: ");
+		_push_plugin_filename(L);
+		lua_concat(L, 3);
 		lua_error(L);
+	}
 	f = (PussPluginInit)lua_tocfunction(L, -2);
 	if( !f )
 		luaL_error(L, "load plugin fetch init function failed!");
