@@ -1004,7 +1004,7 @@ public: 	// Public for scintilla_send_message
 		}
 
 		// ime
-		{
+		if( hasFocus ) {
 			ImGuiContext* ctx = ImGui::GetCurrentContext();
 			const Point pos = PointMainCaret();
 			ctx->PlatformImePos.x = window->Pos.x + pos.x - 1;

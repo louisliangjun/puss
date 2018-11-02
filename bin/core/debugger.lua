@@ -365,10 +365,10 @@ local MAIN_DOCK_WINDOW_FLAGS = ( ImGuiWindowFlags_NoTitleBar
 	)
 
 local function show_main_window()
-	local viewport = imgui.GetMainViewport()
-	imgui.SetNextWindowPos(viewport.PosX, viewport.PosY)
-	imgui.SetNextWindowSize(viewport.SizeX, viewport.SizeY)
-	imgui.SetNextWindowViewport(viewport.ID)
+	local vid, x, y, w, h = imgui.GetMainViewport()
+	imgui.SetNextWindowPos(x, y)
+	imgui.SetNextWindowSize(w, h)
+	imgui.SetNextWindowViewport(vid)
 
 	imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 0)
 	imgui.PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0)
@@ -382,12 +382,12 @@ local function show_main_window()
 	local menu_size = 24
 	local left_size = 260
 
-	imgui.SetNextWindowPos(viewport.PosX, viewport.PosY + menu_size, ImGuiCond_FirstUseEver)
-	imgui.SetNextWindowSize(left_size, viewport.SizeY - menu_size, ImGuiCond_FirstUseEver)
+	imgui.SetNextWindowPos(x, y + menu_size, ImGuiCond_FirstUseEver)
+	imgui.SetNextWindowSize(left_size, h - menu_size, ImGuiCond_FirstUseEver)
 	filebrowser.update()
 
-	imgui.SetNextWindowPos(viewport.PosX + left_size, viewport.PosY + menu_size, ImGuiCond_FirstUseEver)
-	imgui.SetNextWindowSize(viewport.SizeX - left_size, viewport.SizeY - menu_size, ImGuiCond_FirstUseEver)
+	imgui.SetNextWindowPos(x + left_size, y + menu_size, ImGuiCond_FirstUseEver)
+	imgui.SetNextWindowSize(w - left_size, h - menu_size, ImGuiCond_FirstUseEver)
 	editor_window()
 
 	debug_window()

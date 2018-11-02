@@ -317,7 +317,7 @@ static int ImGuiTextEditCallback_LuaWrap(ImGuiTextEditCallbackData* data) {
 }
 ]]
 
-local viewport_implements = [[
+local dock_implements = [[
 #define DOCK_FAMILY_NAME	"PussImguiDockFamily"
 
 static int dock_family_tostring(lua_State* L) {
@@ -351,21 +351,6 @@ static int dock_family_create(lua_State* L) {
 	}
 	lua_setmetatable(L, -2);
 	return 1;
-}
-
-static void puss_imgui_viewport_push(lua_State* L, ImGuiViewport* v) {
-	if( v ) {
-		lua_createtable(L, 0, 7);
-		lua_pushinteger(L, v->ID);			lua_setfield(L, -2, "ID");
-		lua_pushinteger(L, v->Flags);		lua_setfield(L, -2, "Flags");
-		lua_pushnumber(L, v->Pos.x);		lua_setfield(L, -2, "PosX");
-		lua_pushnumber(L, v->Pos.y);		lua_setfield(L, -2, "PosY");
-		lua_pushnumber(L, v->Size.x);		lua_setfield(L, -2, "SizeX");
-		lua_pushnumber(L, v->Size.y);		lua_setfield(L, -2, "SizeY");
-		lua_pushnumber(L, v->DpiScale);		lua_setfield(L, -2, "DpiScale");
-	} else {
-		lua_pushnil(L);
-	}
 }
 ]]
 
@@ -914,8 +899,14 @@ function main()
 					nret = nret + 1
 					dst:writeln('	lua_pushlightuserdata(L, ', aname, ');')
 				elseif atype:match(RE_VIEWPORT) then
-					nret = nret + 1
-					dst:writeln('	puss_imgui_viewport_push(L, ', aname, ');')
+					nret = nret + 7
+					dst:writeln('	lua_pushinteger(L, ', aname, ' ? ', aname, '->ID : 0);')
+					dst:writeln('	lua_pushnumber(L, ', aname, ' ? ', aname, '->Pos.x : 0);')
+					dst:writeln('	lua_pushnumber(L, ', aname, ' ? ', aname, '->Pos.y : 0);')
+					dst:writeln('	lua_pushnumber(L, ', aname, ' ? ', aname, '->Size.x : 0);')
+					dst:writeln('	lua_pushnumber(L, ', aname, ' ? ', aname, '->Size.y : 0);')
+					dst:writeln('	lua_pushinteger(L, ', aname, ' ? ', aname, '->Flags : 0);')
+					dst:writeln('	lua_pushnumber(L, ', aname, ' ? ', aname, '->DpiScale : 0);')
 				else
 					error(string.format('ret type(%s)', atype))
 				end
@@ -1090,7 +1081,7 @@ function main()
 		dst:writeln()
 		dst:insert(buffer_implements)
 		dst:insert(callback_implements)
-		dst:insert(viewport_implements)
+		dst:insert(dock_implements)
 
 		for _, v in ipairs(apis) do
 			gen_function(table.unpack(v))
