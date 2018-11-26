@@ -21,7 +21,6 @@ local LEAF_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDou
 local FOLD_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick
 
 local run_sign = true
-local main_ui = _main_ui
 
 local BROADCAST_PORT = 9999
 local broadcast_recv = net.create_udp_broadcast_recver(BROADCAST_PORT)
@@ -278,12 +277,12 @@ local function debug_window()
 
 	shortcuts_update()
 
-	main_ui:protect_pcall(debug_toolbar)
+	imgui.protect_pcall(debug_toolbar)
 	if imgui.CollapsingHeader('Stack', ImGuiTreeNodeFlags_DefaultOpen) then
-		main_ui:protect_pcall(draw_stack)
+		imgui.protect_pcall(draw_stack)
 	end
 	if imgui.CollapsingHeader('Vars', ImGuiTreeNodeFlags_DefaultOpen) then
-		main_ui:protect_pcall(draw_vars)
+		imgui.protect_pcall(draw_vars)
 	end
 	imgui.End()
 end
@@ -347,7 +346,7 @@ local function editor_window()
 		local files = imgui.GetDropFiles()
 		if files then pages_on_drop_files(files) end
 	end
-	pages.update(main_ui)
+	pages.update()
 	imgui.End()
 end
 
@@ -398,17 +397,17 @@ local function show_main_window()
 end
 
 local function do_update()
-	main_ui:protect_pcall(show_main_window)
+	imgui.protect_pcall(show_main_window)
 
 	recver_update()
 
-	if run_sign and main_ui:should_close() then
+	if run_sign and imgui.should_close() then
 		run_sign = false
 	end
 end
 
 __exports.init = function()
-	main_ui = imgui.Create('Puss - Debugger', 1024, 768, 'puss_debugger.ini', function()
+	imgui.create('Puss - Debugger', 1024, 768, 'puss_debugger.ini', function()
 		local font_path = string.format('%s%sfonts', puss._path, puss._sep)
 		local files = puss.file_list(font_path)
 		for _, name in ipairs(files) do
@@ -418,18 +417,15 @@ __exports.init = function()
 			end
 		end
 	end)
-	_main_ui = main_ui
-	main_ui:set_error_handle(puss.logerr_handle())
-	main_ui(show_main_window, true)
+	imgui.update(show_main_window, true)
 end
 
 __exports.uninit = function()
-	main_ui:destroy()
-	main_ui = nil
+	imgui.destroy()
 end
 
 __exports.update = function()
-	main_ui(do_update)
+	imgui.update(do_update)
 	return run_sign
 end
 

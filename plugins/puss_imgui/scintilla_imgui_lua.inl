@@ -286,33 +286,19 @@ static void im_scintilla_on_notify(lua_State* L, ScintillaIM* sci, const SCNotif
 
 static void im_scintilla_update_callback(ScintillaIM* sci, const SCNotification* ev, void* ud) {
 	lua_State* L = (lua_State*)ud;
-	ImguiEnv* env = (ImguiEnv*)(ImGui::GetCurrentContext() ? ImGui::GetIO().UserData : NULL);
-	if( !env )	return;
 	if( ev ) {
 		if( luaL_testudata(L, 1, LUA_IM_SCI_NAME) ) {
 			int top = lua_gettop(L);
-			if( env ) {
-				lua_rawgeti(L, LUA_REGISTRYINDEX, env->g_ScriptErrorHandle);
-			} else {
-				lua_pushnil(L);
-			}
-			im_scintilla_on_notify(L, sci, ev, env ? top+1 : 0);
+			imgui_error_handle_push(L);
+			im_scintilla_on_notify(L, sci, ev, top+1);
 			lua_settop(L, top);
 		}
 	} else if( lua_isfunction(L, 2) ) {
-		if( env ) {
-			lua_pushvalue(L, 1);	// self
-			lua_rawgeti(L, LUA_REGISTRYINDEX, env->g_ScriptErrorHandle);
-			lua_replace(L, 1);
-			lua_insert(L, 3);
-			lua_pcall(L, lua_gettop(L)-2, LUA_MULTRET, 1);
-		} else {
-			lua_pushvalue(L, 1);	// swap self/callback
-			lua_pushvalue(L, 2);
-			lua_replace(L, 1);
-			lua_replace(L, 2);
-			lua_pcall(L, lua_gettop(L)-1, LUA_MULTRET, 0);
-		}
+		lua_pushvalue(L, 1);	// self
+		imgui_error_handle_push(L);
+		lua_replace(L, 1);
+		lua_insert(L, 3);
+		lua_pcall(L, lua_gettop(L)-2, LUA_MULTRET, 1);
 	}
 }
 

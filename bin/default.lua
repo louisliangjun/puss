@@ -9,6 +9,7 @@ end
 
 -- MUST load before other plugins load who use imgui
 _ENV.imgui = puss.load_plugin(puss_args_match('--opengl') and 'puss_imgui_glfw' or 'puss_imgui')
+imgui.set_error_handle(puss.logerr_handle())
 
 function __main__()
 	local app_module_name = puss_args_match('^%-%-main%s*=%s*([%._%w]+)%s*$') or 'core.app'

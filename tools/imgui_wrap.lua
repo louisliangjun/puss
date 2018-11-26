@@ -1,6 +1,6 @@
 -- imgui_wrap.lua
 
-local buffer_implements = [[
+local puss_imgui_implements = [[
 #define BYTE_ARRAY_NAME	"PussImguiByteArray"
 
 typedef struct _ByteArrayLua {
@@ -205,9 +205,7 @@ static int float_array_create(lua_State* L) {
 	lua_setmetatable(L, -2);
 	return 1;
 }
-]]
 
-local callback_implements = [[
 #define TEXTEDIT_CALLBACK_DATA_NAME	"PussImguiTextEditCallbackData"
 
 static int textedit_callback_data_index(lua_State* L) {
@@ -315,9 +313,7 @@ static int ImGuiTextEditCallback_LuaWrap(ImGuiTextEditCallbackData* data) {
 	lua_pop(L, 1);
 	return res;
 }
-]]
 
-local dock_implements = [[
 #define DOCK_FAMILY_NAME	"PussImguiDockFamily"
 
 static int dock_family_tostring(lua_State* L) {
@@ -352,17 +348,40 @@ static int dock_family_create(lua_State* L) {
 	lua_setmetatable(L, -2);
 	return 1;
 }
+
+static ImDrawList* check_window_drawlist(lua_State* L) {
+	ImGuiContext* context = ImGui::GetCurrentContext();
+	ImDrawList* draw_list = (context && ImGui::GetCurrentWindowRead()) ? ImGui::GetWindowDrawList() : NULL;
+	if( !draw_list ) luaL_error(L, "GetWindowDrawList failed!");
+	return draw_list;
+}
+
+static ImDrawList* check_overlay_drawlist(lua_State* L) {
+	ImGuiContext* context = ImGui::GetCurrentContext();
+	ImDrawList* draw_list = (context && ImGui::GetCurrentWindowRead()) ? ImGui::GetOverlayDrawList() : NULL;
+	if( !draw_list ) luaL_error(L, "GetWindowDrawList failed!");
+	return draw_list;
+}
+
 ]]
 
 local implements = {}
 
-implements.SetNextWindowSizeConstraints = [[	// void SetNextWindowSizeConstraints(const ImVec2& size_min, const ImVec2& size_max, ImGuiSizeCallback custom_callback = NULL, void* custom_callback_data = NULL);
+implements.SetNextWindowSizeConstraints = {'void', 'SetNextWindowSizeConstraints',
+	{ {name='size_min', atype='const ImVec2'}
+	, {name='size_max', atype='const ImVec2'}
+	}, [[	// void SetNextWindowSizeConstraints(const ImVec2& size_min, const ImVec2& size_max, ImGuiSizeCallback custom_callback = NULL, void* custom_callback_data = NULL);
 	ImVec2 size_min( (float)luaL_checknumber(L, 1), (float)luaL_checknumber(L, 2) );
 	ImVec2 size_max( (float)luaL_checknumber(L, 3), (float)luaL_checknumber(L, 4) );
 	ImGui::SetNextWindowSizeConstraints(size_min, size_max);
-	return 0;]]
+	return 0;]]}
 
-implements.InputText = [[	// bool InputText(const char* label, char* buf, size_t buf_size, ImGuiInputTextFlags flags = 0, ImGuiTextEditCallback callback = NULL, void* user_data = NULL);
+implements.InputText = {'bool', 'InputText',
+	{ {name='label', atype='const char*'}
+	, {name='buf', atype='ByteArray'}
+	, {name='flags', atype='ImGuiInputTextFlags', def='0'}
+	, {name='callback', atype='function(ImGuiTextEditCallbackData)', def='NULL'}
+	}, [[	// bool InputText(const char* label, char* buf, size_t buf_size, ImGuiInputTextFlags flags = 0, ImGuiTextEditCallback callback = NULL, void* user_data = NULL);
 	int top = lua_gettop(L);
 	const char* label = luaL_checkstring(L, 1);
 	ByteArrayLua* arr = (ByteArrayLua*)luaL_checkudata(L, 2, BYTE_ARRAY_NAME);
@@ -372,9 +391,15 @@ implements.InputText = [[	// bool InputText(const char* label, char* buf, size_t
 	bool changed = ImGui::InputText(label, (char*)arr->buf, (size_t)arr->cap, flags, callback, &callback_ud);
 	if( callback_ud.e ) { lua_settop(L, 1); lua_error(L); }
 	lua_pushboolean(L, changed ? 1 : 0);
-	return 1;]]
+	return 1;]]}
 
-implements.InputTextMultiline = [[	// bool InputTextMultiline(const char* label, char* buf, size_t buf_size, const ImVec2& size = ImVec2(0,0), ImGuiInputTextFlags flags = 0, ImGuiTextEditCallback callback = NULL, void* user_data = NULL);
+implements.InputTextMultiline = {'bool', 'InputTextMultiline',
+	{ {name='label', atype='const char*'}
+	, {name='buf', atype='ByteArray'}
+	, {name='size', atype='const ImVec2&', def='ImVec2(0,0)'}
+	, {name='flags', atype='ImGuiInputTextFlags', def='0'}
+	, {name='callback', atype='function(ImGuiTextEditCallbackData)', def='NULL'}
+	}, [[	// bool InputTextMultiline(const char* label, char* buf, size_t buf_size, const ImVec2& size = ImVec2(0,0), ImGuiInputTextFlags flags = 0, ImGuiTextEditCallback callback = NULL, void* user_data = NULL);
 	int top = lua_gettop(L);
 	const char* label = luaL_checkstring(L, 1);
 	ByteArrayLua* arr = (ByteArrayLua*)luaL_checkudata(L, 2, BYTE_ARRAY_NAME);
@@ -385,9 +410,18 @@ implements.InputTextMultiline = [[	// bool InputTextMultiline(const char* label,
 	bool changed = ImGui::InputTextMultiline(label, (char*)arr->buf, (size_t)arr->cap, size, flags, callback, &callback_ud);
 	if( callback_ud.e ) { lua_settop(L, 1); lua_error(L); }
 	lua_pushboolean(L, changed ? 1 : 0);
-	return 1;]]
+	return 1;]]}
 
-implements.PlotLines = [[	// void PlotLines(const char* label, const float* values, int values_count, int values_offset = 0, const char* overlay_text = NULL, float scale_min = FLT_MAX, float scale_max = FLT_MAX, ImVec2 graph_size = ImVec2(0,0), int stride = sizeof(float));
+implements.PlotLines = {'void', 'PlotLines',
+	{ {name='label', atype='const char*'}
+	, {name='values', atype='FloatArray'}
+	, {name='values_count', atype='int', def='#values'}
+	, {name='values_offset', atype='int', def='1'}
+	, {name='overlay_text', atype='const char*', def='NULL'}
+	, {name='scale_min', atype='float', def='FLT_MAX'}
+	, {name='scale_max', atype='float', def='FLT_MAX'}
+	, {name='graph_size', atype='ImVec2', def='ImVec2(0,0)'}
+	}, [[	// void PlotLines(const char* label, const float* values, int values_count, int values_offset = 0, const char* overlay_text = NULL, float scale_min = FLT_MAX, float scale_max = FLT_MAX, ImVec2 graph_size = ImVec2(0,0), int stride = sizeof(float));
 	const char* label = luaL_checkstring(L, 1);
 	FloatArrayLua* arr = (FloatArrayLua*)luaL_checkudata(L, 2, FLOAT_ARRAY_NAME);
 	const float* values = arr->buf;
@@ -401,9 +435,18 @@ implements.PlotLines = [[	// void PlotLines(const char* label, const float* valu
 	if( (values_offset + values_count) > arr->len ) { values_count = (arr->len - values_offset); }
 	if( values_count < 0 ) { values_count = 0; }
 	ImGui::PlotLines(label, values, values_count, values_offset, overlay_text, scale_min, scale_max, graph_size);
-	return 0;]]
+	return 0;]]}
 
-implements.PlotHistogram = [[	// void PlotHistogram(const char* label, const float* values, int values_count, int values_offset = 0, const char* overlay_text = NULL, float scale_min = FLT_MAX, float scale_max = FLT_MAX, ImVec2 graph_size = ImVec2(0,0), int stride = sizeof(float));
+implements.PlotHistogram = {'void', 'PlotHistogram',
+	{ {name='label', atype='const char*'}
+	, {name='values', atype='FloatArray'}
+	, {name='values_count', atype='int', def='#values'}
+	, {name='values_offset', atype='int', def='1'}
+	, {name='overlay_text', atype='const char*', def='NULL'}
+	, {name='scale_min', atype='float', def='FLT_MAX'}
+	, {name='scale_max', atype='float', def='FLT_MAX'}
+	, {name='graph_size', atype='ImVec2', def='ImVec2(0,0)'}
+	}, [[	// void PlotHistogram(const char* label, const float* values, int values_count, int values_offset = 0, const char* overlay_text = NULL, float scale_min = FLT_MAX, float scale_max = FLT_MAX, ImVec2 graph_size = ImVec2(0,0), int stride = sizeof(float));
 	const char* label = luaL_checkstring(L, 1);
 	FloatArrayLua* arr = (FloatArrayLua*)luaL_checkudata(L, 2, FLOAT_ARRAY_NAME);
 	const float* values = arr->buf;
@@ -417,9 +460,11 @@ implements.PlotHistogram = [[	// void PlotHistogram(const char* label, const flo
 	if( (values_offset + values_count) > arr->len ) { values_count = (arr->len - values_offset); }
 	if( values_count < 0 ) { values_count = 0; }
 	ImGui::PlotHistogram(label, values, values_count, values_offset, overlay_text, scale_min, scale_max, graph_size);
-	return 0;]]
+	return 0;]]}
 
-implements.IsMousePosValid = [[	//	bool IsMousePosValid(const ImVec2* mouse_pos = NULL);
+implements.IsMousePosValid = {'bool', 'IsMousePosValid',
+	{ {name='mouse_pos', atype='const ImVec2*', def='NULL'}
+	}, [[	//	bool IsMousePosValid(const ImVec2* mouse_pos = NULL);
 	ImVec2 pos;
 	const ImVec2* mouse_pos = (lua_gettop(L) < 2) ? NULL : &pos;
 	if( mouse_pos ) {
@@ -427,9 +472,14 @@ implements.IsMousePosValid = [[	//	bool IsMousePosValid(const ImVec2* mouse_pos 
 		pos.y = (float)luaL_checknumber(L, 2);
 	}
 	lua_pushboolean(L, ImGui::IsMousePosValid(mouse_pos) ? 1 : 0);
-	return 1;]]
+	return 1;]]}
 
-implements.ColorPicker4 = [[	//	bool ColorPicker4(const char* label, float col[4], ImGuiColorEditFlags flags = 0, const float* ref_col = NULL);
+implements.ColorPicker4 = {'bool', 'ColorPicker4',
+	{ {name='label', atype='const char*'}
+	, {name='col', atype='const ImVec4'}
+	, {name='flags', atype='ImGuiColorEditFlags', def='0'}
+	, {name='ref_col', atype='const ImVec4*', def='NULL'}
+	}, [[	//	bool ColorPicker4(const char* label, float col[4], ImGuiColorEditFlags flags = 0, const float* ref_col = NULL);
 	const char* label = luaL_checkstring(L, 1);
 	float col[4] = { (float)luaL_checknumber(L,2), (float)luaL_checknumber(L,3), (float)luaL_checknumber(L,4), (float)luaL_checknumber(L,5) };
 	ImGuiColorEditFlags flags = (ImGuiColorEditFlags)luaL_optinteger(L, 6, 0);
@@ -446,19 +496,26 @@ implements.ColorPicker4 = [[	//	bool ColorPicker4(const char* label, float col[4
 	lua_pushnumber(L, col[1]);
 	lua_pushnumber(L, col[2]);
 	lua_pushnumber(L, col[3]);
-	return 5;]]
+	return 5;]]}
 
-implements.SetDragDropPayload = [[	//	bool SetDragDropPayload(const char* type, const void* data, size_t size, ImGuiCond cond = 0);
+implements.SetDragDropPayload = {'bool', 'SetDragDropPayload',
+	{ {name='type', atype='const char*'}
+	, {name='data', atype='const char*'}
+	, {name='cond', atype='ImGuiCond', def='0'}
+	}, [[	//	bool SetDragDropPayload(const char* type, const void* data, size_t size, ImGuiCond cond = 0);
 	const char* type = luaL_checkstring(L, 1);
 	size_t size = 0;
 	const char* data = luaL_checklstring(L, 2, &size);
 	ImGuiCond cond = (ImGuiCond)luaL_optinteger(L, 3, 0);
 	lua_pushboolean(L, ImGui::SetDragDropPayload(type, data, size, cond) ? 1 : 0);
-	return 1;]]
+	return 1;]]}
 
-implements.AcceptDragDropPayload = [[	//	const ImGuiPayload* AcceptDragDropPayload(const char* type, ImGuiDragDropFlags flags = 0);
+implements.AcceptDragDropPayload = {'ImGuiPayload*', 'AcceptDragDropPayload',
+	{ {name='type', atype='const char*', def='NULL'}
+	, {name='flags', atype='ImGuiDragDropFlags', def='0'}
+	}, [[	//	const ImGuiPayload* AcceptDragDropPayload(const char* type, ImGuiDragDropFlags flags = 0);
 	const char* type = luaL_optstring(L, 1, NULL);
-	ImGuiDragDropFlags flags = (ImGuiCond)luaL_optinteger(L, 2, 0);
+	ImGuiDragDropFlags flags = (ImGuiDragDropFlags)luaL_optinteger(L, 2, 0);
 	const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(type, flags);
 	if( payload ) {
 		lua_createtable(L, 0, 7);
@@ -472,7 +529,7 @@ implements.AcceptDragDropPayload = [[	//	const ImGuiPayload* AcceptDragDropPaylo
 	} else {
 		lua_pushnil(L);
 	}
-	return 1;]]
+	return 1;]]}
 
 local ignore_apis =
 	{ Shutdown = true
@@ -487,14 +544,36 @@ local ignore_apis =
 	, TextUnformatted = true
 	}
 
+local overrides = {}
+overrides.BeginChild = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_BeginChild_sv2bi(L) : wrap_BeginChild_uv2bi(L);]]
+overrides.SetWindowPos = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_SetWindowPos_sv2i(L) : wrap_SetWindowPos_v2i(L);]]
+overrides.SetWindowSize = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_SetWindowSize_sv2i(L) : wrap_SetWindowSize_v2i(L);]]
+overrides.SetWindowCollapsed = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_SetWindowCollapsed_sbi(L) : wrap_SetWindowCollapsed_bi(L);]]
+overrides.SetWindowFocus = [[if( lua_gettop(L)==0 ) ImGui::SetWindowFocus(); else ImGui::SetWindowFocus(luaL_optstring(L,1,NULL)); return 0;]]
+overrides.PushStyleColor = [[return lua_gettop(L)<=2 ? wrap_PushStyleColor_iu(L) : wrap_PushStyleColor_iv4(L);]]
+overrides.PushStyleVar = [[return lua_gettop(L)<=2 ? wrap_PushStyleVar_if(L) : wrap_PushStyleVar_iv2(L);]]
+overrides.GetColorU32 = [[switch( lua_gettop(L) ) { case 1: return lua_isinteger(L, 1) ? wrap_GetColorU32_if(L) : wrap_GetColorU32_u(L); case 2: return wrap_GetColorU32_if(L); } return wrap_GetColorU32_v4(L);]]
+overrides.PushID = [[switch( lua_type(L, 1) ) { case LUA_TNUMBER: return wrap_PushID_i(L); case LUA_TSTRING: return wrap_PushID_s(L); } return wrap_PushID_pv(L); ]]
+overrides.GetID = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_GetID_s(L) : wrap_GetID_pv(L);]]
+overrides.RadioButton = [[return lua_type(L, 2)==LUA_TBOOLEAN ? wrap_RadioButton_sb(L) : wrap_RadioButton_spii(L);]]
+overrides.TreePush = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_TreePush_s(L) : wrap_TreePush_pv(L);]]
+overrides.TreeNode = [[return lua_gettop(L)==1 ? wrap_TreeNode_s(L) : (lua_type(L, 1)==LUA_TSTRING ? wrap_TreeNode_ssva(L) : wrap_TreeNode_pvsva(L));]]
+overrides.TreeNodeEx = [[return lua_gettop(L)<=2 ? wrap_TreeNodeEx_si(L) : (lua_type(L, 1)==LUA_TSTRING ? wrap_TreeNodeEx_sisva(L) : wrap_TreeNodeEx_pvisva(L));]]
+overrides.IsRectVisible = [[ return lua_gettop(L)<=2 ? wrap_IsRectVisible_v2(L) : wrap_IsRectVisible_v2v2(L);]]
+overrides.CollapsingHeader = [[return lua_type(L, 2)==LUA_TBOOLEAN ? wrap_CollapsingHeader_spbi(L) : wrap_CollapsingHeader_si(L);]]
+overrides.ListBoxHeader = [[return lua_gettop(L)==2 ? wrap_ListBoxHeader_sii(L) : wrap_ListBoxHeader_sv2(L);]]
+overrides.Value = [[return lua_type(L, 2)==LUA_TNUMBER ? (lua_isinteger(L, 2) ? wrap_Value_si(L) : wrap_Value_sfs(L)) : wrap_Value_sb(L);]]
+overrides.MenuItem = [[int selected=lua_toboolean(L,3); wrap_MenuItem_ssbb(L); lua_pushboolean(L, lua_toboolean(L,-1) ? !selected : selected); return 2;]]
+
 function main()
 	local out = vlua.match_arg('^%-out=(.+)$') or '.'
 	local src = vlua.match_arg('^%-src=(.+)$') or './include'
 
 	local inttypes = {}
 	local apis = {}
-	-- local drawlist_apis = {}
+	local drawlist_apis = {}
 	local enums = {}
+	local docs = {}
 
 	local function load_header(fname)
 		local f = io.open(src..'/'..fname, 'r')
@@ -504,7 +583,7 @@ function main()
 		t = t:gsub('/%*.-%*/', ' ')		-- remove comment /* */
 		t = t:gsub('\r', '')			-- remove \r
 		t = t:gsub('//.-\n', '\n')		-- remove line comment
-		-- print(t)
+		t = t:gsub('#ifndef%s+IMGUI_DISABLE_OBSOLETE_FUNCTIONS%s+.-#endif', '')	-- remove obsolete
 
 		do
 			inttypes['ImU32'] = 'uint'
@@ -530,7 +609,6 @@ function main()
 			end
 		end
 
-		--[[
 		do
 			for class_block in t:gmatch('struct%s+ImDrawList%s*(%b{})') do
 				-- print('NAMESPACE BLOCK:', namespace_block)
@@ -544,7 +622,6 @@ function main()
 				end
 			end
 		end
-		--]]
 
 		do
 			for block in t:gmatch('enum%s+[_%w]*%s*(%b{})%s*;') do
@@ -848,9 +925,9 @@ function main()
 			return iarg_use, narg_use, fmt
 		end
 
-		local function gen_api_invoke(ret, name, args)
+		local function gen_api_invoke(ns, ret, name, args)
 			local prefix = ret=='void' and '	' or '	__ret__ = '
-			local ts = { prefix, 'ImGui::', name, '(' }
+			local ts = { prefix, ns, name, '(' }
 			if #args > 0 then
 				for i, a in ipairs(args) do
 					if a.attr=='...' then
@@ -986,9 +1063,10 @@ function main()
 					dst:writeln('	if(__ret__ && ((flags & ImGuiTreeNodeFlags_Leaf)==0)) { IMGUI_LUA_WRAP_STACK_BEGIN(', fetch_stack_type(tp), ') }')
 					return
 				end
-			-- TODO if need, style var need use style_stack !!
-			-- elseif name=='PushStyleVar' then
-			-- 	tp = 'PopStyleVar'
+			elseif name=='PushStyleVar' then
+				tp = 'PopStyleVar'
+			elseif name=='PushStyleColor' then
+				tp = 'PopStyleColor'
 			end
 			if not tp then return end
 			local check_ret = ret=='bool'
@@ -1003,11 +1081,14 @@ function main()
 		end
 
 		local function gen_end_wraps(name)
-			-- TODO if need, style var need use style_stack !!
-			-- if name=='PopStyleVar' then
-			-- 	dst:writeln('	for(int i=0; i<count; ++i) { IMGUI_LUA_WRAP_STACK_END(', fetch_stack_type(name), ') }')
-			-- 	return
-			-- end
+			if name=='PopStyleVar' then
+				dst:writeln('	for(int i=0; i<count; ++i) { IMGUI_LUA_WRAP_STACK_END(', fetch_stack_type(name), ') }')
+				return
+			end
+			if name=='PopStyleColor' then
+				dst:writeln('	for(int i=0; i<count; ++i) { IMGUI_LUA_WRAP_STACK_END(', fetch_stack_type(name), ') }')
+				return
+			end
 			if name=='TreePop' then
 				dst:writeln('	IMGUI_LUA_WRAP_STACK_END(', fetch_stack_type(name), ')')
 				return
@@ -1018,8 +1099,8 @@ function main()
 			dst:writeln('	IMGUI_LUA_WRAP_STACK_END(', fetch_stack_type(tp), ')')
 		end
 
-		local function gen_lua_wrap(ret, name, args, exist)
-			local fname = 'wrap_' .. name
+		local function gen_lua_wrap(ret, name, args, exist, rename)
+			local fname = 'wrap_' .. rename
 			if exist then dst:writeln('// [Override]') end
 			local pos = dst:writeln(string.format('static int %s(lua_State* L) {', fname))
 			local narg_pos = dst:writeln('	int __narg__ = lua_gettop(L);')
@@ -1028,7 +1109,7 @@ function main()
 			gen_args_decl(args)
 			local iarg_use, narg_use, suffix = gen_args_fetch(args)
 			gen_end_wraps(name)
-			gen_api_invoke(ret, name, args)
+			gen_api_invoke('ImGui::', ret, name, args)
 			gen_begin_wraps(name, ret)
 			local nret = gen_ret_push(ret, args)
 			if not iarg_use then dst:remove(iarg_pos) end
@@ -1042,7 +1123,40 @@ function main()
 			return fname
 		end
 
-		local function gen_function(ret, name, args)
+		local function _drawlist_lua_wrap(ret, name, args, exist, rename, check)
+			local fname = 'wrap_' .. rename
+			if exist then dst:writeln('// [Override]') end
+			local pos = dst:writeln(string.format('static int %s(lua_State* L) {', fname))
+			dst:writeln('	ImDrawList* __draw_list__ = '..check..'(L);')
+			local narg_pos = dst:writeln('	int __narg__ = lua_gettop(L);')
+			local iarg_pos = dst:writeln('	int __iarg__ = 0;')
+			gen_ret_decl(ret)
+			gen_args_decl(args)
+			local iarg_use, narg_use, suffix = gen_args_fetch(args)
+			gen_end_wraps(name)
+			gen_api_invoke('__draw_list__->', ret, name, args)
+			gen_begin_wraps(name, ret)
+			local nret = gen_ret_push(ret, args)
+			if not iarg_use then dst:remove(iarg_pos) end
+			if not narg_use then dst:remove(narg_pos) end
+			dst:writeln('	return ', nret, ';')
+			dst:writeln('}')
+			if #suffix > 0 then
+				fname = fname .. '_' .. suffix
+				dst:replace(pos, string.format('static int %s(lua_State* L) {', fname))
+			end
+			return fname
+		end
+
+		local function gen_window_drawlist_lua_wrap(ret, name, args, exist, rename)
+			return _drawlist_lua_wrap(ret, name, args, exist, rename, 'check_window_drawlist')
+		end
+
+		local function gen_overlay_drawlist_lua_wrap(ret, name, args, exist, rename)
+			return _drawlist_lua_wrap(ret, name, args, exist, rename, 'check_overlay_drawlist')
+		end
+
+		local function gen_function(wrap, function_prefix, ret, name, args)
 			dst:writeln()
 			dst:writeln(string.format('// [Declare]  %s %s%s;', ret, name, args))
 			args = parse_args(args)
@@ -1054,18 +1168,20 @@ function main()
 			elseif ignore_apis[name] then
 				dst:writeln(string.format('// [Ignore]') )
 			else
-				local exist = functions[name]
+				local fname = function_prefix and function_prefix..name or name
+				local exist = functions[fname]
 				local mark = #dst
-				local ok, ret = pcall(gen_lua_wrap, ret, name, args, exist)
+				local ok, res = pcall(wrap, ret, name, args, exist, fname)
 				if ok then
 					if not exist then
-						functions[name] = ret
-						wraps[name] = ret
+						functions[fname] = res
+						wraps[fname] = res
 					end
+					docs[res] = { ret, name, args }
 				else
-					if not exist then functions[name] = nil end
+					if not exist then functions[fname] = nil end
 					dst:revert(mark)
-					dst:writeln('// ', ret)
+					dst:writeln('// ', res)
 				end
 			end
 		end
@@ -1079,51 +1195,31 @@ function main()
 		dst:writeln('	#define IMGUI_LUA_WRAP_STACK_END(tp)')
 		dst:writeln('#endif//IMGUI_LUA_WRAP_STACK_END')
 		dst:writeln()
-		dst:insert(buffer_implements)
-		dst:insert(callback_implements)
-		dst:insert(dock_implements)
+		dst:insert(puss_imgui_implements)
 
-		for _, v in ipairs(apis) do
-			gen_function(table.unpack(v))
-		end
+		for _, v in ipairs(apis) do gen_function(gen_lua_wrap, nil, table.unpack(v)) end
+
+		for _, v in ipairs(drawlist_apis) do gen_function(gen_window_drawlist_lua_wrap, 'WindowDrawList', table.unpack(v)) end
+		for _, v in ipairs(drawlist_apis) do gen_function(gen_overlay_drawlist_lua_wrap, 'OverlayDrawList', table.unpack(v)) end
 
 		do
 			local t = {}
 			for k in pairs(implements) do table.insert(t, k) end
 			table.sort(t)
 			for _, name in ipairs(t) do
-				local impl = implements[name]
+				local impl = implements[name][4]
 				dst:writeln(string.format('static int wrap_%s(lua_State* L) {', name))
 				dst:insert(impl)
 				dst:writeln('}')
 				wraps[name] = 'wrap_'..name
+				docs['wrap_'..name] = implements[name]
 				dst:writeln()
 			end
 		end
 
-		local overrides = {}
-		overrides.BeginChild = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_BeginChild_sv2bi(L) : wrap_BeginChild_uv2bi(L);]]
-		overrides.SetWindowPos = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_SetWindowPos_sv2i(L) : wrap_SetWindowPos_v2i(L);]]
-		overrides.SetWindowSize = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_SetWindowSize_sv2i(L) : wrap_SetWindowSize_v2i(L);]]
-		overrides.SetWindowCollapsed = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_SetWindowCollapsed_sbi(L) : wrap_SetWindowCollapsed_bi(L);]]
-		overrides.SetWindowFocus = [[if( lua_gettop(L)==0 ) ImGui::SetWindowFocus(); else ImGui::SetWindowFocus(luaL_optstring(L,1,NULL)); return 0;]]
-		overrides.PushStyleColor = [[return lua_gettop(L)<=2 ? wrap_PushStyleColor_iu(L) : wrap_PushStyleColor_iv4(L);]]
-		overrides.PushStyleVar = [[return lua_gettop(L)<=2 ? wrap_PushStyleVar_if(L) : wrap_PushStyleVar_iv2(L);]]
-		overrides.GetColorU32 = [[switch( lua_gettop(L) ) { case 1: return lua_isinteger(L, 1) ? wrap_GetColorU32_if(L) : wrap_GetColorU32_u(L); case 2: return wrap_GetColorU32_if(L); } return wrap_GetColorU32_v4(L);]]
-		overrides.PushID = [[switch( lua_type(L, 1) ) { case LUA_TNUMBER: return wrap_PushID_i(L); case LUA_TSTRING: return wrap_PushID_s(L); } return wrap_PushID_pv(L); ]]
-		overrides.GetID = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_GetID_s(L) : wrap_GetID_pv(L);]]
-		overrides.RadioButton = [[return lua_type(L, 2)==LUA_TBOOLEAN ? wrap_RadioButton_sb(L) : wrap_RadioButton_spii(L);]]
-		overrides.TreePush = [[return lua_type(L, 1)==LUA_TSTRING ? wrap_TreePush_s(L) : wrap_TreePush_pv(L);]]
-		overrides.TreeNode = [[return lua_gettop(L)==1 ? wrap_TreeNode_s(L) : (lua_type(L, 1)==LUA_TSTRING ? wrap_TreeNode_ssva(L) : wrap_TreeNode_pvsva(L));]]
-		overrides.TreeNodeEx = [[return lua_gettop(L)<=2 ? wrap_TreeNodeEx_si(L) : (lua_type(L, 1)==LUA_TSTRING ? wrap_TreeNodeEx_sisva(L) : wrap_TreeNodeEx_pvisva(L));]]
-		overrides.IsRectVisible = [[ return lua_gettop(L)<=2 ? wrap_IsRectVisible_v2(L) : wrap_IsRectVisible_v2v2(L);]]
-		overrides.CollapsingHeader = [[return lua_type(L, 2)==LUA_TBOOLEAN ? wrap_CollapsingHeader_spbi(L) : wrap_CollapsingHeader_si(L);]]
 		wraps.Selectable = 'wrap_Selectable_spbiv2'
-		overrides.ListBoxHeader = [[return lua_gettop(L)==2 ? wrap_ListBoxHeader_sii(L) : wrap_ListBoxHeader_sv2(L);]]
 		wraps.ListBoxHeader2 = 'wrap_ListBoxHeader_sii'
-		overrides.Value = [[return lua_type(L, 2)==LUA_TNUMBER ? (lua_isinteger(L, 2) ? wrap_Value_si(L) : wrap_Value_sfs(L)) : wrap_Value_sb(L);]]
 		wraps.ValueUnsigned = 'wrap_Value_su'
-		overrides.MenuItem = [[int selected=lua_toboolean(L,3); wrap_MenuItem_ssbb(L); lua_pushboolean(L, lua_toboolean(L,-1) ? !selected : selected); return 2;]]
 		do
 			local t = {}
 			for k in pairs(overrides) do table.insert(t, k) end
@@ -1155,4 +1251,45 @@ function main()
 		dst:writeln()
 	end)
 
+	generate_file(vlua.filename_format(out..'/'..'imgui_apis.txt'), function(dst)
+		local function gen_fun(w, wrap_name)
+			local desc = docs[wrap_name]
+			if not desc then return end
+			local ret, name, args = table.unpack(desc)
+			local line = {w, '('}
+			for i, a in ipairs(args) do
+				if a.attr~='...' then
+					table.insert(line, string.format('%s[%s]%s', a.name or '_arg'..i, a.atype, a.def and '='..a.def or ''))
+					table.insert(line, ', ')
+				end
+			end
+			if line[#line]==', ' then
+				line[#line] = ')'
+			else
+				table.insert(line, ')')
+			end
+			if ret~='void' then
+				table.insert(line, ' ==> ')
+				table.insert(line, ret)
+			end
+			dst:writeln(table.concat(line))
+			return true
+		end
+
+		local ws = {}
+		for w in pairs(wraps) do table.insert(ws, w) end
+		table.sort(ws)
+		for _, w in ipairs(ws) do
+			if gen_fun(w, wraps[w]) then
+				-- ok
+			elseif overrides[w] then
+				for wrap_name in overrides[w]:gmatch('wrap_[_%w]+') do
+					gen_fun(w, wrap_name)
+				end
+			else
+				dst:writeln(w, '(...)')
+			end
+		end
+		dst:writeln()
+	end)
 end

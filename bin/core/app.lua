@@ -12,7 +12,6 @@ filebrowser.setup(diskfs)
 docs.setup(diskfs)
 
 local run_sign = true
-local main_ui = _main_ui
 
 show_imgui_demos = show_imgui_demos or false
 show_imgui_metrics = show_imgui_metrics or false
@@ -60,7 +59,7 @@ local function main_menu()
 		else
 			if imgui.MenuItem('Reboot As Debug Mode') then
 				puss._reboot_as_debug_level = 9
-				main_ui:set_should_close(true)
+				imgui.set_should_close(true)
 			end
 		end
 		imgui.EndMenu()
@@ -84,7 +83,7 @@ local function editor_window()
 	imgui.Begin("Editor", nil, EDITOR_WINDOW_FLAGS)
 	local drop_files_here = imgui.GetDropFiles(true)
 	if drop_files_here then pages_on_drop_files(drop_files_here) end
-	pages.update(main_ui)
+	pages.update()
 	imgui.End()
 end
 
@@ -134,7 +133,7 @@ local function show_main_window()
 		show_imgui_metrics = imgui.ShowMetricsWindow(show_imgui_metrics)
 	end
 	if show_samples_window then
-		show_samples_window = samples.update(show_samples_window, main_ui)
+		show_samples_window = samples.update(show_samples_window)
 	end
 	if show_console_window then
 		show_console_window = console.update(show_console_window)
@@ -145,12 +144,12 @@ local function show_main_window()
 end
 
 local function do_quit_update()
-	if run_sign and main_ui:should_close() then
+	if run_sign and imgui.should_close() then
 		if pages.save_all(true) then
 			run_sign = false
 		else
 			imgui.OpenPopup('Quit?')
-			main_ui:set_should_close(false)
+			imgui.set_should_close(false)
 		end
 	end
 
@@ -162,7 +161,7 @@ local function do_quit_update()
 				run_sign = false
 			else
 				imgui.CloseCurrentPopup()
-				main_ui:set_should_close(false)
+				imgui.set_should_close(false)
 			end
 		end
 		imgui.SameLine()
@@ -172,14 +171,14 @@ local function do_quit_update()
 		imgui.SameLine()
 		if imgui.Button('Cancel') then
 			imgui.CloseCurrentPopup()
-			main_ui:set_should_close(false)
+			imgui.set_should_close(false)
 		end
 		imgui.EndPopup()
 	end
 end
 
 local function do_update()
-	main_ui:protect_pcall(show_main_window)
+	imgui.protect_pcall(show_main_window)
 	do_quit_update()
 end
 
@@ -187,7 +186,7 @@ __exports.init = function()
 	local title = 'Puss - Editor'
 	puss._app_title = title
 	run_sign = true
-	main_ui = imgui.Create(title, 1024, 768, 'puss_editor.ini', function()
+	imgui.create(title, 1024, 768, 'puss_editor.ini', function()
 		local font_path = string.format('%s%sfonts', puss._path, puss._sep)
 		local files = puss.file_list(font_path)
 		for _, name in ipairs(files) do
@@ -197,18 +196,15 @@ __exports.init = function()
 			end
 		end
 	end)
-	main_ui:set_error_handle(puss.logerr_handle())
-	_main_ui = main_ui
-	main_ui(show_main_window)
+	imgui.update(show_main_window)
 end
 
 __exports.uninit = function()
-	main_ui:destroy()
-	main_ui = nil
+	imgui.destroy()
 end
 
 __exports.update = function()
-	main_ui(do_update)
+	imgui.update(do_update)
 	return run_sign
 end
 

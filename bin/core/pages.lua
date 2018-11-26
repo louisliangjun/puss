@@ -12,7 +12,7 @@ local TABSBAR_FLAGS = ( ImGuiTabBarFlags_Reorderable
 	| ImGuiTabBarFlags_FittingPolicyScroll
 	)
 
-__exports.update = function(main_ui)
+__exports.update = function()
     if not imgui.BeginTabBar('PussMainTabsBar', TABSBAR_FLAGS) then return end
 
 	-- set active, must after draw tabs
@@ -33,7 +33,7 @@ __exports.update = function(main_ui)
 			local last = selected_page_label
 			selected_page_label = label
 			local draw = page.module.tabs_page_draw
-			if draw then main_ui:protect_pcall(draw, page, last~=label) end
+			if draw then imgui.protect_pcall(draw, page, last~=label) end
 			imgui.EndTabItem()
 		end
 	end
@@ -45,11 +45,11 @@ __exports.update = function(main_ui)
 		local page = pages[i]
 		if not page.open then
 			local close = page.module.tabs_page_close
-			if close then main_ui:protect_pcall(close, page) end
+			if close then imgui.protect_pcall(close, page) end
 		end
 		if not page.was_open then
 			local destroy = page.module.tabs_page_destroy
-			if destroy then main_ui:protect_pcall(destroy, page) end
+			if destroy then imgui.protect_pcall(destroy, page) end
 			index[page.label] = nil
 			table.remove(pages, i)
 		end

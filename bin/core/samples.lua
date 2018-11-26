@@ -20,11 +20,11 @@ local function append_sample(label, source)
 	table.insert(samples, {label=label, source=source})
 end
 
-local function samples_update(main_ui)
+local function samples_update()
 	local refresh, selected
 	imgui.Columns(2)
 	imgui.BeginChild('##Stage')
-		main_ui:protect_pcall(sample_draw)
+		imgui.protect_pcall(sample_draw)
 	imgui.EndChild()
 	imgui.NextColumn()
 	imgui.BeginChild('##Select', nil, 150, false)
@@ -53,7 +53,7 @@ local function samples_update(main_ui)
 			local env = setmetatable({}, {__index=_ENV})
 			local f, err = load(txt, 'sample', 't', env)
 			if f then
-				f, err = main_ui:protect_pcall(f)
+				f, err = imgui.protect_pcall(f)
 				if f then
 					f = env.draw
 					if not f then err = 'function draw() MUST exist!!!' end
@@ -65,11 +65,11 @@ local function samples_update(main_ui)
 	imgui.Columns(1)
 end
 
-__exports.update = function(show, main_ui)
+__exports.update = function(show)
 	local res = false
 	imgui.SetNextWindowSize(800, 600, ImGuiCond_FirstUseEver)
 	res, show = imgui.Begin("SamplesWindow", show, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)
-	if res then samples_update(main_ui) end
+	if res then samples_update() end
 	imgui.End()
 	return show
 end
