@@ -177,7 +177,6 @@
     <ClInclude Include="imgui_impl_win32.h" />
     <ClInclude Include="metrics_gui\metrics_gui.h" />
     <ClInclude Include="puss_module_imgui_keys.inl" />
-    <ClInclude Include="puss_module_imgui.h" />
     <ClInclude Include="scintilla3\include\ILexer.h" />
     <ClInclude Include="scintilla3\include\ILoader.h" />
     <ClInclude Include="scintilla3\include\Platform.h" />
@@ -246,10 +245,9 @@
     <None Include="..\..\objs\gen\scintilla.iface.inl" />
     <None Include="imgui_impl_dx11.inl" />
     <None Include="imgui_impl_win32.inl" />
-    <None Include="metrics_gui_lua.inl" />
+    <None Include="puss_imgui_lua.inl" />
     <None Include="scintilla3\include\Scintilla.iface" />
     <None Include="scintilla3\src\SciTE.properties" />
-    <None Include="scintilla_imgui_lua.inl" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>

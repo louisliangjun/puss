@@ -1,12 +1,6 @@
 // puss_module_imgui.cpp
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-
-#include "puss_module_imgui.h"
-
-#include "imgui.h"
+#include "puss_imgui_lua.inl"
 
 #ifdef PUSS_IMGUI_USE_DX11
 
@@ -172,9 +166,6 @@ static int _lua_utf8_to_utf16(lua_State* L) {
 
 #endif
 
-#define IMGUI_DEFINE_MATH_OPERATORS
-#include "imgui_internal.h"
-
 static void do_create_context() {
 	// Setup ImGui binding
 	ImGui::CreateContext();
@@ -205,13 +196,6 @@ static void do_update_and_render_viewports() {
         ImGui::RenderPlatformWindowsDefault();
     }
 }
-
-static ImVec2					g_DropPos;
-static ImVector<char>           g_DropFiles;
-static lua_State*				g_UpdateLuaState = NULL;
-static int                      g_ScriptErrorHandle = LUA_NOREF;
-static int                      g_StackProtected = 0;
-static ImVector<char>           g_Stack;
 
 #ifdef PUSS_IMGUI_USE_DX11
 
@@ -609,59 +593,6 @@ static void render_drawdata() {
 }
 #endif
 
-#include "scintilla_imgui.h"
-
-#if defined(__GNUC__)
-	#pragma GCC diagnostic ignored "-Wunused-function"          // warning: 'xxxx' defined but not used
-#endif
-
-
-static inline void _wrap_stack_begin(char tp) {
-	g_Stack.push_back(tp);
-}
-
-static inline void _wrap_stack_end(char tp) {
-	int pe = g_Stack.size();
-	int ps = g_StackProtected < 0 ? 0 : g_StackProtected;
-	for( int i=pe-1; i>=ps; --i ) {
-		if( g_Stack[i]==tp ) {
-			g_Stack.erase(&g_Stack[i]);
-			return;
-		}
-	}
-	IM_ASSERT(0 && "stack pop type not matched!");
-}
-
-int puss_imgui_assert_hook(const char* expr, const char* file, int line) {
-	if( g_UpdateLuaState ) {
-		luaL_error(g_UpdateLuaState, "%s @%s:%d", expr, file, line);
-	} else {
-		fprintf(stderr, "%s @%s:%d\r\n", expr, file, line);
-	}
-	return 0;
-}
-
-#define IMGUI_LUA_WRAP_STACK_BEGIN(tp)	_wrap_stack_begin(tp);
-#define IMGUI_LUA_WRAP_STACK_END(tp)	_wrap_stack_end(tp);
-#include "imgui_lua.inl"
-#undef IMGUI_LUA_WRAP_STACK_BEGIN
-#undef IMGUI_LUA_WRAP_STACK_END
-
-#define IMGUI_LIB_NAME	"ImguiLib"
-
-static int imgui_error_handle_default(lua_State* L) {
-	fprintf(stderr, "[ImGui] error: %s\n", lua_tostring(L, -1));
-	return lua_gettop(L);
-}
-
-static void imgui_error_handle_push(lua_State* L) {
-	if( g_ScriptErrorHandle!=LUA_NOREF ) {
-		lua_rawgeti(L, LUA_REGISTRYINDEX, g_ScriptErrorHandle);
-	} else {
-		lua_pushcfunction(L, imgui_error_handle_default);
-	}
-}
-
 static int imgui_created_lua(lua_State* L) {
 	lua_pushboolean(L, created());
 	return 1;
@@ -682,23 +613,6 @@ static int imgui_set_should_close_lua(lua_State* L) {
 
 static int imgui_should_close_lua(lua_State* L) {
 	lua_pushboolean(L, get_should_close());
-	return 1;
-}
-
-static int imgui_set_error_handle_lua(lua_State* L) {
-	if( lua_isfunction(L, 1) ) {
-		lua_pushvalue(L, 1);
-		if( g_ScriptErrorHandle==LUA_NOREF ) {
-			g_ScriptErrorHandle = luaL_ref(L, LUA_REGISTRYINDEX);
-		} else {
-			lua_rawseti(L, LUA_REGISTRYINDEX, g_ScriptErrorHandle);
-		}
-	}
-	if( g_ScriptErrorHandle!=LUA_NOREF ) {
-		lua_rawgeti(L, LUA_REGISTRYINDEX, g_ScriptErrorHandle);
-	} else {
-		lua_pushnil(L);
-	}
 	return 1;
 }
 
@@ -733,56 +647,6 @@ static int imgui_update_lua(lua_State* L) {
 		render_drawdata();
 		ImGui::EndFrame();
 	}
-	return 0;
-}
-
-static int imgui_protect_pcall_lua(lua_State* L) {
-	int base = g_StackProtected;
-	int top = g_Stack.size();
-	g_StackProtected = top;
-	imgui_error_handle_push(L);
-	lua_insert(L, 1);
-	lua_pushboolean(L, lua_pcall(L, lua_gettop(L)-2, LUA_MULTRET, 1)==LUA_OK);
-	lua_replace(L, 1);
-	g_StackProtected = base;
-	while( g_Stack.size() > top ) {
-		int tp = g_Stack.back();
-		g_Stack.pop_back();
-		IMGUI_LUA_WRAP_STACK_POP(tp);
-	}
-	return lua_gettop(L);
-}
-
-static int imgui_getio_delta_time_lua(lua_State* L) {
-	ImGuiContext* ctx = ImGui::GetCurrentContext();
-	lua_pushnumber(L, ctx ? ctx->IO.DeltaTime : 0.0f);
-	return 1;
-}
-
-static bool shortcut_mod_check(lua_State* L, int arg, bool val) {
-	return lua_isnoneornil(L, arg) ? true : (val == ((lua_toboolean(L, arg)!=0)));
-}
-
-static int imgui_is_shortcut_pressed_lua(lua_State* L) {
-	ImGuiContext* ctx = ImGui::GetCurrentContext();
-	int key = (int)luaL_checkinteger(L, 1);
-	bool pressed = ctx
-		&& shortcut_mod_check(L, 2, ctx->IO.KeyCtrl)
-		&& shortcut_mod_check(L, 3, ctx->IO.KeyShift)
-		&& shortcut_mod_check(L, 4, ctx->IO.KeyAlt)
-		&& shortcut_mod_check(L, 5, ctx->IO.KeySuper)
-		&& (key>=0 && key<PUSS_IMGUI_TOTAL_KEY_LAST)
-		&& ImGui::IsKeyPressed(key)
-		;
-	lua_pushboolean(L, pressed ? 1 : 0);
-	return 1;
-}
-
-static int imgui_fetch_extra_keys_lua(lua_State* L) {
-	luaL_checktype(L, 1, LUA_TTABLE);
-#define _PUSS_IMGUI_KEY_REG(key)	lua_pushinteger(L, PUSS_IMGUI_KEY_ ## key);	lua_setfield(L, 1, #key);
-	#include "puss_module_imgui_keys.inl"
-#undef _PUSS_IMGUI_KEY_REG
 	return 0;
 }
 
@@ -887,54 +751,6 @@ static int imgui_create_lua(lua_State* L) {
 	return 0;
 }
 
-static int imgui_get_drop_files_lua(lua_State* L) {
-	int check_drop_pos_in_window = lua_toboolean(L, 1);
-	if( g_DropFiles.empty() )
-		return 0;
-	if( check_drop_pos_in_window ) { 
-		ImGuiWindow* win = ImGui::GetCurrentWindowRead();
-		if( !(win && win->Rect().Contains(g_DropPos)) )
-			return 0;
-	}
-	lua_pushlstring(L, g_DropFiles.Data, g_DropFiles.Size);
-	return 1;
-}
-
-static int add_ttf_font_file_lua(lua_State* L) {
-	ImGuiContext* ctx = ImGui::GetCurrentContext();
-	const char* fname = luaL_checkstring(L, 1);
-	float size_pixel = (float)luaL_checknumber(L, 2);
-	const char* language = luaL_optstring(L, 3, NULL);
-	const ImWchar* glyph_ranges = NULL;
-	ImFont* font = NULL;
-	if( !ctx )	luaL_error(L, "ImGui::GetCurrentContext MUST exist!");
-	if( language ) {
-		if( strcmp(language, "Korean")==0 ) {
-			glyph_ranges = ctx->IO.Fonts->GetGlyphRangesKorean();
-		} else if( strcmp(language, "Japanese")==0 ) {
-			glyph_ranges = ctx->IO.Fonts->GetGlyphRangesJapanese();
-		} else if( strcmp(language, "Japanese")==0 ) {
-			glyph_ranges = ctx->IO.Fonts->GetGlyphRangesJapanese();
-		} else if( strcmp(language, "Chinese")==0 ) {
-			glyph_ranges = ctx->IO.Fonts->GetGlyphRangesChineseFull();
-		} else if( strcmp(language, "ChineseSimplified")==0 ) {
-			glyph_ranges = ctx->IO.Fonts->GetGlyphRangesChineseSimplifiedCommon();
-		} else if( strcmp(language, "Cyrillic")==0 ) {
-			glyph_ranges = ctx->IO.Fonts->GetGlyphRangesCyrillic();
-		} else if( strcmp(language, "Thai")==0 ) {
-			glyph_ranges = ctx->IO.Fonts->GetGlyphRangesThai();
-		} else {
-			luaL_error(L, "Not support font language: %s", language);
-		}
-	}
-	font = ctx->IO.Fonts->AddFontFromFileTTF(fname, size_pixel, NULL, glyph_ranges);
-	lua_pushboolean(L, font ? 1 : 0);
-	return 1;
-}
-
-#include "scintilla_imgui_lua.inl"
-#include "scintilla.iface.inl"
-
 void* __scintilla_imgui_os_window(void) {
 #ifdef PUSS_IMGUI_USE_DX11
 	return g_hWnd;
@@ -945,87 +761,16 @@ void* __scintilla_imgui_os_window(void) {
 #endif
 }
 
-static int im_scintilla_lexers(lua_State* L) {
-	return im_scintilla_get_lexers(L, sci_lexers);
-}
-
-#include "metrics_gui_lua.inl"
-
-static luaL_Reg imgui_lua_apis[] =
+static luaL_Reg imgui_plat_lua_apis[] =
 	{ {"created", imgui_created_lua}
 	, {"create", imgui_create_lua}
 	, {"destroy", imgui_destroy_lua}
 	, {"update", imgui_update_lua}
 	, {"set_should_close", imgui_set_should_close_lua}
 	, {"should_close", imgui_should_close_lua}
-	, {"set_error_handle", imgui_set_error_handle_lua}
-	, {"protect_pcall", imgui_protect_pcall_lua}
-
-	, {"WaitEventsTimeout", imgui_wait_events_lua}
-	, {"GetDropFiles", imgui_get_drop_files_lua}
-	, {"AddFontFromFileTTF", add_ttf_font_file_lua}
-
-	, {"CreateByteArray", byte_array_create}
-	, {"CreateFloatArray", float_array_create}
-	, {"CreateDockFamily", dock_family_create}
-	, {"CreateScintilla", im_scintilla_create}
-	, {"CreateMetricsGuiPlot", metrics_gui_plot_create}
-	, {"GetScintillaLexers", im_scintilla_lexers}
-
-	, {"GetIODeltaTime", imgui_getio_delta_time_lua}
-	, {"IsShortcutPressed", imgui_is_shortcut_pressed_lua}
-	, {"FetchExtraKeys", imgui_fetch_extra_keys_lua}
-
-#define __REG_WRAP(w,f)	, { #w, f }
-	#include "imgui_wraps.inl"
-#undef __REG_WRAP
+	, {"wait_events", imgui_wait_events_lua}
 	, {NULL, NULL}
 	};
-
-static void lua_register_imgui(lua_State* L) {
-	// consts
-	puss_push_consts_table(L);
-#define __REG_ENUM(e)	lua_pushinteger(L, e);	lua_setfield(L, -2, #e);
-	#include "imgui_enums.inl"
-#undef __REG_ENUM
-#define _PUSS_IMGUI_KEY_REG(key)	lua_pushinteger(L, PUSS_IMGUI_KEY_ ## key);	lua_setfield(L, -2, "PUSS_IMGUI_KEY_" #key);
-	#include "puss_module_imgui_keys.inl"
-#undef _PUSS_IMGUI_KEY_REG
-	lua_pop(L, 1);
-}
-
-static void lua_register_scintilla(lua_State* L) {
-	// consts
-	{
-		puss_push_consts_table(L);
-		for( IFaceVal* p=sci_values; p->name; ++p ) {
-			lua_pushinteger(L, p->val);
-			lua_setfield(L, -2, p->name);
-		}
-		lua_pop(L, 1);
-	}
-
-	// metatable: fun/get/set
-	if( luaL_newmetatable(L, LUA_IM_SCI_NAME) ) {
-		static luaL_Reg methods[] =
-			{ {"__index", NULL}
-			, {"__call",im_scintilla_update}
-			, {"__gc",im_scintilla_destroy}
-			, {"destroy",im_scintilla_destroy}
-			, {"set",im_scintilla_set_data}
-			, {"get",im_scintilla_get_data}
-			, {NULL, NULL}
-			};
-		luaL_setfuncs(L, methods, 0);
-
-		for( IFaceDecl* p=sci_functions; p->name; ++p ) {
-			lua_pushlightuserdata(L, p);
-			lua_pushcclosure(L, _lua__sci_send_wrap, 1);
-			lua_setfield(L, -2, p->name);
-		}
-	}
-	lua_setfield(L, -1, "__index");
-}
 
 PussInterface* __puss_iface__ = NULL;
 
@@ -1037,13 +782,18 @@ PUSS_PLUGIN_EXPORT int __puss_plugin_init__(lua_State* L, PussInterface* puss) {
 		return 1;
 	lua_pop(L, 1);
 
-	luaL_newlib(L, imgui_lua_apis);
+	puss_push_consts_table(L);
+	lua_register_imgui_consts(L);
+	lua_pop(L, 1);
+
+	lua_register_scintilla(L);
+
+	lua_createtable(L, 0, (sizeof(imgui_plat_lua_apis) + sizeof(imgui_lua_apis)) / sizeof(luaL_Reg) - 2);
 	lua_pushvalue(L, -1);
 	lua_setfield(L, LUA_REGISTRYINDEX, IMGUI_LIB_NAME);
-	{
-		lua_register_imgui(L);
-		lua_register_scintilla(L);
-	}
+
+	luaL_setfuncs(L, imgui_plat_lua_apis, 0);
+	luaL_setfuncs(L, imgui_lua_apis, 0);
 	return 1;
 }
 

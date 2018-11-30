@@ -461,7 +461,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="puss_module_imgui.h" />
     <ClInclude Include="scintilla_imgui.h" />
     <ClInclude Include="puss_module_imgui_keys.inl" />
     <ClInclude Include="scintilla3\include\Platform.h">
@@ -692,7 +691,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <None Include="scintilla_imgui_lua.inl" />
     <None Include="..\..\objs\gen\imgui_enums.inl">
       <Filter>_gen</Filter>
     </None>
@@ -713,6 +711,6 @@
     </None>
     <None Include="imgui_impl_win32.inl" />
     <None Include="imgui_impl_dx11.inl" />
-    <None Include="metrics_gui_lua.inl" />
+    <None Include="puss_imgui_lua.inl" />
   </ItemGroup>
 </Project>

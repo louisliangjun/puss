@@ -16,7 +16,7 @@ function __main__()
 	local app = puss.import(app_module_name)
 	app.init()
 	while app.update() do
-		imgui.WaitEventsTimeout()
+		imgui.wait_events()
 	end
 	app.uninit()
 end
