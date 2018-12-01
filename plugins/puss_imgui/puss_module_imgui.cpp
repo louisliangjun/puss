@@ -477,7 +477,7 @@ static void puss_imgui_key_set(ImGuiIO& io, int key, bool st) {
 	} else {
 		switch(key) {
 		#define _PUSS_IMGUI_KEY_REG(key)	case GLFW_KEY_ ## key: io.KeysDown[PUSS_IMGUI_KEY_ ## key] = st;	break;
-			#include "puss_module_imgui_keys.inl"
+			#include "puss_imgui_keys.inl"
 		#undef _PUSS_IMGUI_KEY_REG
 		default:
 			break;

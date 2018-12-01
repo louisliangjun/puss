@@ -177,7 +177,6 @@
     <ClInclude Include="imgui_impl_glfw.h" />
     <ClInclude Include="imgui_impl_opengl3.h" />
     <ClInclude Include="metrics_gui\metrics_gui.h" />
-    <ClInclude Include="puss_module_imgui_keys.inl" />
     <ClInclude Include="scintilla3\include\ILexer.h" />
     <ClInclude Include="scintilla3\include\ILoader.h" />
     <ClInclude Include="scintilla3\include\Platform.h" />
@@ -246,6 +245,7 @@
     <None Include="..\..\objs\gen\scintilla.iface.inl" />
     <None Include="imgui_impl_glfw.inl" />
     <None Include="imgui_impl_opengl3.inl" />
+    <None Include="puss_imgui_keys.inl" />
     <None Include="puss_imgui_lua.inl" />
     <None Include="scintilla3\include\Scintilla.iface" />
     <None Include="scintilla3\src\SciTE.properties" />

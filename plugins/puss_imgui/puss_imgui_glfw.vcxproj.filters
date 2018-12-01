@@ -463,7 +463,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="scintilla_imgui.h" />
-    <ClInclude Include="puss_module_imgui_keys.inl" />
     <ClInclude Include="scintilla3\include\Platform.h">
       <Filter>scintilla3\include</Filter>
     </ClInclude>
@@ -713,5 +712,6 @@
     <None Include="imgui_impl_glfw.inl" />
     <None Include="imgui_impl_opengl3.inl" />
     <None Include="puss_imgui_lua.inl" />
+    <None Include="puss_imgui_keys.inl" />
   </ItemGroup>
 </Project>

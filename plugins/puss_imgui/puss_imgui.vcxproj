@@ -176,7 +176,7 @@
     <ClInclude Include="imgui_impl_dx11.h" />
     <ClInclude Include="imgui_impl_win32.h" />
     <ClInclude Include="metrics_gui\metrics_gui.h" />
-    <ClInclude Include="puss_module_imgui_keys.inl" />
+    <ClInclude Include="puss_imgui_keys.inl" />
     <ClInclude Include="scintilla3\include\ILexer.h" />
     <ClInclude Include="scintilla3\include\ILoader.h" />
     <ClInclude Include="scintilla3\include\Platform.h" />

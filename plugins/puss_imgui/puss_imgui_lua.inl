@@ -21,7 +21,7 @@
 enum PussImGuiKeyType
 	{ PUSS_IMGUI_BASIC_KEY_LAST = 255
 #define _PUSS_IMGUI_KEY_REG(key)	, PUSS_IMGUI_KEY_ ## key
-	#include "puss_module_imgui_keys.inl"
+	#include "puss_imgui_keys.inl"
 #undef _PUSS_IMGUI_KEY_REG
 	, PUSS_IMGUI_TOTAL_KEY_LAST
 	};
@@ -141,7 +141,7 @@ static int imgui_is_shortcut_pressed_lua(lua_State* L) {
 static int imgui_fetch_extra_keys_lua(lua_State* L) {
 	luaL_checktype(L, 1, LUA_TTABLE);
 #define _PUSS_IMGUI_KEY_REG(key)	lua_pushinteger(L, PUSS_IMGUI_KEY_ ## key);	lua_setfield(L, 1, #key);
-	#include "puss_module_imgui_keys.inl"
+	#include "puss_imgui_keys.inl"
 #undef _PUSS_IMGUI_KEY_REG
 	return 0;
 }
@@ -787,7 +787,7 @@ static luaL_Reg imgui_lua_apis[] =
 static void lua_register_imgui_consts(lua_State* L) {
 	// puss imgui keys
 #define _PUSS_IMGUI_KEY_REG(key)	lua_pushinteger(L, PUSS_IMGUI_KEY_ ## key);	lua_setfield(L, -2, "PUSS_IMGUI_KEY_" #key);
-	#include "puss_module_imgui_keys.inl"
+	#include "puss_imgui_keys.inl"
 #undef _PUSS_IMGUI_KEY_REG
 
 	// imgui enums
