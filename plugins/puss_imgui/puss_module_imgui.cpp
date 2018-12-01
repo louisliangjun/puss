@@ -2,170 +2,6 @@
 
 #include "puss_imgui_lua.inl"
 
-#ifdef PUSS_IMGUI_USE_DX11
-
-#include <windows.h>
-#include <tchar.h>
-#include <winuser.h>
-#include <d3d11.h>
-#define DIRECTINPUT_VERSION 0x0800
-#include <dinput.h>
-
-#ifndef WM_DPICHANGED
-#define WM_DPICHANGED 0x02E0 // From Windows SDK 8.1+ headers
-#endif
-
-#define PUSS_IMGUI_WINDOW_CLASS	_T("PussImGuiWindow")
-
-static WNDCLASSEX puss_imgui_wc = { sizeof(WNDCLASSEX), CS_CLASSDC, NULL, 0L, 0L, NULL, NULL, NULL, NULL, NULL, PUSS_IMGUI_WINDOW_CLASS, NULL };
-
-static int _win32_vk_map[256];
-
-static LRESULT WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
-BOOL WINAPI DllMain(HANDLE hinstDLL, DWORD dwReason, LPVOID lpvReserved) {
-	switch (dwReason) {
-	case DLL_PROCESS_ATTACH:
-		// Create application window
-		puss_imgui_wc.lpfnWndProc = WndProc;
-		puss_imgui_wc.hInstance = (HINSTANCE)hinstDLL;
-		// puss_imgui_wc.hIcon = LoadIcon(puss_imgui_wc.hInstance, MAKEINTRESOURCE(IDI_ICON1));
-		RegisterClassEx(&puss_imgui_wc);
-		memset(_win32_vk_map, 0, sizeof(_win32_vk_map));
-		_win32_vk_map[VK_ESCAPE] = PUSS_IMGUI_KEY_ESCAPE;
-		_win32_vk_map[VK_RETURN] = PUSS_IMGUI_KEY_ENTER;
-		_win32_vk_map[VK_TAB] = PUSS_IMGUI_KEY_TAB;
-		_win32_vk_map[VK_BACK] = PUSS_IMGUI_KEY_BACKSPACE;
-		_win32_vk_map[VK_INSERT] = PUSS_IMGUI_KEY_INSERT;
-		_win32_vk_map[VK_DELETE] = PUSS_IMGUI_KEY_DELETE;
-		_win32_vk_map[VK_RIGHT] = PUSS_IMGUI_KEY_RIGHT;
-		_win32_vk_map[VK_LEFT] = PUSS_IMGUI_KEY_LEFT;
-		_win32_vk_map[VK_DOWN] = PUSS_IMGUI_KEY_DOWN;
-		_win32_vk_map[VK_UP] = PUSS_IMGUI_KEY_UP;
-		_win32_vk_map[VK_PRIOR] = PUSS_IMGUI_KEY_PAGE_UP;
-		_win32_vk_map[VK_NEXT] = PUSS_IMGUI_KEY_PAGE_DOWN;
-		_win32_vk_map[VK_HOME] = PUSS_IMGUI_KEY_HOME;
-		_win32_vk_map[VK_END] = PUSS_IMGUI_KEY_END;
-		_win32_vk_map[VK_CAPITAL] = PUSS_IMGUI_KEY_CAPS_LOCK;
-		_win32_vk_map[VK_SCROLL] = PUSS_IMGUI_KEY_SCROLL_LOCK;
-		_win32_vk_map[VK_NUMLOCK] = PUSS_IMGUI_KEY_NUM_LOCK;
-		_win32_vk_map[VK_PRINT] = PUSS_IMGUI_KEY_PRINT_SCREEN;
-		_win32_vk_map[VK_PAUSE] = PUSS_IMGUI_KEY_PAUSE;
-		_win32_vk_map[VK_F1] = PUSS_IMGUI_KEY_F1;
-		_win32_vk_map[VK_F2] = PUSS_IMGUI_KEY_F2;
-		_win32_vk_map[VK_F3] = PUSS_IMGUI_KEY_F3;
-		_win32_vk_map[VK_F4] = PUSS_IMGUI_KEY_F4;
-		_win32_vk_map[VK_F5] = PUSS_IMGUI_KEY_F5;
-		_win32_vk_map[VK_F6] = PUSS_IMGUI_KEY_F6;
-		_win32_vk_map[VK_F7] = PUSS_IMGUI_KEY_F7;
-		_win32_vk_map[VK_F8] = PUSS_IMGUI_KEY_F8;
-		_win32_vk_map[VK_F9] = PUSS_IMGUI_KEY_F9;
-		_win32_vk_map[VK_F10] = PUSS_IMGUI_KEY_F10;
-		_win32_vk_map[VK_F11] = PUSS_IMGUI_KEY_F11;
-		_win32_vk_map[VK_F12] = PUSS_IMGUI_KEY_F12;
-		_win32_vk_map[VK_NUMPAD0] = PUSS_IMGUI_KEY_KP_0;
-		_win32_vk_map[VK_NUMPAD1] = PUSS_IMGUI_KEY_KP_1;
-		_win32_vk_map[VK_NUMPAD2] = PUSS_IMGUI_KEY_KP_2;
-		_win32_vk_map[VK_NUMPAD3] = PUSS_IMGUI_KEY_KP_3;
-		_win32_vk_map[VK_NUMPAD4] = PUSS_IMGUI_KEY_KP_4;
-		_win32_vk_map[VK_NUMPAD5] = PUSS_IMGUI_KEY_KP_5;
-		_win32_vk_map[VK_NUMPAD6] = PUSS_IMGUI_KEY_KP_6;
-		_win32_vk_map[VK_NUMPAD7] = PUSS_IMGUI_KEY_KP_7;
-		_win32_vk_map[VK_NUMPAD8] = PUSS_IMGUI_KEY_KP_8;
-		_win32_vk_map[VK_NUMPAD9] = PUSS_IMGUI_KEY_KP_9;
-		_win32_vk_map[VK_DECIMAL] = PUSS_IMGUI_KEY_KP_DECIMAL;
-		_win32_vk_map[VK_DIVIDE] = PUSS_IMGUI_KEY_KP_DIVIDE;
-		_win32_vk_map[VK_MULTIPLY] = PUSS_IMGUI_KEY_KP_MULTIPLY;
-		_win32_vk_map[VK_SUBTRACT] = PUSS_IMGUI_KEY_KP_SUBTRACT;
-		_win32_vk_map[VK_ADD] = PUSS_IMGUI_KEY_KP_ADD;
-		_win32_vk_map[VK_OEM_NEC_EQUAL] = PUSS_IMGUI_KEY_KP_EQUAL;
-		break;
-	case DLL_PROCESS_DETACH:
-		break;
-	}
-	return TRUE;
-}
-
-static int _win32_vk_convert(WPARAM wParam, LPARAM lParam) {
-	int key = _win32_vk_map[wParam];
-	if( key ) {
-		switch(wParam) {
-		case VK_SHIFT:
-			key = GetKeyState(VK_LSHIFT) ? PUSS_IMGUI_KEY_LEFT_SHIFT : PUSS_IMGUI_KEY_RIGHT_SHIFT;
-			break;
-		case VK_CONTROL:
-			key = GetKeyState(VK_LCONTROL) ? PUSS_IMGUI_KEY_LEFT_CONTROL : PUSS_IMGUI_KEY_RIGHT_CONTROL;
-			break;
-		case VK_MENU:
-			key = GetKeyState(VK_LMENU) ? PUSS_IMGUI_KEY_LEFT_ALT : PUSS_IMGUI_KEY_RIGHT_ALT;
-			break;
-		case VK_RETURN:
-			key = (lParam & (1<<24)) ? PUSS_IMGUI_KEY_KP_ENTER : PUSS_IMGUI_KEY_ENTER;
-			break;
-		}
-	}
-	return key;
-}
-
-static int _lua_utf8_to_utf16(lua_State* L) {
-	size_t len = 0;
-	const char* str = luaL_checklstring(L, 1, &len);
-	int wlen = MultiByteToWideChar(CP_UTF8, 0, str, (int)len, NULL, 0);
-	if( wlen > 0 ) {
-		luaL_Buffer B;
-		wchar_t* wstr = (wchar_t*)luaL_buffinitsize(L, &B, (size_t)(wlen<<1));
-		MultiByteToWideChar(CP_UTF8, 0, str, (int)len, wstr, wlen);
-		luaL_addsize(&B, (size_t)(wlen<<1));
-		luaL_addchar(&B, '\0');	// add more one byte for \u0000
-		luaL_pushresult(&B);
-	} else if( wlen==0 ) {
-		lua_pushliteral(L, "");
-	} else {
-		luaL_error(L, "utf8 to utf16 convert failed!");
-	}
-	return 1;
-}
-
-#include "imgui_impl_win32.inl"
-#include "imgui_impl_dx11.inl"
-
-#pragma comment(lib, "d3d11.lib")
-#pragma comment(lib, "d3dcompiler.lib")
-#pragma comment(lib, "dxgi.lib")
-
-#else
-
-#include "imgui_impl_opengl3.inl"
-#include "imgui_impl_glfw.inl"
-
-#ifdef _MSC_VER
-	#pragma comment(lib, "glfw3.lib")
-	#pragma comment(lib, "opengl32.lib")
-#endif
-
-// About OpenGL function loaders: modern OpenGL doesn't have a standard header file and requires individual function pointers to be loaded manually. 
-// Helper libraries are often used for this purpose! Here we are supporting a few common ones: gl3w, glew, glad.
-// You may use another loader/header of your choice (glext, glLoadGen, etc.), or chose to manually implement your own.
-#if defined(IMGUI_IMPL_OPENGL_LOADER_GL3W)
-#include <GL/gl3w.h>    // Initialize with gl3wInit()
-#elif defined(IMGUI_IMPL_OPENGL_LOADER_GLEW)
-#include <GL/glew.h>    // Initialize with glewInit()
-#elif defined(IMGUI_IMPL_OPENGL_LOADER_GLAD)
-#include <glad/glad.h>  // Initialize with gladLoadGL()
-#else
-#include IMGUI_IMPL_OPENGL_LOADER_CUSTOM
-#endif
-
-#include <GLFW/glfw3.h> // Include glfw3.h after our OpenGL definitions
-
-#ifdef _WIN32
-#undef APIENTRY
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include <GLFW/glfw3native.h>   // for glfwGetWin32Window
-#endif
-
-#endif
-
 static void do_create_context() {
 	// Setup ImGui binding
 	ImGui::CreateContext();
@@ -199,12 +35,51 @@ static void do_update_and_render_viewports() {
 
 #ifdef PUSS_IMGUI_USE_DX11
 
+#include <windows.h>
+#include <tchar.h>
+#include <winuser.h>
+#include <d3d11.h>
+#define DIRECTINPUT_VERSION 0x0800
+#include <dinput.h>
+
+#ifndef WM_DPICHANGED
+#define WM_DPICHANGED 0x02E0 // From Windows SDK 8.1+ headers
+#endif
+
+#pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "d3dcompiler.lib")
+#pragma comment(lib, "dxgi.lib")
+
+static int _win32_vk_convert(WPARAM wParam, LPARAM lParam);
+
+#include "imgui_impl_win32.inl"
+#include "imgui_impl_dx11.inl"
+
+#define PUSS_IMGUI_WINDOW_CLASS	_T("PussImGuiWindow")
+
+static WNDCLASSEX puss_imgui_wc = { sizeof(WNDCLASSEX), CS_CLASSDC, NULL, 0L, 0L, NULL, NULL, NULL, NULL, NULL, PUSS_IMGUI_WINDOW_CLASS, NULL };
+
 static IDXGISwapChain*          g_pSwapChain = NULL;
 static ID3D11RenderTargetView*  g_mainRenderTargetView = NULL;
 static LPARAM					g_resizeParam = 0;
 
-static inline int created() {
-	return g_hWnd ? 1 : 0;
+static int _lua_utf8_to_utf16(lua_State* L) {
+	size_t len = 0;
+	const char* str = luaL_checklstring(L, 1, &len);
+	int wlen = MultiByteToWideChar(CP_UTF8, 0, str, (int)len, NULL, 0);
+	if( wlen > 0 ) {
+		luaL_Buffer B;
+		wchar_t* wstr = (wchar_t*)luaL_buffinitsize(L, &B, (size_t)(wlen<<1));
+		MultiByteToWideChar(CP_UTF8, 0, str, (int)len, wstr, wlen);
+		luaL_addsize(&B, (size_t)(wlen<<1));
+		luaL_addchar(&B, '\0');	// add more one byte for \u0000
+		luaL_pushresult(&B);
+	} else if( wlen==0 ) {
+		lua_pushliteral(L, "");
+	} else {
+		luaL_error(L, "utf8 to utf16 convert failed!");
+	}
+	return 1;
 }
 
 static inline void set_should_close(int value) {
@@ -260,7 +135,6 @@ static HRESULT CreateDeviceD3D(HWND hWnd)
 		return E_FAIL;
 
 	CreateRenderTarget();
-
 	return S_OK;
 }
 
@@ -298,8 +172,7 @@ static LRESULT WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 			return 0;
 		break;
 	case WM_DPICHANGED:
-		if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_DpiEnableScaleViewports)
-		{
+		if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_DpiEnableScaleViewports) {
 			//const int dpi = HIWORD(wParam);
 			//printf("WM_DPICHANGED to %d (%.0f%%)\n", dpi, (float)dpi / 96.0f * 100.0f);
 			const RECT* suggested_rect = (RECT*)lParam;
@@ -384,9 +257,9 @@ static bool create_window(const TCHAR* title, int width, int height) {
 }
 
 static void destroy_window() {
-	if (!get_should_close())
-		return;
 	if (!g_hWnd)
+		return;
+	if (!get_should_close())
 		return;
 	HWND hWnd = g_hWnd;
 	CleanupDeviceD3D();
@@ -457,11 +330,136 @@ static void render_drawdata() {
     //g_pSwapChain->Present(0, 0); // Present without vsync
 }
 
+static void do_platform_init(lua_State* L) {
+}
+
+static VOID CALLBACK dummy_timer_handle(HWND, UINT, UINT_PTR, DWORD) {
+}
+
+static int imgui_wait_events_lua(lua_State* L) {
+	double timeout = luaL_optnumber(L, 1, 0.01);
+	UINT_PTR timer = SetTimer(NULL, 0, (UINT)(timeout*1000), dummy_timer_handle);
+	WaitMessage();
+	KillTimer(NULL, timer);
+	return 0;
+}
+
+static int _win32_vk_map[256];
+
+static int _win32_vk_convert(WPARAM wParam, LPARAM lParam) {
+	int key = _win32_vk_map[wParam];
+	if( key ) {
+		switch(wParam) {
+		case VK_SHIFT:
+			key = GetKeyState(VK_LSHIFT) ? PUSS_IMGUI_KEY_LEFT_SHIFT : PUSS_IMGUI_KEY_RIGHT_SHIFT;
+			break;
+		case VK_CONTROL:
+			key = GetKeyState(VK_LCONTROL) ? PUSS_IMGUI_KEY_LEFT_CONTROL : PUSS_IMGUI_KEY_RIGHT_CONTROL;
+			break;
+		case VK_MENU:
+			key = GetKeyState(VK_LMENU) ? PUSS_IMGUI_KEY_LEFT_ALT : PUSS_IMGUI_KEY_RIGHT_ALT;
+			break;
+		case VK_RETURN:
+			key = (lParam & (1<<24)) ? PUSS_IMGUI_KEY_KP_ENTER : PUSS_IMGUI_KEY_ENTER;
+			break;
+		}
+	}
+	return key;
+}
+
+BOOL WINAPI DllMain(HANDLE hinstDLL, DWORD dwReason, LPVOID lpvReserved) {
+	switch (dwReason) {
+	case DLL_PROCESS_ATTACH:
+		// Create application window
+		puss_imgui_wc.lpfnWndProc = WndProc;
+		puss_imgui_wc.hInstance = (HINSTANCE)hinstDLL;
+		// puss_imgui_wc.hIcon = LoadIcon(puss_imgui_wc.hInstance, MAKEINTRESOURCE(IDI_ICON1));
+		RegisterClassEx(&puss_imgui_wc);
+		memset(_win32_vk_map, 0, sizeof(_win32_vk_map));
+		_win32_vk_map[VK_ESCAPE] = PUSS_IMGUI_KEY_ESCAPE;
+		_win32_vk_map[VK_RETURN] = PUSS_IMGUI_KEY_ENTER;
+		_win32_vk_map[VK_TAB] = PUSS_IMGUI_KEY_TAB;
+		_win32_vk_map[VK_BACK] = PUSS_IMGUI_KEY_BACKSPACE;
+		_win32_vk_map[VK_INSERT] = PUSS_IMGUI_KEY_INSERT;
+		_win32_vk_map[VK_DELETE] = PUSS_IMGUI_KEY_DELETE;
+		_win32_vk_map[VK_RIGHT] = PUSS_IMGUI_KEY_RIGHT;
+		_win32_vk_map[VK_LEFT] = PUSS_IMGUI_KEY_LEFT;
+		_win32_vk_map[VK_DOWN] = PUSS_IMGUI_KEY_DOWN;
+		_win32_vk_map[VK_UP] = PUSS_IMGUI_KEY_UP;
+		_win32_vk_map[VK_PRIOR] = PUSS_IMGUI_KEY_PAGE_UP;
+		_win32_vk_map[VK_NEXT] = PUSS_IMGUI_KEY_PAGE_DOWN;
+		_win32_vk_map[VK_HOME] = PUSS_IMGUI_KEY_HOME;
+		_win32_vk_map[VK_END] = PUSS_IMGUI_KEY_END;
+		_win32_vk_map[VK_CAPITAL] = PUSS_IMGUI_KEY_CAPS_LOCK;
+		_win32_vk_map[VK_SCROLL] = PUSS_IMGUI_KEY_SCROLL_LOCK;
+		_win32_vk_map[VK_NUMLOCK] = PUSS_IMGUI_KEY_NUM_LOCK;
+		_win32_vk_map[VK_PRINT] = PUSS_IMGUI_KEY_PRINT_SCREEN;
+		_win32_vk_map[VK_PAUSE] = PUSS_IMGUI_KEY_PAUSE;
+		_win32_vk_map[VK_F1] = PUSS_IMGUI_KEY_F1;
+		_win32_vk_map[VK_F2] = PUSS_IMGUI_KEY_F2;
+		_win32_vk_map[VK_F3] = PUSS_IMGUI_KEY_F3;
+		_win32_vk_map[VK_F4] = PUSS_IMGUI_KEY_F4;
+		_win32_vk_map[VK_F5] = PUSS_IMGUI_KEY_F5;
+		_win32_vk_map[VK_F6] = PUSS_IMGUI_KEY_F6;
+		_win32_vk_map[VK_F7] = PUSS_IMGUI_KEY_F7;
+		_win32_vk_map[VK_F8] = PUSS_IMGUI_KEY_F8;
+		_win32_vk_map[VK_F9] = PUSS_IMGUI_KEY_F9;
+		_win32_vk_map[VK_F10] = PUSS_IMGUI_KEY_F10;
+		_win32_vk_map[VK_F11] = PUSS_IMGUI_KEY_F11;
+		_win32_vk_map[VK_F12] = PUSS_IMGUI_KEY_F12;
+		_win32_vk_map[VK_NUMPAD0] = PUSS_IMGUI_KEY_KP_0;
+		_win32_vk_map[VK_NUMPAD1] = PUSS_IMGUI_KEY_KP_1;
+		_win32_vk_map[VK_NUMPAD2] = PUSS_IMGUI_KEY_KP_2;
+		_win32_vk_map[VK_NUMPAD3] = PUSS_IMGUI_KEY_KP_3;
+		_win32_vk_map[VK_NUMPAD4] = PUSS_IMGUI_KEY_KP_4;
+		_win32_vk_map[VK_NUMPAD5] = PUSS_IMGUI_KEY_KP_5;
+		_win32_vk_map[VK_NUMPAD6] = PUSS_IMGUI_KEY_KP_6;
+		_win32_vk_map[VK_NUMPAD7] = PUSS_IMGUI_KEY_KP_7;
+		_win32_vk_map[VK_NUMPAD8] = PUSS_IMGUI_KEY_KP_8;
+		_win32_vk_map[VK_NUMPAD9] = PUSS_IMGUI_KEY_KP_9;
+		_win32_vk_map[VK_DECIMAL] = PUSS_IMGUI_KEY_KP_DECIMAL;
+		_win32_vk_map[VK_DIVIDE] = PUSS_IMGUI_KEY_KP_DIVIDE;
+		_win32_vk_map[VK_MULTIPLY] = PUSS_IMGUI_KEY_KP_MULTIPLY;
+		_win32_vk_map[VK_SUBTRACT] = PUSS_IMGUI_KEY_KP_SUBTRACT;
+		_win32_vk_map[VK_ADD] = PUSS_IMGUI_KEY_KP_ADD;
+		_win32_vk_map[VK_OEM_NEC_EQUAL] = PUSS_IMGUI_KEY_KP_EQUAL;
+		break;
+	case DLL_PROCESS_DETACH:
+		break;
+	}
+	return TRUE;
+}
+
 #else
 
-static inline int created() {
-	return g_Window ? 1 : 0;
-}
+#include "imgui_impl_opengl3.inl"
+#include "imgui_impl_glfw.inl"
+
+#ifdef _MSC_VER
+	#pragma comment(lib, "glfw3.lib")
+	#pragma comment(lib, "opengl32.lib")
+#endif
+
+// About OpenGL function loaders: modern OpenGL doesn't have a standard header file and requires individual function pointers to be loaded manually. 
+// Helper libraries are often used for this purpose! Here we are supporting a few common ones: gl3w, glew, glad.
+// You may use another loader/header of your choice (glext, glLoadGen, etc.), or chose to manually implement your own.
+#if defined(IMGUI_IMPL_OPENGL_LOADER_GL3W)
+#include <GL/gl3w.h>    // Initialize with gl3wInit()
+#elif defined(IMGUI_IMPL_OPENGL_LOADER_GLEW)
+#include <GL/glew.h>    // Initialize with glewInit()
+#elif defined(IMGUI_IMPL_OPENGL_LOADER_GLAD)
+#include <glad/glad.h>  // Initialize with gladLoadGL()
+#else
+#include IMGUI_IMPL_OPENGL_LOADER_CUSTOM
+#endif
+
+#include <GLFW/glfw3.h> // Include glfw3.h after our OpenGL definitions
+
+#ifdef _WIN32
+#undef APIENTRY
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>   // for glfwGetWin32Window
+#endif
 
 static inline void set_should_close(int value) {
 	if( g_Window ) {
@@ -591,10 +589,51 @@ static void render_drawdata() {
     glfwMakeContextCurrent(g_Window);
     glfwSwapBuffers(g_Window);
 }
+
+static void error_callback(int e, const char *d) {
+	fprintf(stderr, "[GFLW] error %d: %s\n", e, d);
+}
+
+static int glfw_inited = 0;
+
+static void do_platform_init(lua_State* L) {
+	if( !glfw_inited ) {
+		glfwSetErrorCallback(error_callback);
+
+		glfw_inited = glfwInit();
+    	if( !glfw_inited ) luaL_error(L, "[GFLW] failed to init!\n");
+    	atexit(glfwTerminate);
+
+		#if __APPLE__
+			// GL 3.2 + GLSL 150
+			glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+			glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+			glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
+			glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
+		#else
+			// GL 3.0 + GLSL 130
+			glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+			glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+			//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
+			//glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
+		#endif
+	}
+}
+
+static int imgui_wait_events_lua(lua_State* L) {
+	double timeout = luaL_optnumber(L, 1, 0.01);
+	glfwWaitEventsTimeout(timeout);
+	return 0;
+}
+
 #endif
 
 static int imgui_created_lua(lua_State* L) {
-	lua_pushboolean(L, created());
+#ifdef PUSS_IMGUI_USE_DX11
+	lua_pushboolean(L, g_hWnd ? 1 : 0);
+#else
+	lua_pushboolean(L, g_Window ? 1 : 0);
+#endif
 	return 1;
 }
 
@@ -649,58 +688,6 @@ static int imgui_update_lua(lua_State* L) {
 	}
 	return 0;
 }
-
-#ifdef PUSS_IMGUI_USE_DX11
-	static void do_platform_init(lua_State* L) {
-	}
-
-	static VOID CALLBACK dummy_timer_handle(HWND, UINT, UINT_PTR, DWORD) {
-	}
-
-	static int imgui_wait_events_lua(lua_State* L) {
-		double timeout = luaL_optnumber(L, 1, 0.01);
-		UINT_PTR timer = SetTimer(NULL, 0, (UINT)(timeout*1000), dummy_timer_handle);
-		WaitMessage();
-		KillTimer(NULL, timer);
-		return 0;
-	}
-#else
-	static void error_callback(int e, const char *d) {
-		fprintf(stderr, "[GFLW] error %d: %s\n", e, d);
-	}
-
-	static int glfw_inited = 0;
-
-	static void do_platform_init(lua_State* L) {
-		if( !glfw_inited ) {
-			glfwSetErrorCallback(error_callback);
-
-			glfw_inited = glfwInit();
-    		if( !glfw_inited ) luaL_error(L, "[GFLW] failed to init!\n");
-    		atexit(glfwTerminate);
-
-			#if __APPLE__
-				// GL 3.2 + GLSL 150
-				glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-				glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-				glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
-				glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
-			#else
-				// GL 3.0 + GLSL 130
-				glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-				glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-				//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
-				//glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
-			#endif
-		}
-	}
-
-	static int imgui_wait_events_lua(lua_State* L) {
-		double timeout = luaL_optnumber(L, 1, 0.01);
-		glfwWaitEventsTimeout(timeout);
-		return 0;
-	}
-#endif
 
 static int imgui_create_lua(lua_State* L) {
 	const char* title = luaL_checkstring(L, 1);
