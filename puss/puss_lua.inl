@@ -188,7 +188,7 @@ lua_State* puss_lua_newstate(int debug, lua_Alloc f, void* ud) {
 	DebugEnv* env = NULL;
 	lua_State* L;
 	if( debug ) {
-		env = debug_env_new(f ? f : _default_alloc, ud);
+		env = lua_debugger_new(f ? f : _default_alloc, ud);
 		if( !env ) return NULL;
 		ud = env;
 		f = _debug_alloc;

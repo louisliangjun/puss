@@ -30,6 +30,7 @@ local hosts = nil
 local socket = _socket
 
 local dummy_vars = {}
+local bp_active = false
 
 stack_list = stack_list or {}
 stack_vars = stack_vars or {}
@@ -122,7 +123,7 @@ stubs.fetch_subs = function(key, ok, subs)
 	end
 end
 
-stubs.set_bp = function(fname, line, bp)
+stubs.set_bp = function(fname, line, bp, err)
 	fname = fname:match('^@(.-)%s*$') or fname
 	docs.margin_set(fname, line, bp)
 end
@@ -139,6 +140,7 @@ local function shortcuts_update()
 	if shotcuts.is_pressed('debugger/step_into') then net.send(socket, 'step_into') end
 	if shotcuts.is_pressed('debugger/step_out') then net.send(socket, 'step_out') end
 	if shotcuts.is_pressed('debugger/continue') then net.send(socket, 'continue') end
+	if shotcuts.is_pressed('debugger/bp') then bp_active = true end
 end
 
 local function recver_update()
@@ -175,11 +177,31 @@ local function debug_toolbar()
 		end
 	end
 	imgui.SameLine()
-	if imgui.Button("step") then
+	if imgui.Button("capture_error") then
+		net.send(socket, 'capture_error')
+	end
+	imgui.SameLine()
+	if imgui.Button("set/unset bp(F9)") then
+		bp_active = true
+	end
+	imgui.SameLine()
+	if imgui.Button("fetch_disasm") then
+		net.send(socket, 'fetch_disasm', stack_current)
+	end
+
+	if imgui.Button("step(F10)") then
+		net.send(socket, 'step_over')
+	end
+	imgui.SameLine()
+	if imgui.Button("step_into(F11)") then
 		net.send(socket, 'step_into')
 	end
 	imgui.SameLine()
-	if imgui.Button("continue") then
+	if imgui.Button("step_out(Shift+F11)") then
+		net.send(socket, 'step_out')
+	end
+	imgui.SameLine()
+	if imgui.Button("continue(F5)") then
 		net.send(socket, 'continue')
 	end
 
@@ -313,7 +335,8 @@ local function trigger_bp(page, line)
 end
 
 function docs_page_on_draw(page)
-	if shotcuts.is_pressed('debugger/bp') then
+	if bp_active then
+		bp_active = false
 		local line = page.sv:LineFromPosition(page.sv:GetCurrentPos())
 		trigger_bp(page, line)
 	end
