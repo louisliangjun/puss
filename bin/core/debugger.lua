@@ -29,7 +29,6 @@ local hosts = nil
 
 local socket = _socket
 
-local bp_active = false
 local dummy_vars = {}
 
 stack_list = stack_list or {}
@@ -143,7 +142,6 @@ local function shortcuts_update()
 	if shotcuts.is_pressed('debugger/step_into') then net.send(socket, 'step_into') end
 	if shotcuts.is_pressed('debugger/step_out') then net.send(socket, 'step_out') end
 	if shotcuts.is_pressed('debugger/continue') then net.send(socket, 'continue') end
-	if shotcuts.is_pressed('debugger/bp') then bp_active = true end
 end
 
 local function recver_update()
@@ -167,46 +165,52 @@ local function recver_update()
 	end
 end
 
+local function tool_button(label, hint)
+	local clicked = imgui.Button(label)
+	if imgui.IsItemHovered() then
+		imgui.BeginTooltip()
+		imgui.Text(hint)
+		imgui.EndTooltip()
+	end
+	return clicked
+end
+
 local function debug_toolbar()
 	if socket and socket:valid() then
-		if imgui.Button("disconnect") then
+		if tool_button('断开', '断开连接') then
 			socket:close()
 			stack_list_clear()
 		end
 	else
-		if imgui.Button("connect...") then
+		if tool_button('连接', '连接...') then
 			hosts = {}
 			imgui.OpenPopup('Connect ...')
 			imgui.SetNextWindowSize(430, 320)
 		end
 	end
 	imgui.SameLine()
-	if imgui.Button("capture_error") then
-		net.send(socket, 'capture_error')
+	if tool_button('>>', '继续运行 (F5)') then
+		net.send(socket, 'continue')
 	end
 	imgui.SameLine()
-	if imgui.Button("set/unset bp(F9)") then
-		bp_active = true
-	end
-	imgui.SameLine()
-	if imgui.Button("fetch_disasm") then
-		net.send(socket, 'fetch_disasm', stack_current)
-	end
-
-	if imgui.Button("step(F10)") then
+	if tool_button('|>', '单步 (F10)') then
 		net.send(socket, 'step_over')
 	end
 	imgui.SameLine()
-	if imgui.Button("step_into(F11)") then
+	if tool_button('=>', '步入 (F11)') then
 		net.send(socket, 'step_into')
 	end
 	imgui.SameLine()
-	if imgui.Button("step_out(Shift+F11)") then
+	if tool_button('<=', '跳出 (Shift+F11)') then
 		net.send(socket, 'step_out')
 	end
 	imgui.SameLine()
-	if imgui.Button("continue(F5)") then
-		net.send(socket, 'continue')
+	if tool_button('Err', '异常断点') then
+		net.send(socket, 'capture_error')
+	end
+	imgui.SameLine()
+	if tool_button('ASM', '显示反汇编') then
+		net.send(socket, 'fetch_disasm', stack_current)
 	end
 
 	if imgui.BeginPopupModal('Connect ...') then
@@ -340,16 +344,17 @@ local function trigger_bp(page, line)
 end
 
 function docs_page_before_draw(page)
-	if bp_active then
-		bp_active = false
+	if shotcuts.is_pressed('debugger/bp') then
 		local line = page.sv:LineFromPosition(page.sv:GetCurrentPos())
 		trigger_bp(page, line)
 	end
 end
 
 function docs_page_after_draw(page)
-	local info = stack_list[1]
+	local info = stack_list[stack_current]
 	if not info then return end
+	local fname = info.source:match('^@(.+)$')
+	if not fname then return end
 	local line = info.currentline
 	local sv = page.sv
 	local x,y = imgui.GetWindowPos()

@@ -594,12 +594,12 @@ static int _lua__sci_send_wrap(lua_State* L) {
 }
 
 static void im_scintilla_on_notify(lua_State* L, ScintillaIM* sci, const SCNotification* ev, int error_handle) {
+	int top = lua_gettop(L);
 	if( lua_getuservalue(L, 1)!=LUA_TTABLE )
 		return;
-	int top = lua_gettop(L);
 	if( lua_rawgeti(L, -1, ev->nmhdr.code)!=LUA_TFUNCTION )
 		return;
-	lua_pop(L, 1);
+	lua_remove(L, -2);
 	lua_pushvalue(L, 1);
 	switch(ev->nmhdr.code) {
 	case SCN_STYLENEEDED:	// void StyleNeeded=2000(int position)
