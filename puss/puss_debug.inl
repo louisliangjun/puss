@@ -46,13 +46,12 @@ typedef struct _DebugEnv {
 
 	void*			main_addr;
 	lua_State*		main_state;
-	int				breaked_frame;
 
+	lua_State*		breaked_state;
 	const FileInfo*	breaked_finfo;
 	int				breaked_line;
-	lua_State*		breaked_state;
 	int				breaked_top;
-	int				breaked;
+	int				breaked_frame;
 
 	int				step_signal;
 	int				step_depth;
@@ -161,13 +160,12 @@ static void debug_handle_unref(DebugEnv* env) {
 	}
 }
 
-static void debug_handle_invoke(DebugEnv* env, int breaked) {
+static void debug_handle_invoke(DebugEnv* env, int step) {
 	lua_State* L = env->debug_state;
 	lua_settop(L, 0);
 	lua_rawgeti(L, LUA_REGISTRYINDEX, env->debug_handle);
-	lua_pushboolean(L, breaked);
-	lua_pushinteger(L, env->breaked_frame);
-	if( lua_pcall(L, 2, 0, 0) ) {
+	lua_pushinteger(L, step);
+	if( lua_pcall(L, 1, 0, 0) ) {
 		lua_pop(L, 1);
 	}
 }
@@ -331,35 +329,37 @@ static const FileInfo* script_line_hook(DebugEnv* env, lua_State* L, lua_Debug* 
 
 static int script_on_breaked(DebugEnv* env, lua_State* L, int currentline, const FileInfo* finfo) {
 	int frame;
-	if( env->breaked ) return 0;
+	if( env->breaked_state ) return 0;
 	if( env->debug_handle==LUA_NOREF ) return 0;
 
 	// reset breaked infos
+	env->breaked_state = L;
 	env->breaked_finfo = finfo;
 	env->breaked_line = currentline;
-	env->breaked_state = L;
 	env->breaked_top = lua_gettop(L);
-	env->breaked = 1;
-
 	env->step_signal = SIGSTEP_NULL;
 	env->step_depth = 0;
 	env->step_state = NULL;
-
 	env->runto_finfo = NULL;
 	env->runto_line = 0;
 
 	frame = env->breaked_frame;
-	while( frame==env->breaked_frame ) {
-		debug_handle_invoke(env, finfo ? 1 : 0);
+	if( finfo ) {
+		debug_handle_invoke(env, -1);
+		while( frame==env->breaked_frame ) {
+			debug_handle_invoke(env, 0);
+		}
+		debug_handle_invoke(env, 1);
+	} else {
+		debug_handle_invoke(env, 0);
 	}
 
 	// clear breaked infos
 	lua_settop(L, env->breaked_top);
-	env->breaked = 0;
-	env->breaked_top = 0;
 	env->breaked_state = NULL;
-	env->breaked_line = 0;
 	env->breaked_finfo = NULL;
+	env->breaked_line = 0;
+	env->breaked_top = 0;
 	return 0;
 }
 
@@ -643,11 +643,12 @@ static int lua_debug_run_to(lua_State* L) {
 	int line = (int)luaL_checkinteger(L, 2);
 	FileInfo* finfo = file_info_fetch(env, script);
 	env->breaked_frame++;
-	env->runto_finfo = NULL;
-	env->runto_line = 0;
 	if( finfo && line>=1 && line<=finfo->line_num ) {
 		env->runto_finfo = finfo;
 		env->runto_line = line;
+	} else {
+		env->runto_finfo = NULL;
+		env->runto_line = 0;
 	}
 	return 0;
 }
@@ -684,7 +685,6 @@ static int lua_debug_capture_error(lua_State* L) {
 }
 
 #ifndef PUSS_DEBUG_NOT_USE_DISASM
-
 	#ifdef VOID
 		#undef VOID
 	#endif
@@ -699,14 +699,12 @@ static int lua_debug_capture_error(lua_State* L) {
 	#endif
 
 	typedef struct _PrintEnv {
-		const Instruction*	ip;
 		luaL_Buffer			B;
 		char				str[1024+8];
 	} PrintEnv;
 
 	#define printf_decls	PrintEnv* _PENV,
 	#define printf_usage	_PENV,
-	#define print_ip		luaL_addstring(&(_PENV->B), (_PENV->ip==(code+pc)) ? "=>  " : "    ")
 	#define printf(...) do{ \
 		int len = snprintf(_PENV->str, 1024, __VA_ARGS__); \
 		if( len > 0 ) { luaL_addlstring(&(_PENV->B), _PENV->str, len); } \
@@ -789,7 +787,6 @@ static int lua_debug_capture_error(lua_State* L) {
 			int bx = GETARG_Bx(i);
 			int sbx = GETARG_sBx(i);
 			int line = getfuncline(f, pc);
-			print_ip;
 			printf("%d\t", pc + 1);
 			if (line > 0) printf("[%d]\t", line); else printf("[-]\t");
 			printf("%-9s\t", luaP_opnames[o]);
@@ -984,8 +981,8 @@ static int lua_debug_capture_error(lua_State* L) {
 		PrintEnv PENV;
 		PrintEnv* _PENV = &PENV;
 		const LClosure* f = NULL;
+		const Instruction* pc = NULL;
 		DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
-		PENV.ip = NULL;
 		luaL_buffinit(L, &(PENV.B));
 		PENV.str[0] = '\0';
 
@@ -1006,14 +1003,15 @@ static int lua_debug_capture_error(lua_State* L) {
 			}
 			if (ci && (ttype(ci->func) == LUA_TLCL)) {
 				f = clLvalue(ci->func);
-				PENV.ip = ci->u.l.savedpc - 1;
+				pc = ci->u.l.savedpc;
 			}
 		}
 		if (f) {
 			Proto *p = f->p;
 			PrintFunction(p, 0);
 			luaL_pushresult(&(PENV.B));
-			return 1;
+			lua_pushinteger(L, pc ? (pc - p->code + 1) : 0);
+			return 2;
 		}
 		return 0;
 	}
@@ -1071,7 +1069,7 @@ static int lua_debugger_debug(lua_State* hostL) {
 	DebugEnv* env = debug_env_fetch(hostL);
 	if( lua_gettop(hostL)==0 ) {
 		if( env->debug_handle!=LUA_NOREF ) {
-			debug_handle_invoke(env, 0);
+			debug_handle_invoke(env, 1);
 		}
 	} else if( lua_type(hostL, 1)!=LUA_TBOOLEAN ) {
 		// do nothing, used for query debug status, return working

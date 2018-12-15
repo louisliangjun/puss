@@ -210,7 +210,7 @@ local dialog_modes =
 function tabs_page_draw(page, active_page)
 	if (not page.saving) and shotcuts.is_pressed('docs/save') then do_save_page(page) end
 	if shotcuts.is_pressed('docs/close') then page.open = false end
-	puss.trace_pcall(hook, page, 'docs_page_on_draw')
+	puss.trace_pcall(hook, page, 'docs_page_before_draw')
 	if page.saving then draw_saving_bar(page) end
 
 	local active
@@ -249,8 +249,10 @@ function tabs_page_draw(page, active_page)
 
 	local height = mode and -(mode[3] * imgui.GetFrameHeightWithSpacing()) or nil
 	imgui.BeginChild(page.label, nil, height, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
-		page.sv()
-		page.unsaved = page.sv:GetModify()
+		local sv = page.sv
+		sv()
+		page.unsaved = sv:GetModify()
+		puss.trace_pcall(hook, page, 'docs_page_after_draw')
 	imgui.EndChild()
 
 	if mode then

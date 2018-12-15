@@ -19,7 +19,6 @@ if puss._debug_proxy then
 
 	local listen_socket, host_info
 	local socket, address
-	local send_breaked_frame
 
 	local function dispatch(cmd, ...)
 		-- print( 'host recv:', cmd, ... )
@@ -29,46 +28,49 @@ if puss._debug_proxy then
 		return net.send(socket, cmd, handle(puss_debug, ...))
 	end
 
-	local function hook_main_update(breaked, frame)
-		if not socket then
-			if not listen_socket then
-				local s, a = net.listen(nil, 0, true)
-				if not s then return end
+	local function check_client_connect()
+		if not listen_socket then
+			local s, a = net.listen(nil, 0, true)
+			if not s then return end
 
-				listen_socket, host_info = s, string.format('[PussDebug]|%s', a)
-				local ok, title = puss_debug:__host_pcall('puss._debug_fetch_title')
-				if ok then host_info = string.format('%s|%s', host_info, title) end
-			end
-
-			broadcast(host_info)
-			-- print('broadcast', BROADCAST_PORT, host_info)
-
-			socket, address = net.accept(listen_socket)
-			-- print('accept', listen_socket, socket, address)
-
-			if socket then
-				print('host attach', socket, address)
-				listen_socket:close()
-				listen_socket = nil
-			else
-				breaked = false
-			end
-		elseif not socket:valid() then
-			print('host detach', socket, address)
-			breaked, socket, address = false, nil, nil
-		else
-			if breaked and send_breaked_frame ~= frame then
-				-- print('host breaked', frame)
-				net.send(socket, 'breaked')
-				send_breaked_frame = frame
-				puss_debug:__host_pcall('puss._debug_on_breaked')
-			end
-			net.update(socket, dispatch)
+			listen_socket, host_info = s, string.format('[PussDebug]|%s', a)
+			local ok, title = puss_debug:__host_pcall('puss._debug_fetch_title')
+			if ok then host_info = string.format('%s|%s', host_info, title) end
 		end
 
-		if not breaked then
-			send_breaked_frame = nil
-			puss_debug:continue()
+		broadcast(host_info)
+		-- print('broadcast', BROADCAST_PORT, host_info)
+
+		socket, address = net.accept(listen_socket)
+		-- print('accept', listen_socket, socket, address)
+
+		if socket then
+			print('host attach', socket, address)
+			listen_socket:close()
+			listen_socket = nil
+			return true
+		end
+	end
+
+	local function hook_main_update(step)
+		if step==0 then
+			if not socket then
+				if check_client_connect() then return end
+				puss_debug:continue()
+			elseif not socket:valid() then
+				print('host detach', socket, address)
+				socket, address = nil, nil
+				puss_debug:continue()
+			else
+				net.update(socket, dispatch)
+			end
+		else
+			if step < 0 then
+				net.send(socket, 'breaked', puss_debug:fetch_stack())
+				puss_debug:__host_pcall('puss._debug_on_breaked')
+			else
+				net.send(socket, 'continued')
+			end
 		end
 	end
 

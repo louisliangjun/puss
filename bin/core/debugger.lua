@@ -29,8 +29,8 @@ local hosts = nil
 
 local socket = _socket
 
-local dummy_vars = {}
 local bp_active = false
+local dummy_vars = {}
 
 stack_list = stack_list or {}
 stack_vars = stack_vars or {}
@@ -46,6 +46,11 @@ shotcuts.register('debugger/continue', 'continue', 'F5', false, false, false, fa
 shotcuts.register('debugger/step_over', 'step over', 'F10', false, false, false, false)
 shotcuts.register('debugger/step_into', 'step into', 'F11', false, false, false, false)
 shotcuts.register('debugger/step_out', 'step out', 'F11', false, true, false, false)
+
+local function stack_list_clear()
+	stack_list = {}
+	stack_current = 1
+end
 
 local function stack_vars_replace(var)
 	local old = stack_vars[var[1]]
@@ -73,14 +78,12 @@ end
 
 local stubs = {}
 
-stubs.breaked = function()
-	stack_vars = {}
-	--stack_list = {}
-	--stack_current = 1
-	net.send(socket, 'fetch_stack')
+stubs.continued = function()
+	stack_list_clear()
 end
 
-stubs.fetch_stack = function(ok, res)
+stubs.breaked = function(ok, res)
+	stack_vars = {}
 	if not ok then return print('fetch_stack failed:', ok, res) end
 	if type(res)~='table' then return print('fetch_stack failed:', ok, res) end
 	stack_list = res
@@ -168,6 +171,7 @@ local function debug_toolbar()
 	if socket and socket:valid() then
 		if imgui.Button("disconnect") then
 			socket:close()
+			stack_list_clear()
 		end
 	else
 		if imgui.Button("connect...") then
@@ -329,17 +333,30 @@ end
 
 local function trigger_bp(page, line)
 	local sv = page.sv
-	local bp = (sv:MarkerGet(line) & 0x01)==0
+	local marker = sv:MarkerGet(line)
+	local bp = (marker & 0x01)==0
 	local fname = '@'..puss.filename_format(page.filepath)
 	net.send(socket, 'set_bp', fname, line+1, bp)
 end
 
-function docs_page_on_draw(page)
+function docs_page_before_draw(page)
 	if bp_active then
 		bp_active = false
 		local line = page.sv:LineFromPosition(page.sv:GetCurrentPos())
 		trigger_bp(page, line)
 	end
+end
+
+function docs_page_after_draw(page)
+	local info = stack_list[1]
+	if not info then return end
+	local line = info.currentline
+	local sv = page.sv
+	local x,y = imgui.GetWindowPos()
+	local w,h = imgui.GetWindowSize()
+	local top = sv:GetFirstVisibleLine()
+	local th = sv:TextHeight(1)
+	imgui.WindowDrawListAddRectFilled(x,y+(line-top-1)*th,x+w,y+(line-top)*th,0x3FFF00FF)
 end
 
 function docs_page_on_create(page)

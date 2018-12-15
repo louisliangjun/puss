@@ -263,6 +263,7 @@ local function do_reset_styles(sv, lang)
 	else
 		sv:SetCaretLineVisible(false)
 	end
+	sv:SetCaretLineVisibleAlways(true)
 
 	if setting.margin_linenum then
 		sv:SetMarginTypeN(0, SC_MARGIN_NUMBER)
