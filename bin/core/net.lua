@@ -2,7 +2,7 @@
 
 local puss_socket_new
 
-if ks and type(ks.socket_new)=='function' then
+if type(ks)=='table' and type(ks.socket_new)=='function' then
 	puss_socket_new = ks.socket_new
 else
 	local puss_system = puss.load_plugin('puss_system')
