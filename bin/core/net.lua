@@ -1,6 +1,9 @@
 -- net.lua
 
-local puss_system = puss.load_plugin('puss_system')
+if not puss.socket_new then
+	local puss_system = puss.load_plugin('puss_system')
+	puss.socket_new = puss_system.socket_new
+end
 
 local function utable_init(sock)
 	local utable = sock:utable()
@@ -12,7 +15,7 @@ local function utable_init(sock)
 end
 
 __exports.listen = function(ip, port, reuse_addr)
-	local listen_sock = puss_system.socket_new()
+	local listen_sock = puss.socket_new()
 	listen_sock:create()
 	listen_sock:set_nonblock(true)
 	local err, addr = listen_sock:bind(ip, port, reuse_addr)
@@ -29,7 +32,7 @@ __exports.accept = function(listen_sock)
 end
 
 __exports.connect = function(ip, port)
-	local sock = puss_system.socket_new()
+	local sock = puss.socket_new()
 	sock:create()
 	utable_init(sock)
 	sock:set_nonblock(true)
@@ -121,7 +124,7 @@ __exports.update = function(sock, dispatch)
 end
 
 __exports.create_udp_broadcast_sender = function(port)
-	local udp = puss_system.socket_new()
+	local udp = puss.socket_new()
 	udp:create('AF_INET', 'SOCK_DGRAM', 'IPPROTO_UDP')
 	udp:set_broadcast(port)
 	udp:bind()
@@ -130,7 +133,7 @@ __exports.create_udp_broadcast_sender = function(port)
 end
 
 __exports.create_udp_broadcast_recver = function(port)
-	local udp = puss_system.socket_new()
+	local udp = puss.socket_new()
 	udp:create('AF_INET', 'SOCK_DGRAM', 'IPPROTO_UDP')
 	udp:set_broadcast()
 	udp:bind(nil, port, true)

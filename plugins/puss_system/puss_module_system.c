@@ -380,6 +380,7 @@ static int lua_socket_utable(lua_State* L) {
 
 static const luaL_Reg socket_methods[] =
 	{ {"__index",		NULL}
+	, {"__enums",		NULL}
 	, {"__gc",			lua_socket_close}
 	, {"valid",			lua_socket_valid}
 	, {"addr",			lua_socket_addr}
