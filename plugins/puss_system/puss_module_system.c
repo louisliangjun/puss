@@ -75,7 +75,7 @@ static void socket_addr_push(lua_State* L, const struct sockaddr* addr) {
 		struct sockaddr_in* ipv4 = (struct sockaddr_in*)addr;
 		unsigned ip = ntohl(ipv4->sin_addr.s_addr);
 		char saddr[32];
-		sprintf(saddr, "%u.%u.%u.%u:%u", (ip>>24)&0xFF, (ip>>16)&0xFF, (ip>>8)&0xFF, ip&0xFF, ntohs(ipv4->sin_port));
+		sprintf(saddr, "%u.%u.%u.%u:%u", (ip>>24)&0xFF, (ip>>16)&0xFF, (ip>>8)&0xFF, ip&0xFF, (unsigned)ntohs(ipv4->sin_port));
 		lua_pushstring(L, saddr);
 	} else {
 		lua_pushnil(L);
@@ -123,12 +123,25 @@ static int lua_socket_peer(lua_State* L) {
 	return 1;
 }
 
+static int _enum_get(lua_State* L, int arg, int val) {
+	if( lua_type(L, arg)==LUA_TSTRING ) {
+		lua_pushvalue(L, arg);
+		if( lua_rawget(L, 1)==LUA_TNUMBER )
+			val = (int)lua_tointeger(L, -1);
+		lua_pop(L, 1);
+	}
+	return val;
+}
+
 static int lua_socket_create(lua_State* L) {
 	Socket* ud = lua_check_socket(L, 1, 0);
-	int af = (int)luaL_optinteger(L, 2, AF_INET);
-	int type = (int)luaL_optinteger(L, 3, SOCK_STREAM);
-	int protocol = (int)luaL_optinteger(L, 4, IPPROTO_TCP);
-	ud->fd = socket(af, type, protocol);
+	if( !lua_getmetatable(L, 1) )
+		return luaL_error(L, "bad socket meta!");
+	if( lua_getfield(L, -1, "__enums")!=LUA_TTABLE )
+		return luaL_error(L, "bad socket enums table!");
+	lua_replace(L, 1);
+	lua_pop(L, 1);
+	ud->fd = socket( _enum_get(L, 2, AF_INET), _enum_get(L, 3, SOCK_STREAM), _enum_get(L, 4, IPPROTO_TCP) );
 	lua_pushboolean(L, socket_check_valid(ud->fd));
 	return 1;
 }
@@ -352,8 +365,7 @@ static int lua_socket_set_broadcast(lua_State* L) {
 		lua_pushinteger(L, get_last_error());
 		return 2;
 	}
-	lua_pushnil(L);
-	return 2;
+	return 1;
 }
 
 static int lua_socket_utable(lua_State* L) {
@@ -395,7 +407,6 @@ static int lua_socket_new(lua_State* L) {
 	return 1;
 }
 
-
 static const luaL_Reg system_lib_methods[] =
 	{ {"socket_new",	lua_socket_new}
 	, {NULL, NULL}
@@ -428,29 +439,28 @@ PUSS_PLUGIN_EXPORT int __puss_plugin_init__(lua_State* L, PussInterface* puss) {
 	lua_pushvalue(L, -1);
 	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_SYSTEM_LIB_NAME);
 
-	{
-		lua_pushinteger(L, AF_INET);		lua_setfield(L, -2, "AF_INET");
-		lua_pushinteger(L, AF_UNIX);		lua_setfield(L, -2, "AF_UNIX");
-		lua_pushinteger(L, AF_INET6);		lua_setfield(L, -2, "AF_INET6");
-
-		lua_pushinteger(L, PF_INET);		lua_setfield(L, -2, "PF_INET");
-		lua_pushinteger(L, PF_UNIX);		lua_setfield(L, -2, "PF_UNIX");
-		lua_pushinteger(L, PF_INET6);		lua_setfield(L, -2, "PF_INET6");
-
-		lua_pushinteger(L, SOCK_STREAM);	lua_setfield(L, -2, "SOCK_STREAM");
-		lua_pushinteger(L, SOCK_DGRAM);		lua_setfield(L, -2, "SOCK_DGRAM");
-		lua_pushinteger(L, SOCK_RAW);		lua_setfield(L, -2, "SOCK_RAW");
-
-		lua_pushinteger(L, IPPROTO_ICMP);	lua_setfield(L, -2, "IPPROTO_ICMP");
-		lua_pushinteger(L, IPPROTO_IGMP);	lua_setfield(L, -2, "IPPROTO_IGMP");
-		lua_pushinteger(L, IPPROTO_TCP);	lua_setfield(L, -2, "IPPROTO_TCP");
-		lua_pushinteger(L, IPPROTO_UDP);	lua_setfield(L, -2, "IPPROTO_UDP");
-	}
-
 	if( luaL_newmetatable(L, PUSS_SOCKET_NAME) ) {
 		luaL_setfuncs(L, socket_methods, 0);
 		lua_pushvalue(L, -1);
 		lua_setfield(L, -2, "__index");	// metatable.__index = metatable
+
+		lua_newtable(L);
+	#define _REG_ENUM(e)	lua_pushinteger(L, (e));	lua_setfield(L, -2, #e)
+		_REG_ENUM(AF_INET);
+		_REG_ENUM(AF_UNIX);
+		_REG_ENUM(AF_INET6);
+		_REG_ENUM(PF_INET);
+		_REG_ENUM(PF_UNIX);
+		_REG_ENUM(PF_INET6);
+		_REG_ENUM(SOCK_STREAM);
+		_REG_ENUM(SOCK_DGRAM);
+		_REG_ENUM(SOCK_RAW);
+		_REG_ENUM(IPPROTO_ICMP);
+		_REG_ENUM(IPPROTO_IGMP);
+		_REG_ENUM(IPPROTO_TCP);
+		_REG_ENUM(IPPROTO_UDP);
+	#undef _REG_ENUM
+		lua_setfield(L, -2, "__enums");
 	}
 	lua_pop(L, 1);
 
