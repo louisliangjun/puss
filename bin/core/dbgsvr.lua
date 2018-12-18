@@ -5,7 +5,7 @@ if puss._debug_proxy then
 	local puss_debug = puss._debug_proxy
 	do
 		local ok, res = puss_debug:__host_pcall('puss.trace_dofile', puss._debug_filename)
-		if not ok then print('DebugInject failed:', res) end
+		if not ok then print('* DebugInject failed:', res) end
 	end
 
 	local MT = getmetatable(puss_debug)
@@ -17,48 +17,57 @@ if puss._debug_proxy then
 	local BROADCAST_PORT = 9999
 	local broadcast = net.create_udp_broadcast_sender(BROADCAST_PORT)
 
+	local DEBUG_TITLE, WAIT_TIMEOUT = ...
 	local listen_socket, host_info
 	local socket, address
 
 	local function dispatch(cmd, ...)
-		-- print( 'host recv:', cmd, ... )
+		-- print( '* host recv:', cmd, ... )
 		if not cmd:match('^%w[_%w]+$') then error('host command name('..tostring(cmd)..') error!') end
 		local handle = puss_debug[cmd]
 		if not handle then error('host unknown cmd('..tostring(cmd)..')') end
 		return net.send(socket, cmd, handle(puss_debug, ...))
 	end
 
-	local function check_client_connect()
+	local function check_client_connect(wait_time)
 		if not listen_socket then
 			local s, a = net.listen(nil, 0, true)
 			if not s then return end
-
 			listen_socket, host_info = s, string.format('[PussDebug]|%s', a)
-			local ok, title = puss_debug:__host_pcall('puss._debug_fetch_title')
-			if ok then host_info = string.format('%s|%s', host_info, title) end
+			host_info = string.format('%s|%s', host_info, DEBUG_TITLE)
+			print('* debug listen at', host_info)
 		end
 
 		broadcast(host_info)
-		-- print('broadcast', BROADCAST_PORT, host_info)
+		-- print('* broadcast', BROADCAST_PORT, broadcast_message)
 
-		socket, address = net.accept(listen_socket)
-		-- print('accept', listen_socket, socket, address)
+		socket, address = net.accept(listen_socket, wait_time)
+		-- print('* accept', listen_socket, socket, address)
 
 		if socket then
-			print('host attach', socket, address)
+			print('* host attach', socket, address)
 			listen_socket:close()
 			listen_socket = nil
 			return true
 		end
 	end
 
+	local check_timeout = os.clock() + 0.25
+
 	local function hook_main_update(step)
 		if step==0 then
 			if not socket then
-				if check_client_connect() then return end
+				if os.clock() > check_timeout then
+					check_timeout = os.clock() + 0.25
+					if check_client_connect() then
+						puss_debug:__reset(hook_main_update, true, 8192)	-- attached
+						return
+					end
+				end
 				puss_debug:continue()
 			elseif not socket:valid() then
-				print('host detach', socket, address)
+				print('* host detach', socket, address)
+				puss_debug:__reset(hook_main_update, false, 8192)	-- detached
 				socket, address = nil, nil
 				puss_debug:continue()
 			else
@@ -74,7 +83,21 @@ if puss._debug_proxy then
 		end
 	end
 
-	return puss_debug:__reset(hook_main_update, 8192)
+	puss_debug:__reset(hook_main_update, false, 8192)	-- init
+
+	if type(WAIT_TIMEOUT)=='number' then
+		local wait_connect_timeout = os.clock() + WAIT_TIMEOUT
+		print('* debug wait',  WAIT_TIMEOUT)
+		while os.clock() < wait_connect_timeout do
+			if check_client_connect(100) then
+				puss_debug:__reset(hook_main_update, true, 8192)	-- attached
+				puss_debug:step_into()	-- pause
+				break
+			end
+		end
+		print('* debug wait finished!')
+	end
+	return
 end
 
 -- debug helper
@@ -85,7 +108,7 @@ end
 puss._debug_stack_vars = {}
 
 puss._debug_on_breaked = function()
-	-- print('clear debug')
+	-- print('* clear debug')
 	puss._debug_stack_vars = {}
 end
 
@@ -263,9 +286,5 @@ puss._debug_modify_var = function(idx, val)
 	if not var then return end
 	if not var.modify then return end
 	return var.modify(var, idx, val)
-end
-
-puss._debug_fetch_title = function()
-	return puss._app_title or 'noname'
 end
 

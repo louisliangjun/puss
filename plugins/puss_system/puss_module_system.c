@@ -15,10 +15,25 @@
 	}
 #else
 	#include <sys/socket.h>
+	#include <sys/time.h>
 	#include <arpa/inet.h>
 	#include <netdb.h>
 	#include <unistd.h>
 	#include <fcntl.h>
+
+	static int GetCurrentTime(void) {
+		struct timeval tv;
+		uint64_t ret;
+		gettimeofday(&tv, 0);
+		ret = tv.tv_sec;
+		ret *= 1000;
+		ret += (tv.tv_usec/1000);
+		return (int)ret;
+	}
+
+	static void Sleep(unsigned ms) {
+		usleep(ms*1000);
+	}
 
 	typedef int	SOCKET;
 	#define INVALID_SOCKET		-1
@@ -189,10 +204,42 @@ static int lua_socket_listen(lua_State* L) {
 
 static int lua_socket_accept(lua_State* L) {
 	Socket* ud = lua_check_socket(L, 1, 1);
+	int timeout = (int)luaL_optinteger(L, 2, 0);
 	struct sockaddr* peer = &(ud->peer);
 	socklen_t addr_len = sizeof(struct sockaddr);
-	SOCKET fd = accept(ud->fd, peer, &addr_len);
+	SOCKET fd = INVALID_SOCKET;
+	int need_accept = 1;
 	Socket* sock;
+	if( timeout > 0 ) {
+#ifdef _WIN32
+		FD_SET rset;
+		int total;
+		struct timeval tv;
+		tv.tv_sec = timeout / 1000;
+		tv.tv_usec = (timeout % 1000)*1000;
+		FD_ZERO(&rset);
+		FD_SET(ud->fd, &rset);
+		total = select(0, &rset, NULL, NULL, &tv);
+		need_accept = (total > 0);
+#else
+		int start = (int)GetCurrentTime();
+		int now = start;
+		for(;;) {
+			fd = accept(ud->fd, peer, &addr_len);
+			if( fd!=INVALID_SOCKET) {
+				need_accept = 0;
+				break;
+			}
+			now = (int)GetCurrentTime();
+			if( (now-start) > timeout )
+				break;
+			Sleep(1);
+		}
+#endif
+	}
+	if( need_accept ) {
+		fd = accept(ud->fd, peer, &addr_len);
+	}
 	if( !socket_check_valid(fd) ) {
 		lua_pushnil(L);
 		lua_pushinteger(L, get_last_error());
@@ -334,6 +381,32 @@ static int lua_socket_recvfrom(lua_State* L) {
 	return 2;
 }
 
+static int lua_socket_set_timeout(lua_State* L) {
+	Socket* ud = lua_check_socket(L, 1, 1);
+	int recv_timeout_ms = (int)luaL_optinteger(L, 2, 0);
+	int send_timeout_ms = (int)luaL_optinteger(L, 3, 0);
+	int res = 0;
+#ifdef _WIN32
+	DWORD rtv = recv_timeout_ms;
+	DWORD stv = send_timeout_ms;
+#else
+	struct timeval rtv;
+	struct timeval stv;
+	rtv.tv_sec = recv_timeout_ms / 1000; 
+	rtv.tv_usec = (recv_timeout_ms % 1000) * 1000;
+	stv.tv_sec = send_timeout_ms / 1000; 
+	stv.tv_usec = (send_timeout_ms % 1000) * 1000;
+#endif
+	if( recv_timeout_ms && res==0 )	res = setsockopt(ud->fd, SOL_SOCKET, SO_RCVTIMEO, (char*)&rtv, sizeof(rtv));
+	if( send_timeout_ms && res==0 )	res = setsockopt(ud->fd, SOL_SOCKET, SO_SNDTIMEO, (char*)&stv, sizeof(stv));
+	lua_pushinteger(L, res);
+	if( res ) {
+		lua_pushinteger(L, get_last_error());
+		return 2;
+	}
+	return 1;
+}
+
 static int lua_socket_set_nonblock(lua_State* L) {
 	Socket* ud = lua_check_socket(L, 1, 1);
 	int nonblock = lua_toboolean(L, 2);
@@ -395,6 +468,7 @@ static const luaL_Reg socket_methods[] =
 	, {"recv",			lua_socket_recv}
 	, {"sendto",		lua_socket_sendto}
 	, {"recvfrom",		lua_socket_recvfrom}
+	, {"set_timeout",	lua_socket_set_timeout}
 	, {"set_nonblock",	lua_socket_set_nonblock}
 	, {"set_broadcast",	lua_socket_set_broadcast}
 	, {"utable",		lua_socket_utable}

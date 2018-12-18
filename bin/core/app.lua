@@ -47,13 +47,13 @@ local function main_menu()
 					os.execute(string.format('%s/%s --main=core.debugger &', puss._path, puss._self))
 				end
 			end
-			if puss.debug('running') then
+			if puss.debug() then
 				if imgui.MenuItem('Stop debug') then
 					puss.debug(false)
 				end
 			else
 				if imgui.MenuItem('Start debug ...') then
-					puss.debug(true)
+					puss.debug(true, nil, puss._app_title)
 				end
 			end
 		else

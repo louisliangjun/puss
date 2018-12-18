@@ -216,7 +216,7 @@ static FileInfo* file_info_fetch(DebugEnv* env, const char* fname) {
 	}
 	lua_pop(L, 1);
 	name = lua_pushstring(L, fname);
-	finfo = lua_newuserdata(L, sizeof(FileInfo));
+	finfo = (FileInfo*)lua_newuserdata(L, sizeof(FileInfo));
 	memset(finfo, 0, sizeof(FileInfo));
 	finfo->name = name;
 	if( luaL_newmetatable(L, "PussDbgFInfo") ) {
@@ -402,8 +402,8 @@ static void script_hook(lua_State* L, lua_Debug* ar) {
 
 #ifdef LUA_HOOKERROR
 	case LUA_HOOKERROR:
-		if( capture_error && ar->currentline ) {
-			script_on_breaked(env, L, ar->currentline, finfo);
+		if( env->capture_error && ar->currentline ) {
+			script_on_breaked(env, L, ar->currentline, NULL);
 		}
 		break;
 #endif
@@ -418,14 +418,15 @@ static void script_hook(lua_State* L, lua_Debug* ar) {
 #else
 	#define DEBUG_HOOK_MASK	(LUA_MASKLINE | LUA_MASKCALL | LUA_MASKRET)
 #endif
-#define DEBUG_WITH_COUNT_HOOK_MASK	(DEBUG_HOOK_MASK | LUA_MASKCOUNT)
 
 static int lua_debug_reset(lua_State* L) {
 	DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
-	int hook_count = (int)luaL_optinteger(L, 3, 0);
-	int mask = (hook_count > 0) ? DEBUG_WITH_COUNT_HOOK_MASK : DEBUG_HOOK_MASK;
+	int hook_usage = lua_toboolean(L, 2);
+	int hook_count = (int)luaL_optinteger(L, 4, 0);
 	debug_handle_unref(env);
 	if( lua_isfunction(L, 2) ) {
+		int mask = hook_usage ? DEBUG_HOOK_MASK : 0;
+		if( hook_count > 0 )	mask |= LUA_MASKCOUNT;
 		lua_pushvalue(L, 2);
 		env->debug_handle = luaL_ref(L, LUA_REGISTRYINDEX);
 		lua_sethook(env->main_state, script_hook, mask, hook_count);
@@ -442,7 +443,7 @@ typedef struct _HostInvokeUD {
 } HostInvokeUD;
 
 static int do_host_invoke(lua_State* L) {
-	HostInvokeUD* ud = lua_touserdata(L, 1);
+	HostInvokeUD* ud = (HostInvokeUD*)lua_touserdata(L, 1);
 	lua_settop(L, 0);
 	get_value(L, ud->func);
 	puss_lua_unpack(L, ud->args, ud->size);
@@ -992,7 +993,7 @@ static int lua_debug_capture_error(lua_State* L) {
 		if( lua_type(L, 2)==LUA_TSTRING ) {
 			int top = lua_gettop(env->main_state);
 			if( get_value(env->main_state, lua_tostring(L, 2))==LUA_TFUNCTION ) {
-				f = lua_iscfunction(env->main_state, -1) ? NULL : lua_topointer(env->main_state, -1);
+				f = (const LClosure*)(lua_iscfunction(env->main_state, -1) ? NULL : lua_topointer(env->main_state, -1));
 			}
 			lua_settop(env->main_state, top);
 		} else {
@@ -1065,17 +1066,18 @@ static void lua_debugger_clear(DebugEnv* env) {
 	lua_gc(L, LUA_GCCOLLECT, 0);
 }
 
+#ifndef PUSS_DEBUG_DEFAULT_SCRIPT
+	#define PUSS_DEBUG_DEFAULT_SCRIPT	NULL
+#endif
+
 static int lua_debugger_debug(lua_State* hostL) {
 	DebugEnv* env = debug_env_fetch(hostL);
-	if( lua_gettop(hostL)==0 ) {
-		if( env->debug_handle!=LUA_NOREF ) {
-			debug_handle_invoke(env, 1);
-		}
-	} else if( lua_type(hostL, 1)!=LUA_TBOOLEAN ) {
-		// do nothing, used for query debug status, return working
-	} else if( lua_toboolean(hostL, 1) ) {
+	if( lua_toboolean(hostL, 1) ) {
 		lua_State* L = env->debug_state;
-		const char* debugger_script = luaL_optstring(hostL, 2, NULL);
+		const char* debugger_script = luaL_optstring(hostL, 2, PUSS_DEBUG_DEFAULT_SCRIPT);
+		size_t n = 0;
+		void* b = puss_lua_pack(&n, hostL, 3, -1);
+		int top;
 		lua_debugger_clear(env);
 
 		lua_getglobal(L, "puss");
@@ -1085,6 +1087,7 @@ static int lua_debugger_debug(lua_State* hostL) {
 		lua_setfield(L, -2, "_debug_proxy");
 
 		get_value(L, "puss.trace_dofile");
+		top = lua_gettop(L);
 		if( debugger_script ) {
 			lua_pushstring(L, debugger_script);
 		} else {
@@ -1094,17 +1097,26 @@ static int lua_debugger_debug(lua_State* hostL) {
 		}
 		lua_pushvalue(L, -1);
 		lua_setfield(L, -4, "_debug_filename");
-		if( lua_pcall(L, 1, 0, 0) ) {
+		lua_pushglobaltable(L);
+		puss_lua_unpack(L, b, n);
+		if( lua_pcall(L, lua_gettop(L)-top, 0, 0) ) {
 			lua_pop(L, 1);
 		}
 		if( env->debug_handle==LUA_NOREF ) {
 			lua_debugger_clear(env);
 		}
-	} else {
+	} else if( lua_isboolean(hostL, 1) ) {
 		lua_debugger_clear(env);
 	}
 
 	lua_pushboolean(hostL, env->debug_handle!=LUA_NOREF);
 	return 1;
+}
+
+static void lua_debugger_update(lua_State* hostL) {
+	DebugEnv* env = debug_env_fetch(hostL);
+	if( env && env->debug_handle!=LUA_NOREF ) {
+		debug_handle_invoke(env, 0);
+	}
 }
 

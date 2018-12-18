@@ -27,8 +27,8 @@ __exports.listen = function(ip, port, reuse_addr)
 	return listen_sock, addr
 end
 
-__exports.accept = function(listen_sock)
-	local sock = listen_sock:accept()
+__exports.accept = function(listen_sock, wait_time)
+	local sock = listen_sock:accept(wait_time)
 	if not sock then return end
 	utable_init(sock)
 	sock:set_nonblock(true)
