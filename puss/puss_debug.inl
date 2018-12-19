@@ -363,16 +363,19 @@ static int script_on_breaked(DebugEnv* env, lua_State* L, int currentline, const
 	return 0;
 }
 
-static inline DebugEnv* debug_env_fetch(lua_State* L) {
-	DebugEnv* env = NULL;
-	if( lua_getallocf(L, (void**)&env) != _debug_alloc ) {
-		env = NULL;
+#ifndef PUSS_DEBUG_ENV_FETCH
+	#define PUSS_DEBUG_ENV_FETCH	debug_env_fetch
+	static inline DebugEnv* debug_env_fetch(lua_State* L) {
+		DebugEnv* env = NULL;
+		if( lua_getallocf(L, (void**)&env) != _debug_alloc ) {
+			env = NULL;
+		}
+		return env;
 	}
-	return env;
-}
+#endif
 
 static void script_hook(lua_State* L, lua_Debug* ar) {
-	DebugEnv* env = debug_env_fetch(L);
+	DebugEnv* env = PUSS_DEBUG_ENV_FETCH(L);
 	const FileInfo* finfo;
 	assert( env );
 
@@ -403,7 +406,8 @@ static void script_hook(lua_State* L, lua_Debug* ar) {
 #ifdef LUA_HOOKERROR
 	case LUA_HOOKERROR:
 		if( env->capture_error && ar->currentline ) {
-			script_on_breaked(env, L, ar->currentline, NULL);
+			env->breaked_frame++;
+			script_on_breaked(env, L, ar->currentline, file_info_fetch(env, "<pesudo_error_hook>"));
 		}
 		break;
 #endif
@@ -566,15 +570,27 @@ static FileInfo* bp_info_fetch(DebugEnv* env, const char* script, int line) {
 	return finfo;
 }
 
+static char parse_bp_type(lua_State* L, int idx, FileInfo* finfo, int line) {
+	int tp = lua_type(L, idx);
+	if( tp==LUA_TNIL || tp==LUA_TNONE )
+		return (finfo==NULL || finfo->bps[line-1]==BP_NULL) ? BP_ACTIVE : BP_NULL;
+	if( tp==LUA_TSTRING )
+		return BP_COND;
+	return lua_toboolean(L, idx) ? BP_ACTIVE : BP_NULL;
+}
+
 static int lua_debug_set_bp(lua_State* L) {
 	DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
 	const char* script = luaL_checkstring(L, 2);
 	int line = (int)luaL_checkinteger(L, 3);
-	char bp = lua_type(L, 4)==LUA_TSTRING ? BP_COND : (lua_toboolean(L, 4) ? BP_ACTIVE : BP_NULL);
 	FileInfo* finfo = bp_info_fetch(env, script, line);
+	char bp = parse_bp_type(L, 4, finfo, line);
 	lua_settop(L, 4);
 	if( bp==BP_NULL ) {
 		lua_pushnil(L);
+		lua_replace(L, 4);
+	} else if( bp==BP_ACTIVE ) {
+		lua_pushboolean(L, 1);
 		lua_replace(L, 4);
 	}
 	if( !finfo ) {
@@ -681,8 +697,9 @@ static int lua_debug_set_pc(lua_State *L){
 
 static int lua_debug_capture_error(lua_State* L) {
 	DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
-	env->capture_error = lua_toboolean(L, 2);
-	return 0;
+	env->capture_error = lua_isnoneornil(L, 2) ? (!(env->capture_error)) : lua_toboolean(L, 2);
+	lua_pushboolean(L, env->capture_error);
+	return 1;
 }
 
 #ifndef PUSS_DEBUG_NOT_USE_DISASM
@@ -1071,7 +1088,7 @@ static void lua_debugger_clear(DebugEnv* env) {
 #endif
 
 static int lua_debugger_debug(lua_State* hostL) {
-	DebugEnv* env = debug_env_fetch(hostL);
+	DebugEnv* env = PUSS_DEBUG_ENV_FETCH(hostL);
 	if( lua_toboolean(hostL, 1) ) {
 		lua_State* L = env->debug_state;
 		const char* debugger_script = luaL_optstring(hostL, 2, PUSS_DEBUG_DEFAULT_SCRIPT);
@@ -1114,7 +1131,7 @@ static int lua_debugger_debug(lua_State* hostL) {
 }
 
 static void lua_debugger_update(lua_State* hostL) {
-	DebugEnv* env = debug_env_fetch(hostL);
+	DebugEnv* env = PUSS_DEBUG_ENV_FETCH(hostL);
 	if( env && env->debug_handle!=LUA_NOREF ) {
 		debug_handle_invoke(env, 0);
 	}

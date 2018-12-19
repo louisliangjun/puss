@@ -151,16 +151,18 @@ local function recver_update()
 	-- local machine, use addr
 	local ip, port, title = data:match('^%[PussDebug%]|(%d+%.%d+%.%d+%.%d+):(%d+)|?(.*)$')
 	if ip=='0.0.0.0' then ip = addr:match('^(%d+%.%d+%.%d+%.%d+):%d+') end
-	if not ip then return end
-	local key = ip .. ':' .. port
-	local info = hosts[key]
-	if info then
-		info.timestamp = os.time()
-	else
-		info = {label=string.format('%s:%s (%s)', ip, port, title), ip=ip, port=tonumber(port), title=title, timestamp=os.time()}
-		table.insert(hosts, info)
-		hosts[key] = info
+	if ip then
+		local key = ip .. ':' .. port
+		local info = hosts[key]
+		if info then
+			info.timestamp = os.time()
+		else
+			info = {label=string.format('%s:%s (%s)', ip, port, title), ip=ip, port=tonumber(port), title=title, timestamp=os.time()}
+			table.insert(hosts, info)
+			hosts[key] = info
+		end
 	end
+	return true
 end
 
 local function tool_button(label, hint)
@@ -177,6 +179,7 @@ local function debug_toolbar()
 	if socket and socket:valid() then
 		if tool_button('断开', '断开连接') then
 			socket:close()
+			socket = nil
 			stack_list_clear()
 		end
 	else
@@ -241,13 +244,13 @@ local function draw_stack()
 		if imgui.IsItemClicked() then
 			stack_current = i
 			clicked = info
-			if not info.vars then
-				info.vars = dummy_vars
-				net.send(socket, 'fetch_vars', clicked.level)
-			end
 		end
 	end
 	if clicked then
+		if not clicked.vars then
+			clicked.vars = dummy_vars
+			net.send(socket, 'fetch_vars', clicked.level)
+		end
 		local fname = clicked.source:match('^@(.+)$')
 		if fname then locate_to_file(fname, clicked.currentline-1) end
 	end
@@ -334,11 +337,8 @@ local function main_menu()
 end
 
 local function trigger_bp(page, line)
-	local sv = page.sv
-	local marker = sv:MarkerGet(line)
-	local bp = (marker & 0x01)==0
 	local fname = '@'..puss.filename_format(page.filepath)
-	net.send(socket, 'set_bp', fname, line+1, bp)
+	net.send(socket, 'set_bp', fname, line+1)
 end
 
 function docs_page_before_draw(page)
@@ -442,7 +442,9 @@ end
 local function do_update()
 	imgui.protect_pcall(show_main_window)
 
-	recver_update()
+	for i=1,64 do
+		if not recver_update() then break end
+	end
 
 	if run_sign and imgui.should_close() then
 		run_sign = false
