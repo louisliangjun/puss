@@ -656,8 +656,8 @@ static int lua_debug_step_out(lua_State* L) {
 
 static int lua_debug_run_to(lua_State* L) {
 	DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
-	const char* script = luaL_checkstring(L, 1);
-	int line = (int)luaL_checkinteger(L, 2);
+	const char* script = luaL_checkstring(L, 2);
+	int line = (int)luaL_checkinteger(L, 3);
 	FileInfo* finfo = file_info_fetch(env, script);
 	env->breaked_frame++;
 	if( finfo && line>=1 && line<=finfo->line_num ) {
@@ -670,28 +670,29 @@ static int lua_debug_run_to(lua_State* L) {
 	return 0;
 }
 
-static int lua_debug_set_pc(lua_State *L){
-	int toline = (int)luaL_checkinteger(L, 1);
-	CallInfo *ci = L->ci->previous->previous;
+static int lua_debug_set_pc(lua_State* L){
+	DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
+	int toline = (int)luaL_checkinteger(L, 2);
+	CallInfo* ci = env->breaked_state ? env->breaked_state->ci : NULL;
 	int i = 0;
-	const int *map;
-	Proto *p;
+	const int* map;
+	Proto* p;
 
-	if (ttype(ci->func) != LUA_TLCL)
+	if( ci==NULL || (ttype(ci->func) != LUA_TLCL) )
 		return 0;
 
 	p = clLvalue(ci->func)->p;
-	if (toline < p->linedefined || toline > p->lastlinedefined)
+	if( toline < p->linedefined || toline > p->lastlinedefined )
 		return 0;
 
 	map = p->lineinfo;
-	for (; toline + 1 != map[i] && i < p->sizelineinfo; i++);
+	for (; toline != map[i] && i < p->sizelineinfo; i++);
 	if (i == p->sizelineinfo)
 		return 0;
 
 	ci->u.l.savedpc = p->code + i;
-	
-	lua_pushinteger(L, toline+1);
+
+	lua_pushinteger(L, toline);
 	return 1;
 }
 

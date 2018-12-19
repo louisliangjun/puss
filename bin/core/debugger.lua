@@ -73,6 +73,9 @@ local function locate_to_file(fname, line)
 	if docs.open(fname, line) then return end
 end
 
+local modify_var_buf = imgui.CreateByteArray(1024)
+local modify_var_val = nil
+
 local stubs = {}
 
 stubs.attached = function(bps)
@@ -137,6 +140,18 @@ stubs.set_bp = function(fname, line, bp, err)
 	docs.margin_set(fname, line, bp)
 end
 
+stubs.modify_var = function(ok, var)
+	if ok then stack_vars_replace(var) end
+end
+
+stubs.set_pc = function(line)
+	print('set_pc res:', line)
+	if line then
+		local info = stack_list[1]
+		if info then info.currentline = line end
+	end
+end
+
 local function dispatch(cmd, ...)
 	print('debugger recv:', cmd, ...)
 	local h = stubs[cmd]
@@ -184,6 +199,8 @@ local function tool_button(label, hint)
 	return clicked
 end
 
+local page_line_op_active = false
+
 local function debug_toolbar()
 	if socket and socket:valid() then
 		if tool_button('断开', '断开连接') then
@@ -199,7 +216,21 @@ local function debug_toolbar()
 		end
 	end
 	imgui.SameLine()
-	if tool_button('>>', '继续运行 (F5)') then
+	if tool_button('Err', '异常断点') then
+		net.send(socket, 'capture_error')
+	end
+	imgui.SameLine()
+	if tool_button('ASM', '显示反汇编') then
+		net.send(socket, 'fetch_disasm', stack_current)
+	end
+	imgui.SameLine()
+	do
+		imgui.InputText('变量值', modify_var_buf)
+		modify_var_val = modify_var_buf:str()
+		if modify_var_val=='' then modify_var_val = nil end
+	end
+
+	if tool_button('>>', '继续 (F5)') then
 		net.send(socket, 'continue')
 	end
 	imgui.SameLine()
@@ -215,12 +246,12 @@ local function debug_toolbar()
 		net.send(socket, 'step_out')
 	end
 	imgui.SameLine()
-	if tool_button('Err', '异常断点') then
-		net.send(socket, 'capture_error')
+	if tool_button('><', '运行到指定行') then
+		page_line_op_active = 'run_to'
 	end
 	imgui.SameLine()
-	if tool_button('ASM', '显示反汇编') then
-		net.send(socket, 'fetch_disasm', stack_current)
+	if tool_button('JMP', '跳转到指定行') then
+		page_line_op_active = 'set_pc'
 	end
 
 	if imgui.BeginPopupModal('Connect ...') then
@@ -270,15 +301,29 @@ local has_sub_types =
 	, ['U'] = true
 	}
 
+local function conv_string(s)
+	return true, s
+end
+
+local function conv_boolean(s)
+	if s=='true' then return true, true end
+	if s=='false' then return true, false end
+end
+
+local function conv_number(s)
+	local num = tonumber(s)
+	if num then return true, num end
+end
+
 local has_modify_types =
-	{ ['-'] = true
-	, ['B'] = true
-	, ['N'] = true
-	, ['S'] = true
+	{ ['-'] = conv_string
+	, ['B'] = conv_boolean
+	, ['N'] = conv_number
+	, ['S'] = conv_string
 	}
 
 local function draw_subs(stack_current, subs)
-	for _,v in ipairs(subs) do
+	for i,v in ipairs(subs) do
 		local vt = v[3]
 		local has_subs = has_sub_types[vt] and v.subs~=false
 		imgui.PushStyleColor(ImGuiCol_Text, 0.75, 0.75, 1, 1)
@@ -292,10 +337,23 @@ local function draw_subs(stack_current, subs)
 		end
 		imgui.SameLine()
 		imgui.TextColored(1, 1, 0.75, 1, tostring(v[5]))
-		-- if has_modify_types[vt] then
-		-- 	imgui.SameLine()
-		-- 	imgui.SmallButton('modify')
-		-- end
+		if modify_var_val then
+			local conv = has_modify_types[vt]
+			if conv then
+				imgui.SameLine()
+				imgui.PushID(i)
+				if imgui.SmallButton('modify') then
+					local ok, val = conv(modify_var_val)
+					modify_var_buf:strcpy()
+					modify_var_val = nil
+					if ok then
+						-- print('modify',v[1],v[2],v[3],v[4],v[5])
+						net.send(socket, 'modify_var', v[1], val)
+					end
+				end
+				imgui.PopID()
+			end
+		end
 		if has_subs and show then
 			if v.subs then draw_subs(stack_current, v.subs) end
 			imgui.TreePop()
@@ -330,14 +388,14 @@ end
 local function main_menu()
 	local active
 	if not imgui.BeginMenuBar() then return end
-	if imgui.BeginMenu('File') then
-		if imgui.MenuItem('Add puss path FileBrowser') then filebrowser.append_folder(puss.local_to_utf8(puss._path)) end
-		imgui.EndMenu()
-	end
 	if imgui.BeginMenu('Help') then
 		active, show_console_window = imgui.MenuItem('Conosle', nil, show_console_window)
 		imgui.Separator()
 		if imgui.MenuItem('Reload', 'Ctrl+F12') then puss.reload() end
+		if imgui.MenuItem(show_win32_console and 'Hide Win32 Console' or 'Show Win32 Console') then
+			show_win32_console = not show_win32_console
+			ks.console_show(show_win32_console)
+		end
 		imgui.EndMenu()
 	end
 	imgui.EndMenuBar()
@@ -351,8 +409,21 @@ local function trigger_bp(page, line)
 end
 
 function docs_page_before_draw(page)
+	if page_line_op_active then
+		local sv = page.sv
+		local op = page_line_op_active
+		page_line_op_active = nil
+		local line = sv:LineFromPosition(sv:GetCurrentPos())
+		if op=='run_to' then
+			local fname = '@'..page.filepath
+			net.send(socket, op, fname, line+1)
+		else
+			net.send(socket, op, line+1)
+		end
+	end
 	if shotcuts.is_pressed('debugger/bp') then
-		local line = page.sv:LineFromPosition(page.sv:GetCurrentPos())
+		local sv = page.sv
+		local line = sv:LineFromPosition(sv:GetCurrentPos())
 		trigger_bp(page, line)
 	end
 end

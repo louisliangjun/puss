@@ -1,5 +1,7 @@
 -- host debug server
 -- 
+ks.log_info('dbgsvr load:', puss._debug_proxy, ...)
+
 if puss._debug_proxy then
 	local net = puss.import('core.net')
 	local puss_debug = puss._debug_proxy
@@ -39,7 +41,7 @@ if puss._debug_proxy then
 		end
 
 		broadcast(host_info)
-		-- print('* broadcast', BROADCAST_PORT, broadcast_message)
+		-- print('* broadcast', BROADCAST_PORT, host_info)
 
 		socket, address = net.accept(listen_socket, wait_time)
 		-- print('* accept', listen_socket, socket, address)
@@ -61,7 +63,7 @@ if puss._debug_proxy then
 				if os.clock() > check_timeout then
 					check_timeout = os.clock() + 0.25
 					if check_client_connect() then
-						puss_debug:__reset(hook_main_update, true, 8192)	-- attached
+						puss_debug:__reset(hook_main_update, true)	-- attached( NOTICE: can NOT use HOOK_COUNT for run_to )
 						return
 					end
 				end
@@ -91,7 +93,7 @@ if puss._debug_proxy then
 		print('* debug wait',  WAIT_TIMEOUT)
 		while os.clock() < wait_connect_timeout do
 			if check_client_connect(100) then
-				puss_debug:__reset(hook_main_update, true, 8192)	-- attached
+				puss_debug:__reset(hook_main_update, true)	-- attached( NOTICE: can NOT use HOOK_COUNT for run_to )
 				puss_debug:step_into()	-- pause
 				break
 			end
@@ -239,15 +241,16 @@ puss._debug_fetch_vars = function(level)
 		if not n then break end
 		if n:match('^%(.+%)$')==nil then table.insert(vars, {'L', n, v, level, i, modify=var_modify_local}) end
 	end
-	for i=1,255 do
+	for i=1,info.nups do
 		local n,v = debug.getupvalue(info.func, i)
-		if not n then break end
 		table.insert(vars, {'U', n, v, level, i, modify=var_modify_upvalue})
 	end
-	for i=-1,-255,-1 do
-		local n,v = debug.getlocal(level, i)
-		if not n then break end
-		table.insert(vars, {'V', n, v, level, i, modify=var_modify_local})
+	if info.isvararg then
+		for i=-1,-255,-1 do
+			local n,v = debug.getlocal(level, i)
+			if not n then break end
+			table.insert(vars, {'V', n, v, level, i, modify=var_modify_local})
+		end
 	end
 	vars[key] = {start, #vars}
 	return do_ret(vars, start, #vars)
@@ -283,6 +286,8 @@ puss._debug_fetch_subs = function(idx)
 end
 
 puss._debug_modify_var = function(idx, val)
+	print('* host modify', idx, val)
+	local vars = puss._debug_stack_vars
 	local var = vars[idx]
 	if not var then return end
 	if not var.modify then return end
