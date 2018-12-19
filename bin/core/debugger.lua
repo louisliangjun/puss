@@ -75,6 +75,15 @@ end
 
 local stubs = {}
 
+stubs.attached = function(bps)
+	print('bps:', bps)
+	for k,v in pairs(bps) do
+		local fname, line = k:match('^(.+):(%d+)$')
+		print(fname, line, v)
+	end
+	print('bps!')
+end
+
 stubs.continued = function()
 	stack_list_clear()
 end

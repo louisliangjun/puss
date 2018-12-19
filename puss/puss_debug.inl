@@ -175,7 +175,7 @@ static int bps_table_push(lua_State* L, DebugEnv* env) {
 		lua_pop(L, 1);
 		lua_newtable(L);
 		lua_pushvalue(L, -1);
-		lua_rawsetp(L, LUA_REGISTRYINDEX, env);
+		lua_rawsetp(L, LUA_REGISTRYINDEX, &(env->key_of_bps));
 	}
 	return 1;
 }
@@ -185,7 +185,7 @@ static int conds_table_push(lua_State* L, DebugEnv* env) {
 		lua_pop(L, 1);
 		lua_newtable(L);
 		lua_pushvalue(L, -1);
-		lua_rawsetp(L, LUA_REGISTRYINDEX, env);
+		lua_rawsetp(L, LUA_REGISTRYINDEX, &(env->key_of_conds));
 	}
 	return 1;
 }
