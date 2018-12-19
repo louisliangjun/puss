@@ -347,6 +347,11 @@ static int script_on_breaked(DebugEnv* env, lua_State* L, int currentline, const
 	if( finfo ) {
 		debug_handle_invoke(env, -1);
 		while( frame==env->breaked_frame ) {
+#ifdef _WIN32
+			Sleep(1);
+#else
+			usleep(1000);
+#endif
 			debug_handle_invoke(env, 0);
 		}
 		debug_handle_invoke(env, 1);

@@ -1,8 +1,8 @@
 -- host debug server
 -- 
-ks.log_info('dbgsvr load:', puss._debug_proxy, ...)
-
 if puss._debug_proxy then
+	ks.log_info('dbgsvr load:', puss._debug_proxy, ...)
+
 	local net = puss.import('core.net')
 	local puss_debug = puss._debug_proxy
 	do
@@ -15,6 +15,7 @@ if puss._debug_proxy then
 	function MT:fetch_vars(level) return level, self:__host_pcall('puss._debug_fetch_vars', level) end
 	function MT:fetch_subs(idx) return idx, self:__host_pcall('puss._debug_fetch_subs', idx) end
 	function MT:modify_var(idx, val) return self:__host_pcall('puss._debug_modify_var', idx, val) end
+	function MT:execute_script(level, script) return self:__host_pcall('puss._debug_execute_script', level, script) end
 
 	local BROADCAST_PORT = 9999
 	local broadcast = net.create_udp_broadcast_sender(BROADCAST_PORT)
@@ -200,7 +201,7 @@ end
 
 local function var_modify_local(var, idx, val)
 	local level, i = var[4], var[5]
-	debug.setlocal(level, i, v)
+	debug.setlocal(level, i, val)
 	local n, v = debug.getlocal(level, i)
 	var[3] = v
 	return do_ret_one(idx, var)
@@ -216,14 +217,14 @@ local function var_modify_upvalue(var, idx, val)
 end
 
 local function var_modify_table(var, idx, val)
-	local t = val[4]
-	rawset(t, val)
+	local t, k = var[4], var[2]
+	rawset(t, k, val)
 	var[3] = val
 	return do_ret_one(idx, var)
 end
 
 local function var_modify_uservalue(var, idx, val)
-	local u = val[4]
+	local u = var[4]
 	debug.setuservalue(u, val)
 	var[3] = debug.getuservalue(u)
 	return do_ret_one(idx, var)
@@ -292,5 +293,47 @@ puss._debug_modify_var = function(idx, val)
 	if not var then return end
 	if not var.modify then return end
 	return var.modify(var, idx, val)
+end
+
+puss._debug_execute_script = function(level, script)
+	print('* host execute_script', level, script)
+	local function trace_info(i)
+		local info = debug.getinfo(level+i+1, 'Slf')
+		print(i, info.source, info.currentline, info.what, info.func)
+	end
+	-- trace_info(1)
+	-- trace_info(2)
+	-- trace_info(3)
+	local info = debug.getinfo(level + 2, 'f')
+	local function ul_read_wrapper(t, key)
+		for i=1,255 do
+			local k, v = debug.getlocal(level + 3, i)
+			if not k then break end
+			if k == key then return v end
+		end
+		for i=1,255 do
+			local k, v = debug.getupvalue(info.func, i)
+			if not k then break end
+			if k == key then return v end
+		end
+		return _ENV[key]
+	end
+	local function ul_write_wrapper(t, key, val)
+		for i=1,255 do
+			local k, v = debug.getlocal(level + 3, i)
+			if not k then break end
+			if k == key then debug.setlocal(level + 3, i, val) return end
+		end
+		for i=1,255 do
+			local k, v = debug.getupvalue(info.func, i)
+			if not k then break end
+			if k == key then debug.setupvalue(info.func, i, val) return end
+		end
+		error('can not find local or upvalue in this CallInfo')
+	end
+	local env = setmetatable({}, {__index = ul_read_wrapper, __newindex = ul_write_wrapper})
+	local f, errcode = load(script, '<debug-script>', 't', env)
+	if not f then error(errcode) end
+	return f()
 end
 

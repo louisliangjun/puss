@@ -73,8 +73,8 @@ local function locate_to_file(fname, line)
 	if docs.open(fname, line) then return end
 end
 
-local modify_var_buf = imgui.CreateByteArray(1024)
-local modify_var_val = nil
+local debug_input_buf = imgui.CreateByteArray(1024)
+local debug_input_val = nil
 
 local stubs = {}
 
@@ -141,6 +141,7 @@ stubs.set_bp = function(fname, line, bp, err)
 end
 
 stubs.modify_var = function(ok, var)
+	print('modify_var', ok, table.unpack(var))
 	if ok then stack_vars_replace(var) end
 end
 
@@ -215,19 +216,18 @@ local function debug_toolbar()
 			imgui.SetNextWindowSize(430, 320)
 		end
 	end
-	imgui.SameLine()
-	if tool_button('Err', '异常断点') then
-		net.send(socket, 'capture_error')
-	end
-	imgui.SameLine()
-	if tool_button('ASM', '显示反汇编') then
-		net.send(socket, 'fetch_disasm', stack_current)
+	if debug_input_val then
+		imgui.SameLine()
+		if tool_button('Exec', '运行脚本') then
+			print('execute_script', debug_input_val)
+			net.send(socket, 'execute_script', stack_current, debug_input_val)
+		end
 	end
 	imgui.SameLine()
 	do
-		imgui.InputText('变量值', modify_var_buf)
-		modify_var_val = modify_var_buf:str()
-		if modify_var_val=='' then modify_var_val = nil end
+		imgui.InputText('脚本', debug_input_buf)
+		debug_input_val = debug_input_buf:str()
+		if debug_input_val=='' then debug_input_val = nil end
 	end
 
 	if tool_button('>>', '继续 (F5)') then
@@ -252,6 +252,14 @@ local function debug_toolbar()
 	imgui.SameLine()
 	if tool_button('JMP', '跳转到指定行') then
 		page_line_op_active = 'set_pc'
+	end
+	imgui.SameLine()
+	if tool_button('Err', '异常断点') then
+		net.send(socket, 'capture_error')
+	end
+	imgui.SameLine()
+	if tool_button('ASM', '显示反汇编') then
+		net.send(socket, 'fetch_disasm', stack_current)
 	end
 
 	if imgui.BeginPopupModal('Connect ...') then
@@ -301,26 +309,18 @@ local has_sub_types =
 	, ['U'] = true
 	}
 
-local function conv_string(s)
-	return true, s
-end
-
-local function conv_boolean(s)
-	if s=='true' then return true, true end
-	if s=='false' then return true, false end
-end
-
-local function conv_number(s)
-	local num = tonumber(s)
-	if num then return true, num end
-end
-
 local has_modify_types =
-	{ ['-'] = conv_string
-	, ['B'] = conv_boolean
-	, ['N'] = conv_number
-	, ['S'] = conv_string
+	{ ['-'] = true
+	, ['B'] = true
+	, ['N'] = true
+	, ['S'] = true
 	}
+
+local function load_value(val)
+	local f, err = load('return '..val)
+	if not f then error(err) end
+	return f()
+end
 
 local function draw_subs(stack_current, subs)
 	for i,v in ipairs(subs) do
@@ -337,22 +337,21 @@ local function draw_subs(stack_current, subs)
 		end
 		imgui.SameLine()
 		imgui.TextColored(1, 1, 0.75, 1, tostring(v[5]))
-		if modify_var_val then
-			local conv = has_modify_types[vt]
-			if conv then
-				imgui.SameLine()
-				imgui.PushID(i)
-				if imgui.SmallButton('modify') then
-					local ok, val = conv(modify_var_val)
-					modify_var_buf:strcpy()
-					modify_var_val = nil
-					if ok then
-						-- print('modify',v[1],v[2],v[3],v[4],v[5])
-						net.send(socket, 'modify_var', v[1], val)
-					end
+		if debug_input_val and has_modify_types[vt] then
+			imgui.SameLine()
+			imgui.PushID(i)
+			if imgui.SmallButton('modify') then
+				local ok, val = puss.trace_pcall(load_value, debug_input_val)
+				debug_input_buf:strcpy()
+				debug_input_val = nil
+				if ok then
+					print('modify', val, table.unpack(v))
+					net.send(socket, 'modify_var', v[1], val)
+				else
+					print('error', val)
 				end
-				imgui.PopID()
 			end
+			imgui.PopID()
 		end
 		if has_subs and show then
 			if v.subs then draw_subs(stack_current, v.subs) end
@@ -376,12 +375,14 @@ local function debug_window()
 	shortcuts_update()
 
 	imgui.protect_pcall(debug_toolbar)
+	imgui.BeginChild('##StackAndVars')
 	if imgui.CollapsingHeader('Stack', ImGuiTreeNodeFlags_DefaultOpen) then
 		imgui.protect_pcall(draw_stack)
 	end
 	if imgui.CollapsingHeader('Vars', ImGuiTreeNodeFlags_DefaultOpen) then
 		imgui.protect_pcall(draw_vars)
 	end
+	imgui.EndChild()
 	imgui.End()
 end
 
@@ -404,7 +405,7 @@ local function main_menu()
 end
 
 local function trigger_bp(page, line)
-	local fname = '@'..puss.filename_format(page.filepath)
+	local fname = '@'..page.filepath
 	net.send(socket, 'set_bp', fname, line+1)
 end
 
