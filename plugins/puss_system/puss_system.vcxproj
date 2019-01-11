@@ -11,7 +11,12 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="puss_async_service.c" />
     <ClCompile Include="puss_module_system.c" />
+    <ClCompile Include="puss_socket.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="rbx_tree.inl" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>

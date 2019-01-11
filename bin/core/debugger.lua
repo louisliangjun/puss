@@ -1,5 +1,7 @@
 -- debugger.lua
 
+local puss_system = puss.load_plugin('puss_system')
+
 local diskfs = puss.import('core.diskfs')
 local shotcuts = puss.import('core.shotcuts')
 local pages = puss.import('core.pages')
@@ -550,8 +552,14 @@ __exports.uninit = function()
 	imgui.destroy()
 end
 
+local last = os.clock()
+
 __exports.update = function()
+	local now = os.clock()
+	local delta = ((now - last) * 1000) // 1
 	imgui.update(do_update)
+	last = now
+	puss_system.async_service_update(delta, 64)
 	return run_sign
 end
 
