@@ -41,7 +41,7 @@ end
 local PUSS_CONFIG_SHORTNAME = PUSS_CONFIG:gsub('^(%w)%w*_?(%w?)%w*$', '%1%2')
 OBJPATH = path_concat('objs', PUSS_CONFIG_SHORTNAME)
 
-PUSS_CONFIG_SUFFIX = PUSS_CONFIG=='release' and '' or ('.'..PUSS_CONFIG)
+PUSS_CONFIG_SUFFIX = PUSS_CONFIG=='release' and '' or ('-'..PUSS_CONFIG)
 
 -----------------------------
 -- common utils
@@ -226,19 +226,19 @@ vmake_target_add('puss_imgui', function(target)
 		})
 	local flags = shell('pkg-config --static --cflags glfw3')
 	local libs = shell('pkg-config --static --libs glfw3')
-	flags = array_pack(flags, '-DSCI_LEXER')
+	flags = array_pack(flags, '-DPUSS_IMGUI_USE_GLFW', '-DSCI_LEXER')
 	if vlua.OS=='windows' then
 		libs = array_pack(libs, '-lopengl32')
 	else
 		flags = array_pack(flags, '-DFOX')
 		libs = array_pack(libs, '-lGL')
 	end
-	local srcs = {path_concat(src, 'scintilla_imgui.cpp'), path_concat(src, 'puss_module_imgui.cpp')}
+	
+	local srcs = scan_files(src, function(f) return f:match('^.+%.cpp$') end, nil, true)
 	local gl3wobjs = make_c2objs(path_concat(src, 'gl3w'), nil, incs, '-fPIC', '-fvisibility=hidden')
 	local imguiobjs = make_cpp2objs(path_concat(src, 'imgui'), nil, incs, '-fPIC', '-fvisibility=hidden', flags)
-	local metricsobjs = make_cpp2objs(path_concat(src, 'metrics_gui'), nil, incs, '-fPIC', '-fvisibility=hidden', flags)
 	local objs = make_cpp2objs(srcs, nil, incs, '-fPIC', '-fvisibility=hidden', flags)
 	local output = path_concat('bin', 'plugins', target..PUSS_CONFIG_SUFFIX..DLL_SUFFIX)
-	return make_target(output, {objs, metricsobjs, imguiobjs, gl3wobjs}, CXX, CFLAGS, flags, '-shared', '-o', output, objs, metricsobjs, imguiobjs, gl3wobjs, slibs, libs)
+	return make_target(output, {objs, imguiobjs, gl3wobjs}, CXX, CFLAGS, flags, '-shared', '-o', output, objs, imguiobjs, gl3wobjs, slibs, libs)
 end)
 

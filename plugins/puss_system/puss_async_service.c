@@ -54,7 +54,7 @@ typedef struct _AsyncTaskService {
 
 static inline void grp_list_init(GroupNode* node) {
 	node->prev = node;
-	node->prev = node;
+	node->next = node;
 }
 
 static inline void grp_list_reset(AsyncTask* qnode, GroupNode* grp) {
@@ -84,10 +84,10 @@ static inline int timer_qnode_is_attached(AsyncTask* qnode) {
 	return qnode->rbx_node.color!=RBX_FREE;
 }
 
-static inline void timer_queue_insert(RBXTree* q, AsyncTask* qnode) {
+static inline void timer_queue_insert(AsyncTaskService* svs, AsyncTask* qnode) {
 	RBXNode* p = 0;
 	uint64_t timeout = qnode->timeout;
-	RBXNode** link = &(q->root);
+	RBXNode** link = &(svs->timers.root);
 	assert( !timer_qnode_is_attached(qnode) );
 
 	// find insert pos
@@ -102,12 +102,12 @@ static inline void timer_queue_insert(RBXTree* q, AsyncTask* qnode) {
 			break;
 	}
 
-	__rbx_insert_check(&(qnode->rbx_node), p, link, q);
+	__rbx_insert_check(&(qnode->rbx_node), p, link, &(svs->timers));
 }
 
-static inline void timer_queue_remove(RBXTree* q, AsyncTask* qnode) {
+static inline void timer_queue_remove(AsyncTaskService* svs, AsyncTask* qnode) {
 	assert( timer_qnode_is_attached(qnode) );
-	__rbx_erase_check( (RBXNode*)qnode, q );
+	__rbx_erase_check((RBXNode*)qnode, &(svs->timers));
 	qnode->rbx_node.color = RBX_FREE;
 }
 
@@ -119,9 +119,9 @@ static inline void async_task_reset_timeout(AsyncTaskService* svs, AsyncTask* ta
 	assert( svs && task );
 
 	if( task->timeout != timeout ) {
-		timer_queue_remove(&(svs->timers), task);
+		timer_queue_remove(svs, task);
 		task->timeout = timeout;
-		timer_queue_insert(&(svs->timers), task);
+		timer_queue_insert(svs, task);
 	}
 }
 
@@ -156,7 +156,7 @@ static int async_task_continue(lua_State *L, int status, lua_KContext ctx) {
 	task = lua_touserdata(L, lua_upvalueindex(2));
 	if( task && task->co && timer_qnode_is_attached(task) ) {
 		AsyncTaskService* svs = lua_touserdata(L, SERVICE_INDEX);
-		timer_queue_remove(&(svs->timers), task);
+		timer_queue_remove(svs, task);
 		async_task_append_to(svs, task, &(svs->dummy_free_task));
 		return lua_yieldk(L, LUA_MULTRET, ctx, async_task_continue);
 	}
@@ -195,7 +195,7 @@ static AsyncTask* async_service_create_co(lua_State* L, AsyncTaskService* svs) {
 
 static void async_service_destroy_co(lua_State* L, AsyncTaskService* svs, AsyncTask* task) {
 	if( timer_qnode_is_attached(task) ) {
-		timer_queue_remove(&(svs->timers), task);
+		timer_queue_remove(svs, task);
 	}
 	grp_list_reset(task, NULL);
 
@@ -214,7 +214,7 @@ static void async_task_reset_work(AsyncTaskService* svs, AsyncTask* task) {
 	grp_list_reset(task, NULL);
 
 	if( task->timeout != TIMEOUT_WORK ) {
-		timer_queue_remove(&(svs->timers), task);
+		timer_queue_remove(svs, task);
 		async_task_append_to(svs, task, &(svs->dummy_work_task));
 	}
 }
@@ -420,7 +420,6 @@ static int lua_async_service_group_reg(lua_State* L) {
 }
 
 static int lua_async_service_group_unreg(lua_State* L) {
-	AsyncTaskService* svs = lua_touserdata(L, SERVICE_INDEX);
 	GroupNode* grp;
 	GroupNode* iter;
 	AsyncTask* task;
@@ -524,7 +523,7 @@ static int lua_async_task_yield(lua_State* L) {
 	return lua_yield(L, lua_gettop(L));
 }
 
-static int lua_async_task_sync_trace_pcall(lua_State* L) {
+static int lua_async_task_trace_pcall_noyield(lua_State* L) {
 	AsyncTask* task;
 	assert( lua_istable(L, TASK_MAP_INDEX) );
 	task = (lua_rawgetp(L, TASK_MAP_INDEX, L)==LUA_TUSERDATA) ? lua_touserdata(L, -1) : NULL;
@@ -554,7 +553,7 @@ static luaL_Reg async_task_service_methods[] =
 	, {"async_task_sleep", lua_async_task_sleep}
 	, {"async_task_alarm", lua_async_task_alarm}
 	, {"async_task_yield", lua_async_task_yield}
-	, {"async_task_sync_trace_pcall", lua_async_task_sync_trace_pcall}
+	, {"async_task_trace_pcall_noyield", lua_async_task_trace_pcall_noyield}
 	, {NULL, NULL}
 	};
 
@@ -568,10 +567,10 @@ void puss_async_service_reg(lua_State* L) {
 	lua_setuservalue(L, -2);
 
 	svs->dummy_work_task.timeout = TIMEOUT_WORK;
-	timer_queue_insert(&(svs->timers), &(svs->dummy_work_task));
+	timer_queue_insert(svs, &(svs->dummy_work_task));
 
 	svs->dummy_free_task.timeout = TIMEOUT_FREE;
-	timer_queue_insert(&(svs->timers), &(svs->dummy_free_task));
+	timer_queue_insert(svs, &(svs->dummy_free_task));
 
 	lua_newtable(L);	// tasks map
 	lua_newtable(L);	// groups map

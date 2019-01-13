@@ -49,6 +49,8 @@
 //  ES 3.0    300       "#version 300 es"
 //----------------------------------------
 
+#if defined(PUSS_IMGUI_USE_GLFW)
+
 #if defined(_MSC_VER) && !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -578,3 +580,6 @@ static void ImGui_ImplOpenGL3_ShutdownPlatformInterface()
 {
     ImGui::DestroyPlatformWindows();
 }
+
+#endif  //PUSS_IMGUI_USE_GLFW
+

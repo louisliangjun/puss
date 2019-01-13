@@ -1,5 +1,7 @@
 // puss_debug.inl - inner used, not include directly
 
+#include <ctype.h>
+
 #define luac_c
 #define LUA_CORE
 
@@ -11,7 +13,7 @@
 #include "ldebug.h"
 #include "lopcodes.h"
 
-#define PUSS_DEBUG_NAME	"[PussDebugName]"
+#define PUSS_DEBUG_NAME	"[PussDebug]"
 
 #define BP_NULL			0x00
 #define BP_ACTIVE		0x01
@@ -337,14 +339,14 @@ static int script_on_breaked(DebugEnv* env, lua_State* L, int currentline, const
 	env->breaked_finfo = finfo;
 	env->breaked_line = currentline;
 	env->breaked_top = lua_gettop(L);
-	env->step_signal = SIGSTEP_NULL;
-	env->step_depth = 0;
-	env->step_state = NULL;
-	env->runto_finfo = NULL;
-	env->runto_line = 0;
 
 	frame = env->breaked_frame;
 	if( finfo ) {
+		env->step_signal = SIGSTEP_NULL;
+		env->step_depth = 0;
+		env->step_state = NULL;
+		env->runto_finfo = NULL;
+		env->runto_line = 0;
 		debug_handle_invoke(env, -1);
 		while( frame==env->breaked_frame ) {
 #ifdef _WIN32
@@ -356,6 +358,7 @@ static int script_on_breaked(DebugEnv* env, lua_State* L, int currentline, const
 		}
 		debug_handle_invoke(env, 1);
 	} else {
+		// count hook, not clear step & runto signs 
 		debug_handle_invoke(env, 0);
 	}
 
@@ -487,8 +490,6 @@ static int lua_debug_host_pcall(lua_State* L) {
 static int lua_debug_continue(lua_State* L) {
 	DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
 	env->breaked_frame++;
-	env->runto_finfo = NULL;
-	env->runto_line = 0;
 	return 0;
 }
 
@@ -504,9 +505,9 @@ static int debug_cond_bp_test_get(lua_State* L) {
 	lua_Debug ar;
 	if( !k )
 		return 0;
-	if( lua_getstack(L, 3, &ar) )
+	if( !lua_getstack(L, 2, &ar) )
 		return 0;
-	if( lua_getinfo(L, "f", &ar) )
+	if( !lua_getinfo(L, "f", &ar) )
 		return 0;
 	for( i=1; i<256; ++i ) {
 		if( (s = lua_getlocal(L, &ar, i))==NULL )
@@ -530,19 +531,19 @@ static int debug_cond_bp_test_set(lua_State* L) {
 }
 
 static int cond_expr_load(lua_State* L) {
-	DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
-	const char* expr = luaL_checkstring(L, 2);
+	DebugEnv* env = (DebugEnv*)lua_touserdata(L, 1);
 	if( lua_rawgetp(L, LUA_REGISTRYINDEX, &(env->key_of_cond_expr_load))!=LUA_TFUNCTION ) {
 		lua_pop(L, 1);
 		const char* loader_script = "local getter, setter = ...\n"
 			"local expr_env = setmetatable({}, {__index=getter, __newindex=setter})\n"
 			"return function(expr)\n"
-			"	local f, e = load('return ('..expr..')', expr, 't', expr_env)\n"
+			"	local f, e = load('return '..expr, expr, 't', expr_env)\n"
 			"	if not f then error(e) end\n"
 			"	return f\n"
 			"end\n"
 			;
-		if( luaL_loadstring(L, loader_script) )
+
+		if( luaL_loadbuffer(L, loader_script, strlen(loader_script), "<CondExprLoader>") )
 			return lua_error(L);
 		lua_pushcfunction(L, debug_cond_bp_test_get);
 		lua_pushcfunction(L, debug_cond_bp_test_set);
@@ -550,7 +551,7 @@ static int cond_expr_load(lua_State* L) {
 		lua_pushvalue(L, -1);
 		lua_rawsetp(L, LUA_REGISTRYINDEX, &(env->key_of_cond_expr_load));
 	}
-	lua_pushvalue(L, 2);
+	lua_replace(L, 1);
 	lua_call(L, 1, 1);
 	return 1;
 }
@@ -600,15 +601,28 @@ static int lua_debug_set_bp(lua_State* L) {
 	}
 	if( !finfo ) {
 		lua_pushstring(L, "create BP failed!");
-		return 4;
+		return 2;
 	}
 	if( bp==BP_COND ) {
-		lua_pushcfunction(L, cond_expr_load);
-		lua_pushvalue(L, 4);
-		if( lua_pcall(L, 1, 1, 0) )
-			return 4;
-	} else {
-		lua_pushnil(L);
+		size_t len = 0;
+		const char* str = lua_tolstring(L, 4, &len);
+		lua_State* hostL = env->breaked_state ? env->breaked_state : env->main_state;
+		int top = lua_gettop(hostL);
+		lua_pushcfunction(hostL, cond_expr_load);
+		lua_pushlightuserdata(hostL, env);
+		lua_pushlstring(hostL, str, len);
+		if( lua_pcall(hostL, 2, 1, 0) ) {
+			str = lua_tolstring(L, -1, &len);
+			lua_pushlstring(L, str, len);
+			lua_settop(hostL, top);
+			return 2;
+		}
+		// conds[crc32(finfo,line)] = expr function
+		// 
+		conds_table_push(hostL, env);
+		lua_pushvalue(hostL, -2);
+		lua_rawseti(hostL, -2, cond_bp_hash(finfo, line));
+		lua_settop(hostL, top);
 	}
 
 	// bps[fname:line] = bp
@@ -618,18 +632,8 @@ static int lua_debug_set_bp(lua_State* L) {
 	lua_pushfstring(L, "%s:%d", finfo->name, line);
 	lua_pushvalue(L, 4);
 	lua_settable(L, 1);	// set bp
-
-	// conds[crc32(finfo,line)] = expr function
-	// 
-	conds_table_push(L, env);
-	lua_replace(L, 1);
-	lua_pushvalue(L, 5);
-	lua_rawseti(L, 1, cond_bp_hash(finfo, line));
-
 	finfo->bps[line-1] = bp;
-
-	lua_settop(L, 4);
-	return 3;	// file, line, bp
+	return 1;	// bp
 }
 
 static int lua_debug_step_into(lua_State* L) {
@@ -675,7 +679,7 @@ static int lua_debug_run_to(lua_State* L) {
 	return 0;
 }
 
-static int lua_debug_set_pc(lua_State* L){
+static int lua_debug_jmp_to(lua_State* L){
 	DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
 	int toline = (int)luaL_checkinteger(L, 2);
 	CallInfo* ci = env->breaked_state ? env->breaked_state->ci : NULL;
@@ -1056,7 +1060,7 @@ static luaL_Reg puss_debug_methods[] =
 	, {"step_over", lua_debug_step_over}
 	, {"step_out", lua_debug_step_out}
 	, {"run_to", lua_debug_run_to}
-	, {"set_pc", lua_debug_set_pc}
+	, {"jmp_to", lua_debug_jmp_to}
 	, {"capture_error", lua_debug_capture_error}
 	, {"fetch_disasm", lua_debug_fetch_disasm}
 	, {NULL, NULL}
@@ -1130,6 +1134,8 @@ static int lua_debugger_debug(lua_State* hostL) {
 		}
 	} else if( lua_isboolean(hostL, 1) ) {
 		lua_debugger_clear(env);
+	} else if( env->debug_handle ) {
+		debug_handle_invoke(env, 0);
 	}
 
 	lua_pushboolean(hostL, env->debug_handle!=LUA_NOREF);

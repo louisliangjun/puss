@@ -2,7 +2,6 @@
 
 local puss_system = puss.load_plugin('puss_system')
 
-local diskfs = puss.import('core.diskfs')
 local shotcuts = puss.import('core.shotcuts')
 local pages = puss.import('core.pages')
 local docs = puss.import('core.docs')
@@ -10,24 +9,20 @@ local filebrowser = puss.import('core.filebrowser')
 local console = puss.import('core.console')
 local net = puss.import('core.net')
 
-filebrowser.setup(diskfs)
-
-docs.setup(diskfs, function(page, event, ...)
+docs.setup(function(event, ...)
 	local f = _ENV[event]
-	if f then return f(page, ...) end
+	if f then return f(...) end
 end)
 
 local LEAF_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen
 local FOLD_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick
 
 local run_sign = true
+local socket = _socket
+local GROUP_KEY = 'socket'	-- NOTICE : attach to socket if need multi-socket
 
 local BROADCAST_PORT = 9999
 local broadcast_recv = net.create_udp_broadcast_recver(BROADCAST_PORT)
-
-local hosts = nil
-
-local socket = _socket
 
 local dummy_vars = {}
 
@@ -36,19 +31,17 @@ stack_vars = stack_vars or {}
 stack_current = stack_current or 1
 
 show_console_window = show_console_window or false
+use_local_fs = use_local_fs or (use_local_fs==nil)
 
 shotcuts.register('app/reload', 'Reload scripts', 'F12', true, false, false, false)
-
 shotcuts.register('debugger/bp', 'set/unset bp', 'F9', false, false, false, false)
-
 shotcuts.register('debugger/continue', 'continue', 'F5', false, false, false, false)
 shotcuts.register('debugger/step_over', 'step over', 'F10', false, false, false, false)
 shotcuts.register('debugger/step_into', 'step into', 'F11', false, false, false, false)
 shotcuts.register('debugger/step_out', 'step out', 'F11', false, true, false, false)
 
 local function stack_list_clear()
-	stack_list = {}
-	stack_current = 1
+	stack_list, stack_vars, stack_current = {}, {}, 1
 end
 
 local function stack_vars_replace(var)
@@ -68,47 +61,7 @@ local function vars_sort_by_name(a, b)
 	return an<bn
 end
 
-local function locate_to_file(fname, line)
-	if docs.open(fname, line) then return end
-
-	fname = puss._path .. '/' .. fname
-	if docs.open(fname, line) then return end
-end
-
-local debug_input_buf = imgui.CreateByteArray(1024)
-local debug_input_val = nil
-
-local stubs = {}
-
-stubs.attached = function(bps)
-	print('bps:', bps)
-	for k,v in pairs(bps) do
-		local fname, line = k:match('^(.+):(%d+)$')
-		print(fname, line, v)
-	end
-	print('bps!')
-end
-
-stubs.continued = function()
-	stack_list_clear()
-end
-
-stubs.breaked = function(ok, res)
-	stack_vars = {}
-	if not ok then return print('fetch_stack failed:', ok, res) end
-	if type(res)~='table' then return print('fetch_stack failed:', ok, res) end
-	stack_list = res
-	stack_current = 1
-	local info = stack_list[stack_current]
-	if info then
-		net.send(socket, 'fetch_vars', info.level)
-		local fname = info.source:match('^@(.+)$')
-		if fname then locate_to_file(fname, info.currentline-1) end
-	end
-end
-
-stubs.fetch_vars = function(level, ok, vars)
-	if not ok then return print('fetch_vars failed:', vars) end
+local function stack_vars_merge(level, vars)
 	local info
 	for i,v in ipairs(stack_list) do
 		if v.level==level then
@@ -124,76 +77,110 @@ stubs.fetch_vars = function(level, ok, vars)
 	end
 end
 
-stubs.fetch_subs = function(key, ok, subs)
-	if not ok then return print('fetch_subs failed:', subs) end
+local function stack_vars_fill(key, subs)
 	local var = stack_vars[key]
-	if var then
-		var.subs = (subs and next(subs)) and subs or false
-		-- print('fetch subs:', key, var.subs)
-		if subs then
-			for i=1,#subs do subs[i] = stack_vars_replace(subs[i]) end
-			table.sort(subs, vars_sort_by_name)
-		end
-	end
+	if not var then return end
+	var.subs = (subs and next(subs)) and subs or false
+	if not subs then return end
+	for i=1,#subs do subs[i] = stack_vars_replace(subs[i]) end
+	table.sort(subs, vars_sort_by_name)
 end
 
-stubs.set_bp = function(fname, line, bp, err)
-	fname = fname:match('^@(.-)%s*$') or fname
-	docs.margin_set(fname, line, bp)
+local function locate_to_file(fname, line)
+	if docs.open(fname, line) then return end
+
+	fname = puss._path .. '/' .. fname
+	if docs.open(fname, line) then return end
 end
 
-stubs.modify_var = function(ok, var)
-	print('modify_var', ok, table.unpack(var))
-	if ok then stack_vars_replace(var) end
-end
+local debugger_events = {}
 
-stubs.set_pc = function(line)
-	print('set_pc res:', line)
-	if line then
-		local info = stack_list[1]
-		if info then info.currentline = line end
-	end
-end
-
-local function dispatch(cmd, ...)
-	print('debugger recv:', cmd, ...)
-	local h = stubs[cmd]
-	if not h then return print('unknown stub:', cmd) end
-	h(...)
-end
-
-local function shortcuts_update()
-	if shotcuts.is_pressed('debugger/step_over') then net.send(socket, 'step_over') end
-	if shotcuts.is_pressed('debugger/step_into') then net.send(socket, 'step_into') end
-	if shotcuts.is_pressed('debugger/step_out') then net.send(socket, 'step_out') end
-	if shotcuts.is_pressed('debugger/continue') then net.send(socket, 'continue') end
-end
-
-local function recver_update()
-	local data, addr = broadcast_recv()
-	if not data then return end
-	if not hosts then return end
-	--print(data, addr, hosts)
-
-	-- local machine, use addr
-	local ip, port, title = data:match('^%[PussDebug%]|(%d+%.%d+%.%d+%.%d+):(%d+)|?(.*)$')
-	if ip=='0.0.0.0' then ip = addr:match('^(%d+%.%d+%.%d+%.%d+):%d+') end
-	if ip then
-		local key = ip .. ':' .. port
-		local info = hosts[key]
-		if info then
-			info.timestamp = os.time()
+local function debugger_events_dispatch(co, sk, ...)
+	if co then
+		if sk then
+			print('debugger resume:', ...)
+			puss_system.async_service_resume(co, sk, ...)
 		else
-			info = {label=string.format('%s:%s (%s)', ip, port, title), ip=ip, port=tonumber(port), title=title, timestamp=os.time()}
-			table.insert(hosts, info)
-			hosts[key] = info
+			print('debugger recved:', co, ...)
 		end
+	else
+		local h = debugger_events[sk]
+		if not h then return print('unknown stub:', sk) end
+		print('debugger event:', sk, ...)
+		h(...)
 	end
-	return true
 end
 
-local function tool_button(label, hint)
-	local clicked = imgui.Button(label)
+local debugger_rpc
+do
+	local RPC_TIMEOUT = 30*1000 
+
+	local function _rpc_thread_wrap(cb, cmd, ...)
+		local co, sk = puss_system.async_task_alarm(RPC_TIMEOUT, GROUP_KEY)
+		net.send(socket, co, sk, cmd, ...)
+		cb(puss_system.async_task_yield())
+	end
+
+	debugger_rpc = function(cb, cmd, ...)
+		if not cb then
+			net.send(socket, cmd, nil, cmd, ...)
+		elseif socket and socket:valid() then
+			puss_system.async_service_run(_rpc_thread_wrap, cb, cmd, ...)
+		else
+			cb(false, 'bad socket')
+		end
+	end
+end
+
+debugger_events.attached = function(bps)
+	print('bps:', bps)
+	for k,v in pairs(bps) do
+		local fname, line = k:match('^(.+):(%d+)$')
+		print(fname, line, v)
+	end
+	print('bps!')
+end
+
+debugger_events.continued = function()
+	stack_list_clear()
+end
+
+debugger_events.breaked = function(res)
+	stack_vars = {}
+	stack_list = res
+	stack_current = 1
+	local info = stack_list[stack_current]
+	if not info then return end
+	local level = info.level
+	debugger_rpc(function(ok, vars)
+		if ok then stack_vars_merge(level, vars) end
+	end, 'fetch_vars', -level)
+	local fname = info.source:match('^@(.+)$')
+	if fname then locate_to_file(fname, info.currentline-1) end
+end
+
+local ICONS_TEX, ICON_WIDTH, ICON_HEIGHT = nil, 32, 32
+pcall(function()
+	local f = io.open(puss._path .. '/core/debugger_icons.png', 'r')
+	if not f then return end
+	local ctx = f:read('*a')
+	f:close()
+	if not ctx then return end
+	ICONS_TEX, ICON_WIDTH, ICON_HEIGHT = imgui.create_image(ctx)
+	if __icons_tex then imgui.destroy_image(__icons_tex) end
+	__icons_tex = ICONS_TEX
+end)
+
+local function tool_button(label, hint, icon)
+	local clicked
+	if icon and ICONS_TEX then
+		local u = ICON_HEIGHT / ICON_WIDTH
+		imgui.PushID(label)
+		clicked = imgui.ImageButton(ICONS_TEX, 16, 16, u*(icon-1), 0, u*icon, 1)
+		imgui.PopID()
+	else
+		clicked = imgui.Button(label)
+	end
 	if imgui.IsItemHovered() then
 		imgui.BeginTooltip()
 		imgui.Text(hint)
@@ -202,88 +189,175 @@ local function tool_button(label, hint)
 	return clicked
 end
 
-local page_line_op_active = false
+local show_connect_dialog
+do
+	local hosts = {}
 
-local function debug_toolbar()
-	if socket and socket:valid() then
-		if tool_button('断开', '断开连接') then
-			socket:close()
-			socket = nil
-			stack_list_clear()
+	local function recver_update()
+		local data, addr = broadcast_recv()
+		if not data then return end
+		if not hosts then return end
+		--print(data, addr, hosts)
+
+		-- local machine, use addr
+		local ip, port, title = data:match('^%[PussDebug%]|(%d+%.%d+%.%d+%.%d+):(%d+)|?(.*)$')
+		if ip=='0.0.0.0' then ip = addr:match('^(%d+%.%d+%.%d+%.%d+):%d+') end
+		if ip then
+			local key = ip .. ':' .. port
+			local info = hosts[key]
+			if not info then
+				info = {label=string.format('%s:%s (%s)', ip, port, title), ip=ip, port=tonumber(port), title=title}
+				table.insert(hosts, info)
+				hosts[key] = info
+			end
 		end
-	else
-		if tool_button('连接', '连接...') then
-			hosts = {}
-			imgui.OpenPopup('Connect ...')
-			imgui.SetNextWindowSize(430, 320)
-		end
-	end
-	if debug_input_val then
-		imgui.SameLine()
-		if tool_button('Exec', '运行脚本') then
-			print('execute_script', debug_input_val)
-			net.send(socket, 'execute_script', stack_current, debug_input_val)
-		end
-	end
-	imgui.SameLine()
-	do
-		imgui.InputText('脚本', debug_input_buf)
-		debug_input_val = debug_input_buf:str()
-		if debug_input_val=='' then debug_input_val = nil end
+		return true
 	end
 
-	if tool_button('>>', '继续 (F5)') then
-		net.send(socket, 'continue')
-	end
-	imgui.SameLine()
-	if tool_button('|>', '单步 (F10)') then
-		net.send(socket, 'step_over')
-	end
-	imgui.SameLine()
-	if tool_button('=>', '步入 (F11)') then
-		net.send(socket, 'step_into')
-	end
-	imgui.SameLine()
-	if tool_button('<=', '跳出 (Shift+F11)') then
-		net.send(socket, 'step_out')
-	end
-	imgui.SameLine()
-	if tool_button('><', '运行到指定行') then
-		page_line_op_active = 'run_to'
-	end
-	imgui.SameLine()
-	if tool_button('JMP', '跳转到指定行') then
-		page_line_op_active = 'set_pc'
-	end
-	imgui.SameLine()
-	if tool_button('Err', '异常断点') then
-		net.send(socket, 'capture_error')
-	end
-	imgui.SameLine()
-	if tool_button('ASM', '显示反汇编') then
-		net.send(socket, 'fetch_disasm', stack_current)
+	local last_update_time = os.clock()
+	local targets = {}
+
+	local function update_hosts()
+		local now = os.clock()
+		if (now - last_update_time) < 2 then
+			for i=1,64 do
+				if not recver_update() then break end
+			end
+			return
+		end
+		last_update_time = now
+
+		targets, hosts = hosts, {}
+
+		-- trace('----'); for i,v in ipairs(targets) do trace(v.ip, v.port, v.title) end;
+		table.sort(targets, function(a,b) return a.title < b.title end)
 	end
 
-	if imgui.BeginPopupModal('Connect ...') then
-		if imgui.Button("Quit") then
+	local function connect_target(ip, port)
+		_socket = net.connect(ip, port)
+		if socket then socket:close() end
+		socket = _socket
+		if socket then puss_system.async_service_group_cancel(GROUP_KEY) end
+	end
+
+	local function show_target(info)
+		imgui.TreeNodeEx(v, LEAF_FLAGS, info.label)
+		if not imgui.IsItemClicked() then return end
+		imgui.CloseCurrentPopup()
+		connect_target(info.ip, info.port)
+	end
+
+	local remote_addr_buf = imgui.CreateByteArray(64, '127.0.0.1:xxxx')
+
+	show_connect_dialog = function()
+		local activate
+		update_hosts()
+		if not imgui.BeginPopupModal('Connect ...') then return end
+		if imgui.Button("Close") then
 			imgui.CloseCurrentPopup()
 		else
 			imgui.SameLine()
-			imgui.Text('or wait hosts & click to connect ...')
-			imgui.Separator()
-			for _, info in ipairs(hosts) do
-				imgui.TreeNodeEx(v, LEAF_FLAGS, info.label)
-				if imgui.IsItemClicked() then
+			imgui.PushItemWidth(160)
+			imgui.InputText('##Address', remote_addr_buf)
+			imgui.PopItemWidth()
+			imgui.SameLine()
+			if imgui.Button('Connect') then
+				local ip, port = remote_addr_buf:str():match('(%d+%.%d+%.%d+%.%d+):(%d+)')
+				if ip then
 					imgui.CloseCurrentPopup()
-					hosts = nil
-					_socket = net.connect(info.ip, info.port)
-					if socket then socket:close() end
-					socket = _socket
+					connect_target(ip, port)
 				end
+			end
+			imgui.Separator()
+			for _, info in ipairs(targets) do
+				show_target(info, show_local_only)
 			end
 		end
 		imgui.EndPopup()
 	end
+end
+
+local page_line_op_active = false
+local debug_input_buf = imgui.CreateByteArray(1024)
+local debug_input_val = nil
+
+local function debug_toolbar()
+	if socket then
+		if socket:valid() then
+			if tool_button('Disconnect', 'Disconnect', 11) then socket:close() end
+		else
+			stack_list_clear()
+			socket = nil
+		end
+	else
+		if tool_button('Connect', 'Connect ...', 10) then
+			imgui.OpenPopup('Connect ...')
+			imgui.SetNextWindowSize(430, 320)
+		end
+	end
+	imgui.SameLine(nil, 2)
+	if tool_button('>>', 'Continue (F5)', 1) then
+		debugger_rpc(nil, 'continue')
+	end
+	imgui.SameLine(nil, 0)
+	if tool_button('|>', 'Step over (F10)', 2) then
+		debugger_rpc(nil, 'step_over')
+	end
+	imgui.SameLine(nil, 0)
+	if tool_button('=>', 'Step into (F11)', 3) then
+		debugger_rpc(nil, 'step_into')
+	end
+	imgui.SameLine(nil, 0)
+	if tool_button('<=', 'Step out (Shift+F11)', 4) then
+		debugger_rpc(nil, 'step_out')
+	end
+	imgui.SameLine(nil, 0)
+	if tool_button('><', 'Run to .. ', 5) then
+		page_line_op_active = 'run_to'
+	end
+	imgui.SameLine(nil, 0)
+	if tool_button('JMP', 'Jump to ...', 6) then
+		page_line_op_active = 'jmp_to'
+	end
+	imgui.SameLine(nil, 2)
+	if use_capture_error==true then
+		imgui.PushStyleColor(ImGuiCol_Text, 1, 0, 0, 1)
+	elseif use_capture_error==false then
+		imgui.PushStyleColor(ImGuiCol_Text, 0.75, 0.75, 0.75, 0.75)
+	else
+		imgui.PushStyleColor(ImGuiCol_Text, 0.5, 0.5, 0.5, 0.5)
+	end
+	if tool_button('Err', 'Execption breakpoint', 7) then
+		debugger_rpc(function(ok, capture)
+			if ok then use_capture_error = capture end
+		end, 'capture_error')
+	end
+	imgui.PopStyleColor()
+	imgui.SameLine(nil, 0)
+	if tool_button('ASM', 'print ASM to console', 12) then
+		debugger_rpc(nil, 'fetch_disasm', stack_current)
+	end
+
+	if debug_input_val then
+		if tool_button('Exec', 'Execute script', 9) then
+			print('execute_script', debug_input_val)
+			debugger_rpc(nil, 'execute_script', stack_current, debug_input_val)
+		end
+		imgui.SameLine(nil, 0)
+		if tool_button('BP', 'Add condition breakpoint', 8) then
+			page_line_op_active = 'set_bp'
+		end
+		imgui.SameLine(nil, 2)
+		imgui.PushItemWidth(170)
+	else
+		imgui.PushItemWidth(220)
+	end
+	imgui.InputText('##脚本', debug_input_buf, ImGuiInputTextFlags_AutoSelectAll)
+	imgui.PopItemWidth()
+	debug_input_val = debug_input_buf:str()
+	if debug_input_val=='' then debug_input_val = nil end
+
+	show_connect_dialog()
 end
 
 local function draw_stack()
@@ -299,7 +373,10 @@ local function draw_stack()
 	if clicked then
 		if not clicked.vars then
 			clicked.vars = dummy_vars
-			net.send(socket, 'fetch_vars', clicked.level)
+			local level = clicked.level
+			debugger_rpc(function(ok, vars)
+				if ok then stack_vars_merge(level, vars) end
+			end, 'fetch_vars', -level)
 		end
 		local fname = clicked.source:match('^@(.+)$')
 		if fname then locate_to_file(fname, clicked.currentline-1) end
@@ -334,7 +411,11 @@ local function draw_subs(stack_current, subs)
 		if has_subs and imgui.IsItemClicked() then
 			if v.subs==nil then
 				v.subs = dummy_vars
-				net.send(socket, 'fetch_subs', v[1])
+				local key = v[1]
+				debugger_rpc(function(ok, subs)
+					if not ok then return print('fetch_vars failed:', subs) end
+					stack_vars_fill(key, subs)
+				end, 'fetch_vars', key)
 			end
 		end
 		imgui.SameLine()
@@ -344,11 +425,12 @@ local function draw_subs(stack_current, subs)
 			imgui.PushID(i)
 			if imgui.SmallButton('modify') then
 				local ok, val = puss.trace_pcall(load_value, debug_input_val)
-				debug_input_buf:strcpy()
-				debug_input_val = nil
 				if ok then
 					print('modify', val, table.unpack(v))
-					net.send(socket, 'modify_var', v[1], val)
+					debugger_rpc(function(ok, var)
+						print('modify_var', ok, table.unpack(var))
+						if ok then stack_vars_replace(var) end
+					end, 'modify_var', v[1], val)
 				else
 					print('error', val)
 				end
@@ -372,9 +454,12 @@ end
 
 local function debug_window()
 	imgui.Begin('DebugWindow')
-	net.update(socket, dispatch)
+	net.update(socket, debugger_events_dispatch)
 
-	shortcuts_update()
+	if shotcuts.is_pressed('debugger/step_over') then debugger_rpc(nil, 'step_over') end
+	if shotcuts.is_pressed('debugger/step_into') then debugger_rpc(nil, 'step_into') end
+	if shotcuts.is_pressed('debugger/step_out') then debugger_rpc(nil, 'step_out') end
+	if shotcuts.is_pressed('debugger/continue') then debugger_rpc(nil, 'continue') end
 
 	imgui.protect_pcall(debug_toolbar)
 	imgui.BeginChild('##StackAndVars')
@@ -391,24 +476,22 @@ end
 local function main_menu()
 	local active
 	if not imgui.BeginMenuBar() then return end
-	if imgui.BeginMenu('Help') then
-		active, show_console_window = imgui.MenuItem('Conosle', nil, show_console_window)
-		imgui.Separator()
-		if imgui.MenuItem('Reload', 'Ctrl+F12') then puss.reload() end
-		if imgui.MenuItem(show_win32_console and 'Hide Win32 Console' or 'Show Win32 Console') then
-			show_win32_console = not show_win32_console
-			ks.console_show(show_win32_console)
-		end
-		imgui.EndMenu()
-	end
+	if imgui.Button('Reload Ctrl+F12') then puss.reload() end
+	-- active, use_local_fs = imgui.Checkbox('UseLocalFS', use_local_fs)
+	active, show_console_window = imgui.Checkbox('Conosle', show_console_window)
 	imgui.EndMenuBar()
 
 	if shotcuts.is_pressed('app/reload') then puss.reload() end
 end
 
 local function trigger_bp(page, line)
-	local fname = '@'..page.filepath
-	net.send(socket, 'set_bp', fname, line+1)
+	local filepath = page.filepath
+	print('trigger_bp', filepath, line)
+	debugger_rpc(function(ok, bp, err)
+		if not ok then return end
+		if err then return end
+		docs.margin_set(filepath, line, bp)
+	end, 'set_bp', '@'..filepath, line)
 end
 
 function docs_page_before_draw(page)
@@ -419,15 +502,33 @@ function docs_page_before_draw(page)
 		local line = sv:LineFromPosition(sv:GetCurrentPos())
 		if op=='run_to' then
 			local fname = '@'..page.filepath
-			net.send(socket, op, fname, line+1)
-		else
-			net.send(socket, op, line+1)
+			debugger_rpc(nil, op, fname, line+1)
+		elseif op=='jmp_to' then
+			debugger_rpc(function(ok, line)
+				print('jmp_to res:', ok, line)
+				if ok and line then
+					local info = stack_list[1]
+					if info then info.currentline = line end
+				end
+			end, op, line+1)
+		elseif op=='set_bp' then
+			local cond = debug_input_val
+			if not load('return ' .. cond) then
+				print('bad cond')
+			else
+				local filepath = page.filepath
+				debugger_rpc(function(ok, bp, err)
+					if not ok then return end
+					if err then return end
+					docs.margin_set(filepath, line+1, bp)
+				end, 'set_bp', '@'..filepath, line+1, cond)
+			end
 		end
 	end
 	if shotcuts.is_pressed('debugger/bp') then
 		local sv = page.sv
 		local line = sv:LineFromPosition(sv:GetCurrentPos())
-		trigger_bp(page, line)
+		trigger_bp(page, line+1)
 	end
 end
 
@@ -445,21 +546,34 @@ function docs_page_after_draw(page)
 	imgui.WindowDrawListAddRectFilled(x,y+(line-top-1)*th,x+w,y+(line-top)*th,0x3FFF00FF)
 end
 
-function docs_page_on_create(page)
-	print('page create')
+function docs_page_on_load(page_after_load, filepath)
+	if use_local_fs then
+		local f = io.open(puss.utf8_to_local(filepath), 'r')
+		if not f then return end
+		local ctx = f:read('*a')
+		f:close()
+		return page_after_load(ctx)
+	end
+
+	debugger_rpc(function(ok, ctx)
+		if not ok then return print('fetch_file failed:', ctx) end
+		return page_after_load(ctx)
+	end, 'fetch_file', filepath)
+end
+
+function docs_page_on_save(page_after_save, filepath, ctx)
+	local f = io.open(puss.utf8_to_local(filepath), 'w')
+	if not f then return falpage_save_result(false) end
+	f:write(ctx)
+	f:close()
+	page_save_result(true)
 end
 
 function docs_page_on_margin_click(page, modifiers, pos, margin)
 	print(page, modifiers, pos, margin)
 	-- print(page.sv, sv:MarkerGet(line))
 	local line = page.sv:LineFromPosition(pos)
-	trigger_bp(page, line)
-end
-
-local function pages_on_drop_files(files)
-	for path in files:gmatch('(.-)\n') do
-		docs.open(path)
-	end
+	trigger_bp(page, line+1)
 end
 
 local EDITOR_WINDOW_FLAGS = ( ImGuiWindowFlags_NoScrollbar
@@ -468,10 +582,6 @@ local EDITOR_WINDOW_FLAGS = ( ImGuiWindowFlags_NoScrollbar
 
 local function editor_window()
 	imgui.Begin("Editor", nil, EDITOR_WINDOW_FLAGS)
-	if imgui.IsWindowHovered(ImGuiHoveredFlags_ChildWindows) then
-		local files = imgui.GetDropFiles()
-		if files then pages_on_drop_files(files) end
-	end
 	pages.update()
 	imgui.End()
 end
@@ -522,28 +632,46 @@ local function show_main_window()
 	end
 end
 
-local function do_update()
-	imgui.protect_pcall(show_main_window)
+local last_update_time = os.clock()
 
-	for i=1,64 do
-		if not recver_update() then break end
-	end
+local function do_update()
+	local now = os.clock()
+	local delta = ((now - last_update_time) * 1000) // 1
+	last_update_time = now
+	puss_system.async_service_update(delta, 32)
+
+	imgui.protect_pcall(show_main_window)
 
 	if run_sign and imgui.should_close() then
 		run_sign = false
 	end
 end
 
+local function fs_list(dir, callback)
+	if use_local_fs then
+		local fs, ds = puss.list_dir(dir, true)
+		callback(true, fs, ds)
+	elseif socket and socket:valid() then
+		debugger_rpc(callback, 'list_dir', dir)
+	else
+		callback(false)
+	end
+end
+
+local function refresh_root_folders()
+	filebrowser.remove_folders()
+	local default_paths = {'data', 'tools'}
+	for i,v in ipairs(default_paths) do
+		filebrowser.append_folder(v, fs_list)
+	end
+end
+
+refresh_root_folders()
+
 __exports.init = function()
 	imgui.create('Puss - Debugger', 1024, 768, 'puss_debugger.ini', function()
-		local font_path = string.format('%s%sfonts', puss._path, puss._sep)
-		local files = puss.file_list(font_path)
-		for _, name in ipairs(files) do
-			if name:match('^.+%.[tT][tT][fF]$') then
-				local lang = name:match('^.-%.(%w+)%.%w+$')
-				imgui.AddFontFromFileTTF(string.format('%s%s%s', font_path, puss._sep, name), 14, lang)
-			end
-		end
+		local font_name = puss._path .. '/fonts/mono.ttf'
+		imgui.AddFontFromFileTTF(font_name, 14, 'Chinese')
 	end)
 	imgui.update(show_main_window, true)
 end
@@ -552,14 +680,8 @@ __exports.uninit = function()
 	imgui.destroy()
 end
 
-local last = os.clock()
-
 __exports.update = function()
-	local now = os.clock()
-	local delta = ((now - last) * 1000) // 1
 	imgui.update(do_update)
-	last = now
-	puss_system.async_service_update(delta, 64)
 	return run_sign
 end
 

@@ -127,7 +127,7 @@ static PussInterface puss_interface =
 static void _push_plugin_filename(lua_State* L) {
 	lua_pushvalue(L, lua_upvalueindex(3));	// prefix
 	lua_pushvalue(L, 1);					// name
-	lua_pushvalue(L, lua_upvalueindex(4));	// prefix
+	lua_pushvalue(L, lua_upvalueindex(4));	// suffix
 	lua_concat(L, 3);
 }
 
@@ -144,10 +144,8 @@ static int puss_lua_plugin_load(lua_State* L) {
 	lua_pushstring(L, "__puss_plugin_init__");
 	lua_call(L, 2, 2);
 	if( lua_type(L, -2)!=LUA_TFUNCTION ) {
-		lua_pushfstring(L, "plugin: ");
 		_push_plugin_filename(L);
-		lua_concat(L, 3);
-		lua_error(L);
+		luaL_error(L, "load plugin(%s) error:%s", lua_tostring(L, -1), lua_tostring(L, -2));
 	}
 	f = (PussPluginInit)lua_tocfunction(L, -2);
 	if( !f )
@@ -246,6 +244,7 @@ static void puss_module_setup(lua_State* L, const char* app_path, const char* ap
 	lua_pushstring(L, PATH_SEP_STR "plugins" PATH_SEP_STR);
 	lua_concat(L, 2);								// up[3]: plugin_prefix
 #ifdef _WIN32
+	SetDllDirectory(lua_tostring(L, -1));
 	lua_pushfstring(L, "%s.dll", app_config);		// up[4]: plugin_suffix
 #else
 	lua_pushfstring(L, "%s.so", app_config);
@@ -325,7 +324,7 @@ static void puss_lua_open_default(lua_State* L, const char* arg0) {
 		const char* pe = app_name + strlen(app_name);
 		const char* p;
 
-		// fetch config from filename <app.CONFIG>, in win32 <app.CONFIG.exe>
+		// fetch config from filename <app-CONFIG>, in win32 <app-CONFIG.exe>
 #ifdef _WIN32
 		// skip .exe
 		for( p=pe-1; p>ps; --p ) {
@@ -336,7 +335,7 @@ static void puss_lua_open_default(lua_State* L, const char* arg0) {
 		}
 #endif
 		for( p=pe-1; p>ps; --p ) {
-			if( *p == '.' ) {
+			if( *p == '-' ) {
 				size_t n = pe - p;
 				if( n >= sizeof(app_config) ) {
 					// too long CONFIG, use default config ""

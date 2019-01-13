@@ -2,7 +2,8 @@
 
 #include <assert.h>
 
-#define _RBX_TREE_FULL_CHECK
+// #define _RBX_TREE_FULL_CHECK
+// #define _RBX_TREE_ITER_SUPPORT
 
 #define RBX_FREE	0
 #define	RBX_RED		1
@@ -11,29 +12,28 @@
 
 typedef struct _RBXNode		RBXNode;
 typedef struct _RBXTree		RBXTree;
-typedef struct _RBXIter		RBXIter;
 typedef struct _RBXLink		RBXLink;
+
+#ifdef _RBX_TREE_ITER_SUPPORT
+typedef struct _RBXIter		RBXIter;
+#endif
 
 struct _RBXNode {
 	RBXNode*		prev;
 	RBXNode*		next;
 
+	int				color;
+	RBXNode*		parent;
 	RBXNode*		left;
 	RBXNode*		right;
-	RBXNode*		parent;
-	int				color;
 };
 
 struct _RBXTree {
 	RBXNode			list;	// index list head
 	RBXNode*		root;	// tree root node
+#ifdef _RBX_TREE_ITER_SUPPORT
 	RBXIter*		iter;	// iterator list head
-};
-
-struct _RBXIter {
-	RBXNode*		pos;
-	RBXTree*		tree;
-	RBXIter*		next;
+#endif
 };
 
 struct _RBXLink {
@@ -41,6 +41,14 @@ struct _RBXLink {
 	RBXNode**		link;
 	RBXTree*		tree;
 };
+
+#ifdef _RBX_TREE_ITER_SUPPORT
+struct _RBXIter {
+	RBXNode*		pos;
+	RBXTree*		tree;
+	RBXIter*		next;
+};
+#endif
 
 // list
 
@@ -353,6 +361,7 @@ static void rbx_insert(RBXNode* node, RBXNode* parent, RBXNode** link, RBXTree* 
 static void rbx_erase(RBXNode* node, RBXTree* tree) {
 	assert( node && tree );
 
+#ifdef _RBX_TREE_ITER_SUPPORT
 	// update iterators
 	{
 		RBXIter* iter = tree->iter;
@@ -361,6 +370,7 @@ static void rbx_erase(RBXNode* node, RBXTree* tree) {
 				iter->pos = node->prev;
 		}
 	}
+#endif
 
 	if( node->color==RBX_BROTHER ) {
 		// remove from brother list
@@ -400,6 +410,10 @@ static void rbx_erase(RBXNode* node, RBXTree* tree) {
 	__rbx_list_del(node->prev, node->next);
 }
 
+#define	rbx_entry(ptr, type, member)	((type *)((char *)(ptr)-(intptr_t)(&((type *)0)->member)))
+
+#define	rbx_insert_at(node, link_pos)	rbx_insert((node), (link_pos)->parent, (link_pos)->link, (link_pos)->tree)
+
 // debug utils
 // 
 #ifdef _RBX_TREE_FULL_CHECK
@@ -429,43 +443,40 @@ static void rbx_erase(RBXNode* node, RBXTree* tree) {
 
 // iterator
 // 
-static void rbx_iter_tree(RBXIter* iter, RBXTree* tree) {
-	RBXNode* node = &(tree->list);
-	iter->pos = node;
-	iter->tree = tree;
-	iter->next = tree->iter;
-	tree->iter = iter;
-}
-
-static void rbx_iter_finish(RBXIter* iter) {
-	RBXTree* rt = iter->tree;
-	RBXIter* p;
-	if( !rt )
-		return;
-	iter->tree = 0;
-
-	if( rt->iter==iter ) {
-		rt->iter = iter->next;
-	} else {
-		for( p=rt->iter; p; p=p->next ) {
-			if( p->next==iter ) {
-				p->next = iter->next;
-				return;
-			}
-		}
-		assert( 0 && "bad iter finish!" );
+#ifdef _RBX_TREE_ITER_SUPPORT
+	static void rbx_iter_tree(RBXIter* iter, RBXTree* tree) {
+		RBXNode* node = &(tree->list);
+		iter->pos = node;
+		iter->tree = tree;
+		iter->next = tree->iter;
+		tree->iter = iter;
 	}
-}
 
-static inline RBXNode* rbx_iter_next(RBXIter* iter)	{
-	RBXNode* next = iter->pos->next;
-	if( (next==&(iter->tree->list)) )
-		return 0;
-	iter->pos = next;
-	return next;
-}
+	static void rbx_iter_finish(RBXIter* iter) {
+		RBXTree* rt = iter->tree;
+		RBXIter* p;
+		if( !rt )
+			return;
+		iter->tree = 0;
 
-#define	rbx_entry(ptr, type, member)	((type *)((char *)(ptr)-(intptr_t)(&((type *)0)->member)))
+		if( rt->iter==iter ) {
+			rt->iter = iter->next;
+		} else {
+			for( p=rt->iter; p; p=p->next ) {
+				if( p->next==iter ) {
+					p->next = iter->next;
+					return;
+				}
+			}
+			assert( 0 && "bad iter finish!" );
+		}
+	}
 
-#define	rbx_insert_at(node, link_pos)	rbx_insert((node), (link_pos)->parent, (link_pos)->link, (link_pos)->tree)
-
+	static inline RBXNode* rbx_iter_next(RBXIter* iter)	{
+		RBXNode* next = iter->pos->next;
+		if( (next==&(iter->tree->list)) )
+			return 0;
+		iter->pos = next;
+		return next;
+	}
+#endif

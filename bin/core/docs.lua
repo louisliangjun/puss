@@ -3,8 +3,7 @@
 local pages = puss.import('core.pages')
 local sci = puss.import('core.sci')
 local shotcuts = puss.import('core.shotcuts')
-local hook = _hook or function(page, event) end
-local fs = _fs
+local hook = _hook or function(event, ...) end
 
 _inbuf = _inbuf or imgui.CreateByteArray(4*1024, 'find text')
 _rebuf = _rebuf or imgui.CreateByteArray(4*1024, 'TODO : replace text')
@@ -27,16 +26,21 @@ local function do_save_page(page)
 		page.saving = true
 		return
 	end
-	local len, ctx = page.sv:GetText(page.sv:GetTextLength())
-	if not fs.save(page.filepath, ctx) then
-		page.saving = true
-		page.saving_tips = 'save file failed, maybe readonly.'
-		return
+
+	local function page_after_save(ok)
+		if not ok then
+			page.saving_tips = 'save file failed, maybe readonly.'
+			return
+		end
+		page.sv:SetSavePoint()
+		page.saving = nil
+		page.saving_tip = nil
+		page.unsaved = nil
 	end
-	page.sv:SetSavePoint()
-	page.saving = nil
-	page.saving_tip = nil
-	page.unsaved = nil
+
+	local len, ctx = page.sv:GetText(page.sv:GetTextLength())
+	page.saving = true
+	puss.trace_pcall(hook, 'docs_page_on_save', page_after_save, page.filepath, ctx)
 end
 
 local function draw_saving_bar(page)
@@ -210,7 +214,7 @@ local dialog_modes =
 function tabs_page_draw(page, active_page)
 	if (not page.saving) and shotcuts.is_pressed('docs/save') then do_save_page(page) end
 	if shotcuts.is_pressed('docs/close') then page.open = false end
-	puss.trace_pcall(hook, page, 'docs_page_before_draw')
+	puss.trace_pcall(hook, 'docs_page_before_draw', page)
 	if page.saving then draw_saving_bar(page) end
 
 	local active
@@ -252,7 +256,7 @@ function tabs_page_draw(page, active_page)
 		local sv = page.sv
 		sv()
 		page.unsaved = sv:GetModify()
-		puss.trace_pcall(hook, page, 'docs_page_after_draw')
+		puss.trace_pcall(hook, 'docs_page_after_draw', page)
 	imgui.EndChild()
 
 	if mode then
@@ -287,12 +291,8 @@ function tabs_page_destroy(page)
 	page.sv:destroy()
 end
 
-local function generate_label(filename, filepath)
-	return filename..'###'..fs.filename_hash(filepath)
-end
-
 local function on_margin_click(sv, modifiers, pos, margin)
-	puss.trace_pcall(hook, sv:get('page'), 'docs_page_on_margin_click', modifiers, pos, margin)
+	puss.trace_pcall(hook, 'docs_page_on_margin_click', sv:get('page'), modifiers, pos, margin)
 end
 
 local function new_doc(label, lang, filepath)
@@ -305,7 +305,7 @@ local function new_doc(label, lang, filepath)
 	page.sv = sv
 	page.filepath = filepath
 	pages.active(label)
-	puss.trace_pcall(hook, page, 'docs_page_on_create')
+	puss.trace_pcall(hook, 'docs_page_on_create', page)
 	return page
 end
 
@@ -320,10 +320,10 @@ __exports.new_page = function()
 end
 
 local function lookup_page(filepath)
-	filepath = puss.filename_format(filepath, true)
+	filepath = puss.filename_format(filepath)
 	local path, name = filepath:match('^(.*)/([^/]+)$')
 	if not path then path, name = '', filepath end
-	local label = generate_label(name, filepath)
+	local label = name..'###'..filepath
 	local page = pages.lookup(label)
 	return filepath, name, label, page
 end
@@ -331,25 +331,33 @@ end
 __exports.open = function(file, line)
 	local filepath, name, label, page = lookup_page(file)
 	if page then
+		if line then page.scroll_to_line = line end
 		pages.active(label)
-	else
-		local ctx = fs.load(filepath)
-		if ctx then
+		return
+	end
+
+	local function page_after_load(ctx)
+		if not ctx then return end
+		page = pages.lookup(filepath)
+		if page then
+			pages.active(label)
+		else
 			page = new_doc(label, sci.guess_language(name), filepath)
-			page.sv:SetText(ctx)
-			page.sv:EmptyUndoBuffer()
 		end
+		page.sv:SetText(ctx)
+		page.sv:EmptyUndoBuffer()
+		if line then page.scroll_to_line = line end
 	end
-	if page and line then
-		page.scroll_to_line = line
-	end
-	return page
+
+	puss.trace_pcall(hook, 'docs_page_on_load', page_after_load, filepath)
 end
 
 local function on_margin_set(sv, filepath, line, value)
 	print('on_set_bp', sv, filepath, line, value)
 	if value then
-		sv:MarkerAdd(line-1, 0)
+		if sv:MarkerGet(line-1)==0 then
+			sv:MarkerAdd(line-1, 0)
+		end
 	else
 		sv:MarkerDelete(line-1, 0)
 	end
@@ -361,10 +369,8 @@ __exports.margin_set = function(file, line, value)
 	page.sv(on_margin_set, filepath, line, value)
 end
 
-__exports.setup = function(new_fs, new_hook)
-	_fs = new_fs or fs
+__exports.setup = function(new_hook)
 	_hook = new_hook or hook
-	fs = _fs
 	hook = _hook
 end
 

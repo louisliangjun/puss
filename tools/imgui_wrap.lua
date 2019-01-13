@@ -1,6 +1,14 @@
 -- imgui_wrap.lua
 
 local puss_imgui_implements = [[
+
+#ifndef IMGUI_LUA_WRAP_CHECK_TEXTURE
+	#define IMGUI_LUA_WRAP_CHECK_TEXTURE	lua_touserdata
+#endif
+#ifndef IMGUI_LUA_WRAP_PUSH_TEXTURE
+	#define IMGUI_LUA_WRAP_PUSH_TEXTURE		lua_pushlightuserdata
+#endif
+
 #define BYTE_ARRAY_NAME	"PussImguiByteArray"
 
 typedef struct _ByteArrayLua {
@@ -910,7 +918,7 @@ function main()
 					dst:writeln('	', aname, '.w = ', a.def and '(float)luaL_optnumber(L, ++__iarg__, '..aname..'.w)' or '(float)luaL_checknumber(L, ++__iarg__)', ';')
 				elseif atype=='ImTextureID' then
 					iarg_use, fmt = true, fmt .. 'pv'
-					dst:writeln('	', aname, ' = ('..atype..')lua_topointer(L, ++__iarg__);')
+					dst:writeln('	', aname, ' = ('..atype..')IMGUI_LUA_WRAP_CHECK_TEXTURE(L, ++__iarg__);')
 				elseif atype:match(RE_CDOCKFAMILY) then
 					iarg_use, fmt = true, fmt .. 'pv'
 					if a.def then
@@ -974,7 +982,7 @@ function main()
 					dst:writeln('	lua_pushnumber(L, ', aname, '.w);')
 				elseif atype=='ImTextureID' then
 					nret = nret + 1
-					dst:writeln('	lua_pushlightuserdata(L, ', aname, ');')
+					dst:writeln('	IMGUI_LUA_WRAP_PUSH_TEXTURE(L, ', aname, ');')
 				elseif atype:match(RE_VIEWPORT) then
 					nret = nret + 7
 					dst:writeln('	lua_pushinteger(L, ', aname, ' ? ', aname, '->ID : 0);')
@@ -1010,7 +1018,7 @@ function main()
 					error(string.format('not support ('..tostring(aname)..')'))
 				elseif atype=='ImTextureID' then
 					nret = nret + 1
-					dst:writeln('	lua_pushlightuserdata(L, ', aname, ');')
+					dst:writeln('	IMGUI_LUA_WRAP_PUSH_TEXTURE(L, ', aname, ');')
 				elseif atype:match(RE_PBOOL) then
 					nret = nret + 1
 					dst:writeln('	if(', aname, ') lua_pushboolean(L, ', '(*', aname, ') ? 1 : 0); else lua_pushnil(L);')

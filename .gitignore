@@ -5,6 +5,7 @@
 /include/lua*.h
 /include/lauxlib.h
 /objs
+/.vscode
 *.VC.opendb
 *.VC.db-wal
 *.VC.db-shm

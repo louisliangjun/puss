@@ -3,8 +3,8 @@
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros">
     <PussRoot>$(MSBuildThisFileDirectory)</PussRoot>
-    <_PussProjectName>$(ProjectName).$(Configuration.ToLower())</_PussProjectName>
-    <PussProjectName>$(_PussProjectName.Replace(".release", ""))</PussProjectName>
+    <_PussProjectName>$(ProjectName)-$(Configuration.ToLower())</_PussProjectName>
+    <PussProjectName>$(_PussProjectName.Replace("-release", ""))</PussProjectName>
   </PropertyGroup>
   <PropertyGroup>
     <OutDir>$(PussRoot)bin\plugins\</OutDir>

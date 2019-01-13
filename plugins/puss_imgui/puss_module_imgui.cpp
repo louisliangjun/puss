@@ -1,5 +1,23 @@
 // puss_module_imgui.cpp
 
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
+#if defined(__GNUC__)
+	#pragma GCC diagnostic ignored "-Wunused-function"          // warning: 'xxxx' defined but not used
+#endif
+
+#include "imgui.h"
+
+#include "puss_plugin.h"
+
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_STATIC
+#include "stb_image.h"
+
+static ImTextureID	image_texture_check(lua_State* L, int arg);
+#define IMGUI_LUA_WRAP_CHECK_TEXTURE	image_texture_check
 #include "puss_imgui_lua.inl"
 
 static void do_create_context() {
@@ -33,7 +51,7 @@ static void do_update_and_render_viewports() {
     }
 }
 
-#ifdef PUSS_IMGUI_USE_DX11
+#if defined(PUSS_IMGUI_USE_DX11)
 
 #include <windows.h>
 #include <tchar.h>
@@ -41,6 +59,8 @@ static void do_update_and_render_viewports() {
 #include <d3d11.h>
 #define DIRECTINPUT_VERSION 0x0800
 #include <dinput.h>
+
+#include "resource.h"
 
 #ifndef WM_DPICHANGED
 #define WM_DPICHANGED 0x02E0 // From Windows SDK 8.1+ headers
@@ -50,18 +70,22 @@ static void do_update_and_render_viewports() {
 #pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "dxgi.lib")
 
-static int _win32_vk_convert(WPARAM wParam, LPARAM lParam);
-
-#include "imgui_impl_win32.inl"
-#include "imgui_impl_dx11.inl"
+#include "imgui_impl_win32.h"
+#include "imgui_impl_dx11.h"
 
 #define PUSS_IMGUI_WINDOW_CLASS	_T("PussImGuiWindow")
 
 static WNDCLASSEX puss_imgui_wc = { sizeof(WNDCLASSEX), CS_CLASSDC, NULL, 0L, 0L, NULL, NULL, NULL, NULL, NULL, PUSS_IMGUI_WINDOW_CLASS, NULL };
 
-static IDXGISwapChain*          g_pSwapChain = NULL;
-static ID3D11RenderTargetView*  g_mainRenderTargetView = NULL;
-static LPARAM					g_resizeParam = 0;
+static ID3D11Device*				g_pd3dDevice = NULL;
+static ID3D11DeviceContext*			g_pd3dDeviceContext = NULL;
+static ID3D11ShaderResourceView*	g_missingImageTexture = NULL;
+static ImVector<ImTextureID>		g_imageTextures;	// TODO if need sort & search, or use hash table
+
+static HWND							g_hWnd = 0;
+static IDXGISwapChain*				g_pSwapChain = NULL;
+static ID3D11RenderTargetView*		g_mainRenderTargetView = NULL;
+static LPARAM						g_resizeParam = 0;
 
 static int _lua_utf8_to_utf16(lua_State* L) {
 	size_t len = 0;
@@ -108,43 +132,50 @@ static void CleanupRenderTarget()
 	if (g_mainRenderTargetView) { g_mainRenderTargetView->Release(); g_mainRenderTargetView = NULL; }
 }
 
-static HRESULT CreateDeviceD3D(HWND hWnd)
+static HRESULT CreateSwapChain(HWND hWnd)
 {
-	// Setup swap chain
-	DXGI_SWAP_CHAIN_DESC sd;
-	ZeroMemory(&sd, sizeof(sd));
-	sd.BufferCount = 2;
-	sd.BufferDesc.Width = 0;
-	sd.BufferDesc.Height = 0;
-	sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	sd.BufferDesc.RefreshRate.Numerator = 60;
-	sd.BufferDesc.RefreshRate.Denominator = 1;
-	sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
-	sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-	sd.OutputWindow = hWnd;
-	sd.SampleDesc.Count = 1;
-	sd.SampleDesc.Quality = 0;
-	sd.Windowed = TRUE;
-	sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-
-	UINT createDeviceFlags = 0;
-	//createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
-	D3D_FEATURE_LEVEL featureLevel;
-	const D3D_FEATURE_LEVEL featureLevelArray[2] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0, };
-	if (D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &g_pSwapChain, &g_pd3dDevice, &featureLevel, &g_pd3dDeviceContext) != S_OK)
-		return E_FAIL;
-
-	CreateRenderTarget();
+    // Get factory from device
+    IDXGIDevice* pDXGIDevice = NULL;
+    IDXGIAdapter* pDXGIAdapter = NULL;
+    IDXGIFactory* pFactory = NULL;
+    if( g_pd3dDevice->QueryInterface(IID_PPV_ARGS(&pDXGIDevice)) == S_OK
+        && pDXGIDevice->GetParent(IID_PPV_ARGS(&pDXGIAdapter)) == S_OK
+		&& pDXGIAdapter->GetParent(IID_PPV_ARGS(&pFactory)) == S_OK )
+    {
+		// Setup swap chain
+		DXGI_SWAP_CHAIN_DESC sd;
+		ZeroMemory(&sd, sizeof(sd));
+		sd.BufferCount = 2;
+		sd.BufferDesc.Width = 0;
+		sd.BufferDesc.Height = 0;
+		sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		sd.BufferDesc.RefreshRate.Numerator = 60;
+		sd.BufferDesc.RefreshRate.Denominator = 1;
+		sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+		sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+		sd.OutputWindow = hWnd;
+		sd.SampleDesc.Count = 1;
+		sd.SampleDesc.Quality = 0;
+		sd.Windowed = TRUE;
+		sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+		pFactory->CreateSwapChain(g_pd3dDevice, &sd, &g_pSwapChain);
+    }
+	if (pDXGIDevice) pDXGIDevice->Release();
+	if (pDXGIAdapter) pDXGIAdapter->Release();
+	if (pFactory) pFactory->Release();
+	if( g_pSwapChain ) {
+		CreateRenderTarget();
+	}
 	return S_OK;
 }
 
-static void CleanupDeviceD3D()
+static void CleanupSwapChain()
 {
 	CleanupRenderTarget();
 	if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = NULL; }
-	if (g_pd3dDeviceContext) { g_pd3dDeviceContext->Release(); g_pd3dDeviceContext = NULL; }
-	if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = NULL; }
 }
+
+IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 static LRESULT WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	if( ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam) )
@@ -153,8 +184,8 @@ static LRESULT WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	switch (msg) {
 	case WM_CREATE:
 		// Initialize Direct3D
-		if (CreateDeviceD3D(hWnd) < 0) {
-			CleanupDeviceD3D();
+		if (CreateSwapChain(hWnd) < 0) {
+			CleanupSwapChain();
 		}
 		break;
 	case WM_CLOSE:
@@ -253,6 +284,7 @@ static bool create_window(const TCHAR* title, int width, int height) {
 	do_create_context();
 	ImGui_ImplWin32_Init(hwnd);
 	ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
+	g_hWnd = hwnd;
 	return true;
 }
 
@@ -261,12 +293,11 @@ static void destroy_window() {
 		return;
 	if (!get_should_close())
 		return;
-	HWND hWnd = g_hWnd;
-	CleanupDeviceD3D();
+	CleanupSwapChain();
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
-	DestroyWindow(hWnd);
+	DestroyWindow(g_hWnd);
 }
 
 static bool prepare_newframe() {
@@ -317,7 +348,7 @@ static bool prepare_newframe() {
 }
 
 static bool prepare_render() {
-	return g_hWnd!=NULL;
+	return g_pSwapChain!=NULL;
 }
 
 static void render_drawdata() {
@@ -328,9 +359,6 @@ static void render_drawdata() {
 	do_update_and_render_viewports();
 	g_pSwapChain->Present(1, 0); // Present with vsync
     //g_pSwapChain->Present(0, 0); // Present without vsync
-}
-
-static void do_platform_init(lua_State* L) {
 }
 
 static VOID CALLBACK dummy_timer_handle(HWND, UINT, UINT_PTR, DWORD) {
@@ -344,9 +372,116 @@ static int imgui_wait_events_lua(lua_State* L) {
 	return 0;
 }
 
+static int imgui_image_destroy(lua_State* L) {
+	ID3D11ShaderResourceView* pTextureView = NULL;
+	if( pTextureView ) {
+		pTextureView->Release();
+		pTextureView = NULL;
+	}
+}
+
+static ID3D11ShaderResourceView* d3d11_create_texture_rgba(int w, int h, const void* data) {
+	D3D11_TEXTURE2D_DESC desc;
+	ZeroMemory(&desc, sizeof(desc));
+	desc.Width = w;
+	desc.Height = h;
+	desc.MipLevels = 1;
+	desc.ArraySize = 1;
+	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.SampleDesc.Count = 1;
+	desc.Usage = D3D11_USAGE_DEFAULT;
+	desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	desc.CPUAccessFlags = 0;
+	
+	ID3D11Texture2D* pTexture = NULL;
+	D3D11_SUBRESOURCE_DATA subResource;
+	subResource.pSysMem = data;
+	subResource.SysMemPitch = desc.Width * 4;
+	subResource.SysMemSlicePitch = 0;
+	g_pd3dDevice->CreateTexture2D(&desc, &subResource, &pTexture);
+
+	// Create texture view
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+	ZeroMemory(&srvDesc, sizeof(srvDesc));
+	srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels = desc.MipLevels;
+	srvDesc.Texture2D.MostDetailedMip = 0;
+	ID3D11ShaderResourceView* pTextureView = NULL;
+	g_pd3dDevice->CreateShaderResourceView(pTexture, &srvDesc, &pTextureView);
+	pTexture->Release();
+
+	return pTextureView;
+}
+
+static ImTextureID image_texture_check(lua_State* L, int arg) {
+	ImTextureID tex = (ImTextureID)lua_touserdata(L, arg);
+	return (tex==g_missingImageTexture || g_imageTextures.contains(tex)) ? tex : g_missingImageTexture;
+}
+
+static int imgui_image_texture_create_lua(lua_State* L) {
+	size_t size = 0;
+	const char* data = luaL_checklstring(L, 1, &size);
+	int w, h, n;
+	stbi_uc* img = stbi_load_from_memory((const stbi_uc*)data, (int)size, &w, &h, &n, 4);
+	if( !img )
+		luaL_error(L, "stb load image failed: %s", stbi_failure_reason());
+	ID3D11ShaderResourceView* res = d3d11_create_texture_rgba(w, h, img);
+	stbi_image_free(img);
+	if( !res )
+		luaL_error(L, "stb create texture failed!");
+	g_imageTextures.push_back((ImTextureID)res);
+	lua_pushlightuserdata(L, (ImTextureID)res);
+	lua_pushinteger(L, w);
+	lua_pushinteger(L, h);
+	return 3;
+}
+
+static int imgui_image_texture_destroy_lua(lua_State* L) {
+	ImTextureID tex = (ImTextureID)lua_touserdata(L, 1);
+	if( tex!=g_missingImageTexture ) {
+		ImTextureID* it = g_imageTextures.begin();
+		ImTextureID* end = g_imageTextures.end();
+		for( ; it<end; ++it ) {
+			if( *it==tex ) {
+				ID3D11ShaderResourceView* res = (ID3D11ShaderResourceView*)tex;
+				g_imageTextures.erase(it);
+				if( res ) res->Release();
+				break;
+			}
+		}
+	}
+	return 0;
+}
+
+static void platfrom_uninit() {
+	if (g_missingImageTexture)	{ g_missingImageTexture->Release(); g_missingImageTexture = NULL; }
+	if (g_pd3dDeviceContext) { g_pd3dDeviceContext->Release(); g_pd3dDeviceContext = NULL; }
+	if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = NULL; }
+}
+
+static void do_platform_init(lua_State* L) {
+	// Create D3DDevice
+	UINT createDeviceFlags = 0;
+	// createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+	D3D_FEATURE_LEVEL featureLevel;
+	const D3D_FEATURE_LEVEL featureLevelArray[2] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0, };
+	HRESULT hRes = D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &g_pd3dDevice, &featureLevel, &g_pd3dDeviceContext);
+	if ( hRes != S_OK)
+		luaL_error(L, "D3D11CreateDevice Failed!");
+	const UINT32 missing_data[16] =
+		{ 0xFF0000FF, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF
+		, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF
+		, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF
+		, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF
+		};
+	g_missingImageTexture = d3d11_create_texture_rgba(4, 4, missing_data);
+	atexit(platfrom_uninit);
+}
+
 static int _win32_vk_map[256];
 
-static int _win32_vk_convert(WPARAM wParam, LPARAM lParam) {
+int _win32_vk_convert(WPARAM wParam, LPARAM lParam) {
 	int key = _win32_vk_map[wParam];
 	if( key ) {
 		switch(wParam) {
@@ -367,73 +502,78 @@ static int _win32_vk_convert(WPARAM wParam, LPARAM lParam) {
 	return key;
 }
 
+static void _win32_vk_map_init() {
+	memset(_win32_vk_map, 0, sizeof(_win32_vk_map));
+	_win32_vk_map[VK_ESCAPE] = PUSS_IMGUI_KEY_ESCAPE;
+	_win32_vk_map[VK_RETURN] = PUSS_IMGUI_KEY_ENTER;
+	_win32_vk_map[VK_TAB] = PUSS_IMGUI_KEY_TAB;
+	_win32_vk_map[VK_BACK] = PUSS_IMGUI_KEY_BACKSPACE;
+	_win32_vk_map[VK_INSERT] = PUSS_IMGUI_KEY_INSERT;
+	_win32_vk_map[VK_DELETE] = PUSS_IMGUI_KEY_DELETE;
+	_win32_vk_map[VK_RIGHT] = PUSS_IMGUI_KEY_RIGHT;
+	_win32_vk_map[VK_LEFT] = PUSS_IMGUI_KEY_LEFT;
+	_win32_vk_map[VK_DOWN] = PUSS_IMGUI_KEY_DOWN;
+	_win32_vk_map[VK_UP] = PUSS_IMGUI_KEY_UP;
+	_win32_vk_map[VK_PRIOR] = PUSS_IMGUI_KEY_PAGE_UP;
+	_win32_vk_map[VK_NEXT] = PUSS_IMGUI_KEY_PAGE_DOWN;
+	_win32_vk_map[VK_HOME] = PUSS_IMGUI_KEY_HOME;
+	_win32_vk_map[VK_END] = PUSS_IMGUI_KEY_END;
+	_win32_vk_map[VK_CAPITAL] = PUSS_IMGUI_KEY_CAPS_LOCK;
+	_win32_vk_map[VK_SCROLL] = PUSS_IMGUI_KEY_SCROLL_LOCK;
+	_win32_vk_map[VK_NUMLOCK] = PUSS_IMGUI_KEY_NUM_LOCK;
+	_win32_vk_map[VK_PRINT] = PUSS_IMGUI_KEY_PRINT_SCREEN;
+	_win32_vk_map[VK_PAUSE] = PUSS_IMGUI_KEY_PAUSE;
+	_win32_vk_map[VK_F1] = PUSS_IMGUI_KEY_F1;
+	_win32_vk_map[VK_F2] = PUSS_IMGUI_KEY_F2;
+	_win32_vk_map[VK_F3] = PUSS_IMGUI_KEY_F3;
+	_win32_vk_map[VK_F4] = PUSS_IMGUI_KEY_F4;
+	_win32_vk_map[VK_F5] = PUSS_IMGUI_KEY_F5;
+	_win32_vk_map[VK_F6] = PUSS_IMGUI_KEY_F6;
+	_win32_vk_map[VK_F7] = PUSS_IMGUI_KEY_F7;
+	_win32_vk_map[VK_F8] = PUSS_IMGUI_KEY_F8;
+	_win32_vk_map[VK_F9] = PUSS_IMGUI_KEY_F9;
+	_win32_vk_map[VK_F10] = PUSS_IMGUI_KEY_F10;
+	_win32_vk_map[VK_F11] = PUSS_IMGUI_KEY_F11;
+	_win32_vk_map[VK_F12] = PUSS_IMGUI_KEY_F12;
+	_win32_vk_map[VK_NUMPAD0] = PUSS_IMGUI_KEY_KP_0;
+	_win32_vk_map[VK_NUMPAD1] = PUSS_IMGUI_KEY_KP_1;
+	_win32_vk_map[VK_NUMPAD2] = PUSS_IMGUI_KEY_KP_2;
+	_win32_vk_map[VK_NUMPAD3] = PUSS_IMGUI_KEY_KP_3;
+	_win32_vk_map[VK_NUMPAD4] = PUSS_IMGUI_KEY_KP_4;
+	_win32_vk_map[VK_NUMPAD5] = PUSS_IMGUI_KEY_KP_5;
+	_win32_vk_map[VK_NUMPAD6] = PUSS_IMGUI_KEY_KP_6;
+	_win32_vk_map[VK_NUMPAD7] = PUSS_IMGUI_KEY_KP_7;
+	_win32_vk_map[VK_NUMPAD8] = PUSS_IMGUI_KEY_KP_8;
+	_win32_vk_map[VK_NUMPAD9] = PUSS_IMGUI_KEY_KP_9;
+	_win32_vk_map[VK_DECIMAL] = PUSS_IMGUI_KEY_KP_DECIMAL;
+	_win32_vk_map[VK_DIVIDE] = PUSS_IMGUI_KEY_KP_DIVIDE;
+	_win32_vk_map[VK_MULTIPLY] = PUSS_IMGUI_KEY_KP_MULTIPLY;
+	_win32_vk_map[VK_SUBTRACT] = PUSS_IMGUI_KEY_KP_SUBTRACT;
+	_win32_vk_map[VK_ADD] = PUSS_IMGUI_KEY_KP_ADD;
+	_win32_vk_map[VK_OEM_NEC_EQUAL] = PUSS_IMGUI_KEY_KP_EQUAL;
+}
+
 BOOL WINAPI DllMain(HANDLE hinstDLL, DWORD dwReason, LPVOID lpvReserved) {
 	switch (dwReason) {
 	case DLL_PROCESS_ATTACH:
 		// Create application window
 		puss_imgui_wc.lpfnWndProc = WndProc;
 		puss_imgui_wc.hInstance = (HINSTANCE)hinstDLL;
-		// puss_imgui_wc.hIcon = LoadIcon(puss_imgui_wc.hInstance, MAKEINTRESOURCE(IDI_ICON1));
+		puss_imgui_wc.hIcon = LoadIcon(puss_imgui_wc.hInstance, MAKEINTRESOURCE(IDI_ICON1));
 		RegisterClassEx(&puss_imgui_wc);
-		memset(_win32_vk_map, 0, sizeof(_win32_vk_map));
-		_win32_vk_map[VK_ESCAPE] = PUSS_IMGUI_KEY_ESCAPE;
-		_win32_vk_map[VK_RETURN] = PUSS_IMGUI_KEY_ENTER;
-		_win32_vk_map[VK_TAB] = PUSS_IMGUI_KEY_TAB;
-		_win32_vk_map[VK_BACK] = PUSS_IMGUI_KEY_BACKSPACE;
-		_win32_vk_map[VK_INSERT] = PUSS_IMGUI_KEY_INSERT;
-		_win32_vk_map[VK_DELETE] = PUSS_IMGUI_KEY_DELETE;
-		_win32_vk_map[VK_RIGHT] = PUSS_IMGUI_KEY_RIGHT;
-		_win32_vk_map[VK_LEFT] = PUSS_IMGUI_KEY_LEFT;
-		_win32_vk_map[VK_DOWN] = PUSS_IMGUI_KEY_DOWN;
-		_win32_vk_map[VK_UP] = PUSS_IMGUI_KEY_UP;
-		_win32_vk_map[VK_PRIOR] = PUSS_IMGUI_KEY_PAGE_UP;
-		_win32_vk_map[VK_NEXT] = PUSS_IMGUI_KEY_PAGE_DOWN;
-		_win32_vk_map[VK_HOME] = PUSS_IMGUI_KEY_HOME;
-		_win32_vk_map[VK_END] = PUSS_IMGUI_KEY_END;
-		_win32_vk_map[VK_CAPITAL] = PUSS_IMGUI_KEY_CAPS_LOCK;
-		_win32_vk_map[VK_SCROLL] = PUSS_IMGUI_KEY_SCROLL_LOCK;
-		_win32_vk_map[VK_NUMLOCK] = PUSS_IMGUI_KEY_NUM_LOCK;
-		_win32_vk_map[VK_PRINT] = PUSS_IMGUI_KEY_PRINT_SCREEN;
-		_win32_vk_map[VK_PAUSE] = PUSS_IMGUI_KEY_PAUSE;
-		_win32_vk_map[VK_F1] = PUSS_IMGUI_KEY_F1;
-		_win32_vk_map[VK_F2] = PUSS_IMGUI_KEY_F2;
-		_win32_vk_map[VK_F3] = PUSS_IMGUI_KEY_F3;
-		_win32_vk_map[VK_F4] = PUSS_IMGUI_KEY_F4;
-		_win32_vk_map[VK_F5] = PUSS_IMGUI_KEY_F5;
-		_win32_vk_map[VK_F6] = PUSS_IMGUI_KEY_F6;
-		_win32_vk_map[VK_F7] = PUSS_IMGUI_KEY_F7;
-		_win32_vk_map[VK_F8] = PUSS_IMGUI_KEY_F8;
-		_win32_vk_map[VK_F9] = PUSS_IMGUI_KEY_F9;
-		_win32_vk_map[VK_F10] = PUSS_IMGUI_KEY_F10;
-		_win32_vk_map[VK_F11] = PUSS_IMGUI_KEY_F11;
-		_win32_vk_map[VK_F12] = PUSS_IMGUI_KEY_F12;
-		_win32_vk_map[VK_NUMPAD0] = PUSS_IMGUI_KEY_KP_0;
-		_win32_vk_map[VK_NUMPAD1] = PUSS_IMGUI_KEY_KP_1;
-		_win32_vk_map[VK_NUMPAD2] = PUSS_IMGUI_KEY_KP_2;
-		_win32_vk_map[VK_NUMPAD3] = PUSS_IMGUI_KEY_KP_3;
-		_win32_vk_map[VK_NUMPAD4] = PUSS_IMGUI_KEY_KP_4;
-		_win32_vk_map[VK_NUMPAD5] = PUSS_IMGUI_KEY_KP_5;
-		_win32_vk_map[VK_NUMPAD6] = PUSS_IMGUI_KEY_KP_6;
-		_win32_vk_map[VK_NUMPAD7] = PUSS_IMGUI_KEY_KP_7;
-		_win32_vk_map[VK_NUMPAD8] = PUSS_IMGUI_KEY_KP_8;
-		_win32_vk_map[VK_NUMPAD9] = PUSS_IMGUI_KEY_KP_9;
-		_win32_vk_map[VK_DECIMAL] = PUSS_IMGUI_KEY_KP_DECIMAL;
-		_win32_vk_map[VK_DIVIDE] = PUSS_IMGUI_KEY_KP_DIVIDE;
-		_win32_vk_map[VK_MULTIPLY] = PUSS_IMGUI_KEY_KP_MULTIPLY;
-		_win32_vk_map[VK_SUBTRACT] = PUSS_IMGUI_KEY_KP_SUBTRACT;
-		_win32_vk_map[VK_ADD] = PUSS_IMGUI_KEY_KP_ADD;
-		_win32_vk_map[VK_OEM_NEC_EQUAL] = PUSS_IMGUI_KEY_KP_EQUAL;
+		_win32_vk_map_init();
 		break;
 	case DLL_PROCESS_DETACH:
+		UnregisterClass(PUSS_IMGUI_WINDOW_CLASS, (HINSTANCE)hinstDLL);
 		break;
 	}
 	return TRUE;
 }
 
-#else
+#elif defined(PUSS_IMGUI_USE_GLFW)
 
-#include "imgui_impl_opengl3.inl"
-#include "imgui_impl_glfw.inl"
+#include "imgui_impl_opengl3.h"
+#include "imgui_impl_glfw.h"
 
 #ifdef _MSC_VER
 	#pragma comment(lib, "glfw3.lib")
@@ -460,6 +600,8 @@ BOOL WINAPI DllMain(HANDLE hinstDLL, DWORD dwReason, LPVOID lpvReserved) {
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>   // for glfwGetWin32Window
 #endif
+
+static GLFWwindow* g_Window = NULL;
 
 static inline void set_should_close(int value) {
 	if( g_Window ) {
@@ -548,12 +690,11 @@ static bool create_window(const char* title, int width, int height) {
 
 static void destroy_window() {
 	if( g_Window ) {
-		GLFWwindow* win = g_Window;
 		ImGui_ImplOpenGL3_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
 		ImGui::DestroyContext();
+		glfwDestroyWindow(g_Window);
 		g_Window = NULL;
-		glfwDestroyWindow(win);
 	}
 }
 
@@ -626,13 +767,28 @@ static int imgui_wait_events_lua(lua_State* L) {
 	return 0;
 }
 
+static ImTextureID	image_texture_check(lua_State* L, int arg) {
+	luaL_error(L, "TODO: check_image_texture!");
+	return 0;
+}
+
+static int imgui_image_texture_create_lua(lua_State* L) {
+	return luaL_error(L, "TODO: create_image!");
+}
+
+static int imgui_image_texture_destroy_lua(lua_State* L) {
+	return luaL_error(L, "TODO: destroy_image!");
+}
+
 #endif
 
 static int imgui_created_lua(lua_State* L) {
-#ifdef PUSS_IMGUI_USE_DX11
+#if defined(PUSS_IMGUI_USE_DX11)
 	lua_pushboolean(L, g_hWnd ? 1 : 0);
-#else
+#elif defined(PUSS_IMGUI_USE_GLFW)
 	lua_pushboolean(L, g_Window ? 1 : 0);
+#else
+	lua_pushboolean(L, 0);
 #endif
 	return 1;
 }
@@ -696,16 +852,18 @@ static int imgui_create_lua(lua_State* L) {
 	const char* ini_filename = luaL_optstring(L, 4, NULL);
 	int has_init_cb = lua_isfunction(L, 5);
 
-#ifdef PUSS_IMGUI_USE_DX11
+#if defined(PUSS_IMGUI_USE_DX11)
 	lua_pushcfunction(L, _lua_utf8_to_utf16);
 	lua_pushvalue(L, 1);
 	lua_call(L, 1, 1);
 	lua_replace(L, 1);
 	if( !create_window((const TCHAR*)lua_tostring(L, 1), width, height) )
 		luaL_error(L, "create window failed!");
-#else
+#elif defined(PUSS_IMGUI_USE_GLFW)
 	if( !create_window(title, width, height) )
 		luaL_error(L, "create window failed!");
+#else
+	luaL_error(L, "create window unknown platform!");
 #endif
 
 	if( ini_filename ) {
@@ -739,10 +897,12 @@ static int imgui_create_lua(lua_State* L) {
 }
 
 void* __scintilla_imgui_os_window(void) {
-#ifdef PUSS_IMGUI_USE_DX11
+#if defined(PUSS_IMGUI_USE_DX11)
 	return g_hWnd;
-#elif defined(GLFW_EXPOSE_NATIVE_WIN32)
-	return glfwGetWin32Window(g_Window);
+#elif defined(PUSS_IMGUI_USE_GLFW)
+	#if defined(GLFW_EXPOSE_NATIVE_WIN32)
+		return glfwGetWin32Window(g_Window);
+	#endif
 #else
 	return NULL;
 #endif
@@ -756,6 +916,8 @@ static luaL_Reg imgui_plat_lua_apis[] =
 	, {"set_should_close", imgui_set_should_close_lua}
 	, {"should_close", imgui_should_close_lua}
 	, {"wait_events", imgui_wait_events_lua}
+	, {"create_image", imgui_image_texture_create_lua}
+	, {"destroy_image", imgui_image_texture_destroy_lua}
 	, {NULL, NULL}
 	};
 

@@ -8,9 +8,6 @@ local console = puss.import('core.console')
 local samples = puss.import('core.samples')
 local diskfs = puss.import('core.diskfs')
 
-filebrowser.setup(diskfs)
-docs.setup(diskfs)
-
 local run_sign = true
 
 show_imgui_demos = show_imgui_demos or false
@@ -20,13 +17,34 @@ show_samples_window = show_samples_window or false
 show_console_window = show_console_window or false
 show_shutcut_window = show_shutcut_window or false
 
+function docs_page_on_load(page_after_load, filepath)
+	local ctx = diskfs.load(filepath)
+	return page_after_load(ctx)
+end
+
+function docs_page_on_save(page_after_save, filepath, ctx)
+	local ok = diskfs.save(filepath, ctx)
+	page_save_result(ok)
+end
+
+docs.setup(function(event, ...)
+	local f = _ENV[event]
+	if f then return f(...) end
+end)
+
+local function fs_list(dir, callback)
+	callback(true, puss.file_list(dir, true))	-- list file & convert name to utf8
+end
+
 shotcuts.register('app/reload', 'Reload scripts', 'F12', true, false, false, false)
 
 local function main_menu()
 	local active
 	if not imgui.BeginMenuBar() then return end
 	if imgui.BeginMenu('File') then
-		if imgui.MenuItem('Add puss path FileBrowser') then filebrowser.append_folder(puss.local_to_utf8(puss._path)) end
+		if imgui.MenuItem('Add puss path FileBrowser') then
+			filebrowser.append_folder(puss.local_to_utf8(puss._path), fs_list)
+		end
 		if imgui.MenuItem('New page') then docs.new_page() end
 		imgui.EndMenu()
 	end
