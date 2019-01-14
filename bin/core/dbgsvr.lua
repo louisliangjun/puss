@@ -19,7 +19,7 @@ if puss._debug_proxy then
 		end
 	end
 
-	local BROADCAST_PORT = 9999
+	local BROADCAST_PORT = 7654
 	local broadcast = net.create_udp_broadcast_sender(BROADCAST_PORT)
 
 	local DEBUG_TITLE, WAIT_TIMEOUT = ...

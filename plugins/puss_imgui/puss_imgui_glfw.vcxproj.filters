@@ -457,9 +457,8 @@
     <ClCompile Include="imgui\imgui_draw.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
-    <ClCompile Include="metrics_gui\metrics_gui.cpp">
-      <Filter>metrics_gui</Filter>
-    </ClCompile>
+    <ClCompile Include="imgui_impl_glfw.cpp" />
+    <ClCompile Include="imgui_impl_opengl3.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="scintilla_imgui.h" />
@@ -660,9 +659,6 @@
     </ClInclude>
     <ClInclude Include="imgui_impl_glfw.h" />
     <ClInclude Include="imgui_impl_opengl3.h" />
-    <ClInclude Include="metrics_gui\metrics_gui.h">
-      <Filter>metrics_gui</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="imgui">
@@ -686,9 +682,6 @@
     <Filter Include="scintilla3\src">
       <UniqueIdentifier>{d448ffea-0036-4c7b-ac41-74a4d6275b19}</UniqueIdentifier>
     </Filter>
-    <Filter Include="metrics_gui">
-      <UniqueIdentifier>{37856369-e18b-4db3-8ce4-30196754044b}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\objs\gen\imgui_enums.inl">
@@ -709,8 +702,6 @@
     <None Include="scintilla3\src\SciTE.properties">
       <Filter>scintilla3\src</Filter>
     </None>
-    <None Include="imgui_impl_glfw.inl" />
-    <None Include="imgui_impl_opengl3.inl" />
     <None Include="puss_imgui_lua.inl" />
     <None Include="puss_imgui_keys.inl" />
   </ItemGroup>

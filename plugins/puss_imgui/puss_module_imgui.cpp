@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #if defined(__GNUC__)
@@ -51,6 +52,70 @@ static void do_update_and_render_viewports() {
     }
 }
 
+static ImTextureID				g_missingImageTexture = NULL;
+static ImVector<ImTextureID>	g_imageTextures;	// TODO if need sort & search, or use hash table
+
+static ImTextureID image_texture_create(int w, int h, const void* data);
+static void image_texture_destroy(ImTextureID tex);
+
+static void imgui_texture_uninit(void) {
+	if (g_missingImageTexture) {
+		image_texture_destroy(g_missingImageTexture);
+		g_missingImageTexture = NULL;
+	}
+}
+
+static void imgui_texture_init() {
+	const uint32_t missing_data[16] =
+		{ 0xFF0000FF, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF
+		, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF
+		, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF
+		, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF
+		};
+	g_missingImageTexture = image_texture_create(4, 4, missing_data);
+
+	atexit(imgui_texture_uninit);
+}
+
+static ImTextureID image_texture_check(lua_State* L, int arg) {
+	ImTextureID tex = (ImTextureID)lua_touserdata(L, arg);
+	return (tex==g_missingImageTexture || g_imageTextures.contains(tex)) ? tex : g_missingImageTexture;
+}
+
+static int imgui_image_texture_create_lua(lua_State* L) {
+	size_t size = 0;
+	const char* data = luaL_checklstring(L, 1, &size);
+	int w, h, n;
+	stbi_uc* img = stbi_load_from_memory((const stbi_uc*)data, (int)size, &w, &h, &n, 4);
+	if( !img )
+		luaL_error(L, "stb load image failed: %s", stbi_failure_reason());
+	ImTextureID res = image_texture_create(w, h, img);
+	stbi_image_free(img);
+	if( !res )
+		luaL_error(L, "stb create texture failed!");
+	g_imageTextures.push_back(res);
+	lua_pushlightuserdata(L, res);
+	lua_pushinteger(L, w);
+	lua_pushinteger(L, h);
+	return 3;
+}
+
+static int imgui_image_texture_destroy_lua(lua_State* L) {
+	ImTextureID tex = (ImTextureID)lua_touserdata(L, 1);
+	if( tex!=g_missingImageTexture ) {
+		ImTextureID* it = g_imageTextures.begin();
+		ImTextureID* end = g_imageTextures.end();
+		for( ; it<end; ++it ) {
+			if( *it==tex ) {
+				g_imageTextures.erase(it);
+				image_texture_destroy(tex);
+				break;
+			}
+		}
+	}
+	return 0;
+}
+
 #if defined(PUSS_IMGUI_USE_DX11)
 
 #include <windows.h>
@@ -60,7 +125,7 @@ static void do_update_and_render_viewports() {
 #define DIRECTINPUT_VERSION 0x0800
 #include <dinput.h>
 
-#include "resource.h"
+// #include "resource.h"
 
 #ifndef WM_DPICHANGED
 #define WM_DPICHANGED 0x02E0 // From Windows SDK 8.1+ headers
@@ -79,10 +144,8 @@ static WNDCLASSEX puss_imgui_wc = { sizeof(WNDCLASSEX), CS_CLASSDC, NULL, 0L, 0L
 
 static ID3D11Device*				g_pd3dDevice = NULL;
 static ID3D11DeviceContext*			g_pd3dDeviceContext = NULL;
-static ID3D11ShaderResourceView*	g_missingImageTexture = NULL;
-static ImVector<ImTextureID>		g_imageTextures;	// TODO if need sort & search, or use hash table
 
-static HWND							g_hWnd = 0;
+static HWND							g_Window = 0;
 static IDXGISwapChain*				g_pSwapChain = NULL;
 static ID3D11RenderTargetView*		g_mainRenderTargetView = NULL;
 static LPARAM						g_resizeParam = 0;
@@ -104,19 +167,6 @@ static int _lua_utf8_to_utf16(lua_State* L) {
 		luaL_error(L, "utf8 to utf16 convert failed!");
 	}
 	return 1;
-}
-
-static inline void set_should_close(int value) {
-	if (ImGui::GetCurrentContext()) {
-		ImGuiViewport* viewport = ImGui::GetMainViewport();
-		if (viewport) {
-			viewport->PlatformRequestClose = value ? true : false;
-		}
-	}
-}
-
-static inline int get_should_close() {
-	return (ImGui::GetCurrentContext() == NULL || ImGui::GetMainViewport()->PlatformRequestClose ? 1 : 0);
 }
 
 static void CreateRenderTarget()
@@ -177,7 +227,7 @@ static void CleanupSwapChain()
 
 IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-static LRESULT WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	if( ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam) )
 		return 1;
 
@@ -189,7 +239,12 @@ static LRESULT WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		}
 		break;
 	case WM_CLOSE:
-		set_should_close(1);
+		if (ImGui::GetCurrentContext()) {
+			ImGuiViewport* viewport = ImGui::GetMainViewport();
+			if (viewport) {
+				viewport->PlatformRequestClose = true;
+			}
+		}
 		return 1;
 	case WM_DESTROY:
 		// PostQuitMessage(0);
@@ -284,20 +339,18 @@ static bool create_window(const TCHAR* title, int width, int height) {
 	do_create_context();
 	ImGui_ImplWin32_Init(hwnd);
 	ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
-	g_hWnd = hwnd;
+	g_Window = hwnd;
 	return true;
 }
 
 static void destroy_window() {
-	if (!g_hWnd)
-		return;
-	if (!get_should_close())
+	if (!g_Window)
 		return;
 	CleanupSwapChain();
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
-	DestroyWindow(g_hWnd);
+	DestroyWindow(g_Window);
 }
 
 static bool prepare_newframe() {
@@ -372,15 +425,7 @@ static int imgui_wait_events_lua(lua_State* L) {
 	return 0;
 }
 
-static int imgui_image_destroy(lua_State* L) {
-	ID3D11ShaderResourceView* pTextureView = NULL;
-	if( pTextureView ) {
-		pTextureView->Release();
-		pTextureView = NULL;
-	}
-}
-
-static ID3D11ShaderResourceView* d3d11_create_texture_rgba(int w, int h, const void* data) {
+static ImTextureID image_texture_create(int w, int h, const void* data) {
 	D3D11_TEXTURE2D_DESC desc;
 	ZeroMemory(&desc, sizeof(desc));
 	desc.Width = w;
@@ -411,51 +456,24 @@ static ID3D11ShaderResourceView* d3d11_create_texture_rgba(int w, int h, const v
 	g_pd3dDevice->CreateShaderResourceView(pTexture, &srvDesc, &pTextureView);
 	pTexture->Release();
 
-	return pTextureView;
+	return (ImTextureID)pTextureView;
 }
 
-static ImTextureID image_texture_check(lua_State* L, int arg) {
-	ImTextureID tex = (ImTextureID)lua_touserdata(L, arg);
-	return (tex==g_missingImageTexture || g_imageTextures.contains(tex)) ? tex : g_missingImageTexture;
-}
-
-static int imgui_image_texture_create_lua(lua_State* L) {
-	size_t size = 0;
-	const char* data = luaL_checklstring(L, 1, &size);
-	int w, h, n;
-	stbi_uc* img = stbi_load_from_memory((const stbi_uc*)data, (int)size, &w, &h, &n, 4);
-	if( !img )
-		luaL_error(L, "stb load image failed: %s", stbi_failure_reason());
-	ID3D11ShaderResourceView* res = d3d11_create_texture_rgba(w, h, img);
-	stbi_image_free(img);
-	if( !res )
-		luaL_error(L, "stb create texture failed!");
-	g_imageTextures.push_back((ImTextureID)res);
-	lua_pushlightuserdata(L, (ImTextureID)res);
-	lua_pushinteger(L, w);
-	lua_pushinteger(L, h);
-	return 3;
-}
-
-static int imgui_image_texture_destroy_lua(lua_State* L) {
-	ImTextureID tex = (ImTextureID)lua_touserdata(L, 1);
-	if( tex!=g_missingImageTexture ) {
-		ImTextureID* it = g_imageTextures.begin();
-		ImTextureID* end = g_imageTextures.end();
-		for( ; it<end; ++it ) {
-			if( *it==tex ) {
-				ID3D11ShaderResourceView* res = (ID3D11ShaderResourceView*)tex;
-				g_imageTextures.erase(it);
-				if( res ) res->Release();
-				break;
-			}
-		}
+static int imgui_image_destroy(lua_State* L) {
+	ID3D11ShaderResourceView* pTextureView = NULL;
+	if( pTextureView ) {
+		pTextureView->Release();
+		pTextureView = NULL;
 	}
-	return 0;
 }
 
-static void platfrom_uninit() {
-	if (g_missingImageTexture)	{ g_missingImageTexture->Release(); g_missingImageTexture = NULL; }
+static void image_texture_destroy(ImTextureID tex) {
+	ID3D11ShaderResourceView* pTextureView = (ID3D11ShaderResourceView*)tex;
+	if (pTextureView)
+		pTextureView->Release();
+}
+
+static void do_platfrom_uninit() {
 	if (g_pd3dDeviceContext) { g_pd3dDeviceContext->Release(); g_pd3dDeviceContext = NULL; }
 	if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = NULL; }
 }
@@ -469,14 +487,6 @@ static void do_platform_init(lua_State* L) {
 	HRESULT hRes = D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &g_pd3dDevice, &featureLevel, &g_pd3dDeviceContext);
 	if ( hRes != S_OK)
 		luaL_error(L, "D3D11CreateDevice Failed!");
-	const UINT32 missing_data[16] =
-		{ 0xFF0000FF, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF
-		, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF
-		, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF
-		, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF
-		};
-	g_missingImageTexture = d3d11_create_texture_rgba(4, 4, missing_data);
-	atexit(platfrom_uninit);
 }
 
 static int _win32_vk_map[256];
@@ -559,7 +569,7 @@ BOOL WINAPI DllMain(HANDLE hinstDLL, DWORD dwReason, LPVOID lpvReserved) {
 		// Create application window
 		puss_imgui_wc.lpfnWndProc = WndProc;
 		puss_imgui_wc.hInstance = (HINSTANCE)hinstDLL;
-		puss_imgui_wc.hIcon = LoadIcon(puss_imgui_wc.hInstance, MAKEINTRESOURCE(IDI_ICON1));
+		// puss_imgui_wc.hIcon = LoadIcon(puss_imgui_wc.hInstance, MAKEINTRESOURCE(IDI_ICON1));
 		RegisterClassEx(&puss_imgui_wc);
 		_win32_vk_map_init();
 		break;
@@ -603,16 +613,6 @@ BOOL WINAPI DllMain(HANDLE hinstDLL, DWORD dwReason, LPVOID lpvReserved) {
 
 static GLFWwindow* g_Window = NULL;
 
-static inline void set_should_close(int value) {
-	if( g_Window ) {
-		glfwSetWindowShouldClose(g_Window, value);
-	}
-}
-
-static inline int get_should_close() {
-	return (g_Window==NULL || glfwWindowShouldClose(g_Window));
-}
-
 static void puss_imgui_key_set(ImGuiIO& io, int key, bool st) {
 	if( ((unsigned)key) <= PUSS_IMGUI_BASIC_KEY_LAST ) {
 		io.KeysDown[key] = st;
@@ -624,6 +624,13 @@ static void puss_imgui_key_set(ImGuiIO& io, int key, bool st) {
 		default:
 			break;
 		}
+	}
+}
+
+static void ImGui_Puss_WindowCloseCallback(GLFWwindow* window) {
+	ImGuiViewport* viewport = ImGui::FindViewportByPlatformHandle(window);
+    if( viewport ) {
+        viewport->PlatformRequestClose = true;
 	}
 }
 
@@ -655,55 +662,58 @@ static void ImGui_Puss_DropCallback(GLFWwindow* w, int count, const char** files
 }
 
 static bool create_window(const char* title, int width, int height) {
-	g_Window = glfwCreateWindow(width, height, title, NULL, NULL);
-	if( !g_Window )
+	GLFWwindow* w = glfwCreateWindow(width, height, title, NULL, NULL);
+	if( !w )
 		return false;
 
-	glfwMakeContextCurrent(g_Window);
-	glfwSwapInterval(1); // Enable vsync
+	glfwMakeContextCurrent(w);
+	glfwSwapInterval(0); // Disable vsync
 	static bool glad_inited = false;
 	if( !glad_inited ) {
 		glad_inited = true;
 		gl3wInit();
 	}
 
-	glfwGetWindowSize(g_Window, &width, &height);
+	glfwGetWindowSize(w, &width, &height);
 	glViewport(0, 0, width, height);
 
 	// Setup ImGui binding
 	do_create_context();
 
-	ImGui_ImplGlfw_InitForOpenGL(g_Window, false);
-	glfwSetMouseButtonCallback(g_Window, ImGui_ImplGlfw_MouseButtonCallback);
-	glfwSetScrollCallback(g_Window, ImGui_ImplGlfw_ScrollCallback);
-	glfwSetKeyCallback(g_Window, ImGui_Puss_KeyCallback);
-	glfwSetCharCallback(g_Window, ImGui_ImplGlfw_CharCallback);
-	glfwSetDropCallback(g_Window, ImGui_Puss_DropCallback);
+	ImGui_ImplGlfw_InitForOpenGL(w, false);
+
+	glfwSetWindowCloseCallback(w, ImGui_Puss_WindowCloseCallback);
+	glfwSetMouseButtonCallback(w, ImGui_ImplGlfw_MouseButtonCallback);
+	glfwSetScrollCallback(w, ImGui_ImplGlfw_ScrollCallback);
+	glfwSetKeyCallback(w, ImGui_Puss_KeyCallback);
+	glfwSetCharCallback(w, ImGui_ImplGlfw_CharCallback);
+	glfwSetDropCallback(w, ImGui_Puss_DropCallback);
 
 	#if __APPLE__
 		ImGui_ImplOpenGL3_Init("#version 150");
 	#else
 		ImGui_ImplOpenGL3_Init("#version 130");
 	#endif
+	g_Window = w;
 	return true;
 }
 
 static void destroy_window() {
-	if( g_Window ) {
-		ImGui_ImplOpenGL3_Shutdown();
-		ImGui_ImplGlfw_Shutdown();
-		ImGui::DestroyContext();
-		glfwDestroyWindow(g_Window);
-		g_Window = NULL;
-	}
+	if( !g_Window )
+		return;
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
+	glfwDestroyWindow(g_Window);
+	g_Window = NULL;
 }
 
 static bool prepare_newframe() {
-	if( !g_Window )
-		return false;
-
 	// input
 	glfwPollEvents();
+
+	if( !ImGui::GetCurrentContext() )
+		return false;
 
 	ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -737,28 +747,34 @@ static void error_callback(int e, const char *d) {
 
 static int glfw_inited = 0;
 
-static void do_platform_init(lua_State* L) {
-	if( !glfw_inited ) {
-		glfwSetErrorCallback(error_callback);
-
-		glfw_inited = glfwInit();
-    	if( !glfw_inited ) luaL_error(L, "[GFLW] failed to init!\n");
-    	atexit(glfwTerminate);
-
-		#if __APPLE__
-			// GL 3.2 + GLSL 150
-			glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-			glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-			glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
-			glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
-		#else
-			// GL 3.0 + GLSL 130
-			glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-			glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-			//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
-			//glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
-		#endif
+static void do_platfrom_uninit(void) {
+	if( glfw_inited ) {
+		glfwTerminate();
 	}
+}
+
+static void do_platform_init(lua_State* L) {
+	if( glfw_inited )
+		return;
+
+	glfwSetErrorCallback(error_callback);
+
+	glfw_inited = glfwInit();
+    if( !glfw_inited ) luaL_error(L, "[GFLW] failed to init!\n");
+
+	#if __APPLE__
+		// GL 3.2 + GLSL 150
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
+		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
+	#else
+		// GL 3.0 + GLSL 130
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+		//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
+		//glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
+	#endif
 }
 
 static int imgui_wait_events_lua(lua_State* L) {
@@ -767,29 +783,30 @@ static int imgui_wait_events_lua(lua_State* L) {
 	return 0;
 }
 
-static ImTextureID	image_texture_check(lua_State* L, int arg) {
-	luaL_error(L, "TODO: check_image_texture!");
-	return 0;
+static ImTextureID image_texture_create(int w, int h, const void* data) {
+    // Upload texture to graphics system
+	GLuint tex = 0;
+    GLint last_texture;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_texture);
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glBindTexture(GL_TEXTURE_2D, last_texture);
+	return (ImTextureID)tex;
 }
 
-static int imgui_image_texture_create_lua(lua_State* L) {
-	return luaL_error(L, "TODO: create_image!");
-}
-
-static int imgui_image_texture_destroy_lua(lua_State* L) {
-	return luaL_error(L, "TODO: destroy_image!");
+static void image_texture_destroy(ImTextureID tex) {
+	GLuint id = (GLuint)tex;
+    glDeleteTextures(1, &id);
 }
 
 #endif
 
 static int imgui_created_lua(lua_State* L) {
-#if defined(PUSS_IMGUI_USE_DX11)
-	lua_pushboolean(L, g_hWnd ? 1 : 0);
-#elif defined(PUSS_IMGUI_USE_GLFW)
 	lua_pushboolean(L, g_Window ? 1 : 0);
-#else
-	lua_pushboolean(L, 0);
-#endif
 	return 1;
 }
 
@@ -802,12 +819,20 @@ static int imgui_destroy_lua(lua_State* L) {
 
 static int imgui_set_should_close_lua(lua_State* L) {
 	int value = lua_toboolean(L, 1);
-	set_should_close(value);
+	ImGuiViewport* viewport = ImGui::FindViewportByPlatformHandle(g_Window);
+	if( viewport ) {
+		viewport->PlatformRequestClose = value ? true : false;
+	}
 	return 0;
 }
 
 static int imgui_should_close_lua(lua_State* L) {
-	lua_pushboolean(L, get_should_close());
+	ImGuiViewport* viewport = ImGui::FindViewportByPlatformHandle(g_Window);
+	if( viewport ) {
+		lua_pushboolean(L, viewport->PlatformRequestClose ? 1 : 0);
+		return 1;
+	}
+	lua_pushboolean(L, 0);
 	return 1;
 }
 
@@ -897,15 +922,10 @@ static int imgui_create_lua(lua_State* L) {
 }
 
 void* __scintilla_imgui_os_window(void) {
-#if defined(PUSS_IMGUI_USE_DX11)
-	return g_hWnd;
-#elif defined(PUSS_IMGUI_USE_GLFW)
 	#if defined(GLFW_EXPOSE_NATIVE_WIN32)
 		return glfwGetWin32Window(g_Window);
 	#endif
-#else
-	return NULL;
-#endif
+	return g_Window;
 }
 
 static luaL_Reg imgui_plat_lua_apis[] =
@@ -926,6 +946,8 @@ PussInterface* __puss_iface__ = NULL;
 PUSS_PLUGIN_EXPORT int __puss_plugin_init__(lua_State* L, PussInterface* puss) {
 	__puss_iface__ = puss;
 	do_platform_init(L);
+	atexit(do_platfrom_uninit);
+	imgui_texture_init();
 
 	if( lua_getfield(L, LUA_REGISTRYINDEX, IMGUI_LIB_NAME)==LUA_TTABLE )
 		return 1;

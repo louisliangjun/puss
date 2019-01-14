@@ -21,7 +21,7 @@ local run_sign = true
 local socket = _socket
 local GROUP_KEY = 'socket'	-- NOTICE : attach to socket if need multi-socket
 
-local BROADCAST_PORT = 9999
+local BROADCAST_PORT = 7654
 local broadcast_recv = net.create_udp_broadcast_recver(BROADCAST_PORT)
 
 local dummy_vars = {}
@@ -161,7 +161,7 @@ end
 
 local ICONS_TEX, ICON_WIDTH, ICON_HEIGHT = nil, 32, 32
 pcall(function()
-	local f = io.open(puss._path .. '/core/debugger_icons.png', 'r')
+	local f = io.open(puss._path .. '/core/debugger_icons.png', 'rb')
 	if not f then return end
 	local ctx = f:read('*a')
 	f:close()
