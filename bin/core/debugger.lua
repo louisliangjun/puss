@@ -669,6 +669,7 @@ end
 refresh_root_folders()
 
 __exports.init = function()
+	puss.async_service_logerr_handle(puss.logerr_handle())
 	imgui.create('Puss - Debugger', 1024, 768, 'puss_debugger.ini', function()
 		local font_name = puss._path .. '/fonts/mono.ttf'
 		imgui.AddFontFromFileTTF(font_name, 14, 'Chinese')

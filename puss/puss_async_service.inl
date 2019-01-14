@@ -226,7 +226,7 @@ static int async_task_resume(lua_State* L, AsyncTaskService* svs, AsyncTask* tas
 }
 
 static int default_error_handle(lua_State* L) {
-	fprintf(stderr, "[ThreadError] %s\n", luaL_tolstring(L, -1, NULL));
+	fprintf(stderr, "[AsyncTaskError] %s\n", luaL_tolstring(L, -1, NULL));
 	return lua_gettop(L);
 }
 
