@@ -2,9 +2,6 @@
 
 #include <assert.h>
 
-// #define _RBX_TREE_FULL_CHECK
-// #define _RBX_TREE_ITER_SUPPORT
-
 #define RBX_FREE	0
 #define	RBX_RED		1
 #define	RBX_BLACK	2
@@ -23,9 +20,15 @@ struct _RBXNode {
 	RBXNode*		next;
 
 	int				color;
-	RBXNode*		parent;
-	RBXNode*		left;
-	RBXNode*		right;
+	RBXNode*		parent;	// nouse when color==RBX_BROTHER
+	union {
+		RBXNode*	left;
+		RBXNode*	brother_list_first;
+	};
+	union {
+		RBXNode*	right;
+		RBXNode*	brother_list_last;
+	};
 };
 
 struct _RBXTree {
@@ -308,7 +311,7 @@ static void rbx_init(RBXTree* tree) {
 	__rbx_list_init(&(tree->list));
 }
 
-#define __rbx_has_brother(node) ((node)->next->color==RBX_BROTHER)
+#define __rbx_no_brother(node) ((node)->next->color!=RBX_BROTHER)
 
 static void rbx_insert(RBXNode* node, RBXNode* parent, RBXNode** link, RBXTree* tree) {
 	assert( node && link && tree);
@@ -322,25 +325,19 @@ static void rbx_insert(RBXNode* node, RBXNode* parent, RBXNode** link, RBXTree* 
 		parent = &(tree->list);	// insert into list
 		assert( parent->next==parent );
 	} else if( *link ) {
-		// insert node into brother list
+		// append to brother list
+		RBXNode* first = parent->next;
 		assert( parent==*link );
 		node->color = RBX_BROTHER;
-		node->parent = 0;
-
-		if( __rbx_has_brother(parent) ) {
-			// append to brother list
-			RBXNode* first = parent->next;
-			RBXNode* last  = first->left;
-			node->left = last;
-			node->right = first;
-			first->left = node;
-			last->right = node;
-			parent = last;	// use parent as insert pos
+		// node->parent, node->brother_list_first, node->brother_list_last = 0;
+		
+		if( first->color==RBX_BROTHER ) {
+			parent = first->brother_list_last;	// use parent as insert pos
 		} else {
-			// borther list head
-			node->left = node;
-			node->right = node;
+			first = node;
+			node->brother_list_last = node;		// node is new first
 		}
+		node->brother_list_first = first;		// node is new last
 	} else {
 		__rbx_link_node(node, parent, link);
 		__rbx_insert_color(node, tree);
@@ -349,9 +346,10 @@ static void rbx_insert(RBXNode* node, RBXNode* parent, RBXNode** link, RBXTree* 
 			parent = parent->prev;	// use parent as insert pos
 
 		} else {
-			assert( link==&parent->right );
-			if( __rbx_has_brother(parent) )
-				parent = parent->next->left;	// use parent as insert pos
+			RBXNode* first = parent->next;
+			assert( link==&(parent->right) );
+			if( first->color==RBX_BROTHER )
+				parent = first->brother_list_last;	// use parent as insert pos
 		}
 	}
 
@@ -373,17 +371,28 @@ static void rbx_erase(RBXNode* node, RBXTree* tree) {
 #endif
 
 	if( node->color==RBX_BROTHER ) {
-		// remove from brother list
-		node->right->left = node->left;
-		node->left->right = node->right;
-	} else if( __rbx_has_brother(node) ) {
+		RBXNode* prev = node->prev;
+		RBXNode* next = node->next;
+		if( (prev->color!=RBX_BROTHER) && (next->color==RBX_BROTHER) ) {
+			// node is first & next in brother list
+			next->brother_list_last = node->brother_list_last;
+			node->brother_list_last->brother_list_first = next;
+		}
+		if( (next->color!=RBX_BROTHER) && (prev->color==RBX_BROTHER) ) {
+			// node is last & prev in brother list
+			prev->brother_list_first = node->brother_list_first;
+			node->brother_list_first->brother_list_last = prev;
+		}
+	} else if( node->next->color==RBX_BROTHER ) {
 		// replace node with brother list's first child
-		RBXNode* first = node->next;
 		RBXNode* parent = node->parent;
-
-		// remove first from brother list
-		first->right->left = first->left;
-		first->left->right = first->right;
+		RBXNode* first = node->next;
+		RBXNode* next = first->next;
+		if( next->color==RBX_BROTHER ) {
+			// remove first from brother list
+			first->brother_list_last->brother_list_first = next;
+			next->brother_list_last = first->brother_list_last;
+		}
 
 		first->color = node->color;
 		first->parent = parent;
@@ -413,33 +422,6 @@ static void rbx_erase(RBXNode* node, RBXTree* tree) {
 #define	rbx_entry(ptr, type, member)	((type *)((char *)(ptr)-(intptr_t)(&((type *)0)->member)))
 
 #define	rbx_insert_at(node, link_pos)	rbx_insert((node), (link_pos)->parent, (link_pos)->link, (link_pos)->tree)
-
-// debug utils
-// 
-#ifdef _RBX_TREE_FULL_CHECK
-	static int __rbx_dbg_check_node_in_tree(RBXNode* node, RBXTree* tree) {
-		RBXNode* list = &(tree->list);
-		RBXNode* p;
-		for( p = list->next; p!=list; p=p->next ) {
-			if( p==node )
-				return 1;
-		}
-		return 0;
-	}
-
-	#define	__rbx_insert_check(node, parent, link, tree) do { \
-				assert( !__rbx_dbg_check_node_in_tree((node), (tree)) ); \
-				rbx_insert((node), (parent), (link), (tree)); \
-			} while(0)
-
-	#define	__rbx_erase_check(node, tree) do { \
-				assert( __rbx_dbg_check_node_in_tree((node), (tree)) ); \
-				rbx_erase((node), (tree)); \
-			} while(0)
-#else
-	#define	__rbx_insert_check	rbx_insert
-	#define	__rbx_erase_check	rbx_erase
-#endif
 
 // iterator
 // 

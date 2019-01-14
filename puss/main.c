@@ -207,9 +207,6 @@ int main(int argc, char* argv[]) {
 	int res = puss_main(argc, argv
 		, (debug_level==NULL) ? 0 : (*debug_level=='\0' ? 1 : (int)strtol(debug_level, NULL, 10))
 		, console_mode ? 1 : 0);
-#ifdef _WIN32
-	if( console_mode ) { system("PAUSE"); }
-#endif
 	return res;
 }
 

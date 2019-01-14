@@ -193,5 +193,7 @@
     <None Include="puss_debug.inl" />
     <None Include="puss_pickle.inl" />
     <None Include="puss_lua.inl" />
+    <None Include="puss_async_service.inl" />
+    <None Include="rbx_tree.inl" />
   </ItemGroup>
 </Project>

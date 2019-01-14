@@ -1,12 +1,4 @@
-// puss_async_service.c
-
-#include <stdio.h>
-#include <memory.h>
-#include <string.h>
-#include <assert.h>
-#include <stdint.h>
-
-#include "puss_plugin.h"
+// puss_async_service.inl
 
 #include "rbx_tree.inl"
 
@@ -102,12 +94,12 @@ static inline void timer_queue_insert(AsyncTaskService* svs, AsyncTask* qnode) {
 			break;
 	}
 
-	__rbx_insert_check(&(qnode->rbx_node), p, link, &(svs->timers));
+	rbx_insert(&(qnode->rbx_node), p, link, &(svs->timers));
 }
 
 static inline void timer_queue_remove(AsyncTaskService* svs, AsyncTask* qnode) {
 	assert( timer_qnode_is_attached(qnode) );
-	__rbx_erase_check((RBXNode*)qnode, &(svs->timers));
+	rbx_erase((RBXNode*)qnode, &(svs->timers));
 	qnode->rbx_node.color = RBX_FREE;
 }
 
@@ -128,7 +120,7 @@ static inline void async_task_reset_timeout(AsyncTaskService* svs, AsyncTask* ta
 static inline void async_task_append_to(AsyncTaskService* svs, AsyncTask* task, AsyncTask* head) {
 	RBXNode* pos = &(head->rbx_node);
 	task->timeout = head->timeout;
-	__rbx_insert_check(&(task->rbx_node), pos, &pos, &(svs->timers));
+	rbx_insert(&(task->rbx_node), pos, &pos, &(svs->timers));
 	assert( pos==&(head->rbx_node) );
 }
 

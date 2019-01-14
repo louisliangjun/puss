@@ -1,7 +1,5 @@
 -- debugger.lua
 
-local puss_system = puss.load_plugin('puss_system')
-
 local shotcuts = puss.import('core.shotcuts')
 local pages = puss.import('core.pages')
 local docs = puss.import('core.docs')
@@ -99,7 +97,7 @@ local function debugger_events_dispatch(co, sk, ...)
 	if co then
 		if sk then
 			print('debugger resume:', ...)
-			puss_system.async_service_resume(co, sk, ...)
+			puss.async_service_resume(co, sk, ...)
 		else
 			print('debugger recved:', co, ...)
 		end
@@ -116,16 +114,16 @@ do
 	local RPC_TIMEOUT = 30*1000 
 
 	local function _rpc_thread_wrap(cb, cmd, ...)
-		local co, sk = puss_system.async_task_alarm(RPC_TIMEOUT, GROUP_KEY)
+		local co, sk = puss.async_task_alarm(RPC_TIMEOUT, GROUP_KEY)
 		net.send(socket, co, sk, cmd, ...)
-		cb(puss_system.async_task_yield())
+		cb(puss.async_task_yield())
 	end
 
 	debugger_rpc = function(cb, cmd, ...)
 		if not cb then
 			net.send(socket, cmd, nil, cmd, ...)
 		elseif socket and socket:valid() then
-			puss_system.async_service_run(_rpc_thread_wrap, cb, cmd, ...)
+			puss.async_service_run(_rpc_thread_wrap, cb, cmd, ...)
 		else
 			cb(false, 'bad socket')
 		end
@@ -235,9 +233,11 @@ do
 
 	local function connect_target(ip, port)
 		_socket = net.connect(ip, port)
-		if socket then socket:close() end
+		if socket then
+			socket:close()
+			puss.async_service_group_cancel(GROUP_KEY)
+		end
 		socket = _socket
-		if socket then puss_system.async_service_group_cancel(GROUP_KEY) end
 	end
 
 	local function show_target(info)
@@ -638,7 +638,7 @@ local function do_update()
 	local now = os.clock()
 	local delta = ((now - last_update_time) * 1000) // 1
 	last_update_time = now
-	puss_system.async_service_update(delta, 32)
+	puss.async_service_update(delta, 32)
 
 	imgui.protect_pcall(show_main_window)
 

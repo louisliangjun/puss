@@ -5,7 +5,6 @@
 #define PUSS_SYSTEM_LIB_NAME	"[PussSystemLib]"
 
 void puss_socket_reg(lua_State* L);
-void puss_async_service_reg(lua_State* L);
 
 PussInterface* __puss_iface__ = NULL;
 
@@ -21,7 +20,6 @@ PUSS_PLUGIN_EXPORT int __puss_plugin_init__(lua_State* L, PussInterface* puss) {
 	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_SYSTEM_LIB_NAME);
 
 	puss_socket_reg(L);
-	puss_async_service_reg(L);
 	return 1;
 }
 

@@ -51,8 +51,6 @@ int puss_imgui_assert_hook(const char* expr, const char* file, int line) {
 #undef IMGUI_LUA_WRAP_STACK_BEGIN
 #undef IMGUI_LUA_WRAP_STACK_END
 
-#define IMGUI_LIB_NAME	"ImguiLib"
-
 static int imgui_error_handle_default(lua_State* L) {
 	fprintf(stderr, "[ImGui] error: %s\n", lua_tostring(L, -1));
 	return lua_gettop(L);

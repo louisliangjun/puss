@@ -3,9 +3,5 @@
   <ItemGroup>
     <ClCompile Include="puss_module_system.c" />
     <ClCompile Include="puss_socket.c" />
-    <ClCompile Include="puss_async_service.c" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="rbx_tree.inl" />
   </ItemGroup>
 </Project>

@@ -52,7 +52,7 @@ static void do_update_and_render_viewports() {
     }
 }
 
-static ImTextureID				g_missingImageTexture = NULL;
+static ImTextureID				g_missingImageTexture = 0;
 static ImVector<ImTextureID>	g_imageTextures;	// TODO if need sort & search, or use hash table
 
 static ImTextureID image_texture_create(int w, int h, const void* data);
@@ -61,7 +61,7 @@ static void image_texture_destroy(ImTextureID tex);
 static void imgui_texture_uninit(void) {
 	if (g_missingImageTexture) {
 		image_texture_destroy(g_missingImageTexture);
-		g_missingImageTexture = NULL;
+		g_missingImageTexture = 0;
 	}
 }
 
@@ -73,8 +73,6 @@ static void imgui_texture_init() {
 		, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF, 0xFF0000FF
 		};
 	g_missingImageTexture = image_texture_create(4, 4, missing_data);
-
-	atexit(imgui_texture_uninit);
 }
 
 static ImTextureID image_texture_check(lua_State* L, int arg) {
@@ -474,11 +472,14 @@ static void image_texture_destroy(ImTextureID tex) {
 }
 
 static void do_platfrom_uninit() {
+	imgui_texture_uninit();
 	if (g_pd3dDeviceContext) { g_pd3dDeviceContext->Release(); g_pd3dDeviceContext = NULL; }
 	if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = NULL; }
 }
 
 static void do_platform_init(lua_State* L) {
+	if( g_pd3dDevice )
+		return;
 	// Create D3DDevice
 	UINT createDeviceFlags = 0;
 	// createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
@@ -487,6 +488,7 @@ static void do_platform_init(lua_State* L) {
 	HRESULT hRes = D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &g_pd3dDevice, &featureLevel, &g_pd3dDeviceContext);
 	if ( hRes != S_OK)
 		luaL_error(L, "D3D11CreateDevice Failed!");
+	imgui_texture_init();
 }
 
 static int _win32_vk_map[256];
@@ -611,6 +613,7 @@ BOOL WINAPI DllMain(HANDLE hinstDLL, DWORD dwReason, LPVOID lpvReserved) {
 #include <GLFW/glfw3native.h>   // for glfwGetWin32Window
 #endif
 
+static GLFWwindow* g_HideWindow = NULL;
 static GLFWwindow* g_Window = NULL;
 
 static void puss_imgui_key_set(ImGuiIO& io, int key, bool st) {
@@ -662,17 +665,14 @@ static void ImGui_Puss_DropCallback(GLFWwindow* w, int count, const char** files
 }
 
 static bool create_window(const char* title, int width, int height) {
-	GLFWwindow* w = glfwCreateWindow(width, height, title, NULL, NULL);
+    glfwWindowHint(GLFW_VISIBLE, 1);
+    glfwWindowHint(GLFW_FOCUSED, 1);
+	GLFWwindow* w = glfwCreateWindow(width, height, title, NULL, g_HideWindow);
 	if( !w )
 		return false;
 
 	glfwMakeContextCurrent(w);
 	glfwSwapInterval(0); // Disable vsync
-	static bool glad_inited = false;
-	if( !glad_inited ) {
-		glad_inited = true;
-		gl3wInit();
-	}
 
 	glfwGetWindowSize(w, &width, &height);
 	glViewport(0, 0, width, height);
@@ -749,6 +749,9 @@ static int glfw_inited = 0;
 
 static void do_platfrom_uninit(void) {
 	if( glfw_inited ) {
+		glfwMakeContextCurrent(g_HideWindow);
+		imgui_texture_uninit();
+		glfwDestroyWindow(g_HideWindow);
 		glfwTerminate();
 	}
 }
@@ -760,21 +763,28 @@ static void do_platform_init(lua_State* L) {
 	glfwSetErrorCallback(error_callback);
 
 	glfw_inited = glfwInit();
-    if( !glfw_inited ) luaL_error(L, "[GFLW] failed to init!\n");
+	if( !glfw_inited ) luaL_error(L, "[GFLW] failed to init!\n");
 
-	#if __APPLE__
-		// GL 3.2 + GLSL 150
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
-		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
-	#else
-		// GL 3.0 + GLSL 130
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-		//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
-		//glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
-	#endif
+#if __APPLE__
+	// GL 3.2 + GLSL 150
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
+	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
+#else
+	// GL 3.0 + GLSL 130
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+	//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
+	//glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
+#endif
+	
+    glfwWindowHint(GLFW_VISIBLE, 0);
+    glfwWindowHint(GLFW_FOCUSED, 0);
+	g_HideWindow = glfwCreateWindow(100, 100, "GlfwHideWindow", NULL, NULL);
+	glfwMakeContextCurrent(g_HideWindow);
+	gl3wInit();
+	imgui_texture_init();
 }
 
 static int imgui_wait_events_lua(lua_State* L) {
@@ -941,13 +951,18 @@ static luaL_Reg imgui_plat_lua_apis[] =
 	, {NULL, NULL}
 	};
 
+#define IMGUI_LIB_NAME	"PussImguiLib"
+
+static int puss_imgui_lib_gc(lua_State* L) {
+	do_platfrom_uninit();
+	return 0;
+}
+
 PussInterface* __puss_iface__ = NULL;
 
 PUSS_PLUGIN_EXPORT int __puss_plugin_init__(lua_State* L, PussInterface* puss) {
 	__puss_iface__ = puss;
 	do_platform_init(L);
-	atexit(do_platfrom_uninit);
-	imgui_texture_init();
 
 	if( lua_getfield(L, LUA_REGISTRYINDEX, IMGUI_LIB_NAME)==LUA_TTABLE )
 		return 1;
@@ -960,11 +975,16 @@ PUSS_PLUGIN_EXPORT int __puss_plugin_init__(lua_State* L, PussInterface* puss) {
 	lua_register_scintilla(L);
 
 	lua_createtable(L, 0, (sizeof(imgui_plat_lua_apis) + sizeof(imgui_lua_apis)) / sizeof(luaL_Reg) - 2);
-	lua_pushvalue(L, -1);
-	lua_setfield(L, LUA_REGISTRYINDEX, IMGUI_LIB_NAME);
-
 	luaL_setfuncs(L, imgui_plat_lua_apis, 0);
 	luaL_setfuncs(L, imgui_lua_apis, 0);
+
+	lua_createtable(L, 0, 1);
+	lua_pushcfunction(L, puss_imgui_lib_gc);
+	lua_setfield(L, -2, "__gc");
+	lua_setmetatable(L, -2);
+
+	lua_pushvalue(L, -1);
+	lua_setfield(L, LUA_REGISTRYINDEX, IMGUI_LIB_NAME);
 	return 1;
 }
 

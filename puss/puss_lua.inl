@@ -69,6 +69,7 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 
 #include "puss_sys.inl"
 #include "puss_pickle.inl"
+#include "puss_async_service.inl"
 #include "puss_debug.inl"
 
 // interface
@@ -254,6 +255,7 @@ static void puss_module_setup(lua_State* L, const char* app_path, const char* ap
 
 	lua_settop(L, puss_index);
 	luaL_setfuncs(L, puss_methods, 0);
+	puss_async_service_reg(L);
 	lua_setglobal(L, "puss");	// set to _G.puss
 
 	// setup builtins

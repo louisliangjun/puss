@@ -1,13 +1,7 @@
 -- net.lua
 
-local puss_socket_new
-
-if type(ks)=='table' and type(ks.socket_new)=='function' then
-	puss_socket_new = ks.socket_new
-else
-	local puss_system = puss.load_plugin('puss_system')
-	puss_socket_new = puss_system.socket_new
-end
+local puss_system = puss.load_plugin('puss_system')
+local puss_socket_new = puss_system.socket_new
 
 local function utable_init(sock)
 	local utable = sock:utable()
