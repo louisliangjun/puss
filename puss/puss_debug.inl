@@ -503,25 +503,32 @@ static int debug_cond_bp_test_get(lua_State* L) {
 	const char* s;
 	int i;
 	lua_Debug ar;
-	if( !k )
-		return 0;
 	if( !lua_getstack(L, 2, &ar) )
 		return 0;
 	if( !lua_getinfo(L, "f", &ar) )
 		return 0;
-	for( i=1; i<256; ++i ) {
-		if( (s = lua_getlocal(L, &ar, i))==NULL )
-			break;
-		if( s==k || strcmp(s,k)==0 )
-			return 1;
-		lua_pop(L, 1);
+	if( k ) {
+		for( i=1; i<256; ++i ) {
+			if( (s = lua_getlocal(L, &ar, i))==NULL )
+				break;
+			if( s==k || strcmp(s,k)==0 )
+				return 1;
+			lua_pop(L, 1);
+		}
+		for( i=1; i<256; ++i ) {
+			if( (s = lua_getupvalue(L, -1, i))==NULL )
+				break;
+			if( s==k || strcmp(s,k)==0 )
+				return 1;
+			lua_pop(L, 1);
+		}
 	}
-	for( i=1; i<256; ++i ) {
-		if( (s = lua_getupvalue(L, -1, i))==NULL )
-			break;
-		if( s==k || strcmp(s,k)==0 )
+	if ((s = lua_getupvalue(L, -1, 1)) != NULL) {
+		if (strcmp(s, "_ENV") == 0) {
+			lua_pushvalue(L, 2);
+			lua_gettable(L, -2);
 			return 1;
-		lua_pop(L, 1);
+		}
 	}
 	return 0;
 }

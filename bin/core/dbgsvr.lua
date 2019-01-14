@@ -350,7 +350,10 @@ puss._debug_execute_script = function(level, script)
 			if not k then break end
 			if k == key then return v end
 		end
-		return _ENV[key]
+		do
+			local k, v = debug.getupvalue(info.func, 1)
+			if k == '_ENV' then return v[key] end
+		end
 	end
 	local function ul_write_wrapper(t, key, val)
 		for i=1,255 do
