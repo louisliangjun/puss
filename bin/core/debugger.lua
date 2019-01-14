@@ -152,7 +152,7 @@ debugger_events.breaked = function(res)
 	local level = info.level
 	debugger_rpc(function(ok, vars)
 		if ok then stack_vars_merge(level, vars) end
-	end, 'fetch_vars', -level)
+	end, 'fetch_stack_subs', level)
 	local fname = info.source:match('^@(.+)$')
 	if fname then locate_to_file(fname, info.currentline-1) end
 end
@@ -376,7 +376,7 @@ local function draw_stack()
 			local level = clicked.level
 			debugger_rpc(function(ok, vars)
 				if ok then stack_vars_merge(level, vars) end
-			end, 'fetch_vars', -level)
+			end, 'fetch_stack_subs', level)
 		end
 		local fname = clicked.source:match('^@(.+)$')
 		if fname then locate_to_file(fname, clicked.currentline-1) end
@@ -411,11 +411,11 @@ local function draw_subs(stack_current, subs)
 		if has_subs and imgui.IsItemClicked() then
 			if v.subs==nil then
 				v.subs = dummy_vars
-				local key = v[1]
+				local idx = v[1]
 				debugger_rpc(function(ok, subs)
-					if not ok then return print('fetch_vars failed:', subs) end
-					stack_vars_fill(key, subs)
-				end, 'fetch_vars', key)
+					if not ok then return print('fetch_index_subs failed:', subs) end
+					stack_vars_fill(idx, subs)
+				end, 'fetch_index_subs', idx)
 			end
 		end
 		imgui.SameLine()
