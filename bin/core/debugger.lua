@@ -5,6 +5,7 @@ local pages = puss.import('core.pages')
 local docs = puss.import('core.docs')
 local filebrowser = puss.import('core.filebrowser')
 local console = puss.import('core.console')
+local miniline = puss.import('core.miniline')
 local net = puss.import('core.net')
 
 docs.setup(function(event, ...)
@@ -624,7 +625,7 @@ local function show_main_window()
 	imgui.SetNextWindowPos(x + left_size, y + menu_size, ImGuiCond_FirstUseEver)
 	imgui.SetNextWindowSize(w - left_size, h - menu_size, ImGuiCond_FirstUseEver)
 	editor_window()
-
+	miniline.update(x, y, w, h)
 	debug_window()
 
 	if show_console_window then
@@ -649,10 +650,10 @@ end
 
 local function fs_list(dir, callback)
 	if use_local_fs then
-		local fs, ds = puss.list_dir(dir, true)
+		local fs, ds = puss.file_list(dir, true)
 		callback(true, fs, ds)
 	elseif socket and socket:valid() then
-		debugger_rpc(callback, 'list_dir', dir)
+		debugger_rpc(callback, 'file_list', dir)
 	else
 		callback(false)
 	end
@@ -660,7 +661,7 @@ end
 
 local function refresh_root_folders()
 	filebrowser.remove_folders()
-	local default_paths = {'data', 'tools'}
+	local default_paths = {puss._path}
 	for i,v in ipairs(default_paths) do
 		filebrowser.append_folder(v, fs_list)
 	end
