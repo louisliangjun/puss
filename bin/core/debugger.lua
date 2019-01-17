@@ -564,10 +564,10 @@ end
 
 function docs_page_on_save(page_after_save, filepath, ctx)
 	local f = io.open(puss.utf8_to_local(filepath), 'w')
-	if not f then return falpage_save_result(false) end
+	if not f then return page_after_save(false) end
 	f:write(ctx)
 	f:close()
-	page_save_result(true)
+	page_after_save(true)
 end
 
 function docs_page_on_margin_click(page, modifiers, pos, margin)
@@ -620,7 +620,9 @@ local function show_main_window()
 
 	imgui.SetNextWindowPos(x, y + menu_size, ImGuiCond_FirstUseEver)
 	imgui.SetNextWindowSize(left_size, h - menu_size, ImGuiCond_FirstUseEver)
+	imgui.Begin("FileBrowser")
 	filebrowser.update()
+	imgui.End()
 
 	imgui.SetNextWindowPos(x + left_size, y + menu_size, ImGuiCond_FirstUseEver)
 	imgui.SetNextWindowSize(w - left_size, h - menu_size, ImGuiCond_FirstUseEver)

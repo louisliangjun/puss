@@ -24,7 +24,7 @@ end
 
 function docs_page_on_save(page_after_save, filepath, ctx)
 	local ok = diskfs.save(filepath, ctx)
-	page_save_result(ok)
+	page_after_save(ok)
 end
 
 docs.setup(function(event, ...)
@@ -87,12 +87,6 @@ local function main_menu()
 	if shotcuts.is_pressed('app/reload') then puss.reload() end
 end
 
-local function pages_on_drop_files(files)
-	for path in files:gmatch('(.-)\n') do
-		docs.open(path)
-	end
-end
-
 local EDITOR_WINDOW_FLAGS = ( ImGuiWindowFlags_NoScrollbar
 	| ImGuiWindowFlags_NoScrollWithMouse
 	)
@@ -100,8 +94,34 @@ local EDITOR_WINDOW_FLAGS = ( ImGuiWindowFlags_NoScrollbar
 local function editor_window()
 	imgui.Begin("Editor", nil, EDITOR_WINDOW_FLAGS)
 	local drop_files_here = imgui.GetDropFiles(true)
-	if drop_files_here then pages_on_drop_files(drop_files_here) end
+	if drop_files_here then
+		for path in drop_files_here:gmatch('(.-)\n') do
+			docs.open(path)
+		end
+	end
 	pages.update()
+	imgui.End()
+end
+
+local function filebrowser_window()
+	imgui.Begin("FileBrowser")
+	filebrowser.update()
+	local drop_folders_here = imgui.GetDropFiles(true)
+	if drop_folders_here then
+		for path in drop_folders_here:gmatch('(.-)\n') do
+			local is_folder = true
+			local local_path = puss.utf8_to_local(path)
+			local f = io.open(local_path, 'r')
+			if f then
+				local ctx = f:read(64)
+				is_folder = (ctx==nil)
+				f:close()
+			end
+			if is_folder then
+				filebrowser.append_folder(path, fs_list)
+			end
+		end
+	end
 	imgui.End()
 end
 
@@ -138,7 +158,7 @@ local function show_main_window()
 
 	imgui.SetNextWindowPos(x, y + menu_size, ImGuiCond_FirstUseEver)
 	imgui.SetNextWindowSize(left_size, h - menu_size, ImGuiCond_FirstUseEver)
-	filebrowser.update()
+	filebrowser_window()
 
 	imgui.SetNextWindowPos(x + left_size, y + menu_size, ImGuiCond_FirstUseEver)
 	imgui.SetNextWindowSize(w - left_size, h - menu_size, ImGuiCond_FirstUseEver)

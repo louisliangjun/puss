@@ -321,7 +321,7 @@ end
 
 local function lookup_page(filepath)
 	filepath = puss.filename_format(filepath)
-	local path, name = filepath:match('^(.*)/([^/]+)$')
+	local path, name = filepath:match('^(.*)[/\\]([^/\\]+)$')
 	if not path then path, name = '', filepath end
 	local label = name..'###'..filepath
 	local page = pages.lookup(label)

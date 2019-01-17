@@ -103,7 +103,6 @@ local function show_folder(dir, root)
 end
 
 __exports.update = function()
-	imgui.Begin("FileBrowser")
 	local remove_id
 	for i,v in ipairs(root_folders) do
 		local show, open = imgui.CollapsingHeader(v._label, true)
@@ -111,6 +110,5 @@ __exports.update = function()
 		if show then show_folder(v, v) end
 	end
 	if remove_id then table.remove(root_folders, remove_id) end
-	imgui.End()
 end
 
