@@ -20,8 +20,19 @@ root_dir : dir {
 }
 --]]
 
+_root_version = _root_version or 0
 _root_folders = _root_folders or {}
 local root_folders = _root_folders
+
+__exports.check_fetch_folders = function(ver)
+	if ver==_root_version then return ver end
+
+	local res = {}
+	for i,v in ipairs(root_folders) do
+		table.insert(res, v.path)
+	end
+	return _root_version, res
+end
 
 __exports.append_folder = function(path, async_list_dir)
 	path = puss.filename_format(path, true)
@@ -36,6 +47,7 @@ __exports.append_folder = function(path, async_list_dir)
 		, _label = name..'##'..path
 		}
 	table.insert(root_folders, dir)
+	_root_version = _root_version + 1
 end
 
 __exports.remove_folder = function(path)
@@ -43,6 +55,7 @@ __exports.remove_folder = function(path)
 	for i,v in ipairs(root_folders) do
 		if path==v.path then
 			table.remote(root_folders, i)
+			_root_version = _root_version + 1
 			break
 		end
 	end
@@ -51,6 +64,7 @@ end
 __exports.remove_folders = function()
 	root_folders = {}
 	_root_folders = root_folders
+	_root_version = _root_version + 1
 end
 
 local function fill_folder(dir, root)

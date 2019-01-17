@@ -321,7 +321,6 @@ static void puss_lua_open_default(lua_State* L, const char* arg0) {
 	}
 
 	{
-
 		const char* ps = app_name;
 		const char* pe = app_name + strlen(app_name);
 		const char* p;

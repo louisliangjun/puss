@@ -1,6 +1,7 @@
 -- miniline.lua
 
 local shotcuts = puss.import('core.shotcuts')
+local filebrowser = puss.import('core.filebrowser')
 local docs = puss.import('core.docs')
 
 local open = false
@@ -39,8 +40,10 @@ do
 			end
 		end
 
+		print('rebuild index start')
 		key_index, files = {}, {}
 		for i,v in ipairs(root_folders) do
+			print('  rebuild index:', v)
 			do_build(v, {})
 		end
 
@@ -117,8 +120,6 @@ do
 	end
 end
 
-post_rebuild_search_task({puss._path})
-
 shotcuts.register('miniline/open', 'Open Miniline', 'P', true, false, false, false)
 
 local MINILINE_FLAGS = ( ImGuiWindowFlags_NoMove
@@ -136,11 +137,27 @@ local function on_search_result(key, ok, res)
 	results = res
 end
 
+local check_refresh_index
+do
+	local last_index_ver
+
+	check_refresh_index = function()
+		local ver, folders = filebrowser.check_fetch_folders(last_index_ver)
+		last_index_ver = ver
+		if folders then
+			post_rebuild_search_task(folders)
+		end
+	end
+end
+
 __exports.update = function(x, y, w, h)
 	if not open then
 		if not shotcuts.is_pressed('miniline/open') then return end
 		open = true
+		results = {}
 	end
+
+	check_refresh_index()
 
 	local show
 	imgui.SetNextWindowPos(x + w - 520, y + 20, ImGuiCond_Always)

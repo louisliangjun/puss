@@ -7,6 +7,7 @@ local filebrowser = puss.import('core.filebrowser')
 local console = puss.import('core.console')
 local samples = puss.import('core.samples')
 local diskfs = puss.import('core.diskfs')
+local miniline = puss.import('core.miniline')
 
 local run_sign = true
 
@@ -41,13 +42,6 @@ shotcuts.register('app/reload', 'Reload scripts', 'F12', true, false, false, fal
 local function main_menu()
 	local active
 	if not imgui.BeginMenuBar() then return end
-	if imgui.BeginMenu('File') then
-		if imgui.MenuItem('Add puss path FileBrowser') then
-			filebrowser.append_folder(puss.local_to_utf8(puss._path), fs_list)
-		end
-		if imgui.MenuItem('New page') then docs.new_page() end
-		imgui.EndMenu()
-	end
 	if imgui.BeginMenu('Help') then
 		active, show_imgui_demos = imgui.MenuItem('ImGUI Demos', nil, show_imgui_demos)
 		active, show_imgui_metrics = imgui.MenuItem('ImGUI Metrics', nil, show_imgui_metrics)
@@ -118,7 +112,7 @@ local function filebrowser_window()
 				f:close()
 			end
 			if is_folder then
-				filebrowser.append_folder(path, fs_list)
+				filebrowser.append_folder(puss.filename_format(path, true), fs_list)
 			end
 		end
 	end
@@ -163,6 +157,8 @@ local function show_main_window()
 	imgui.SetNextWindowPos(x + left_size, y + menu_size, ImGuiCond_FirstUseEver)
 	imgui.SetNextWindowSize(w - left_size, h - menu_size, ImGuiCond_FirstUseEver)
 	editor_window()
+
+	miniline.update(x, y, w, h)
 
 	if show_imgui_demos then
 		show_imgui_demos = imgui.ShowDemoWindow(show_imgui_demos)
@@ -235,6 +231,8 @@ __exports.init = function()
 		end
 	end)
 	imgui.update(show_main_window)
+
+	filebrowser.append_folder(puss.filename_format(puss._path .. '/core', true), fs_list)
 end
 
 __exports.uninit = function()
