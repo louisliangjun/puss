@@ -805,11 +805,11 @@ static ImTextureID image_texture_create(int w, int h, const void* data) {
     glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
     glBindTexture(GL_TEXTURE_2D, last_texture);
-	return (ImTextureID)tex;
+	return (ImTextureID)(intptr_t)tex;
 }
 
 static void image_texture_destroy(ImTextureID tex) {
-	GLuint id = (GLuint)tex;
+	GLuint id = (GLuint)(intptr_t)tex;
     glDeleteTextures(1, &id);
 }
 
