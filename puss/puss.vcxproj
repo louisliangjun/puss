@@ -73,15 +73,14 @@
     <ClInclude Include="..\3rd\lua-5.3.5\src\lundump.h" />
     <ClInclude Include="..\3rd\lua-5.3.5\src\lvm.h" />
     <ClInclude Include="..\3rd\lua-5.3.5\src\lzio.h" />
+    <ClInclude Include="..\include\puss_lua.h" />
+    <ClInclude Include="..\include\puss_macros.h" />
     <ClInclude Include="..\include\puss_plugin.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="puss_async_service.inl" />
-    <None Include="puss_debug.inl" />
-    <None Include="puss_lua.inl" />
-    <None Include="puss_pickle.inl" />
-    <None Include="puss_sys.inl" />
-    <None Include="rbx_tree.inl" />
+    <ProjectReference Include="..\puss_toolkit\puss_toolkit.vcxproj">
+      <Project>{6203c836-94e5-4eae-9520-012e449058cf}</Project>
+    </ProjectReference>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
@@ -132,7 +131,7 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_CONSOLE;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(PussRoot)3rd\lua-5.3.5\src\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(PussRoot)3rd\lua-5.3.5\src\;$(PussRoot)puss_toolkit\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -151,7 +150,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_CONSOLE;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(PussRoot)3rd\lua-5.3.5\src\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(PussRoot)3rd\lua-5.3.5\src\;$(PussRoot)puss_toolkit\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

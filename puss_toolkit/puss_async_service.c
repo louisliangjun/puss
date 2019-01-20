@@ -1,6 +1,14 @@
-// puss_async_service.inl
+// puss_async_service.c
 
-#include "rbx_tree.inl"
+#include "puss_async_service.h"
+
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <memory.h>
+#include <assert.h>
+
+#include "rbx_tree.h"
 
 #define TIMEOUT_FREE	0xFFFFFFFFFFFFFFFFull
 #define TIMEOUT_WORK	(TIMEOUT_FREE - 1ull)

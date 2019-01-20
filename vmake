@@ -87,13 +87,19 @@ end)
 
 vmake_target_add('puss', function(target)
 	vmake('luaproxy')
-	local slibs = vmake('lua53')
+	local slibs = vmake('puss_toolkit', 'lua53')
 	local suffix_flag = '-DPUSS_CONFIG=\\"'..PUSS_CONFIG..'\\"'
-	local incs = array_pack(INCLUDES, LUA_SRC_PATH, 'plugins')
+	local incs = array_pack(INCLUDES, LUA_SRC_PATH, 'puss_toolkit')
 	local libs = vlua.OS=='windows' and '' or '-lm -ldl'
 	local objs = make_c2objs(target, nil, incs, suffix_flag)
 	local output = path_concat('bin', target..PUSS_CONFIG_SUFFIX..EXE_SUFFIX)
 	return make_target(output, {objs, slibs}, CC, CFLAGS, '-o', output, objs, slibs, libs)
+end)
+
+vmake_target_add('puss_toolkit', function(target)
+	local objs = make_c2objs(target, nil, INCLUDES, suffix_flag)
+	local output = path_concat(OBJPATH, 'lib'..target..'.a')
+	return make_target(output, objs, AR, output, objs)
 end)
 
 vmake_target_add('luaproxy', function(target)

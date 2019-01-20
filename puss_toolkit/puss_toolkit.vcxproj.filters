@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <None Include="thread_utils.h" />
+    <None Include="puss_debug.inl" />
+    <None Include="puss_lua.inl" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="rbx_tree.h" />
+    <ClInclude Include="simple_pickle.h" />
+    <ClInclude Include="conv_utils.h" />
+    <ClInclude Include="puss_async_service.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="conv_utils.c" />
+    <ClCompile Include="puss_async_service.c" />
+    <ClCompile Include="rbx_tree.c" />
+    <ClCompile Include="simple_pickle.c" />
+  </ItemGroup>
+</Project>

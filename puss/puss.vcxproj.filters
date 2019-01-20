@@ -1,7 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClCompile Include="main.c" />
     <ClCompile Include="..\3rd\lua-5.3.5\src\lapi.c">
       <Filter>lua</Filter>
     </ClCompile>
@@ -101,10 +100,14 @@
     <ClCompile Include="..\3rd\lua-5.3.5\src\lzio.c">
       <Filter>lua</Filter>
     </ClCompile>
+    <ClCompile Include="main.c" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="lua">
       <UniqueIdentifier>{efc6c975-407d-4791-87c8-3fff9d63f5be}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="include">
+      <UniqueIdentifier>{f8205cce-9b4c-448a-99d5-c9e052259d9d}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -186,14 +189,14 @@
     <ClInclude Include="..\3rd\lua-5.3.5\src\lzio.h">
       <Filter>lua</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\puss_plugin.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="puss_sys.inl" />
-    <None Include="puss_debug.inl" />
-    <None Include="puss_pickle.inl" />
-    <None Include="puss_lua.inl" />
-    <None Include="puss_async_service.inl" />
-    <None Include="rbx_tree.inl" />
+    <ClInclude Include="..\include\puss_plugin.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\puss_macros.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\puss_lua.h">
+      <Filter>include</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

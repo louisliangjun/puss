@@ -1,4 +1,4 @@
-// puss_lua.c
+// puss_lua.inl
 
 const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 	"puss.dofile = function(name, env, ...)\n"
@@ -59,22 +59,21 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 #include <memory.h>
 #include <stdio.h>
 
-#define PUSS_KEY(name)			"[" #name "]"
-
-#define PUSS_KEY_PUSS			PUSS_KEY(puss)
+#define PUSS_KEY_PUSS			"_@Puss@_"
 
 #ifdef _MSC_VER
 	#pragma warning(disable: 4996)		// VC++ depart functions warning
 #endif
 
-#include "puss_sys.inl"
-#include "puss_pickle.inl"
-#include "puss_async_service.inl"
+#include "conv_utils.h"
+#include "simple_pickle.h"
+#include "puss_async_service.h"
+
 #include "puss_debug.inl"
 
 // interface
 // 
-#define PUSS_KEY_INTERFACES		PUSS_KEY(interfaces)
+#define PUSS_KEY_INTERFACES		"_@PussInterface@_"
 
 static void* puss_interface_check(lua_State* L, const char* name) {
 	int top = lua_gettop(L);
@@ -209,8 +208,8 @@ static luaL_Reg puss_methods[] =
 	, {"file_list",			puss_lua_file_list}
 	, {"local_to_utf8",		puss_lua_local_to_utf8}
 	, {"utf8_to_local",		puss_lua_utf8_to_local}
-	, {"pack",				puss_lua_pack_lua}
-	, {"unpack",			puss_lua_unpack_lua}
+	, {"pack",				puss_lua_simple_pack}
+	, {"unpack",			puss_lua_simple_unpack}
 	, {NULL, NULL}
 	};
 
@@ -230,7 +229,7 @@ static void puss_module_setup(lua_State* L, const char* app_path, const char* ap
 	lua_pushstring(L, app_name ? app_name : "puss");
 	lua_setfield(L, puss_index, "_self");	// puss._self
 
-	lua_pushstring(L, PATH_SEP_STR);
+	lua_pushstring(L, "/");
 	lua_setfield(L, puss_index, "_sep");	// puss._sep
 
 	lua_newtable(L);								// up[1]: plugins
@@ -242,7 +241,7 @@ static void puss_module_setup(lua_State* L, const char* app_path, const char* ap
 	assert( lua_type(L, -1)==LUA_TFUNCTION );
 	lua_remove(L, -2);
 	lua_getfield(L, puss_index, "_path");
-	lua_pushstring(L, PATH_SEP_STR "plugins" PATH_SEP_STR);
+	lua_pushstring(L, "/plugins/");
 	lua_concat(L, 2);								// up[3]: plugin_prefix
 #ifdef _WIN32
 	SetDllDirectory(lua_tostring(L, -1));
@@ -297,6 +296,14 @@ static void puss_lua_open_default(lua_State* L, const char* arg0) {
 	char app_config[16] = { 0 };
 #ifdef _WIN32
 	len = (int)GetModuleFileNameA(0, pth, 4096);
+	{
+		char* ps = pth;
+		char* pe = ps + len;
+		for( ; ps<pe; ++ps ) {
+			if( *ps=='\\' )
+				*ps = '/';
+		}
+	}
 #else
 	len = readlink("/proc/self/exe", pth, 4096);
 #endif
@@ -309,7 +316,7 @@ static void puss_lua_open_default(lua_State* L, const char* arg0) {
 	}
 
 	for( --len; len>0; --len ) {
-		if( pth[len]=='\\' || pth[len]=='/' ) {
+		if( pth[len]=='/' ) {
 			pth[len] = '\0';
 			break;
 		}

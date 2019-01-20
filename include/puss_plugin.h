@@ -3,21 +3,7 @@
 #ifndef _INC_PUSS_LUA_PLUGIN_H_
 #define _INC_PUSS_LUA_PLUGIN_H_
 
-#ifdef __cplusplus
-	#define PUSS_EXTERN_C       extern "C"
-	#define PUSS_DECLS_BEGIN    PUSS_EXTERN_C {
-	#define PUSS_DECLS_END      }
-#else
-	#define PUSS_EXTERN_C	    extern
-	#define PUSS_DECLS_BEGIN
-	#define PUSS_DECLS_END
-#endif
-
-PUSS_DECLS_BEGIN
-	#include "lua.h"
-	#include "lualib.h"
-	#include "lauxlib.h"
-PUSS_DECLS_END
+#include "puss_lua.h"
 
 typedef struct _PussInterface	PussInterface;
 
@@ -34,17 +20,6 @@ typedef struct _PussInterface	PussInterface;
 #endif
 
 #include "luaproxy.h"
-
-// C inline
-// 
-#ifndef  __cplusplus
-	#ifdef _MSC_VER
-		#ifdef inline
-			#undef inline
-		#endif
-		#define inline __forceinline
-	#endif
-#endif
 
 PUSS_DECLS_BEGIN
 

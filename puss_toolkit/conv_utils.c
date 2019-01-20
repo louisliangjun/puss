@@ -1,10 +1,11 @@
-// puss_sys.inl
+// conv_utils.c
+
+#include "conv_utils.h"
 
 #ifdef _WIN32
 	#define WIN32_LEAN_AND_MEAN
 	#include <windows.h>
 	#include <wchar.h>
-	#define PATH_SEP_STR	"\\"
 
 	static int _lua_mbcs2wch(lua_State* L, int stridx, UINT code_page, const char* code_page_name) {
 		size_t len = 0;
@@ -47,13 +48,12 @@
 #else
 	#include <unistd.h>
 	#include <dirent.h>
-	#define PATH_SEP_STR	"/"
 #endif
 
-typedef struct _FileStr {
+typedef struct _FStr {
 	size_t n;
 	char* s;
-} FileStr;
+} FStr;
 
 #ifdef _WIN32
 	#define is_sep(ch) ((ch)=='/' || (ch)=='\\')
@@ -78,15 +78,14 @@ static inline char* copy_str(char* dst, char* src, size_t n) {
 	return dst + n;
 }
 
-static size_t format_filename(char* fname, int convert_to_unix_path_sep) {
-	FileStr strs[258];
-	FileStr* start = strs;
-	FileStr* cur = strs;
-	FileStr* end = cur + 258;
+size_t puss_format_filename(char* fname) {
+	FStr strs[258];
+	FStr* start = strs;
+	FStr* cur = strs;
+	FStr* end = cur + 258;
 	char* s = fname;
 	char sep = '/';
 #ifdef _WIN32
-	sep = convert_to_unix_path_sep ? '/' : '\\';
 	if( ((s[0]>='a' && s[1]<='z') || (s[0]>='A' && s[1]<='Z')) && (s[1]==':') ) {
 		cur->s = s;
 		cur->n = 2;
@@ -118,7 +117,7 @@ static size_t format_filename(char* fname, int convert_to_unix_path_sep) {
 	// 
 	while( *(s = skip_seps(s)) ) {
 		if( cur >= end ) {
-			FileStr* prev = cur - 1;
+			FStr* prev = cur - 1;
 			while( *s ) { ++s; }
 			prev->n = (s - prev->s);
 			break;
@@ -133,7 +132,7 @@ static size_t format_filename(char* fname, int convert_to_unix_path_sep) {
 		if( cur->n==1 && cur->s[0]=='.' ) {
 			// remove ./
 		} else if( cur->n==2 && cur->s[0]=='.' && cur->s[1]=='.' ) {
-			FileStr* prev = cur - 1;
+			FStr* prev = cur - 1;
 			if( (prev < start) || (prev->n==2 && prev->s[0]=='.' && prev->s[1]=='.') ) {
 				++cur;
 			} else {
@@ -146,7 +145,7 @@ static size_t format_filename(char* fname, int convert_to_unix_path_sep) {
 
 	end = cur;
 	s = fname;
-	if( start!=strs ) {	// root C: or C:\ or \\ or / 
+	if( start!=strs ) {	// root C: or C:/ or // or / 
 		s = copy_str(s, strs[0].s, strs[0].n);
 	}
 	if( start < end ) {
@@ -160,14 +159,13 @@ static size_t format_filename(char* fname, int convert_to_unix_path_sep) {
 	return (size_t)(s - fname);
 }
 
-static int puss_lua_filename_format(lua_State* L) {
+int puss_lua_filename_format(lua_State* L) {
 	size_t n = 0;
 	const char* s = luaL_checklstring(L, 1, &n);
-	int convert_to_unix_path_sep = lua_toboolean(L, 2);
 	luaL_Buffer B;
 	luaL_buffinitsize(L, &B, n+1);
 	memcpy(B.b, s, n+1);
-	n = format_filename(B.b, convert_to_unix_path_sep);
+	n = puss_format_filename(B.b);
 	luaL_pushresultsize(&B, n);
 	return 1;
 }
@@ -178,7 +176,7 @@ static int puss_lua_filename_format(lua_State* L) {
 	static int _lua_local_to_utf16(lua_State* L) { return _lua_mbcs2wch(L, 1, 0, "local"); }
 	static int _lua_utf16_to_local(lua_State* L) { return _lua_wch2mbcs(L, 1, 0, "local"); }
 
-	static int puss_lua_file_list(lua_State* L) {
+	int puss_lua_file_list(lua_State* L) {
 		BOOL utf8 = lua_toboolean(L, 2);
 		const WCHAR* wpath;
 		lua_Integer nfile = 0;
@@ -228,17 +226,17 @@ static int puss_lua_filename_format(lua_State* L) {
 		return 2;
 	}
 
-	static int puss_lua_local_to_utf8(lua_State* L) {
+	int puss_lua_local_to_utf8(lua_State* L) {
 		_lua_mbcs2wch(L, 1, 0, "local");
 		return _lua_wch2mbcs(L, -1, CP_UTF8, "utf8");
 	}
 
-	static int puss_lua_utf8_to_local(lua_State* L) {
+	int puss_lua_utf8_to_local(lua_State* L) {
 		_lua_mbcs2wch(L, 1, CP_UTF8, "utf8");
 		return _lua_wch2mbcs(L, -1, 0, "local");
 	}
 #else
-	static int puss_lua_file_list(lua_State* L) {
+	int puss_lua_file_list(lua_State* L) {
 		const char* dirpath = luaL_checkstring(L, 1);
 		lua_Integer nfile = 0;
 		lua_Integer ndir = 0;
@@ -266,14 +264,14 @@ static int puss_lua_filename_format(lua_State* L) {
 		return 2;
 	}
 
-	static int puss_lua_local_to_utf8(lua_State* L) {
+	int puss_lua_local_to_utf8(lua_State* L) {
 		// TODO if need, now locale==UTF8 
 		luaL_checkstring(L, 1);
 		lua_settop(L, 1);
 		return 1;
 	}
 
-	static int puss_lua_utf8_to_local(lua_State* L) {
+	int puss_lua_utf8_to_local(lua_State* L) {
 		// TODO if need, now locale==UTF8 
 		luaL_checkstring(L, 1);
 		lua_settop(L, 1);

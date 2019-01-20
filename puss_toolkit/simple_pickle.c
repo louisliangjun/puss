@@ -1,6 +1,14 @@
-// puss_lua_pickle.inl
+// simple_pickle.c
 
-#define PUSS_KEY_PICKLE_CACHE	PUSS_KEY(pickle_cache)
+#include "simple_pickle.h"
+
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <memory.h>
+#include <assert.h>
+
+#define PUSS_KEY_PICKLE_CACHE	"PussSimplePickleCache"
 
 #define TNIL		0
 #define TTRUE		1
@@ -14,12 +22,6 @@
 
 #define PICKLE_DEPTH_MAX	32
 #define PICKLE_ARG_MAX		32
-
-typedef struct _PickleBuffer {
-	unsigned char*	buf;
-	size_t			len;
-	size_t			free;
-} PickleBuffer;
 
 static inline unsigned char* pickle_mem_prepare(lua_State* L, PickleBuffer* mb, size_t len) {
 	if( mb->free < len ) {
@@ -235,7 +237,7 @@ static void _lua_pickle_pack(LPacker* pac, int start, int end) {
 	pac->mb.buf[0] = (unsigned char)n;
 }
 
-static void* puss_lua_pack(size_t* plen, lua_State* L, int start, int end) {
+void* puss_simple_pack(size_t* plen, lua_State* L, int start, int end) {
 	LPacker* pac;
 	start = lua_absindex(L, start);
 	end = lua_absindex(L, end);
@@ -286,7 +288,7 @@ static int _pickle_unpack(LUnPacker* upac) {
 	return n;
 }
 
-static int puss_lua_unpack(lua_State* L, const void* pkt, size_t len) {
+int puss_simple_unpack(lua_State* L, const void* pkt, size_t len) {
 	LUnPacker upac;
 	upac.L = L;
 	upac.start = (const char*)pkt;
@@ -295,14 +297,14 @@ static int puss_lua_unpack(lua_State* L, const void* pkt, size_t len) {
 	return _pickle_unpack(&upac);
 }
 
-static int puss_lua_pack_lua(lua_State* L) {
+int puss_lua_simple_pack(lua_State* L) {
 	size_t len = 0;
-	void* buf = puss_lua_pack(&len, L, 1, -1);
+	void* buf = puss_simple_pack(&len, L, 1, -1);
 	lua_pushlstring(L, (const char*)buf, len);
 	return 1;
 }
 
-static int puss_lua_unpack_lua(lua_State* L) {
+int puss_lua_simple_unpack(lua_State* L) {
 	LUnPacker upac;
 	size_t len = 0;
 	upac.L = L;

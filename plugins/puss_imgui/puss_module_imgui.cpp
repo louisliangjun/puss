@@ -5,10 +5,6 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#if defined(__GNUC__)
-	#pragma GCC diagnostic ignored "-Wunused-function"          // warning: 'xxxx' defined but not used
-#endif
-
 #include "imgui.h"
 
 #include "puss_plugin.h"
@@ -16,6 +12,16 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_STATIC
 #include "stb_image.h"
+
+#if defined(__GNUC__)
+	#pragma GCC diagnostic ignored "-Wunused-function"          // warning: 'xxxx' defined but not used
+#endif
+
+#ifdef _MSC_VER
+	#if _MSC_VER >= 1916
+		#pragma comment(lib, "legacy_stdio_definitions.lib")
+	#endif
+#endif
 
 static ImTextureID	image_texture_check(lua_State* L, int arg);
 #define IMGUI_LUA_WRAP_CHECK_TEXTURE	image_texture_check
@@ -35,7 +41,6 @@ static void do_create_context() {
 	io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleFonts;     // FIXME-DPI: THIS CURRENTLY DOESN'T WORK AS EXPECTED. DON'T USE IN USER APP!
 	io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleViewports; // FIXME-DPI
 	io.ConfigResizeWindowsFromEdges = true;
-	io.ConfigDockingWithShift = true;
 
 	// Setup style
 	ImGui::GetStyle().WindowRounding = 0.0f;

@@ -90,7 +90,6 @@ static int puss_error_handle(lua_State* L) {
 }
 
 #ifdef _WIN32
-	#define is_path_sep(ch) ((ch)=='/' || (ch)=='\\')
 	static int puss_error_handle_win(lua_State* L) {
 		int top = lua_gettop(L);
 		push_error_str(L);

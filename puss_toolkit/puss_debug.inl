@@ -458,7 +458,7 @@ static int do_host_invoke(lua_State* L) {
 	HostInvokeUD* ud = (HostInvokeUD*)lua_touserdata(L, 1);
 	lua_settop(L, 0);
 	get_value(L, ud->func);
-	puss_lua_unpack(L, ud->args, ud->size);
+	puss_simple_unpack(L, ud->args, ud->size);
 	lua_call(L, lua_gettop(L)-1, LUA_MULTRET);
 	return lua_gettop(L);
 }
@@ -469,7 +469,7 @@ static int lua_debug_host_pcall(lua_State* L) {
 	const char* func = luaL_checkstring(L, 2);
 	int top = lua_gettop(hostL);
 	size_t len = 0;
-	void* buf = puss_lua_pack(&len, L, 3, -1);
+	void* buf = puss_simple_pack(&len, L, 3, -1);
 	HostInvokeUD ud = { func, len, buf };
 	int res;
 	if( !lua_checkstack(hostL, 8) )
@@ -478,12 +478,12 @@ static int lua_debug_host_pcall(lua_State* L) {
 	lua_pushcfunction(hostL, do_host_invoke);
 	lua_pushlightuserdata(hostL, &ud);
 	res = lua_pcall(hostL, 1, LUA_MULTRET, 0);
-	buf = puss_lua_pack(&len, hostL, top+1, -1);
+	buf = puss_simple_pack(&len, hostL, top+1, -1);
 	lua_settop(hostL, top);
 
 	lua_settop(L, 0);
 	lua_pushboolean(L, res==LUA_OK);
-	puss_lua_unpack(L, buf, len);
+	puss_simple_unpack(L, buf, len);
 	return lua_gettop(L);
 }
 
@@ -1110,7 +1110,7 @@ static int lua_debugger_debug(lua_State* hostL) {
 		lua_State* L = env->debug_state;
 		const char* debugger_script = luaL_optstring(hostL, 2, PUSS_DEBUG_DEFAULT_SCRIPT);
 		size_t n = 0;
-		void* b = puss_lua_pack(&n, hostL, 3, -1);
+		void* b = puss_simple_pack(&n, hostL, 3, -1);
 		int top;
 		lua_debugger_clear(env);
 
@@ -1132,7 +1132,7 @@ static int lua_debugger_debug(lua_State* hostL) {
 		lua_pushvalue(L, -1);
 		lua_setfield(L, -4, "_debug_filename");
 		lua_pushglobaltable(L);
-		puss_lua_unpack(L, b, n);
+		puss_simple_unpack(L, b, n);
 		if( lua_pcall(L, lua_gettop(L)-top, 0, 0) ) {
 			lua_pop(L, 1);
 		}
@@ -1149,7 +1149,7 @@ static int lua_debugger_debug(lua_State* hostL) {
 	return 1;
 }
 
-static void lua_debugger_update(lua_State* hostL) {
+static inline void lua_debugger_update(lua_State* hostL) {
 	DebugEnv* env = PUSS_DEBUG_ENV_FETCH(hostL);
 	if( env && env->debug_handle!=LUA_NOREF ) {
 		debug_handle_invoke(env, 0);
