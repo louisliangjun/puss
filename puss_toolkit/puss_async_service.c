@@ -1,6 +1,6 @@
 // puss_async_service.c
 
-#include "puss_async_service.h"
+#include "puss_toolkit.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -576,4 +576,3 @@ void puss_async_service_reg(lua_State* L) {
 	lua_newtable(L);	// groups map
 	luaL_setfuncs(L, async_task_service_methods, 3);
 }
-

@@ -66,18 +66,18 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <None Include="puss_debug.inl" />
-    <None Include="puss_lua.inl" />
+    <None Include="puss_toolkit.inl" />
     <None Include="thread_utils.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="conv_utils.h" />
-    <ClInclude Include="puss_async_service.h" />
+    <ClInclude Include="puss_toolkit.h" />
     <ClInclude Include="rbx_tree.h" />
-    <ClInclude Include="simple_pickle.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="conv_utils.c" />
     <ClCompile Include="puss_async_service.c" />
+    <ClCompile Include="puss_lua.c" />
+    <ClCompile Include="puss_thread_service.c" />
     <ClCompile Include="rbx_tree.c" />
     <ClCompile Include="simple_pickle.c" />
   </ItemGroup>

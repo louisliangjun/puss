@@ -1,6 +1,6 @@
 // conv_utils.c
 
-#include "conv_utils.h"
+#include "puss_toolkit.h"
 
 #ifdef _WIN32
 	#define WIN32_LEAN_AND_MEAN
@@ -159,7 +159,7 @@ size_t puss_format_filename(char* fname) {
 	return (size_t)(s - fname);
 }
 
-int puss_lua_filename_format(lua_State* L) {
+static int puss_lua_filename_format(lua_State* L) {
 	size_t n = 0;
 	const char* s = luaL_checklstring(L, 1, &n);
 	luaL_Buffer B;
@@ -176,7 +176,7 @@ int puss_lua_filename_format(lua_State* L) {
 	static int _lua_local_to_utf16(lua_State* L) { return _lua_mbcs2wch(L, 1, 0, "local"); }
 	static int _lua_utf16_to_local(lua_State* L) { return _lua_wch2mbcs(L, 1, 0, "local"); }
 
-	int puss_lua_file_list(lua_State* L) {
+	static int puss_lua_file_list(lua_State* L) {
 		BOOL utf8 = lua_toboolean(L, 2);
 		const WCHAR* wpath;
 		lua_Integer nfile = 0;
@@ -226,17 +226,17 @@ int puss_lua_filename_format(lua_State* L) {
 		return 2;
 	}
 
-	int puss_lua_local_to_utf8(lua_State* L) {
+	static int puss_lua_local_to_utf8(lua_State* L) {
 		_lua_mbcs2wch(L, 1, 0, "local");
 		return _lua_wch2mbcs(L, -1, CP_UTF8, "utf8");
 	}
 
-	int puss_lua_utf8_to_local(lua_State* L) {
+	static int puss_lua_utf8_to_local(lua_State* L) {
 		_lua_mbcs2wch(L, 1, CP_UTF8, "utf8");
 		return _lua_wch2mbcs(L, -1, 0, "local");
 	}
 #else
-	int puss_lua_file_list(lua_State* L) {
+	static int puss_lua_file_list(lua_State* L) {
 		const char* dirpath = luaL_checkstring(L, 1);
 		lua_Integer nfile = 0;
 		lua_Integer ndir = 0;
@@ -264,14 +264,14 @@ int puss_lua_filename_format(lua_State* L) {
 		return 2;
 	}
 
-	int puss_lua_local_to_utf8(lua_State* L) {
+	static int puss_lua_local_to_utf8(lua_State* L) {
 		// TODO if need, now locale==UTF8 
 		luaL_checkstring(L, 1);
 		lua_settop(L, 1);
 		return 1;
 	}
 
-	int puss_lua_utf8_to_local(lua_State* L) {
+	static int puss_lua_utf8_to_local(lua_State* L) {
 		// TODO if need, now locale==UTF8 
 		luaL_checkstring(L, 1);
 		lua_settop(L, 1);
@@ -279,3 +279,14 @@ int puss_lua_filename_format(lua_State* L) {
 	}
 #endif
 
+static luaL_Reg conv_utils_methods[] =
+	{ {"filename_format", puss_lua_filename_format}
+	, {"file_list", puss_lua_file_list}
+	, {"local_to_utf8", puss_lua_local_to_utf8}
+	, {"utf8_to_local", puss_lua_utf8_to_local}
+	, {NULL, NULL}
+	};
+
+void puss_conv_utils_reg(lua_State* L) {
+	luaL_setfuncs(L, conv_utils_methods, 0);
+}

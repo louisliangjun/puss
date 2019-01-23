@@ -1,6 +1,6 @@
 // simple_pickle.c
 
-#include "simple_pickle.h"
+#include "puss_toolkit.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -22,6 +22,12 @@
 
 #define PICKLE_DEPTH_MAX	32
 #define PICKLE_ARG_MAX		32
+
+typedef struct _PickleBuffer {
+	unsigned char*	buf;
+	size_t			len;
+	size_t			free;
+} PickleBuffer;
 
 static inline unsigned char* pickle_mem_prepare(lua_State* L, PickleBuffer* mb, size_t len) {
 	if( mb->free < len ) {
@@ -237,10 +243,8 @@ static void _lua_pickle_pack(LPacker* pac, int start, int end) {
 	pac->mb.buf[0] = (unsigned char)n;
 }
 
-void* puss_simple_pack(size_t* plen, lua_State* L, int start, int end) {
+static LPacker* packer_ensure(lua_State* L) {
 	LPacker* pac;
-	start = lua_absindex(L, start);
-	end = lua_absindex(L, end);
 	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_PICKLE_CACHE)==LUA_TUSERDATA ) {
 		pac = (LPacker*)lua_touserdata(L, -1);
 	} else {
@@ -256,6 +260,13 @@ void* puss_simple_pack(size_t* plen, lua_State* L, int start, int end) {
 	}
 	_pickle_reset(pac, L);
 	lua_pop(L, 1);
+	return pac;
+}
+
+void* puss_simple_pack(size_t* plen, lua_State* L, int start, int end) {
+	LPacker* pac = packer_ensure(L);
+	start = lua_absindex(L, start);
+	end = lua_absindex(L, end);
 	assert( pac );
 
 	if( start <= end )
@@ -297,14 +308,14 @@ int puss_simple_unpack(lua_State* L, const void* pkt, size_t len) {
 	return _pickle_unpack(&upac);
 }
 
-int puss_lua_simple_pack(lua_State* L) {
+static int puss_lua_simple_pack(lua_State* L) {
 	size_t len = 0;
 	void* buf = puss_simple_pack(&len, L, 1, -1);
 	lua_pushlstring(L, (const char*)buf, len);
 	return 1;
 }
 
-int puss_lua_simple_unpack(lua_State* L) {
+static int puss_lua_simple_unpack(lua_State* L) {
 	LUnPacker upac;
 	size_t len = 0;
 	upac.L = L;
@@ -320,3 +331,11 @@ int puss_lua_simple_unpack(lua_State* L) {
 	return _pickle_unpack(&upac);
 }
 
+static luaL_Reg simple_pickle_methods[] =
+	{ {"simple_pack", puss_lua_simple_pack}
+	, {"simple_unpack", puss_lua_simple_unpack}
+	};
+
+void puss_simple_pickle_reg(lua_State* L) {
+	luaL_setfuncs(L, simple_pickle_methods, 0);
+}

@@ -221,12 +221,12 @@ __exports.init = function()
 	puss._app_title = title
 	run_sign = true
 	imgui.create(title, 1024, 768, 'puss_editor.ini', function()
-		local font_path = string.format('%s%sfonts', puss._path, puss._sep)
+		local font_path = string.format('%s/fonts', puss._path)
 		local files = puss.file_list(font_path)
 		for _, name in ipairs(files) do
 			if name:match('^.+%.[tT][tT][fF]$') then
 				local lang = name:match('^.-%.(%w+)%.%w+$')
-				imgui.AddFontFromFileTTF(string.format('%s%s%s', font_path, puss._sep, name), 14, lang)
+				imgui.AddFontFromFileTTF(string.format('%s/%s', font_path, name), 14, lang)
 			end
 		end
 	end)

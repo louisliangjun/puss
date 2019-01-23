@@ -35,13 +35,10 @@ __exports.exist = function(filepath)
 	return ctx and true
 end
 
--- win32 override
---
-if puss._sep=='\\' then
+if os.getenv('OS')=='Windows_NT' then
 	O_WRITE, O_READ = 'wb', 'rb'
 
 	__exports.filename_hash = function(filepath)
 		return filepath:lower()
 	end
 end
-

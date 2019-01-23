@@ -1,5 +1,9 @@
 // main.c
 
+#ifdef _MSC_VER
+	#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #ifdef _WIN32
 	#define WIN32_LEAN_AND_MEAN
 	#include <windows.h>
@@ -9,7 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "puss_lua.inl"
+#include "puss_toolkit.inl"
 
 #define PUSS_DEFAULT_SCRIPT_FILE "default.lua"
 
@@ -107,7 +111,7 @@ static const char* puss_push_script_filename(lua_State* L, const char* script) {
 	} else {
 		lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_PUSS);
 		lua_getfield(L, -1, "_path");
-		lua_getfield(L, -2, "_sep");
+		lua_pushstring(L, "/");
 		lua_remove(L, -3);
 		lua_pushstring(L, PUSS_DEFAULT_SCRIPT_FILE);
 		lua_concat(L, 3);
@@ -164,8 +168,7 @@ restart_label:
 #endif
 	reboot_as_debug_level = (debug_level==0);
 
-	luaL_openlibs(L);
-	puss_lua_open_default(L, argv[0]);
+	puss_lua_parse_arg0(L, argv[0], puss_lua_setup);
 	lua_getglobal(L, "xpcall");
 	lua_pushcfunction(L, puss_init);
 	lua_pushcfunction(L, console_mode ? puss_error_handle : puss_error_handle_win);
@@ -185,10 +188,9 @@ restart_label:
 	if( reboot_as_debug_level ) {
 		int top = lua_gettop(L);
 		debug_level = 0;
-		if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_PUSS)==LUA_TTABLE ) {
-			lua_getfield(L, -1, "_reboot_as_debug_level");
-			debug_level = (int)lua_tointeger(L, -1);
-		}
+		lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_PUSS);
+		lua_getfield(L, -1, "_reboot_as_debug_level");
+		debug_level = (int)lua_tointeger(L, -1);
 		lua_settop(L, top);
 		reboot_as_debug_level = debug_level ? 1 : 0;
 	}
