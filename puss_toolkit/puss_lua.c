@@ -74,12 +74,12 @@ const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 
 // interface
 // 
-#define PUSS_KEY_INTERFACES		"_@PussInterface@_"
-#define PUSS_KEY_LUASTATE_MT	"_@PussLuaStateMT@_"
+#define PUSS_NAME_INTERFACES	"_@PussInterface@_"
+#define PUSS_NAME_SIMPLESTATE	"_@PussSimpleState@_"
 
 static void* puss_interface_check(lua_State* L, const char* name) {
 	int top = lua_gettop(L);
-	void* iface = ( name && lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_INTERFACES)==LUA_TTABLE
+	void* iface = ( name && lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAME_INTERFACES)==LUA_TTABLE
 			&& lua_getfield(L, -1, name)==LUA_TUSERDATA ) ? lua_touserdata(L, -1) : NULL;
 	if( !iface )
 		luaL_error(L, "puss_interface_check(%s), iface not found!", name);
@@ -91,11 +91,11 @@ static void puss_interface_register(lua_State* L, const char* name, void* iface)
 	int top = lua_gettop(L);
 	if( !(name && iface) ) {
 		luaL_error(L, "puss_interface_register(%s), name and iface MUST exist!", name);
-	} else if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_INTERFACES)!=LUA_TTABLE ) {
+	} else if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_NAME_INTERFACES)!=LUA_TTABLE ) {
 		lua_pop(L, 1);
 		lua_newtable(L);
 		lua_pushvalue(L, -1);
-		lua_setfield(L, LUA_REGISTRYINDEX, PUSS_KEY_INTERFACES);
+		lua_setfield(L, LUA_REGISTRYINDEX, PUSS_NAME_INTERFACES);
 	}
 	if( lua_getfield(L, -1, name)==LUA_TNIL ) {
 		lua_pop(L, 1);
@@ -259,13 +259,7 @@ static int simple_luastate_create(lua_State* L) {
 		lua_setfield(L, -2, "__index");
 	}
 	lua_setmetatable(L, -2);
-
-	lua_pushvalue(L, lua_upvalueindex(1));
-	lua_call(L, 0, 1);
-	if( !lua_isuserdata(L, -1) )
-		return luaL_error(L, "newstate return bad value!");
-	ud->L = (lua_State*)lua_touserdata(L, -1);
-	lua_pop(L, 1);
+	ud->L = __puss_toolkit_sink__.state_new();
 	return 1;
 }
 
@@ -279,9 +273,8 @@ static void puss_module_setup(lua_State* L, const char* app_path, const char* ap
 	lua_newtable(L);	// puss
 	puss_index = lua_gettop(L);
 
-	// puss namespace init
 	lua_pushvalue(L, -1);
-	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_KEY_PUSS);
+	__puss_toolkit_sink__.state_set_key(L, PUSS_KEY_PUSS);
 	lua_pushvalue(L, -1);
 	lua_setglobal(L, "puss");	// set to _G.puss
 
@@ -312,12 +305,8 @@ static void puss_module_setup(lua_State* L, const char* app_path, const char* ap
 	lua_pushcclosure(L, _puss_lua_plugin_load, 4);
 	lua_setfield(L, puss_index, "load_plugin");			// puss.load_plugin
 
-	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_NEWSTATE) ) {
-		lua_pushcclosure(L, simple_luastate_create, 1);
-		lua_setfield(L, puss_index, "simple_luastate_new");	// puss.simple_luastate_new
-	} else {
-		lua_pop(L, 1);
-	}
+	lua_pushcfunction(L, simple_luastate_create);
+	lua_setfield(L, puss_index, "simple_luastate_new");	// puss.simple_luastate_new
 
 	lua_assert(lua_gettop(L)==puss_index);	puss_conv_utils_reg(L);
 	lua_assert(lua_gettop(L)==puss_index);	puss_simple_pickle_reg(L);
@@ -327,46 +316,88 @@ static void puss_module_setup(lua_State* L, const char* app_path, const char* ap
 	lua_assert(lua_gettop(L)==puss_index);	lua_call(L, 1, 0);	// call builtin-scripts
 }
 
-void puss_lua_setup_base(lua_State* L, const char* app_path, const char* app_name, const char* app_config) {
-	if( !app_path )	app_path = ".";
-	if( !app_name )	app_name = "puss";
-
+int puss_lua_setup_base(lua_State* L) {
 	// check already open
-	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_KEY_PUSS)==LUA_TTABLE ) {
+	if( PUSS_LUA_GET(L, PUSS_KEY_PUSS)==LUA_TTABLE ) {
 		lua_setglobal(L, "puss");
-		return;
+	} else {
+		lua_pop(L, 1);
+		puss_module_setup(L, __puss_toolkit_sink__.app_path, __puss_toolkit_sink__.app_name, __puss_toolkit_sink__.app_config);
 	}
-	lua_pop(L, 1);
-
-	puss_module_setup(L, app_path, app_name, app_config);
+	return 0;
 }
 
-void puss_lua_parse_arg0(lua_State* L, const char* arg0, PussSetup setup) {
-	char pth[4096];
-	int len;
-	const char* app_path = NULL;
-	const char* app_name = NULL;
-	char app_config[16] = { 0 };
+// default puss toolkit sink
+
+static lua_State* _default_puss_state_new(void) {
+	lua_State* L = luaL_newstate();
+	puss_lua_setup_base(L);
+	return L;
+}
+
+static int _default_puss_key_get(lua_State* L, PussToolkitKey key) {
+	char* r = (char*)&__puss_toolkit_sink__;
+	return lua_rawgetp(L, LUA_REGISTRYINDEX, r+key);
+}
+
+static void _default_puss_key_set(lua_State* L, PussToolkitKey key) {
+	char* r = (char*)&__puss_toolkit_sink__;
+	lua_rawsetp(L, LUA_REGISTRYINDEX, r+key);
+}
+
+#define DEFAULT_PATH_SIZE	4096
+
+static char _default_app_config[16] = { 0 };
+static char _default_arg0[] = { '.', '/', 'p', 'u', 's', 's', 0 };
+static char* _default_args[2] = { _default_arg0, NULL };
+
+PussToolkitSink	__puss_toolkit_sink__ =
+	{ 1
+	, _default_args
+	, "."
+	, "puss"
+	, _default_app_config
+	, 0
+	, _default_puss_state_new
+	, _default_puss_key_get
+	, _default_puss_key_set
+	};
+
+static char _default_path[DEFAULT_PATH_SIZE] = { 0 };
+
+void puss_toolkit_sink_init(int argc, char* argv[]) {
+	char* pth = _default_path;
+	int len = 0;
+	char* p;
+
+	__puss_toolkit_sink__.app_argc = argc;
+	__puss_toolkit_sink__.app_argv = argv;
+
 #ifdef _WIN32
-	len = (int)GetModuleFileNameA(0, pth, 4096);
-	{
-		char* ps = pth;
-		char* pe = ps + len;
-		for( ; ps<pe; ++ps ) {
-			if( *ps=='\\' )
-				*ps = '/';
-		}
+	len = (int)GetModuleFileNameA(0, pth, DEFAULT_PATH_SIZE-32);
+	for( p=pth+len-1; p>pth; --p ) {
+		if( *p=='\\' || *p=='/' )
+			break;
+	}
+	strcpy(p, "\\plugins\\");
+	SetDllDirectoryA(pth);
+
+	len = (int)GetModuleFileNameA(0, pth, DEFAULT_PATH_SIZE-32);
+	for( p=pth+len-1; p>pth; --p ) {
+		if( *p=='\\' )
+			*p = '/';
 	}
 #else
-	len = readlink("/proc/self/exe", pth, 4096);
-#endif
+	len = readlink("/proc/self/exe", pth, DEFAULT_PATH_SIZE-32);
 	if( len > 0 ) {
 		pth[len] = '\0';
 	} else {
 		// try use argv[0]
-		len = (int)strlen(arg0); 
-		strcpy(pth, arg0);
+		len = (int)strlen(__puss_toolkit_sink__.app_argv[0]);
+		if( len >= DEFAULT_PATH_SIZE )	exit(1);
+		strcpy(pth, __puss_toolkit_sink__.app_argv[0]);
 	}
+#endif
 
 	for( --len; len>0; --len ) {
 		if( pth[len]=='/' ) {
@@ -375,17 +406,18 @@ void puss_lua_parse_arg0(lua_State* L, const char* arg0, PussSetup setup) {
 		}
 	}
 
-	if( len > 0 ) {
-		app_path = pth;
-		app_name = pth+len+1;
-	}
+	if( len <= 0 )
+		return;
 
+	__puss_toolkit_sink__.app_path = pth;
+	__puss_toolkit_sink__.app_name = pth+len+1;
+
+	// fetch config from filename <app-CONFIG>, in win32 <app-CONFIG.exe>
 	{
-		const char* ps = app_name;
-		const char* pe = app_name + strlen(app_name);
-		const char* p;
+		char* ps = pth + len + 1;
+		char* pe = ps + strlen(ps);
+		size_t n;
 
-		// fetch config from filename <app-CONFIG>, in win32 <app-CONFIG.exe>
 #ifdef _WIN32
 		// skip .exe
 		for( p=pe-1; p>ps; --p ) {
@@ -396,26 +428,19 @@ void puss_lua_parse_arg0(lua_State* L, const char* arg0, PussSetup setup) {
 		}
 #endif
 		for( p=pe-1; p>ps; --p ) {
-			if( *p == '-' ) {
-				size_t n = pe - p;
-				if( n >= sizeof(app_config) ) {
-					// too long CONFIG, use default config ""
-				} else {
-					memcpy(app_config, p, n);
-					app_config[n] = '\0';
-				}
+			if( *p != '-' )
+				continue;
+
+			n = pe - p;
+			if( n >= sizeof(_default_app_config) ) {
+				// too long CONFIG, use default config ""
 				break;
 			}
+
+			memcpy(_default_app_config, p, n);
+			_default_app_config[n] = '\0';
+			__puss_toolkit_sink__.app_config = _default_app_config;
+			break;
 		}
 	}
-
-#ifdef _WIN32
-	{
-		lua_pushfstring(L, "%s/plugins/", app_path);
-		SetDllDirectoryA(lua_tostring(L, -1));
-		lua_pop(L, 1);
-	}
-#endif
-
-	(*setup)(L, app_path, app_name, app_config);
 }

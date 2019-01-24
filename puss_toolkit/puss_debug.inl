@@ -1090,6 +1090,7 @@ static DebugEnv* lua_debugger_new(lua_Alloc f, void* ud) {
 	}
 	lua_pop(L, 1);
 	luaL_openlibs(env->debug_state);
+	puss_lua_setup_base(env->debug_state);
 	return env;
 }
 
@@ -1114,20 +1115,19 @@ static int lua_debugger_debug(lua_State* hostL) {
 		int top;
 		lua_debugger_clear(env);
 
-		lua_getglobal(L, "puss");
+		PUSS_LUA_GET(L, PUSS_KEY_PUSS);
+		lua_assert( lua_istable(L, -1) );
 
 		*((DebugEnv**)lua_newuserdata(L, sizeof(DebugEnv*))) = env;
 		luaL_setmetatable(L, PUSS_DEBUG_NAME);
 		lua_setfield(L, -2, "_debug_proxy");
 
-		get_value(L, "puss.trace_dofile");
+		lua_getfield(L, -1, "trace_dofile");
 		top = lua_gettop(L);
 		if( debugger_script ) {
 			lua_pushstring(L, debugger_script);
 		} else {
-			get_value(L, "puss._path");
-			lua_pushstring(L, "/core/dbgsvr.lua");
-			lua_concat(L, 2);
+			lua_pushfstring(L, "%s/core/dbgsvr.lua", __puss_toolkit_sink__.app_path);
 		}
 		lua_pushvalue(L, -1);
 		lua_setfield(L, -4, "_debug_filename");
@@ -1138,6 +1138,8 @@ static int lua_debugger_debug(lua_State* hostL) {
 		}
 		if( env->debug_handle==LUA_NOREF ) {
 			lua_debugger_clear(env);
+		} else {
+			lua_pop(L, 1);
 		}
 	} else if( lua_isboolean(hostL, 1) ) {
 		lua_debugger_clear(env);
