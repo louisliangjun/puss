@@ -287,6 +287,6 @@ static luaL_Reg conv_utils_methods[] =
 	, {NULL, NULL}
 	};
 
-void puss_conv_utils_reg(lua_State* L) {
+void puss_reg_conv_utils(lua_State* L) {
 	luaL_setfuncs(L, conv_utils_methods, 0);
 }

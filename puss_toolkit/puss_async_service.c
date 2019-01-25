@@ -557,7 +557,7 @@ static luaL_Reg async_task_service_methods[] =
 	, {NULL, NULL}
 	};
 
-void puss_async_service_reg(lua_State* L) {
+void puss_reg_async_service(lua_State* L) {
 	AsyncTaskService* svs = lua_newuserdata(L, sizeof(AsyncTaskService));
 	memset(svs, 0, sizeof(AsyncTaskService));
 	rbx_init(&(svs->timers));

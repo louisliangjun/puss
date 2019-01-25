@@ -39,22 +39,16 @@ static lua_State* puss_lua_newstate(void) {
 		alloc = _debug_alloc;
 	}
 	L = lua_newstate(alloc, dbg);
-	if( !L ) {
-		lua_close(dbg->debug_state);
-		free(dbg);
-	} else {
+	if( L ) {
 		lua_atpanic(L, &_default_panic);
 		luaL_openlibs(L);
-		puss_lua_setup_base(L);
-
-		// support: puss.debug
-		if( dbg ) {
-			dbg->main_state = L;
-			PUSS_LUA_GET(L, PUSS_KEY_PUSS);
-			lua_pushcfunction(L, lua_debugger_debug);
-			lua_setfield(L, -2, "debug");	// puss.debug
-			lua_pop(L, 1);
+		lua_pushcfunction(L, puss_lua_init);
+		if( lua_pcall(L, 0, 0, 0) ) {
+			fprintf(stderr, "[Puss] init failed: %s\n", lua_tostring(L, -1));
+			lua_close(L);
+			L = NULL;
 		}
 	}
+	lua_debugger_attach(dbg, L);
 	return L;
 }

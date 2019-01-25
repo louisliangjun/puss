@@ -263,15 +263,19 @@ static int simple_luastate_create(lua_State* L) {
 	return 1;
 }
 
-static void puss_module_setup(lua_State* L, const char* app_path, const char* app_name, const char* app_config) {
-	int puss_index;
+int puss_lua_init(lua_State* L) {
+	// check already open
+	if( PUSS_LUA_GET(L, PUSS_KEY_PUSS)==LUA_TTABLE ) {
+		lua_setglobal(L, "puss");
+		return 0;
+	}
+	lua_pop(L, 1);
 
 	// setup builtins
 	if( luaL_loadbuffer(L, builtin_scripts, sizeof(builtin_scripts)-1, "@puss_builtin.lua") )
 		lua_error(L);
 
 	lua_newtable(L);	// puss
-	puss_index = lua_gettop(L);
 
 	lua_pushvalue(L, -1);
 	__puss_toolkit_sink__.state_set_key(L, PUSS_KEY_PUSS);
@@ -280,50 +284,44 @@ static void puss_module_setup(lua_State* L, const char* app_path, const char* ap
 
 	// fprintf(stderr, "!!!puss_module_setup %s %s %s\n", app_path, app_name, app_config);
 
-	lua_pushstring(L, app_path);
-	lua_setfield(L, puss_index, "_path");	// puss._path
+	lua_pushstring(L, __puss_toolkit_sink__.app_path);
+	lua_setfield(L, -2, "_path");		// puss._path
 
-	lua_pushstring(L, app_name);
-	lua_setfield(L, puss_index, "_self");	// puss._self
+	lua_pushstring(L, __puss_toolkit_sink__.app_name);
+	lua_setfield(L, -2, "_self");		// puss._self
 
-	lua_newtable(L);								// up[1]: plugins
-	lua_pushvalue(L, puss_index);
-	lua_setfield(L, puss_index, "puss");			// puss plugins["puss"] = puss-self
+	lua_newtable(L);					// up[1]: plugins
+	lua_pushvalue(L, -2);
+	lua_setfield(L, -2, "puss");		// puss plugins["puss"] = puss-self
 
 	lua_getglobal(L, "package");
 	assert( lua_type(L, -1)==LUA_TTABLE );
-	lua_getfield(L, -1, "loadlib");					// up[2]: package.loadlib
+	lua_getfield(L, -1, "loadlib");		// up[2]: package.loadlib
 	assert( lua_type(L, -1)==LUA_TFUNCTION );
 	lua_remove(L, -2);
 
-	lua_pushfstring(L, "%s/plugins/", app_path);	// up[3]: plugin_prefix
+	lua_pushfstring(L, "%s/plugins/", __puss_toolkit_sink__.app_path);	// up[3]: plugin_prefix
 #ifdef _WIN32
-	lua_pushfstring(L, "%s.dll", app_config);		// up[4]: plugin_suffix
+	lua_pushfstring(L, "%s.dll", __puss_toolkit_sink__.app_config);		// up[4]: plugin_suffix win32
 #else
-	lua_pushfstring(L, "%s.so", app_config);
+	lua_pushfstring(L, "%s.so", __puss_toolkit_sink__.app_config);		// up[4]: plugin_suffix unix
 #endif
 	lua_pushcclosure(L, _puss_lua_plugin_load, 4);
-	lua_setfield(L, puss_index, "load_plugin");			// puss.load_plugin
+	lua_setfield(L, -2, "load_plugin");	// puss.load_plugin
 
 	lua_pushcfunction(L, simple_luastate_create);
-	lua_setfield(L, puss_index, "simple_luastate_new");	// puss.simple_luastate_new
+	lua_setfield(L, -2, "simple_luastate_new");	// puss.simple_luastate_new
 
-	lua_assert(lua_gettop(L)==puss_index);	puss_conv_utils_reg(L);
-	lua_assert(lua_gettop(L)==puss_index);	puss_simple_pickle_reg(L);
-	lua_assert(lua_gettop(L)==puss_index);	puss_async_service_reg(L);
-	lua_assert(lua_gettop(L)==puss_index);	puss_thread_service_reg(L);
+	lua_call(L, 1, 0);	// call builtin-scripts
 
-	lua_assert(lua_gettop(L)==puss_index);	lua_call(L, 1, 0);	// call builtin-scripts
-}
+	// reg modules
+	PUSS_LUA_GET(L, PUSS_KEY_PUSS);
+	puss_reg_conv_utils(L);
+	puss_reg_simple_pickle(L);
+	puss_reg_async_service(L);
+	puss_reg_thread_service(L);
+	lua_pop(L, 1);
 
-int puss_lua_setup_base(lua_State* L) {
-	// check already open
-	if( PUSS_LUA_GET(L, PUSS_KEY_PUSS)==LUA_TTABLE ) {
-		lua_setglobal(L, "puss");
-	} else {
-		lua_pop(L, 1);
-		puss_module_setup(L, __puss_toolkit_sink__.app_path, __puss_toolkit_sink__.app_name, __puss_toolkit_sink__.app_config);
-	}
 	return 0;
 }
 
@@ -331,7 +329,13 @@ int puss_lua_setup_base(lua_State* L) {
 
 static lua_State* _default_puss_state_new(void) {
 	lua_State* L = luaL_newstate();
-	puss_lua_setup_base(L);
+	luaL_openlibs(L);
+	lua_pushcfunction(L, puss_lua_init);
+	if( lua_pcall(L, 0, 0, 0) ) {
+		fprintf(stderr, "[Puss] init failed: %s\n", lua_tostring(L, -1));
+		lua_close(L);
+		L = NULL;
+	}
 	return L;
 }
 

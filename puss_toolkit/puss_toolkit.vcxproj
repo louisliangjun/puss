@@ -70,6 +70,8 @@
     <None Include="thread_utils.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\include\puss_lua.h" />
+    <ClInclude Include="..\include\puss_macros.h" />
     <ClInclude Include="puss_toolkit.h" />
     <ClInclude Include="rbx_tree.h" />
   </ItemGroup>

@@ -433,7 +433,7 @@ static int thread_env_ensure(lua_State* L) {
 	return 0;
 }
 
-void puss_thread_service_reg(lua_State* L) {
+void puss_reg_thread_service(lua_State* L) {
 	int ret = PUSS_LUA_GET(L, PUSS_KEY_THREAD_ENV);
 	lua_pop(L, 1);
 	if( ret==LUA_TUSERDATA )

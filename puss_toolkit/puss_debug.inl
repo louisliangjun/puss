@@ -281,7 +281,7 @@ static void *_debug_alloc(void *ud, void *ptr, size_t osize, size_t nsize) {
 			env->main_addr = nptr;
 		}
 		++nptr;
-	} else if( ptr && (env->main_addr==ptr) ) {
+	} else if( ptr && (ptr==env->main_addr) && env->main_state ) {
 		debug_env_free(env);
 	}
 	return (void*)nptr;
@@ -1090,7 +1090,8 @@ static DebugEnv* lua_debugger_new(lua_Alloc f, void* ud) {
 	}
 	lua_pop(L, 1);
 	luaL_openlibs(env->debug_state);
-	puss_lua_setup_base(env->debug_state);
+	lua_pushcfunction(L, puss_lua_init);
+	lua_call(L, 0, 0);
 	return env;
 }
 
@@ -1158,3 +1159,19 @@ static inline void lua_debugger_update(lua_State* hostL) {
 	}
 }
 
+static inline void lua_debugger_attach(DebugEnv* env, lua_State* hostL) {
+	// support: puss.debug
+	if( !env )
+		return;
+
+	if( !hostL ) {
+		debug_env_free(env);
+		return;
+	}
+
+	env->main_state = hostL;
+	PUSS_LUA_GET(hostL, PUSS_KEY_PUSS);
+	lua_pushcfunction(hostL, lua_debugger_debug);
+	lua_setfield(hostL, -2, "debug");	// puss.debug
+	lua_pop(hostL, 1);
+}

@@ -11,8 +11,8 @@ PUSS_DECLS_BEGIN
 
 typedef enum _PussToolkitKey
 	{ PUSS_KEY_NULL
-	, PUSS_KEY_PUSS			// puss {table}
-	, PUSS_KEY_THREAD_ENV	// ThreadEnv
+	, PUSS_KEY_PUSS
+	, PUSS_KEY_THREAD_ENV
 	} PussToolkitKey;
 
 typedef int  (*PussKeyGet)(lua_State* L, PussToolkitKey key);
@@ -38,7 +38,7 @@ extern PussToolkitSink	__puss_toolkit_sink__;
 
 void	puss_toolkit_sink_init(int argc, char* argv[]);
 
-int		puss_lua_setup_base(lua_State* L);
+int		puss_lua_init(lua_State* L);
 
 #define	PUSS_LUA_GET(L, K)	((*(__puss_toolkit_sink__.state_get_key))((L), (K)))
 
@@ -48,12 +48,12 @@ size_t	puss_format_filename(char* fname);
 void*	puss_simple_pack(size_t* plen, lua_State* L, int start, int end);
 int		puss_simple_unpack(lua_State* L, const void* pkt, size_t len);
 
-// export Lua utils
+// puss builtin modules declare
 
-void	puss_conv_utils_reg(lua_State* L);
-void	puss_simple_pickle_reg(lua_State* L);
-void	puss_async_service_reg(lua_State* L);
-void	puss_thread_service_reg(lua_State* L);
+void	puss_reg_conv_utils(lua_State* L);
+void	puss_reg_simple_pickle(lua_State* L);
+void	puss_reg_async_service(lua_State* L);
+void	puss_reg_thread_service(lua_State* L);
 
 PUSS_DECLS_END
 
