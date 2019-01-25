@@ -168,102 +168,6 @@ static int _puss_lua_plugin_load(lua_State* L) {
 	return 1;
 }
 
-#define PUSS_KEY_SIMPLELUASTATE		"_@PussSimpleLuaState@_"
-
-typedef struct _SimpleLuaState {
-	lua_State*	L;
-} SimpleLuaState;
-
-static int simple_luastate_close(lua_State* L) {
-	SimpleLuaState* ud = (SimpleLuaState*)luaL_checkudata(L, 1, PUSS_KEY_SIMPLELUASTATE);
-	if( ud->L ) {
-		lua_close(ud->L);
-		ud->L = NULL;
-	}
-	return 0;
-}
-
-static int _luastate_pcall(lua_State* L) {
-	lua_State* from = (lua_State*)lua_touserdata(L, 1);
-	size_t len = 0;
-	void* pkt = puss_simple_pack(&len, from, 2, -1);
-	lua_settop(L, 0);
-	puss_simple_unpack(L, pkt, len);
-
-	lua_pushglobaltable(L);
-	lua_pushvalue(L, 1);
-	lua_gettable(L, -2);
-	lua_replace(L, 1);
-	lua_pop(L, 1);
-	lua_call(L, lua_gettop(L)-1, LUA_MULTRET);
-	return lua_gettop(L);
-}
-
-static int _luastate_reply(lua_State* L) {
-	lua_State* from = (lua_State*)lua_touserdata(L, 1);
-	int top = (int)lua_tointeger(L, 2);
-	size_t len = 0;
-	void* pkt = puss_simple_pack(&len, from, top, -1);
-	lua_settop(L, 0);
-	puss_simple_unpack(L, pkt, len);
-	return lua_gettop(L);
-}
-
-static int simple_luastate_pcall(lua_State* L) {
-	SimpleLuaState* ud = (SimpleLuaState*)luaL_checkudata(L, 1, PUSS_KEY_SIMPLELUASTATE);
-	lua_State* state = ud->L;
-	int top = lua_gettop(L);
-	int res;
-	if( !state ) {
-		lua_pushboolean(L, 0);
-		lua_pushstring(L, "lua state already free!");
-		return 2;
-	}
-	if( top < 2 ) {
-		lua_pushboolean(L, 0);
-		lua_pushstring(L, "no enought args!");
-		return 2;
-	}
-
-	top = lua_gettop(state);
-	PUSS_LUA_GET(state, PUSS_KEY_ERROR_HANDLE);
-	lua_pushcfunction(state, _luastate_pcall);
-	lua_pushlightuserdata(state, L);
-	res = lua_pcall(state, 1, LUA_MULTRET, top+1);
-	lua_settop(L, 0);
-	lua_pushboolean(L, res==LUA_OK);
-	lua_pushcfunction(L, _luastate_reply);
-	lua_pushlightuserdata(L, state);
-	lua_pushinteger(L, top+1);
-	res = lua_pcall(L, 2, LUA_MULTRET, 0);
-	lua_settop(state, top);
-	if( res ) {
-		lua_pushboolean(L, 0);
-		lua_replace(L, 1);
-	}
-	return lua_gettop(L);
-}
-
-static luaL_Reg simple_luastate_methods[] =
-	{ {"__gc", simple_luastate_close}
-	, {"close", simple_luastate_close}
-	, {"pcall", simple_luastate_pcall}
-	, {NULL, NULL}
-	};
-
-static int simple_luastate_create(lua_State* L) {
-	SimpleLuaState* ud = (SimpleLuaState*)lua_newuserdata(L, sizeof(SimpleLuaState));
-	memset(ud, 0, sizeof(SimpleLuaState));
-	if( luaL_newmetatable(L, PUSS_KEY_SIMPLELUASTATE) ) {
-		luaL_setfuncs(L, simple_luastate_methods, 0);
-		lua_pushvalue(L, -1);
-		lua_setfield(L, -2, "__index");
-	}
-	lua_setmetatable(L, -2);
-	ud->L = __puss_toolkit_sink__.state_new();
-	return 1;
-}
-
 static int _default_error_handle(lua_State* L) {
 	luaL_requiref(L, LUA_DBLIBNAME, luaopen_debug, 0);
 	if( lua_istable(L, -1) && lua_getfield(L, -1, "traceback")==LUA_TFUNCTION ) {
@@ -338,15 +242,13 @@ int puss_lua_init(lua_State* L) {
 	lua_pushcclosure(L, _puss_lua_plugin_load, 4);
 	lua_setfield(L, -2, "load_plugin");	// puss.load_plugin
 
-	lua_pushcfunction(L, simple_luastate_create);
-	lua_setfield(L, -2, "simple_luastate_new");	// puss.simple_luastate_new
-
 	lua_call(L, 1, 0);	// call builtin-scripts
 
 	// reg modules
 	PUSS_LUA_GET(L, PUSS_KEY_PUSS);
 	puss_reg_puss_utils(L);
 	puss_reg_simple_pickle(L);
+	puss_reg_simple_luastate(L);
 	puss_reg_async_service(L);
 	puss_reg_thread_service(L);
 	lua_pop(L, 1);

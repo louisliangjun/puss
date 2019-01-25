@@ -108,7 +108,7 @@ if select(1, ...)=='__miniline_thread__' then
 		-- print('search start: ', search_key)
 		local res = do_search(search_key)
 		-- print('search', search_key, #res)
-		puss.thread_event_notify('core.miniline', 'search_response', search_key, res)
+		puss.thread_notify('core.miniline', 'search_response', search_key, res)
 	end
 
 	return
@@ -134,6 +134,10 @@ shotcuts.register('miniline/open', 'Open Miniline', 'P', true, false, false, fal
 __exports.search_response = function(key, res)
 	-- print('result', key, res)
 	results = res or {}
+end
+
+__exports.search_thread_query = function(...)
+	return thread:query(...)
 end
 
 local MINILINE_FLAGS = ( ImGuiWindowFlags_NoMove

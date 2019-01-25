@@ -646,7 +646,7 @@ local last_update_time = os.clock()
 
 local function do_update()
 	for i=1,64 do
-		local ok, more = puss.trace_pcall(puss.thread_event_dispatch, on_thread_event)
+		local ok, more = puss.trace_pcall(puss.thread_dispatch, on_thread_event)
 		if ok and (not more) then break end
 	end
 
@@ -701,4 +701,3 @@ __exports.update = function()
 	imgui.update(do_update)
 	return run_sign
 end
-

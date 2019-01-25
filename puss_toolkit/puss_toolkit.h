@@ -55,6 +55,7 @@ int		puss_simple_unpack(lua_State* L, const void* pkt, size_t len);
 
 void	puss_reg_puss_utils(lua_State* L);
 void	puss_reg_simple_pickle(lua_State* L);
+void	puss_reg_simple_luastate(lua_State* L);
 void	puss_reg_async_service(lua_State* L);
 void	puss_reg_thread_service(lua_State* L);
 

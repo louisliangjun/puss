@@ -28,6 +28,7 @@ struct _QEnv {
 	QEnv*			qenv_children;	// list head
 	QEnv*			qenv_sibling;	// list next
 
+	// task queue
 	PussMutex		mutex;
 #ifdef _WIN32
 	HANDLE			ev;
@@ -38,9 +39,10 @@ struct _QEnv {
 	TMsg*			head;
 	TMsg*			tail;
 	TMsg			kill;
-	lua_State*		L;
-	lua_CFunction	event_handle;	// function event_handle(TMsg** ptask);	-- now simple use ptask==nil as idle
 
+	lua_State*		L;
+	uint32_t		wait_time;
+	lua_CFunction	event_handle;	// function event_handle(TMsg** ptask);	-- now simple use ptask==nil as idle
 };
 
 typedef struct _PussLuaThread {
@@ -297,10 +299,9 @@ static PUSS_THREAD_DECLARE(thread_main, arg) {
 	lua_State* L = q->L;
 	TMsg* msg = NULL;
 	TMsg* next = NULL;
-	uint32_t wait_time = 1000;	// TODO : idle interval
 
 	for( ; msg!=&(q->kill); msg=next ) {
-		next = msg ? msg->next : qenv_bpop_all(q, wait_time);
+		next = msg ? msg->next : qenv_bpop_all(q, q->wait_time);
 		if( msg ) {
 			msg->next = NULL;
 			lua_settop(L, 0);
@@ -416,6 +417,50 @@ static int puss_lua_thread_create(lua_State* L) {
 	return 1;
 }
 
+static int simple_unpack_msg(lua_State* L) {
+	TMsg* msg = (TMsg*)lua_touserdata(L, 1);
+	puss_simple_unpack(L, msg->buf, msg->len);
+	return lua_gettop(L) - 1;
+}
+
+static int puss_lua_thread_dispatch(lua_State* L) {
+	QEnv* self_env = NULL;
+	TMsg* msg = NULL;
+	int res = LUA_OK;
+	luaL_checktype(L, 1, LUA_TFUNCTION);	// error handle
+	if( PUSS_LUA_GET(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
+		self_env = (QEnv*)lua_touserdata(L, -1);
+	lua_pop(L, 1);
+	if( !self_env )
+		return 0;
+
+	msg = qenv_pop(self_env);
+	if( !msg )
+		return 0;
+
+	lua_pushcfunction(L, simple_unpack_msg);
+	lua_pushlightuserdata(L, msg);
+	res = lua_pcall(L, 1, LUA_MULTRET, 0);
+	free(msg);
+	if( res )
+		return lua_error(L);
+
+	lua_call(L, lua_gettop(L)-1, LUA_MULTRET);
+	return lua_gettop(L);
+}
+
+static int puss_lua_thread_setup(lua_State* L) {
+	QEnv* self_env = NULL;
+	uint32_t wait_time = (uint32_t)luaL_checkinteger(L, 1);
+	if( PUSS_LUA_GET(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
+		self_env = (QEnv*)lua_touserdata(L, -1);
+	lua_pop(L, 1);
+	if( !self_env )
+		return 0;
+	self_env->wait_time = wait_time;
+	return 0;
+}
+
 static int puss_lua_thread_notify(lua_State* L) {
 	QEnv* self_env = NULL;
 	TMsg* msg = NULL;
@@ -449,42 +494,11 @@ static int puss_lua_thread_notify(lua_State* L) {
 	return 1;
 }
 
-static int simple_unpack_msg(lua_State* L) {
-	TMsg* msg = (TMsg*)lua_touserdata(L, 1);
-	puss_simple_unpack(L, msg->buf, msg->len);
-	return lua_gettop(L) - 1;
-}
-
-static int puss_lua_thread_dispatch(lua_State* L) {
-	QEnv* self_env = NULL;
-	TMsg* msg = NULL;
-	int res = LUA_OK;
-	luaL_checktype(L, 1, LUA_TFUNCTION);	// error handle
-	if( PUSS_LUA_GET(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
-		self_env = (QEnv*)lua_touserdata(L, -1);
-	lua_pop(L, 1);
-	if( !self_env )
-		return 0;
-
-	msg = qenv_pop(self_env);
-	if( !msg )
-		return 0;
-
-	lua_pushcfunction(L, simple_unpack_msg);
-	lua_pushlightuserdata(L, msg);
-	res = lua_pcall(L, 1, LUA_MULTRET, 0);
-	free(msg);
-	if( res )
-		return lua_error(L);
-
-	lua_call(L, lua_gettop(L)-1, LUA_MULTRET);
-	return lua_gettop(L);
-}
-
 static luaL_Reg thread_service_methods[] =
 	{ {"thread_create", puss_lua_thread_create}
-	, {"thread_event_notify", puss_lua_thread_notify}
-	, {"thread_event_dispatch", puss_lua_thread_dispatch}
+	, {"thread_dispatch", puss_lua_thread_dispatch}
+	, {"thread_setup", puss_lua_thread_setup}
+	, {"thread_notify", puss_lua_thread_notify}
 	, {NULL, NULL}
 	};
 

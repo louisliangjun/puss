@@ -18,5 +18,6 @@
     <ClCompile Include="puss_thread_service.c" />
     <ClCompile Include="puss_lua.c" />
     <ClCompile Include="puss_utils.c" />
+    <ClCompile Include="simple_luastate.c" />
   </ItemGroup>
 </Project>
