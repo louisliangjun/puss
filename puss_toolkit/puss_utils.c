@@ -279,7 +279,39 @@ static int puss_lua_filename_format(lua_State* L) {
 	}
 #endif
 
-static luaL_Reg conv_utils_methods[] =
+int puss_get_value(lua_State* L, const char* path) {
+	int top = lua_gettop(L);
+	const char* ps = path;
+	const char* pe = ps;
+	int tp = LUA_TTABLE;
+
+	lua_pushglobaltable(L);
+	for( ; *pe; ++pe ) {
+		if( *pe=='.' ) {
+			if( tp!=LUA_TTABLE )
+				goto not_found;
+			lua_pushlstring(L, ps, pe-ps);
+			tp = lua_rawget(L, -2);
+			lua_remove(L, -2);
+			ps = pe+1;
+		}
+	}
+
+	if( ps!=pe && tp==LUA_TTABLE ) {
+		lua_pushlstring(L, ps, pe-ps);
+		tp = lua_rawget(L, -2);
+		lua_remove(L, -2);
+		return tp;
+	}
+
+not_found:
+	lua_settop(L, top);
+	lua_pushnil(L);
+	tp = LUA_TNIL;
+	return tp;
+}
+
+static luaL_Reg puss_utils_methods[] =
 	{ {"filename_format", puss_lua_filename_format}
 	, {"file_list", puss_lua_file_list}
 	, {"local_to_utf8", puss_lua_local_to_utf8}
@@ -287,6 +319,6 @@ static luaL_Reg conv_utils_methods[] =
 	, {NULL, NULL}
 	};
 
-void puss_reg_conv_utils(lua_State* L) {
-	luaL_setfuncs(L, conv_utils_methods, 0);
+void puss_reg_puss_utils(lua_State* L) {
+	luaL_setfuncs(L, puss_utils_methods, 0);
 }

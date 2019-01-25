@@ -76,33 +76,19 @@ static int puss_dummy_main(lua_State* L) {
 	return 0;
 }
 
-static void push_error_str(lua_State* L) {
-	if( lua_getglobal(L, "debug")==LUA_TTABLE && lua_getfield(L, -1, "traceback")==LUA_TFUNCTION ) {
-		lua_pushvalue(L, 1);
-		lua_call(L, 1, 1);
-	} else {
-		lua_pushvalue(L, 1);
-	}
-}
-
-static int puss_error_handle(lua_State* L) {
-	int top = lua_gettop(L);
-	push_error_str(L);
-	fprintf(stderr, "[Error] %s\n", luaL_tolstring(L, -1, NULL));
-	lua_settop(L, top);
-	return lua_gettop(L);
-}
-
 #ifdef _WIN32
 	static int puss_error_handle_win(lua_State* L) {
-		int top = lua_gettop(L);
-		push_error_str(L);
-		MessageBoxA(NULL, lua_tostring(L, -1), "ERROR", MB_OK|MB_ICONERROR);
-		lua_settop(L, top);
-		return lua_gettop(L);
+		luaL_requiref(L, LUA_DBLIBNAME, luaopen_debug, 0);
+		if( lua_istable(L, -1) && lua_getfield(L, -1, "traceback")==LUA_TFUNCTION ) {
+			lua_pushvalue(L, 1);
+			lua_call(L, 1, 1);
+		} else {
+			lua_settop(L, 1);
+		}
+		MessageBoxA(NULL, lua_tostring(L, -1), "PussError", MB_OK|MB_ICONERROR);
+		lua_settop(L, 1);
+		return 1;
 	}
-#else
-	#define puss_error_handle_win	puss_error_handle
 #endif
 
 static const char* _push_script_filename(lua_State* L, const char* script) {
@@ -110,13 +96,11 @@ static const char* _push_script_filename(lua_State* L, const char* script) {
 }
 
 static int puss_init(lua_State* L) {
-	int argc = (int)lua_tointeger(L, 1);
-	const char** argv = (const char**)lua_touserdata(L, 2);
 	int is_script_file = 0;
 	const char* script = NULL;
 
 	PUSS_LUA_GET(L, PUSS_KEY_PUSS);
-	script = puss_push_parse_args(L, &is_script_file, argc, argv);
+	script = puss_push_parse_args(L, &is_script_file, __puss_toolkit_sink__.app_argc, __puss_toolkit_sink__.app_argv);
 	lua_setfield(L, -2, "_args");			// puss._args
 	lua_pushboolean(L, is_script_file);
 	lua_setfield(L, -2, "_is_script_file");	// puss._is_script_file
@@ -143,7 +127,6 @@ int main(int argc, char* argv[]) {
 	const char* console_mode = puss_args_lookup(argc, argv, "--console");
 	int reboot_as_debug_level = 0;
 	lua_State* L = NULL;
-	int res = 0;
 	puss_toolkit_sink_init(argc, argv);
 	__puss_toolkit_sink__.app_debug_level = (debug_level==NULL) ? 0 : (*debug_level=='\0' ? 1 : (int)strtol(debug_level, NULL, 10));
 	__puss_toolkit_sink__.state_new = puss_lua_newstate;
@@ -160,22 +143,19 @@ restart_label:
 	reboot_as_debug_level = (__puss_toolkit_sink__.app_debug_level==0);
 
 	L = puss_lua_newstate();
-	lua_getglobal(L, "xpcall");
-	lua_pushcfunction(L, puss_init);
-	lua_pushcfunction(L, console_mode ? puss_error_handle : puss_error_handle_win);
-	lua_pushinteger(L, argc);
-	lua_pushlightuserdata(L, argv);
-	lua_call(L, 4, 2);
-	res = lua_toboolean(L, -2) ? 0 : 1;
-	if( res ) {
-		fprintf(stderr, "puss_init() failed: %s\n", lua_tostring(L, -1));
-	} else {
-		lua_getglobal(L, "xpcall");
-		lua_replace(L, -3);
-		lua_pushcfunction(L, console_mode ? puss_error_handle : puss_error_handle_win);
-		lua_call(L, 2, 1);
-		res = lua_toboolean(L, -1) ? 0 : 2;
+	lua_settop(L, 0);
+	PUSS_LUA_GET(L, PUSS_KEY_ERROR_HANDLE);
+#ifdef _WIN32
+	if( !console_mode ) {
+		lua_pop(L, 1);
+		lua_pushcfunction(L, puss_error_handle_win);
 	}
+#endif
+	lua_pushcfunction(L, puss_init);
+	if( lua_pcall(L, 0, 1, 1) )
+		return 1;
+	if( lua_pcall(L, 0, 1, 1) )
+		return 2;
 	if( reboot_as_debug_level ) {
 		PUSS_LUA_GET(L, PUSS_KEY_PUSS);
 		lua_getfield(L, -1, "_reboot_as_debug_level");
@@ -188,6 +168,6 @@ restart_label:
 	if( reboot_as_debug_level )
 		goto restart_label;
 
-	return res;
+	return 0;
 }
 

@@ -12,6 +12,8 @@ PUSS_DECLS_BEGIN
 typedef enum _PussToolkitKey
 	{ PUSS_KEY_NULL
 	, PUSS_KEY_PUSS
+	, PUSS_KEY_CONST_TABLE
+	, PUSS_KEY_ERROR_HANDLE
 	, PUSS_KEY_THREAD_ENV
 	} PussToolkitKey;
 
@@ -45,12 +47,13 @@ int		puss_lua_init(lua_State* L);
 // export C utils
 
 size_t	puss_format_filename(char* fname);
+int		puss_get_value(lua_State* L, const char* path);
 void*	puss_simple_pack(size_t* plen, lua_State* L, int start, int end);
 int		puss_simple_unpack(lua_State* L, const void* pkt, size_t len);
 
 // puss builtin modules declare
 
-void	puss_reg_conv_utils(lua_State* L);
+void	puss_reg_puss_utils(lua_State* L);
 void	puss_reg_simple_pickle(lua_State* L);
 void	puss_reg_async_service(lua_State* L);
 void	puss_reg_thread_service(lua_State* L);

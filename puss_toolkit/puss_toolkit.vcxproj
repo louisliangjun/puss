@@ -76,7 +76,7 @@
     <ClInclude Include="rbx_tree.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="conv_utils.c" />
+    <ClCompile Include="puss_utils.c" />
     <ClCompile Include="puss_async_service.c" />
     <ClCompile Include="puss_lua.c" />
     <ClCompile Include="puss_thread_service.c" />

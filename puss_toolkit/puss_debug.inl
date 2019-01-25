@@ -122,38 +122,6 @@ static lua_Integer cond_bp_hash(const FileInfo* finfo, int line) {
 	return (lua_Integer)PUSS_DEBUG_HASH(PUSS_DEBUG_HASH(~0, &finfo, sizeof(finfo)), &line, sizeof(line));
 }
 
-static int get_value(lua_State* L, const char* path) {
-	int top = lua_gettop(L);
-	const char* ps = path;
-	const char* pe = ps;
-	int tp = LUA_TTABLE;
-
-	lua_pushglobaltable(L);
-	for( ; *pe; ++pe ) {
-		if( *pe=='.' ) {
-			if( tp!=LUA_TTABLE )
-				goto not_found;
-			lua_pushlstring(L, ps, pe-ps);
-			tp = lua_rawget(L, -2);
-			lua_remove(L, -2);
-			ps = pe+1;
-		}
-	}
-
-	if( ps!=pe && tp==LUA_TTABLE ) {
-		lua_pushlstring(L, ps, pe-ps);
-		tp = lua_rawget(L, -2);
-		lua_remove(L, -2);
-		return tp;
-	}
-
-not_found:
-	lua_settop(L, top);
-	lua_pushnil(L);
-	tp = LUA_TNIL;
-	return tp;
-}
-
 static void debug_handle_unref(DebugEnv* env) {
 	lua_State* L = env->debug_state;
 	if( env->debug_handle!=LUA_NOREF ) {
@@ -457,7 +425,7 @@ typedef struct _HostInvokeUD {
 static int do_host_invoke(lua_State* L) {
 	HostInvokeUD* ud = (HostInvokeUD*)lua_touserdata(L, 1);
 	lua_settop(L, 0);
-	get_value(L, ud->func);
+	puss_get_value(L, ud->func);
 	puss_simple_unpack(L, ud->args, ud->size);
 	lua_call(L, lua_gettop(L)-1, LUA_MULTRET);
 	return lua_gettop(L);
@@ -1026,7 +994,7 @@ static int lua_debug_capture_error(lua_State* L) {
 
 		if( lua_type(L, 2)==LUA_TSTRING ) {
 			int top = lua_gettop(env->main_state);
-			if( get_value(env->main_state, lua_tostring(L, 2))==LUA_TFUNCTION ) {
+			if( puss_get_value(env->main_state, lua_tostring(L, 2))==LUA_TFUNCTION ) {
 				f = (const LClosure*)(lua_iscfunction(env->main_state, -1) ? NULL : lua_topointer(env->main_state, -1));
 			}
 			lua_settop(env->main_state, top);

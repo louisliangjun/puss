@@ -166,7 +166,7 @@ static int async_task_continue(lua_State *L, int status, lua_KContext ctx) {
 
 static int async_task_main(lua_State* L) {
 	assert( lua_gettop(L) == 0 );
-	lua_getuservalue(L, SERVICE_INDEX);
+	PUSS_LUA_GET(L, PUSS_KEY_ERROR_HANDLE);
 	assert( lua_isfunction(L, -1) );
 	return lua_yieldk(L, LUA_MULTRET, 0, async_task_continue);
 }
@@ -231,20 +231,6 @@ static int async_task_resume(lua_State* L, AsyncTaskService* svs, AsyncTask* tas
 
 	async_service_destroy_co(L, svs, task);
 	return 0;
-}
-
-static int default_error_handle(lua_State* L) {
-	fprintf(stderr, "[AsyncTaskError] %s\n", luaL_tolstring(L, -1, NULL));
-	return lua_gettop(L);
-}
-
-static int lua_async_service_logerr_handle(lua_State* L) {
-	if( lua_isfunction(L, 1) ) {
-		lua_pushvalue(L, 1);
-		lua_setuservalue(L, SERVICE_INDEX);
-	}
-	lua_getuservalue(L, SERVICE_INDEX);
-	return 1;
 }
 
 static int lua_async_service_get_task_count(lua_State* L) {
@@ -530,7 +516,7 @@ static int lua_async_task_trace_pcall_noyield(lua_State* L) {
 	if( !task )
 		return luaL_error(L, "MUST in async task thread!");
 	lua_pop(L, 1);
-	lua_getuservalue(L, SERVICE_INDEX);
+	PUSS_LUA_GET(L, PUSS_KEY_ERROR_HANDLE);
 	lua_insert(L, 1);
 	lua_pushboolean(L, lua_pcall(L, lua_gettop(L)-2, LUA_MULTRET, 1)==LUA_OK);
 	lua_replace(L, 1);
@@ -540,7 +526,6 @@ static int lua_async_task_trace_pcall_noyield(lua_State* L) {
 static luaL_Reg async_task_service_methods[] =
 	{ {"async_service_get_task_count", lua_async_service_get_task_count}
 	, {"async_service_collectgarbage", lua_async_service_collectgarbage}
-	, {"async_service_logerr_handle", lua_async_service_logerr_handle}
 	, {"async_service_run", lua_async_service_run}
 	, {"async_service_kill", lua_async_service_kill}
 	, {"async_service_wakeup", lua_async_service_wakeup}
@@ -562,9 +547,6 @@ void puss_reg_async_service(lua_State* L) {
 	memset(svs, 0, sizeof(AsyncTaskService));
 	rbx_init(&(svs->timers));
 	grp_list_init(&(svs->sleep_group));
-
-	lua_pushcfunction(L, default_error_handle);
-	lua_setuservalue(L, -2);
 
 	svs->dummy_work_task.timeout = TIMEOUT_WORK;
 	timer_queue_insert(svs, &(svs->dummy_work_task));

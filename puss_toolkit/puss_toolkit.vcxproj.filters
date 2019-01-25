@@ -12,11 +12,11 @@
     <ClInclude Include="..\include\puss_macros.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="conv_utils.c" />
     <ClCompile Include="puss_async_service.c" />
     <ClCompile Include="rbx_tree.c" />
     <ClCompile Include="simple_pickle.c" />
     <ClCompile Include="puss_thread_service.c" />
     <ClCompile Include="puss_lua.c" />
+    <ClCompile Include="puss_utils.c" />
   </ItemGroup>
 </Project>

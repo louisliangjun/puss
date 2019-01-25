@@ -110,7 +110,7 @@ static void puss_interface_register(lua_State* L, const char* name, void* iface)
 // consts
 // 
 static void puss_push_consts_table(lua_State* L) {
-	lua_pushglobaltable(L);
+	PUSS_LUA_GET(L, PUSS_KEY_CONST_TABLE);
 }
 
 static PussInterface puss_interface =
@@ -226,9 +226,10 @@ static int simple_luastate_pcall(lua_State* L) {
 	}
 
 	top = lua_gettop(state);
+	PUSS_LUA_GET(state, PUSS_KEY_ERROR_HANDLE);
 	lua_pushcfunction(state, _luastate_pcall);
 	lua_pushlightuserdata(state, L);
-	res = lua_pcall(state, 1, LUA_MULTRET, 0);
+	res = lua_pcall(state, 1, LUA_MULTRET, top+1);
 	lua_settop(L, 0);
 	lua_pushboolean(L, res==LUA_OK);
 	lua_pushcfunction(L, _luastate_reply);
@@ -263,7 +264,35 @@ static int simple_luastate_create(lua_State* L) {
 	return 1;
 }
 
+static int _default_error_handle(lua_State* L) {
+	luaL_requiref(L, LUA_DBLIBNAME, luaopen_debug, 0);
+	if( lua_istable(L, -1) && lua_getfield(L, -1, "traceback")==LUA_TFUNCTION ) {
+		lua_pushvalue(L, 1);
+		lua_call(L, 1, 1);
+		fprintf(stderr, "[PussError] %s\n", lua_tostring(L, -1));
+		lua_settop(L, 1);
+	} else {
+		lua_settop(L, 1);
+		fprintf(stderr, "[PussError] %s\n", lua_tostring(L, -1));
+	}
+	return 1;
+}
+
 int puss_lua_init(lua_State* L) {
+	// check consts table
+	if( PUSS_LUA_GET(L, PUSS_KEY_CONST_TABLE)!=LUA_TTABLE ) {
+		lua_pushglobaltable(L);	// default use _G as CONST table
+		__puss_toolkit_sink__.state_set_key(L, PUSS_KEY_CONST_TABLE);
+	}
+	lua_pop(L, 1);
+
+	// check error handle
+	if( PUSS_LUA_GET(L, PUSS_KEY_ERROR_HANDLE)!=LUA_TFUNCTION ) {
+		lua_pushcfunction(L, _default_error_handle);	
+		__puss_toolkit_sink__.state_set_key(L, PUSS_KEY_ERROR_HANDLE);
+	}
+	lua_pop(L, 1);
+
 	// check already open
 	if( PUSS_LUA_GET(L, PUSS_KEY_PUSS)==LUA_TTABLE ) {
 		lua_setglobal(L, "puss");
@@ -316,7 +345,7 @@ int puss_lua_init(lua_State* L) {
 
 	// reg modules
 	PUSS_LUA_GET(L, PUSS_KEY_PUSS);
-	puss_reg_conv_utils(L);
+	puss_reg_puss_utils(L);
 	puss_reg_simple_pickle(L);
 	puss_reg_async_service(L);
 	puss_reg_thread_service(L);

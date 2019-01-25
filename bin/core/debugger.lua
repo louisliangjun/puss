@@ -635,13 +635,27 @@ local function show_main_window()
 	end
 end
 
+local function on_thread_event(module, event, ...)
+	-- print('on_thread_event', module, event, ...)
+	local m = puss.import(module)
+	if m then m[event](...) end
+	return true	-- nned more
+end
+
 local last_update_time = os.clock()
 
 local function do_update()
-	local now = os.clock()
-	local delta = ((now - last_update_time) * 1000) // 1
-	last_update_time = now
-	puss.async_service_update(delta, 32)
+	for i=1,64 do
+		local ok, more = puss.trace_pcall(puss.thread_event_dispatch, on_thread_event)
+		if ok and (not more) then break end
+	end
+
+	do
+		local now = os.clock()
+		local delta = ((now - last_update_time) * 1000) // 1
+		last_update_time = now
+		puss.async_service_update(delta, 32)
+	end
 
 	imgui.protect_pcall(show_main_window)
 
@@ -672,7 +686,6 @@ end
 refresh_root_folders()
 
 __exports.init = function()
-	puss.async_service_logerr_handle(puss.logerr_handle())
 	imgui.create('Puss - Debugger', 1024, 768, 'puss_debugger.ini', function()
 		local font_name = puss._path .. '/fonts/mono.ttf'
 		imgui.AddFontFromFileTTF(font_name, 14, 'Chinese')
