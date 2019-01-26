@@ -22,7 +22,7 @@ typedef void (*PussKeySet)(lua_State* L, PussToolkitKey key);
 
 typedef lua_State* (*PussStateNew)(void);
 
-typedef struct _PussToolkitSink {
+typedef struct _PussConfig {
 	int				app_argc;
 	char**			app_argv;
 
@@ -34,15 +34,15 @@ typedef struct _PussToolkitSink {
 	PussStateNew	state_new;
 	PussKeyGet		state_get_key;
 	PussKeySet		state_set_key;
-} PussToolkitSink;
+} PussConfig;
 
-extern PussToolkitSink	__puss_toolkit_sink__;
+extern PussConfig	__puss_config__;
 
-void	puss_toolkit_sink_init(int argc, char* argv[]);
+void	puss_config_init(int argc, char* argv[]);
 
 int		puss_lua_init(lua_State* L);
 
-#define	PUSS_LUA_GET(L, K)	((*(__puss_toolkit_sink__.state_get_key))((L), (K)))
+#define	PUSS_LUA_GET(L, K)	((*(__puss_config__.state_get_key))((L), (K)))
 
 // export C utils
 

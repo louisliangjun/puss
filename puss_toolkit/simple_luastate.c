@@ -101,7 +101,7 @@ static int simple_luastate_new(lua_State* L) {
 		lua_setfield(L, -2, "__index");
 	}
 	lua_setmetatable(L, -2);
-	ud->L = __puss_toolkit_sink__.state_new();
+	ud->L = __puss_config__.state_new();
 	return 1;
 }
 

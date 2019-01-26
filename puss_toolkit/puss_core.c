@@ -1,4 +1,4 @@
-// puss_lua.c
+// puss_core.c
 
 const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 	"local puss = ...\n"
@@ -186,14 +186,14 @@ int puss_lua_init(lua_State* L) {
 	// check consts table
 	if( PUSS_LUA_GET(L, PUSS_KEY_CONST_TABLE)!=LUA_TTABLE ) {
 		lua_pushglobaltable(L);	// default use _G as CONST table
-		__puss_toolkit_sink__.state_set_key(L, PUSS_KEY_CONST_TABLE);
+		__puss_config__.state_set_key(L, PUSS_KEY_CONST_TABLE);
 	}
 	lua_pop(L, 1);
 
 	// check error handle
 	if( PUSS_LUA_GET(L, PUSS_KEY_ERROR_HANDLE)!=LUA_TFUNCTION ) {
 		lua_pushcfunction(L, _default_error_handle);	
-		__puss_toolkit_sink__.state_set_key(L, PUSS_KEY_ERROR_HANDLE);
+		__puss_config__.state_set_key(L, PUSS_KEY_ERROR_HANDLE);
 	}
 	lua_pop(L, 1);
 
@@ -211,16 +211,16 @@ int puss_lua_init(lua_State* L) {
 	lua_newtable(L);	// puss
 
 	lua_pushvalue(L, -1);
-	__puss_toolkit_sink__.state_set_key(L, PUSS_KEY_PUSS);
+	__puss_config__.state_set_key(L, PUSS_KEY_PUSS);
 	lua_pushvalue(L, -1);
 	lua_setglobal(L, "puss");	// set to _G.puss
 
 	// fprintf(stderr, "!!!puss_module_setup %s %s %s\n", app_path, app_name, app_config);
 
-	lua_pushstring(L, __puss_toolkit_sink__.app_path);
+	lua_pushstring(L, __puss_config__.app_path);
 	lua_setfield(L, -2, "_path");		// puss._path
 
-	lua_pushstring(L, __puss_toolkit_sink__.app_name);
+	lua_pushstring(L, __puss_config__.app_name);
 	lua_setfield(L, -2, "_self");		// puss._self
 
 	lua_newtable(L);					// up[1]: plugins
@@ -233,11 +233,11 @@ int puss_lua_init(lua_State* L) {
 	assert( lua_type(L, -1)==LUA_TFUNCTION );
 	lua_remove(L, -2);
 
-	lua_pushfstring(L, "%s/plugins/", __puss_toolkit_sink__.app_path);	// up[3]: plugin_prefix
+	lua_pushfstring(L, "%s/plugins/", __puss_config__.app_path);	// up[3]: plugin_prefix
 #ifdef _WIN32
-	lua_pushfstring(L, "%s.dll", __puss_toolkit_sink__.app_config);		// up[4]: plugin_suffix win32
+	lua_pushfstring(L, "%s.dll", __puss_config__.app_config);		// up[4]: plugin_suffix win32
 #else
-	lua_pushfstring(L, "%s.so", __puss_toolkit_sink__.app_config);		// up[4]: plugin_suffix unix
+	lua_pushfstring(L, "%s.so", __puss_config__.app_config);		// up[4]: plugin_suffix unix
 #endif
 	lua_pushcclosure(L, _puss_lua_plugin_load, 4);
 	lua_setfield(L, -2, "load_plugin");	// puss.load_plugin
@@ -271,12 +271,12 @@ static lua_State* _default_puss_state_new(void) {
 }
 
 static int _default_puss_key_get(lua_State* L, PussToolkitKey key) {
-	char* r = (char*)&__puss_toolkit_sink__;
+	char* r = (char*)&__puss_config__;
 	return lua_rawgetp(L, LUA_REGISTRYINDEX, r+key);
 }
 
 static void _default_puss_key_set(lua_State* L, PussToolkitKey key) {
-	char* r = (char*)&__puss_toolkit_sink__;
+	char* r = (char*)&__puss_config__;
 	lua_rawsetp(L, LUA_REGISTRYINDEX, r+key);
 }
 
@@ -286,7 +286,7 @@ static char _default_app_config[16] = { 0 };
 static char _default_arg0[] = { '.', '/', 'p', 'u', 's', 's', 0 };
 static char* _default_args[2] = { _default_arg0, NULL };
 
-PussToolkitSink	__puss_toolkit_sink__ =
+PussConfig	__puss_config__ =
 	{ 1
 	, _default_args
 	, "."
@@ -300,13 +300,13 @@ PussToolkitSink	__puss_toolkit_sink__ =
 
 static char _default_path[DEFAULT_PATH_SIZE] = { 0 };
 
-void puss_toolkit_sink_init(int argc, char* argv[]) {
+void puss_config_init(int argc, char* argv[]) {
 	char* pth = _default_path;
 	int len = 0;
 	char* p;
 
-	__puss_toolkit_sink__.app_argc = argc;
-	__puss_toolkit_sink__.app_argv = argv;
+	__puss_config__.app_argc = argc;
+	__puss_config__.app_argv = argv;
 
 #ifdef _WIN32
 	len = (int)GetModuleFileNameA(0, pth, DEFAULT_PATH_SIZE-32);
@@ -328,9 +328,9 @@ void puss_toolkit_sink_init(int argc, char* argv[]) {
 		pth[len] = '\0';
 	} else {
 		// try use argv[0]
-		len = (int)strlen(__puss_toolkit_sink__.app_argv[0]);
+		len = (int)strlen(__puss_config__.app_argv[0]);
 		if( len >= DEFAULT_PATH_SIZE )	exit(1);
-		strcpy(pth, __puss_toolkit_sink__.app_argv[0]);
+		strcpy(pth, __puss_config__.app_argv[0]);
 	}
 #endif
 
@@ -344,8 +344,8 @@ void puss_toolkit_sink_init(int argc, char* argv[]) {
 	if( len <= 0 )
 		return;
 
-	__puss_toolkit_sink__.app_path = pth;
-	__puss_toolkit_sink__.app_name = pth+len+1;
+	__puss_config__.app_path = pth;
+	__puss_config__.app_name = pth+len+1;
 
 	// fetch config from filename <app-CONFIG>, in win32 <app-CONFIG.exe>
 	{
@@ -374,7 +374,7 @@ void puss_toolkit_sink_init(int argc, char* argv[]) {
 
 			memcpy(_default_app_config, p, n);
 			_default_app_config[n] = '\0';
-			__puss_toolkit_sink__.app_config = _default_app_config;
+			__puss_config__.app_config = _default_app_config;
 			break;
 		}
 	}

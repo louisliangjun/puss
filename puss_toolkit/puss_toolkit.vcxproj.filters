@@ -8,16 +8,14 @@
   <ItemGroup>
     <ClInclude Include="rbx_tree.h" />
     <ClInclude Include="puss_toolkit.h" />
-    <ClInclude Include="..\include\puss_lua.h" />
-    <ClInclude Include="..\include\puss_macros.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="puss_async_service.c" />
     <ClCompile Include="rbx_tree.c" />
     <ClCompile Include="simple_pickle.c" />
-    <ClCompile Include="puss_thread_service.c" />
-    <ClCompile Include="puss_lua.c" />
     <ClCompile Include="puss_utils.c" />
     <ClCompile Include="simple_luastate.c" />
+    <ClCompile Include="async_service.c" />
+    <ClCompile Include="thread_service.c" />
+    <ClCompile Include="puss_core.c" />
   </ItemGroup>
 </Project>

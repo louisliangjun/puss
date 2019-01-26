@@ -384,7 +384,7 @@ static int puss_lua_thread_create(lua_State* L) {
 	}
 	lua_setmetatable(L, -2);
 
-	new_state = __puss_toolkit_sink__.state_new();
+	new_state = __puss_config__.state_new();
 
 	if( PUSS_LUA_GET(new_state, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
 		new_env = (QEnv*)lua_touserdata(new_state, -1);
@@ -513,7 +513,7 @@ static int thread_env_ensure(lua_State* L) {
 	lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD);
 	env->L = lua_tothread(L, -1);
 	lua_pop(L, 1);
-	__puss_toolkit_sink__.state_set_key(L, PUSS_KEY_THREAD_ENV);
+	__puss_config__.state_set_key(L, PUSS_KEY_THREAD_ENV);
 	return 0;
 }
 

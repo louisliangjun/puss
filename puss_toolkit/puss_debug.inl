@@ -1096,7 +1096,7 @@ static int lua_debugger_debug(lua_State* hostL) {
 		if( debugger_script ) {
 			lua_pushstring(L, debugger_script);
 		} else {
-			lua_pushfstring(L, "%s/core/dbgsvr.lua", __puss_toolkit_sink__.app_path);
+			lua_pushfstring(L, "%s/core/dbgsvr.lua", __puss_config__.app_path);
 		}
 		lua_pushvalue(L, -1);
 		lua_setfield(L, -4, "_debug_filename");

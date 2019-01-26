@@ -33,7 +33,7 @@ static lua_State* puss_lua_newstate(void) {
 	lua_Alloc alloc = _default_alloc;
 	DebugEnv* dbg = NULL;
 	lua_State* L;
-	if( __puss_toolkit_sink__.app_debug_level ) {
+	if( __puss_config__.app_debug_level ) {
 		dbg = lua_debugger_new(_default_alloc, NULL);
 		if( !dbg ) return NULL;
 		alloc = _debug_alloc;
