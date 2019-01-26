@@ -166,7 +166,7 @@ static int async_task_continue(lua_State *L, int status, lua_KContext ctx) {
 
 static int async_task_main(lua_State* L) {
 	assert( lua_gettop(L) == 0 );
-	PUSS_LUA_GET(L, PUSS_KEY_ERROR_HANDLE);
+	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
 	assert( lua_isfunction(L, -1) );
 	return lua_yieldk(L, LUA_MULTRET, 0, async_task_continue);
 }
@@ -516,7 +516,7 @@ static int lua_async_task_trace_pcall_noyield(lua_State* L) {
 	if( !task )
 		return luaL_error(L, "MUST in async task thread!");
 	lua_pop(L, 1);
-	PUSS_LUA_GET(L, PUSS_KEY_ERROR_HANDLE);
+	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
 	lua_insert(L, 1);
 	lua_pushboolean(L, lua_pcall(L, lua_gettop(L)-2, LUA_MULTRET, 1)==LUA_OK);
 	lua_replace(L, 1);

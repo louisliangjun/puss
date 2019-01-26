@@ -1,6 +1,20 @@
-// puss_debug.inl - inner used, not include directly
+// puss_debug.inl
+
+#include "puss_toolkit.h"
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <unistd.h>
+#include <time.h>
+#endif
 
 #include <ctype.h>
+#include <assert.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define luac_c
 #define LUA_CORE
@@ -1057,9 +1071,14 @@ static DebugEnv* lua_debugger_new(lua_Alloc f, void* ud) {
 		lua_setfield(L, -2, "__index");
 	}
 	lua_pop(L, 1);
-	luaL_openlibs(env->debug_state);
-	lua_pushcfunction(L, puss_lua_init);
-	lua_call(L, 0, 0);
+	luaL_openlibs(L);
+	lua_pushcfunction(L, puss_load_builtins);
+	if (lua_pcall(L, 0, 0, 0)) {
+		lua_writestringerror("[Puss] load builtins failed: %s\n", lua_tostring(L, -1));
+		lua_close(L);
+		L = NULL;
+	}
+	lua_pop(L, 1);
 	return env;
 }
 
@@ -1084,7 +1103,7 @@ static int lua_debugger_debug(lua_State* hostL) {
 		int top;
 		lua_debugger_clear(env);
 
-		PUSS_LUA_GET(L, PUSS_KEY_PUSS);
+		puss_lua_get(L, PUSS_KEY_PUSS);
 		lua_assert( lua_istable(L, -1) );
 
 		*((DebugEnv**)lua_newuserdata(L, sizeof(DebugEnv*))) = env;
@@ -1120,14 +1139,7 @@ static int lua_debugger_debug(lua_State* hostL) {
 	return 1;
 }
 
-static inline void lua_debugger_update(lua_State* hostL) {
-	DebugEnv* env = PUSS_DEBUG_ENV_FETCH(hostL);
-	if( env && env->debug_handle!=LUA_NOREF ) {
-		debug_handle_invoke(env, 0);
-	}
-}
-
-static inline void lua_debugger_attach(DebugEnv* env, lua_State* hostL) {
+static void lua_debugger_attach(DebugEnv* env, lua_State* hostL) {
 	// support: puss.debug
 	if( !env )
 		return;
@@ -1138,8 +1150,42 @@ static inline void lua_debugger_attach(DebugEnv* env, lua_State* hostL) {
 	}
 
 	env->main_state = hostL;
-	PUSS_LUA_GET(hostL, PUSS_KEY_PUSS);
+	puss_lua_get(hostL, PUSS_KEY_PUSS);
 	lua_pushcfunction(hostL, lua_debugger_debug);
 	lua_setfield(hostL, -2, "debug");	// puss.debug
 	lua_pop(hostL, 1);
+}
+
+static int __puss_config_debug_level__ = 0;
+
+static lua_State* puss_lua_debugger_newstate(void) {
+	lua_Alloc alloc = __puss_config__.app_alloc_fun;
+	void* alloc_tag = __puss_config__.app_alloc_tag;
+	DebugEnv* dbg = NULL;
+	lua_State* L;
+	if( __puss_config_debug_level__ ) {
+		dbg = lua_debugger_new(alloc, alloc_tag);
+		if (!dbg) return NULL;
+		alloc = _debug_alloc;
+		alloc_tag = dbg;
+	}
+	L = lua_newstate(alloc, alloc_tag);
+	if( L ) {
+		luaL_openlibs(L);
+		lua_pushcfunction(L, puss_load_builtins);
+		if( lua_pcall(L, 0, 0, 0) ) {
+			lua_writestringerror("[Puss] load builtins failed: %s\n", lua_tostring(L, -1));
+			lua_close(L);
+			L = NULL;
+		}
+	}
+	lua_debugger_attach(dbg, L);
+	return L;
+}
+
+static inline void puss_lua_debugger_update(lua_State* hostL) {
+	DebugEnv* env = PUSS_DEBUG_ENV_FETCH(hostL);
+	if (env && env->debug_handle != LUA_NOREF) {
+		debug_handle_invoke(env, 0);
+	}
 }

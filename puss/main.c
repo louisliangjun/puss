@@ -13,7 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "puss_toolkit.inl"
+#include "puss_debug.inl"
 
 #define PUSS_DEFAULT_SCRIPT_FILE "default.lua"
 
@@ -99,7 +99,7 @@ static int puss_init(lua_State* L) {
 	int is_script_file = 0;
 	const char* script = NULL;
 
-	PUSS_LUA_GET(L, PUSS_KEY_PUSS);
+	puss_lua_get(L, PUSS_KEY_PUSS);
 	script = puss_push_parse_args(L, &is_script_file, __puss_config__.app_argc, __puss_config__.app_argv);
 	lua_setfield(L, -2, "_args");			// puss._args
 	lua_pushboolean(L, is_script_file);
@@ -108,9 +108,9 @@ static int puss_init(lua_State* L) {
 	lua_setfield(L, -2, "_script");			// puss._script
 
 	if( is_script_file ) {
-		if( luaL_dostring(L, "puss.trace_dofile(puss._script)") ) {
-			lua_error(L);
-		}
+		lua_getfield(L, -1, "dofile");
+		lua_getfield(L, -2, "_script");
+		lua_call(L, 1, 0);
 		if( lua_getglobal(L, "__main__")!=LUA_TFUNCTION ) {
 			lua_pop(L, 1);
 			lua_pushcfunction(L, puss_dummy_main);
@@ -128,8 +128,8 @@ int main(int argc, char* argv[]) {
 	int reboot_as_debug_level = 0;
 	lua_State* L = NULL;
 	puss_config_init(argc, argv);
-	__puss_config__.app_debug_level = (debug_level==NULL) ? 0 : (*debug_level=='\0' ? 1 : (int)strtol(debug_level, NULL, 10));
-	__puss_config__.state_new = puss_lua_newstate;
+	__puss_config_debug_level__ = (debug_level==NULL) ? 0 : (*debug_level=='\0' ? 1 : (int)strtol(debug_level, NULL, 10));
+	__puss_config__.state_new = puss_lua_debugger_newstate;
 
 restart_label:
 #ifdef _WIN32
@@ -140,11 +140,11 @@ restart_label:
 		freopen("CONOUT$", "w+t", stderr);
 	}
 #endif
-	reboot_as_debug_level = (__puss_config__.app_debug_level==0);
+	reboot_as_debug_level = (__puss_config_debug_level__==0);
 
 	L = puss_lua_newstate();
 	lua_settop(L, 0);
-	PUSS_LUA_GET(L, PUSS_KEY_ERROR_HANDLE);
+	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
 #ifdef _WIN32
 	if( !console_mode ) {
 		lua_pop(L, 1);
@@ -152,16 +152,16 @@ restart_label:
 	}
 #endif
 	lua_pushcfunction(L, puss_init);
-	if( lua_pcall(L, 0, 1, 1) )
+	if( lua_pcall(L, 0, 1, 1) )	// init
 		return 1;
-	if( lua_pcall(L, 0, 1, 1) )
+	if( lua_pcall(L, 0, 1, 1) )	// main
 		return 2;
 	if( reboot_as_debug_level ) {
-		PUSS_LUA_GET(L, PUSS_KEY_PUSS);
+		puss_lua_get(L, PUSS_KEY_PUSS);
 		lua_getfield(L, -1, "_reboot_as_debug_level");
-		__puss_config__.app_debug_level = (int)lua_tointeger(L, -1);
+		__puss_config_debug_level__ = (int)lua_tointeger(L, -1);
 		lua_pop(L, 2);
-		reboot_as_debug_level = __puss_config__.app_debug_level ? 1 : 0;
+		reboot_as_debug_level = __puss_config_debug_level__ ? 1 : 0;
 	}
 	lua_close(L);
 

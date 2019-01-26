@@ -72,7 +72,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <None Include="puss_debug.inl" />
-    <None Include="puss_toolkit.inl" />
     <None Include="thread_utils.h" />
   </ItemGroup>
   <ItemGroup>

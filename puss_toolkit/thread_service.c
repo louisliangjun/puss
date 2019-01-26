@@ -305,7 +305,7 @@ static PUSS_THREAD_DECLARE(thread_main, arg) {
 		if( msg ) {
 			msg->next = NULL;
 			lua_settop(L, 0);
-			PUSS_LUA_GET(L, PUSS_KEY_ERROR_HANDLE);
+			puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
 			lua_pushcfunction(L, q->event_handle);
 			lua_pushlightuserdata(L, &(msg));
 			lua_pcall(L, 1, 0, 1);
@@ -314,7 +314,7 @@ static PUSS_THREAD_DECLARE(thread_main, arg) {
 				free(msg);
 		} else {
 			lua_settop(L, 0);
-			PUSS_LUA_GET(L, PUSS_KEY_ERROR_HANDLE);
+			puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
 			lua_pushcfunction(L, q->event_handle);
 			lua_pcall(L, 0, 0, 1);
 			lua_settop(L, 0);
@@ -384,9 +384,9 @@ static int puss_lua_thread_create(lua_State* L) {
 	}
 	lua_setmetatable(L, -2);
 
-	new_state = __puss_config__.state_new();
+	new_state = puss_lua_newstate();
 
-	if( PUSS_LUA_GET(new_state, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
+	if( puss_lua_get(new_state, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
 		new_env = (QEnv*)lua_touserdata(new_state, -1);
 	lua_pop(new_state, 1);
 	if( !new_env ) {
@@ -400,7 +400,7 @@ static int puss_lua_thread_create(lua_State* L) {
 	}
 	ud->env = new_env;
 
-	if( PUSS_LUA_GET(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
+	if( puss_lua_get(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
 		self_env = (QEnv*)lua_touserdata(L, -1);
 	lua_pop(L, 1);
 	if( self_env ) {
@@ -428,7 +428,7 @@ static int puss_lua_thread_dispatch(lua_State* L) {
 	TMsg* msg = NULL;
 	int res = LUA_OK;
 	luaL_checktype(L, 1, LUA_TFUNCTION);	// error handle
-	if( PUSS_LUA_GET(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
+	if( puss_lua_get(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
 		self_env = (QEnv*)lua_touserdata(L, -1);
 	lua_pop(L, 1);
 	if( !self_env )
@@ -452,7 +452,7 @@ static int puss_lua_thread_dispatch(lua_State* L) {
 static int puss_lua_thread_setup(lua_State* L) {
 	QEnv* self_env = NULL;
 	uint32_t wait_time = (uint32_t)luaL_checkinteger(L, 1);
-	if( PUSS_LUA_GET(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
+	if( puss_lua_get(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
 		self_env = (QEnv*)lua_touserdata(L, -1);
 	lua_pop(L, 1);
 	if( !self_env )
@@ -467,7 +467,7 @@ static int puss_lua_thread_notify(lua_State* L) {
 	size_t len = 0;
 	void* pkt;
 	QEnv* owner;
-	if( PUSS_LUA_GET(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
+	if( puss_lua_get(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
 		self_env = (QEnv*)lua_touserdata(L, -1);
 	lua_pop(L, 1);
 	if( !(self_env && self_env->qenv_owner) ) {
@@ -519,18 +519,18 @@ static int thread_env_ensure(lua_State* L) {
 
 void puss_reg_thread_service(lua_State* L) {
 	int top;
-	int ret = PUSS_LUA_GET(L, PUSS_KEY_THREAD_ENV);
+	int ret = puss_lua_get(L, PUSS_KEY_THREAD_ENV);
 	lua_pop(L, 1);
 	if( ret==LUA_TUSERDATA )
 		return;
 
 	top = lua_gettop(L);
-	PUSS_LUA_GET(L, PUSS_KEY_ERROR_HANDLE);
+	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
 	lua_pushcfunction(L, thread_env_ensure);
 	lua_pcall(L, 0, 0, top+1);
 	lua_settop(L, top);
 
-	ret = PUSS_LUA_GET(L, PUSS_KEY_THREAD_ENV);
+	ret = puss_lua_get(L, PUSS_KEY_THREAD_ENV);
 	lua_pop(L, 1);
 
 	if( ret==LUA_TUSERDATA )

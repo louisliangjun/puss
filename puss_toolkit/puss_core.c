@@ -1,6 +1,6 @@
 // puss_core.c
 
-const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
+static const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 	"local puss = ...\n"
 	"\n"
 	"puss.dofile = function(name, env, ...)\n"
@@ -110,7 +110,7 @@ static void puss_interface_register(lua_State* L, const char* name, void* iface)
 // consts
 // 
 static void puss_push_consts_table(lua_State* L) {
-	PUSS_LUA_GET(L, PUSS_KEY_CONST_TABLE);
+	puss_lua_get(L, PUSS_KEY_CONST_TABLE);
 }
 
 static PussInterface puss_interface =
@@ -173,49 +173,41 @@ static int _default_error_handle(lua_State* L) {
 	if( lua_istable(L, -1) && lua_getfield(L, -1, "traceback")==LUA_TFUNCTION ) {
 		lua_pushvalue(L, 1);
 		lua_call(L, 1, 1);
-		fprintf(stderr, "[PussError] %s\n", lua_tostring(L, -1));
+		lua_writestringerror("[PussError] %s\n", lua_tostring(L, -1));
 		lua_settop(L, 1);
 	} else {
 		lua_settop(L, 1);
-		fprintf(stderr, "[PussError] %s\n", lua_tostring(L, -1));
+		lua_writestringerror("[PussError] %s\n", lua_tostring(L, -1));
 	}
 	return 1;
 }
 
-int puss_lua_init(lua_State* L) {
+static int luaopen_puss(lua_State* L) {
 	// check consts table
-	if( PUSS_LUA_GET(L, PUSS_KEY_CONST_TABLE)!=LUA_TTABLE ) {
+	if( puss_lua_get(L, PUSS_KEY_CONST_TABLE)!=LUA_TTABLE ) {
 		lua_pushglobaltable(L);	// default use _G as CONST table
 		__puss_config__.state_set_key(L, PUSS_KEY_CONST_TABLE);
 	}
 	lua_pop(L, 1);
 
 	// check error handle
-	if( PUSS_LUA_GET(L, PUSS_KEY_ERROR_HANDLE)!=LUA_TFUNCTION ) {
+	if( puss_lua_get(L, PUSS_KEY_ERROR_HANDLE)!=LUA_TFUNCTION ) {
 		lua_pushcfunction(L, _default_error_handle);	
 		__puss_config__.state_set_key(L, PUSS_KEY_ERROR_HANDLE);
 	}
 	lua_pop(L, 1);
 
 	// check already open
-	if( PUSS_LUA_GET(L, PUSS_KEY_PUSS)==LUA_TTABLE ) {
-		lua_setglobal(L, "puss");
-		return 0;
-	}
+	if( puss_lua_get(L, PUSS_KEY_PUSS)==LUA_TTABLE )
+		return 1;
 	lua_pop(L, 1);
-
-	// setup builtins
-	if( luaL_loadbuffer(L, builtin_scripts, sizeof(builtin_scripts)-1, "@puss_builtin.lua") )
-		lua_error(L);
 
 	lua_newtable(L);	// puss
 
 	lua_pushvalue(L, -1);
 	__puss_config__.state_set_key(L, PUSS_KEY_PUSS);
-	lua_pushvalue(L, -1);
-	lua_setglobal(L, "puss");	// set to _G.puss
 
-	// fprintf(stderr, "!!!puss_module_setup %s %s %s\n", app_path, app_name, app_config);
+	// lua_writestringerror("!!!puss_module_setup %s %s %s\n", app_path, app_name, app_config);
 
 	lua_pushstring(L, __puss_config__.app_path);
 	lua_setfield(L, -2, "_path");		// puss._path
@@ -227,7 +219,7 @@ int puss_lua_init(lua_State* L) {
 	lua_pushvalue(L, -2);
 	lua_setfield(L, -2, "puss");		// puss plugins["puss"] = puss-self
 
-	lua_getglobal(L, "package");
+	luaL_requiref(L, LUA_LOADLIBNAME, luaopen_package, 0);
 	assert( lua_type(L, -1)==LUA_TTABLE );
 	lua_getfield(L, -1, "loadlib");		// up[2]: package.loadlib
 	assert( lua_type(L, -1)==LUA_TFUNCTION );
@@ -242,28 +234,45 @@ int puss_lua_init(lua_State* L) {
 	lua_pushcclosure(L, _puss_lua_plugin_load, 4);
 	lua_setfield(L, -2, "load_plugin");	// puss.load_plugin
 
-	lua_call(L, 1, 0);	// call builtin-scripts
-
 	// reg modules
-	PUSS_LUA_GET(L, PUSS_KEY_PUSS);
 	puss_reg_puss_utils(L);
 	puss_reg_simple_pickle(L);
 	puss_reg_simple_luastate(L);
 	puss_reg_async_service(L);
 	puss_reg_thread_service(L);
-	lua_pop(L, 1);
+	return 1;
+}
 
+int puss_load_builtins(lua_State* L) {
+	if( luaL_loadbuffer(L, builtin_scripts, sizeof(builtin_scripts) - 1, "@puss_builtin.lua") )
+		lua_error(L);
+	luaL_requiref(L, "puss", luaopen_puss, 1);
+	lua_call(L, 1, 0);
 	return 0;
 }
 
 // default puss toolkit sink
 
+static void *_default_alloc(void *ud, void *ptr, size_t osize, size_t nsize) {
+	(void)ud; (void)osize;  /* not used */
+	if (nsize == 0) {
+		free(ptr);
+		return NULL;
+	}
+	return realloc(ptr, nsize);
+}
+
+static int _default_panic(lua_State *L) {
+	lua_writestringerror("PANIC: unprotected error in call to Lua API (%s)\n", lua_tostring(L, -1));
+	return 0;  /* return to Lua to abort */
+}
+
 static lua_State* _default_puss_state_new(void) {
 	lua_State* L = luaL_newstate();
 	luaL_openlibs(L);
-	lua_pushcfunction(L, puss_lua_init);
-	if( lua_pcall(L, 0, 0, 0) ) {
-		fprintf(stderr, "[Puss] init failed: %s\n", lua_tostring(L, -1));
+	lua_pushcfunction(L, puss_load_builtins);
+	if (lua_pcall(L, 0, 0, 0)) {
+		lua_writestringerror("[Puss] load builtins failed: %s\n", lua_tostring(L, -1));
 		lua_close(L);
 		L = NULL;
 	}
@@ -289,10 +298,14 @@ static char* _default_args[2] = { _default_arg0, NULL };
 PussConfig	__puss_config__ =
 	{ 1
 	, _default_args
+
 	, "."
 	, "puss"
 	, _default_app_config
-	, 0
+
+	, _default_alloc
+	, _default_panic
+
 	, _default_puss_state_new
 	, _default_puss_key_get
 	, _default_puss_key_set

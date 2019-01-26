@@ -67,7 +67,7 @@ static int simple_luastate_pcall(lua_State* L) {
 	}
 
 	top = lua_gettop(state);
-	PUSS_LUA_GET(state, PUSS_KEY_ERROR_HANDLE);
+	puss_lua_get(state, PUSS_KEY_ERROR_HANDLE);
 	lua_pushcfunction(state, _luastate_pcall);
 	lua_pushlightuserdata(state, L);
 	res = lua_pcall(state, 1, LUA_MULTRET, top+1);
@@ -101,7 +101,7 @@ static int simple_luastate_new(lua_State* L) {
 		lua_setfield(L, -2, "__index");
 	}
 	lua_setmetatable(L, -2);
-	ud->L = __puss_config__.state_new();
+	ud->L = puss_lua_newstate();
 	return 1;
 }
 

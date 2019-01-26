@@ -127,7 +127,7 @@ local results = {}
 local thread = puss.thread_create()
 
 -- print('dofile', puss._path..'/core/miniline.lua', '__miniline_thread__')
-thread:query('puss.trace_dofile', puss._path..'/core/miniline.lua', nil, '__miniline_thread__')
+thread:query('puss.dofile', puss._path..'/core/miniline.lua', nil, '__miniline_thread__')
 
 shotcuts.register('miniline/open', 'Open Miniline', 'P', true, false, false, false)
 
