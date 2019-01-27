@@ -108,10 +108,16 @@ if select(1, ...)=='__miniline_thread__' then
 		-- print('search start: ', search_key)
 		local res = do_search(search_key)
 		-- print('search', search_key, #res)
-		puss.thread_notify('core.miniline', 'search_response', search_key, res)
+		puss.thread_post_owner('core.miniline', 'search_response', search_key, res)
 	end
 
-	return
+	local function on_thread_event(ev, ...)
+		_G[ev](...)
+	end
+
+	while not puss.thread_detached() do
+		puss.trace_pcall(puss.thread_dispatch, on_thread_event)
+	end
 end
 
 -- miniline main thread
@@ -124,10 +130,7 @@ local open = false
 local input_buf = imgui.CreateByteArray(512)
 local cursor = 1
 local results = {}
-local thread = puss.thread_create()
-
--- print('dofile', puss._path..'/core/miniline.lua', '__miniline_thread__')
-thread:query('puss.dofile', puss._path..'/core/miniline.lua', nil, '__miniline_thread__')
+local thread = puss.thread_create(puss._path..'/core/miniline.lua', nil, '__miniline_thread__')
 
 shotcuts.register('miniline/open', 'Open Miniline', 'P', true, false, false, false)
 
@@ -137,7 +140,7 @@ __exports.search_response = function(key, res)
 end
 
 __exports.search_thread_query = function(...)
-	return thread:query(...)
+	return thread:post(...)
 end
 
 local MINILINE_FLAGS = ( ImGuiWindowFlags_NoMove
@@ -157,7 +160,7 @@ do
 		local ver, folders = filebrowser.check_fetch_folders(last_index_ver)
 		-- print(last_index_ver, ver)
 		last_index_ver = ver
-		if folders then thread:query('rebuild_search_indexes', folders) end
+		if folders then thread:post('rebuild_search_indexes', folders) end
 	end
 end
 
@@ -169,7 +172,7 @@ local function draw_miniline()
 	if imgui.InputText('##input', input_buf) then
 		local str = input_buf:str()
 		-- print('start search', str)
-		thread:query('search', str)
+		thread:post('search', str)
 	end
 	imgui.SetItemDefaultFocus()
 	imgui.PopItemWidth()
