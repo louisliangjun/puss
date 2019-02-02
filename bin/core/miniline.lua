@@ -108,7 +108,7 @@ if select(1, ...)=='__miniline_thread__' then
 		-- print('search start: ', search_key)
 		local res = do_search(search_key)
 		-- print('search', search_key, #res)
-		puss.thread_post_owner('core.miniline', 'search_response', search_key, res)
+		puss.thread_owner:post('core.miniline', 'search_response', search_key, res)
 	end
 
 	local function on_thread_event(ev, ...)
