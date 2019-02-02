@@ -116,8 +116,12 @@ if select(1, ...)=='__miniline_thread__' then
 	end
 
 	while not puss.thread_detached() do
-		puss.trace_pcall(puss.thread_dispatch, on_thread_event)
+		if puss.thread_wait(5000) then
+			puss.trace_pcall(puss.thread_dispatch, on_thread_event)
+		end
 	end
+
+	return
 end
 
 -- miniline main thread
