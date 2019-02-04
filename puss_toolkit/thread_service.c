@@ -10,8 +10,12 @@
 
 #include "thread_utils.h"
 
-#define PUSS_NAME_THREAD_MT		"_@PussThreadMT@_"
-#define PUSS_NAME_THREADENV_MT	"_@PussThreadEnvMT@_"
+#define PUSS_NAME_THREAD_MT		"_@PussThread@_"
+#define PUSS_NAME_THREADENV_MT	"_@PussThreadEnv@_"
+
+#define PUSS_THREAD_ST_NORMAL	0
+#define PUSS_THREAD_ST_DETACHED	1
+#define PUSS_THREAD_ST_CLOSED	2
 
 typedef struct _TMsg	TMsg;
 typedef struct _QEnv	QEnv;
@@ -25,7 +29,7 @@ struct _TMsg {
 struct _QEnv {
 	PussMutex		mutex;
 	lua_State*		L;
-	int				detached;
+	int				status;
 	int				_ref;
 	TMsg			_detach;
 
@@ -68,6 +72,13 @@ static void qenv_unref(QEnv* env) {
 	pthread_cond_destroy(&env->cond);
 #endif
 	puss_mutex_uninit(&env->mutex);
+
+	while( env->head ) {
+		TMsg* msg = env->head;
+		env->head = msg->next;
+		free(msg);
+	}
+
 	free(env);
 }
 
@@ -110,58 +121,14 @@ static TMsg* qenv_pop(QEnv* q) {
 			ResetEvent(q->ev);
 #endif
 		if( res==&q->_detach ) {
-			q->detached = 1;
 			res = NULL;
+			if( q->status==PUSS_THREAD_ST_NORMAL )
+				q->status = PUSS_THREAD_ST_DETACHED;
 		}
 	}
 	puss_mutex_unlock(&q->mutex);
 	return res;
 }
-
-static int thread_detach(lua_State* L) {
-	PussLuaThread* self = (PussLuaThread*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
-	QEnv* env = self->env;
-	self->env = NULL;
-	if( self->tid ) {
-		if( env )
-			qenv_push(env, &env->_detach);
-		puss_thread_detach(self->tid);
-		self->tid = 0;
-	}
-	qenv_unref(env);
-	return 0;
-}
-
-static int thread_post(lua_State* L) {
-	PussLuaThread* self = (PussLuaThread*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
-	QEnv* env = self->env;
-	int top = lua_gettop(L);
-	size_t len = 0;
-	void* pkt;
-	TMsg* msg;
-	if( !env )
-		return 0;
-	if( !(env->L) )
-		return 0;
-	if( top < 2 )
-		return luaL_error(L, "thread post bad args!");
-	pkt = puss_simple_pack(&len, L, 2, -1);
-	msg = (TMsg*)malloc(sizeof(TMsg) + len);
-	if( !msg )
-		return luaL_error(L, "no memory!");
-	msg->next = NULL;
-	msg->len = len;
-	memcpy(msg->buf, pkt, len);
-	qenv_push(env, msg);
-	return 0;
-}
-
-static luaL_Reg thread_methods[] =
-	{ {"__gc", thread_detach}
-	, {"detach", thread_detach}
-	, {"post", thread_post}
-	, {NULL, NULL}
-	};
 
 static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
 	QEnv* env = qenv_ref((QEnv*)arg);
@@ -175,13 +142,21 @@ static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
 	// close state
 	env->L = NULL;
 	lua_close(L);
+	env->status = PUSS_THREAD_ST_CLOSED;
+	qenv_unref(env);
+	return 0;
+}
 
-	// wait detach signal if self not detached
-	while( !env->detached ) {
-		TMsg* msg = qenv_pop(env);
-		if( msg )	free(msg);
+static int puss_lua_thread_detach(lua_State* L) {
+	PussLuaThread* thread = (PussLuaThread*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
+	QEnv* env = thread->env;
+	thread->env = NULL;
+	if( thread->tid ) {
+		if( env )
+			qenv_push(env, &env->_detach);
+		puss_thread_detach(thread->tid);
+		thread->tid = 0;
 	}
-
 	qenv_unref(env);
 	return 0;
 }
@@ -190,9 +165,8 @@ static PussLuaThread* puss_lua_thread_new(lua_State* L) {
 	PussLuaThread* ud = (PussLuaThread*)lua_newuserdata(L, sizeof(PussLuaThread));
 	memset(ud, 0, sizeof(PussLuaThread));
 	if( luaL_newmetatable(L, PUSS_NAME_THREAD_MT) ) {
-		luaL_setfuncs(L, thread_methods, 0);
-		lua_pushvalue(L, -1);
-		lua_setfield(L, -2, "__index");
+		lua_pushcfunction(L, puss_lua_thread_detach);
+		lua_setfield(L, -2, "__gc");
 	}
 	lua_setmetatable(L, -2);
 	return ud;
@@ -278,15 +252,6 @@ static int simple_unpack_msg(lua_State* L) {
 	return lua_gettop(L) - 1;
 }
 
-static int puss_lua_thread_detached(lua_State* L) {
-	QEnv* env = NULL;
-	if( puss_lua_get(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
-		env = *(QEnv**)lua_touserdata(L, -1);
-	lua_pop(L, 1);
-	lua_pushboolean(L, env==NULL || env->detached);
-	return 1;
-}
-
 static int puss_lua_thread_wait(lua_State* L) {
 	QEnv* env = NULL;
 	uint32_t wait_time = (uint32_t)luaL_checkinteger(L, 1);
@@ -295,23 +260,17 @@ static int puss_lua_thread_wait(lua_State* L) {
 	lua_pop(L, 1);
 	if( !env )
 		return 0;
-	if( env->detached )
-		return 0;
-	if( env->head ) {
-		lua_pushboolean(L, 1);
-		return 1;
-	}
-
+	if( (wait_time==0) && (env->head==NULL) ) {
 #ifdef _WIN32
-	WaitForSingleObject(env->ev, wait_time);
+		WaitForSingleObject(env->ev, wait_time);
 #else
-	puss_mutex_lock(&env->mutex);
-	if( env->head==NULL ) {
-		puss_pthread_cond_timedwait(&env->mutex, &env->cond, wait_time);
-	}
-	puss_mutex_unlock(&env->mutex);
+		puss_mutex_lock(&env->mutex);
+		if( env->head==NULL ) {
+			puss_pthread_cond_timedwait(&env->mutex, &env->cond, wait_time);
+		}
+		puss_mutex_unlock(&env->mutex);
 #endif
-
+	}
 	lua_pushboolean(L, env->head!=NULL);
 	return 1;
 }
@@ -341,12 +300,56 @@ static int puss_lua_thread_dispatch(lua_State* L) {
 	return lua_gettop(L);
 }
 
+static inline QEnv* thread_env_test(lua_State* L, int arg) {
+	PussLuaThread* thread = (PussLuaThread*)luaL_testudata(L, arg, PUSS_NAME_THREAD_MT);
+	QEnv* env = NULL;
+	if( thread ) {
+		env = thread->env;
+	} else {
+		if( puss_lua_get(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
+			env = *(QEnv**)lua_touserdata(L, -1);
+		lua_pop(L, 1);
+	}
+	return env;
+}
+
+static int puss_lua_thread_post(lua_State* L) {
+	QEnv* env = thread_env_test(L, 1);
+	int top = lua_gettop(L);
+	size_t len = 0;
+	void* pkt;
+	TMsg* msg;
+	if( !env )
+		return 0;
+	if( !(env->L) )
+		return 0;
+	if( top < 2 )
+		return luaL_error(L, "thread post bad args!");
+	pkt = puss_simple_pack(&len, L, 2, -1);
+	msg = (TMsg*)malloc(sizeof(TMsg) + len);
+	if( !msg )
+		return luaL_error(L, "no memory!");
+	msg->next = NULL;
+	msg->len = len;
+	memcpy(msg->buf, pkt, len);
+	qenv_push(env, msg);
+	return 0;
+}
+
+static int puss_lua_thread_status(lua_State* L) {
+	QEnv* env = thread_env_test(L, 1);
+	lua_pushinteger(L, env ? env->status : PUSS_THREAD_ST_CLOSED);
+	return 1;
+}
+
 static luaL_Reg thread_service_methods[] =
 	{ {"thread_owner", NULL}
+	, {"thread_detach", puss_lua_thread_detach}
 	, {"thread_create", puss_lua_thread_create}
-	, {"thread_detached", puss_lua_thread_detached}
 	, {"thread_wait", puss_lua_thread_wait}
 	, {"thread_dispatch", puss_lua_thread_dispatch}
+	, {"thread_post", puss_lua_thread_post}
+	, {"thread_status", puss_lua_thread_status}
 	, {NULL, NULL}
 	};
 

@@ -108,14 +108,14 @@ if select(1, ...)=='__miniline_thread__' then
 		-- print('search start: ', search_key)
 		local res = do_search(search_key)
 		-- print('search', search_key, #res)
-		puss.thread_owner:post('core.miniline', 'search_response', search_key, res)
+		puss.thread_post(puss.thread_owner, 'core.miniline', 'search_response', search_key, res)
 	end
 
 	local function on_thread_event(ev, ...)
 		_G[ev](...)
 	end
 
-	while not puss.thread_detached() do
+	while puss.thread_status()==0 do
 		if puss.thread_wait(5000) then
 			puss.trace_pcall(puss.thread_dispatch, on_thread_event)
 		end
@@ -144,7 +144,7 @@ __exports.search_response = function(key, res)
 end
 
 __exports.search_thread_query = function(...)
-	return thread:post(...)
+	return puss.thread_post(thread, ...)
 end
 
 local MINILINE_FLAGS = ( ImGuiWindowFlags_NoMove
@@ -164,7 +164,7 @@ do
 		local ver, folders = filebrowser.check_fetch_folders(last_index_ver)
 		-- print(last_index_ver, ver)
 		last_index_ver = ver
-		if folders then thread:post('rebuild_search_indexes', folders) end
+		if folders then puss.thread_post(thread, 'rebuild_search_indexes', folders) end
 	end
 end
 
@@ -176,7 +176,7 @@ local function draw_miniline()
 	if imgui.InputText('##input', input_buf) then
 		local str = input_buf:str()
 		-- print('start search', str)
-		thread:post('search', str)
+		puss.thread_post(thread, 'search', str)
 	end
 	imgui.SetItemDefaultFocus()
 	imgui.PopItemWidth()
