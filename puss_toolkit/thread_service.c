@@ -75,7 +75,8 @@ static void qenv_unref(QEnv* env) {
 	while( env->head ) {
 		TMsg* msg = env->head;
 		env->head = msg->next;
-		free(msg);
+		if( msg != &env->_detach )
+			free(msg);
 	}
 
 	free(env);
