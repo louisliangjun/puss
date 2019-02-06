@@ -11,7 +11,6 @@
 #include "thread_utils.h"
 
 #define PUSS_NAME_THREAD_MT		"_@PussThread@_"
-#define PUSS_NAME_THREADENV_MT	"_@PussThreadEnv@_"
 
 #define PUSS_THREAD_ST_NORMAL	0
 #define PUSS_THREAD_ST_DETACHED	1
@@ -365,7 +364,7 @@ static int thread_env_create(lua_State* L) {
 	QEnv* env = (QEnv*)malloc(sizeof(QEnv));
 	QEnv** ud;
 	ud = (QEnv**)lua_newuserdata(L, sizeof(QEnv*));
-	if( luaL_newmetatable(L, PUSS_NAME_THREADENV_MT) ) {
+	if( luaL_newmetatable(L, "_@PussThreadEnv@_") ) {
 		lua_pushcfunction(L, thread_env_gc);
 		lua_setfield(L, -2, "__gc");
 	}
