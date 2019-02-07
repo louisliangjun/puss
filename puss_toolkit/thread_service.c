@@ -12,12 +12,8 @@
 
 #define PUSS_NAME_THREAD_MT		"_@PussThread@_"
 
-#define PUSS_THREAD_ST_NORMAL	0
-#define PUSS_THREAD_ST_DETACHED	1
-#define PUSS_THREAD_ST_CLOSED	2
-
 typedef struct _TMsg	TMsg;
-typedef struct _QEnv	QEnv;
+typedef struct _TQueue	TQueue;
 
 struct _TMsg {
 	TMsg*			next;
@@ -25,10 +21,8 @@ struct _TMsg {
 	char			buf[1];
 };
 
-struct _QEnv {
+struct _TQueue {
 	PussMutex		mutex;
-	lua_State*		L;
-	int				status;
 	int				_ref;
 	TMsg			_detach;
 
@@ -42,44 +36,49 @@ struct _QEnv {
 	TMsg*			tail;
 };
 
+typedef struct _QEnv {
+	TQueue*			q;
+	int				detached;
+} QEnv;
+
 typedef struct _PussLuaThread {
+	TQueue*			q;
 	PussThreadID	tid;
-	QEnv*			env;
 } PussLuaThread;
 
-static QEnv* qenv_ref(QEnv* env) {
-	if( env ) {
-		puss_mutex_lock(&env->mutex);
-		++(env->_ref);
-		puss_mutex_unlock(&env->mutex);
+static TQueue* queue_ref(TQueue* q) {
+	if( q ) {
+		puss_mutex_lock(&q->mutex);
+		++(q->_ref);
+		puss_mutex_unlock(&q->mutex);
 	}
-	return env;
+	return q;
 }
 
-static void qenv_unref(QEnv* env) {
+static void queue_unref(TQueue* q) {
 	int ref;
-	if( !env )
+	if( !q )
 		return;
-	puss_mutex_lock(&env->mutex);
-	ref = (--(env->_ref));
-	puss_mutex_unlock(&env->mutex);
+	puss_mutex_lock(&q->mutex);
+	ref = (--(q->_ref));
+	puss_mutex_unlock(&q->mutex);
 	if( ref > 0 )
 		return;
 #ifdef _WIN32
-	CloseHandle(env->ev);
+	CloseHandle(q->ev);
 #else
-	pthread_cond_destroy(&env->cond);
+	pthread_cond_destroy(&q->cond);
 #endif
-	puss_mutex_uninit(&env->mutex);
+	puss_mutex_uninit(&q->mutex);
 
-	while( env->head ) {
-		TMsg* msg = env->head;
-		env->head = msg->next;
-		if( msg != &env->_detach )
+	while( q->head ) {
+		TMsg* msg = q->head;
+		q->head = msg->next;
+		if( msg != &q->_detach )
 			free(msg);
 	}
 
-	free(env);
+	free(q);
 }
 
 #define task_queue_push(queue, msg)	{ \
@@ -91,7 +90,7 @@ static void qenv_unref(QEnv* env) {
 			(queue)->tail = msg; \
 		}
 
-static void qenv_push(QEnv* q, TMsg* task) {
+static void queue_push(TQueue* q, TMsg* task) {
 #ifdef _WIN32
 	puss_mutex_lock(&q->mutex);
 	task_queue_push(q, task);
@@ -109,7 +108,7 @@ static void qenv_push(QEnv* q, TMsg* task) {
 #endif
 }
 
-static TMsg* qenv_pop(QEnv* q) {
+static TMsg* queue_pop(TQueue* q) {
 	TMsg* res = NULL;
 	puss_mutex_lock(&q->mutex);
 	if( q->head ) {
@@ -120,19 +119,17 @@ static TMsg* qenv_pop(QEnv* q) {
 		if( !(q->head) )
 			ResetEvent(q->ev);
 #endif
-		if( res==&q->_detach ) {
-			res = NULL;
-			if( q->status==PUSS_THREAD_ST_NORMAL )
-				q->status = PUSS_THREAD_ST_DETACHED;
-		}
 	}
 	puss_mutex_unlock(&q->mutex);
 	return res;
 }
 
 static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
-	QEnv* env = qenv_ref((QEnv*)arg);
-	lua_State* L = env->L;
+	lua_State* L = (lua_State*)arg;
+	TQueue* q = NULL;
+	if( puss_lua_get(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
+		q = queue_ref(((QEnv*)lua_touserdata(L, -1))->q);
+	lua_pop(L, 1);
 
 	// thread main
 	assert( lua_isfunction(L, 1) );
@@ -140,24 +137,22 @@ static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
 	lua_pcall(L, lua_gettop(L)-2, 0, 1);
 
 	// close state
-	env->L = NULL;
 	lua_close(L);
-	env->status = PUSS_THREAD_ST_CLOSED;
-	qenv_unref(env);
+	queue_unref(q);
 	return 0;
 }
 
 static int puss_lua_thread_detach(lua_State* L) {
 	PussLuaThread* thread = (PussLuaThread*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
-	QEnv* env = thread->env;
-	thread->env = NULL;
+	TQueue* env = thread->q;
+	thread->q = NULL;
 	if( thread->tid ) {
 		if( env )
-			qenv_push(env, &env->_detach);
+			queue_push(env, &env->_detach);
 		puss_thread_detach(thread->tid);
 		thread->tid = 0;
 	}
-	qenv_unref(env);
+	queue_unref(env);
 	return 0;
 }
 
@@ -173,7 +168,7 @@ static PussLuaThread* puss_lua_thread_new(lua_State* L) {
 }
 
 typedef struct _ThreadCreateArg {
-	QEnv*			owner_env;
+	TQueue*			owner_queue;
 	lua_CFunction	thread_main;
 	size_t			args_len;
 	void*			args_buf;
@@ -185,7 +180,7 @@ static int do_thread_state_prepare(lua_State* L) {
 	{
 		PussLuaThread* ud = puss_lua_thread_new(L);
 		ud->tid = 0;	// owner not use tid
-		ud->env = qenv_ref(arg->owner_env);
+		ud->q = queue_ref(arg->owner_queue);
 	}
 	lua_setfield(L, -2, "thread_owner");
 
@@ -205,14 +200,14 @@ static int do_thread_state_prepare(lua_State* L) {
 static int puss_lua_thread_create(lua_State* L) {
 	ThreadCreateArg create_arg;
 	QEnv* new_env = NULL;
+	TQueue* q;
 	lua_State* new_state;
 	PussLuaThread* ud;
 	create_arg.thread_main = lua_iscfunction(L, 1) ? lua_tocfunction(L, 1) : NULL;
 	create_arg.args_buf = puss_simple_pack(&(create_arg.args_len), L, create_arg.thread_main ? 2 : 1, -1);
-
-	create_arg.owner_env = puss_lua_get(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA ? *(QEnv**)lua_touserdata(L, -1) : NULL;
+	create_arg.owner_queue = puss_lua_get(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA ? ((QEnv*)lua_touserdata(L, -1))->q : NULL;
 	lua_pop(L, 1);
-	if( !create_arg.owner_env )
+	if( !create_arg.owner_queue )
 		return luaL_error(L, "bad logic");
 
 	ud = puss_lua_thread_new(L);
@@ -221,13 +216,14 @@ static int puss_lua_thread_create(lua_State* L) {
 	if( !new_state )
 		return luaL_error(L, "puss_lua_newstate failed!");
 	if( puss_lua_get(new_state, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
-		new_env = *(QEnv**)lua_touserdata(new_state, -1);
+		new_env = (QEnv*)lua_touserdata(new_state, -1);
 	lua_pop(new_state, 1);
-	if( !new_env ) {
+	q = new_env ? new_env->q : NULL;
+	if( !q ) {
 		lua_close(new_state);
 		return luaL_error(L, "bad logic, puss_lua_newstate no env!");
 	}
-	ud->env = qenv_ref(new_env);
+	ud->q = queue_ref(q);
 
 	lua_settop(new_state, 0);
 	lua_pushcfunction(new_state, do_thread_state_prepare);
@@ -235,14 +231,86 @@ static int puss_lua_thread_create(lua_State* L) {
 	if( lua_pcall(new_state, 1, LUA_MULTRET, 0) )
 		return luaL_error(L, "new state init: %s", lua_isstring(new_state, -1) ? lua_tostring(new_state, -1) : "do_thread_state_prepare failed!");
 
-	if( !puss_thread_create(&(ud->tid), thread_main_wrapper, new_env) ) {
-		ud->env = NULL;
-		qenv_unref(new_env);
-		assert( new_env->_ref > 0 );
+	if( !puss_thread_create(&(ud->tid), thread_main_wrapper, new_state) ) {
+		ud->q = NULL;
+		queue_unref(q);
+		assert( q->_ref > 0 );
 		lua_close(new_state);
 		return luaL_error(L, "create thread failed!");
 	}
 
+	return 1;
+}
+
+static int puss_lua_thread_post(lua_State* L) {
+	int top = lua_gettop(L);
+	size_t len = 0;
+	void* pkt;
+	TMsg* msg;
+	PussLuaThread* thread = (PussLuaThread*)luaL_testudata(L, 1, PUSS_NAME_THREAD_MT);
+	TQueue* q = NULL;
+	if( thread ) {
+		q = thread->q;
+	} else {
+		if( puss_lua_get(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
+			q = ((QEnv*)lua_touserdata(L, -1))->q;
+		lua_pop(L, 1);
+	}
+	if( top < 2 )
+		return luaL_error(L, "thread post bad args!");
+	if( !q )
+		return 0;
+	pkt = puss_simple_pack(&len, L, 2, -1);
+	msg = (TMsg*)malloc(sizeof(TMsg) + len);
+	if( !msg )
+		return luaL_error(L, "no memory!");
+	msg->next = NULL;
+	msg->len = len;
+	memcpy(msg->buf, pkt, len);
+	queue_push(q, msg);
+	return 0;
+}
+
+static int puss_lua_thread_wait(lua_State* L) {
+	uint32_t wait_time = (uint32_t)luaL_checkinteger(L, 1);
+	QEnv* env = NULL;
+	TQueue* q;
+	if( puss_lua_get(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
+		env = (QEnv*)lua_touserdata(L, -1);
+	lua_pop(L, 1);
+	if( env==NULL )
+		return 0;
+	if( env->q==NULL )
+		return 0;
+	if( env->detached )
+		return 0;
+	q = env->q;
+	if( (wait_time==0) && (q->head==NULL) ) {
+#ifdef _WIN32
+		WaitForSingleObject(q->ev, wait_time);
+#else
+		puss_mutex_lock(&q->mutex);
+		if( q->head==NULL ) {
+			puss_pthread_cond_timedwait(&q->mutex, &q->cond, wait_time);
+		}
+		puss_mutex_unlock(&q->mutex);
+#endif
+	}
+	lua_pushboolean(L, q->head!=NULL);
+	return 1;
+}
+
+static int puss_lua_thread_detached(lua_State* L) {
+	PussLuaThread* thread = (PussLuaThread*)luaL_testudata(L, 1, PUSS_NAME_THREAD_MT);
+	if( thread ) {
+		lua_pushboolean(L, thread->tid==0);
+	} else {
+		QEnv* env = NULL;
+		if( puss_lua_get(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
+			env = ((QEnv*)lua_touserdata(L, -1));
+		lua_pop(L, 1);
+		lua_pushboolean(L, env ? env->detached : 1);
+	}
 	return 1;
 }
 
@@ -252,42 +320,26 @@ static int simple_unpack_msg(lua_State* L) {
 	return lua_gettop(L) - 1;
 }
 
-static int puss_lua_thread_wait(lua_State* L) {
-	QEnv* env = NULL;
-	uint32_t wait_time = (uint32_t)luaL_checkinteger(L, 1);
-	if( puss_lua_get(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
-		env = *(QEnv**)lua_touserdata(L, -1);
-	lua_pop(L, 1);
-	if( !env )
-		return 0;
-	if( (wait_time==0) && (env->head==NULL) ) {
-#ifdef _WIN32
-		WaitForSingleObject(env->ev, wait_time);
-#else
-		puss_mutex_lock(&env->mutex);
-		if( env->head==NULL ) {
-			puss_pthread_cond_timedwait(&env->mutex, &env->cond, wait_time);
-		}
-		puss_mutex_unlock(&env->mutex);
-#endif
-	}
-	lua_pushboolean(L, env->head!=NULL);
-	return 1;
-}
-
 static int puss_lua_thread_dispatch(lua_State* L) {
 	QEnv* env = NULL;
-	TMsg* msg = NULL;
 	int res = LUA_OK;
+	TQueue* q;
+	TMsg* msg;
 	luaL_checktype(L, 1, LUA_TFUNCTION);	// error handle
 	if( puss_lua_get(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
-		env = *(QEnv**)lua_touserdata(L, -1);
+		env = ((QEnv*)lua_touserdata(L, -1));
 	lua_pop(L, 1);
-	if( !env )
+	q = env ? env->q : NULL;
+	if( !q )
 		return 0;
-	msg = qenv_pop(env);
+	msg = queue_pop(q);
 	if( !msg )
 		return 0;
+	if( msg==&q->_detach ) {
+		env->detached = 1;
+		queue_push(q, msg);
+		return 0;
+	}
 
 	lua_pushcfunction(L, simple_unpack_msg);
 	lua_pushlightuserdata(L, msg);
@@ -300,89 +352,45 @@ static int puss_lua_thread_dispatch(lua_State* L) {
 	return lua_gettop(L);
 }
 
-static inline QEnv* thread_env_test(lua_State* L, int arg) {
-	PussLuaThread* thread = (PussLuaThread*)luaL_testudata(L, arg, PUSS_NAME_THREAD_MT);
-	QEnv* env = NULL;
-	if( thread ) {
-		env = thread->env;
-	} else {
-		if( puss_lua_get(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA )
-			env = *(QEnv**)lua_touserdata(L, -1);
-		lua_pop(L, 1);
-	}
-	return env;
-}
-
-static int puss_lua_thread_post(lua_State* L) {
-	QEnv* env = thread_env_test(L, 1);
-	int top = lua_gettop(L);
-	size_t len = 0;
-	void* pkt;
-	TMsg* msg;
-	if( !env )
-		return 0;
-	if( !(env->L) )
-		return 0;
-	if( top < 2 )
-		return luaL_error(L, "thread post bad args!");
-	pkt = puss_simple_pack(&len, L, 2, -1);
-	msg = (TMsg*)malloc(sizeof(TMsg) + len);
-	if( !msg )
-		return luaL_error(L, "no memory!");
-	msg->next = NULL;
-	msg->len = len;
-	memcpy(msg->buf, pkt, len);
-	qenv_push(env, msg);
-	return 0;
-}
-
-static int puss_lua_thread_status(lua_State* L) {
-	QEnv* env = thread_env_test(L, 1);
-	lua_pushinteger(L, env ? env->status : PUSS_THREAD_ST_CLOSED);
-	return 1;
-}
-
 static luaL_Reg thread_service_methods[] =
 	{ {"thread_owner", NULL}
 	, {"thread_detach", puss_lua_thread_detach}
 	, {"thread_create", puss_lua_thread_create}
-	, {"thread_wait", puss_lua_thread_wait}
-	, {"thread_dispatch", puss_lua_thread_dispatch}
 	, {"thread_post", puss_lua_thread_post}
-	, {"thread_status", puss_lua_thread_status}
+	, {"thread_wait", puss_lua_thread_wait}
+	, {"thread_detached", puss_lua_thread_detached}
+	, {"thread_dispatch", puss_lua_thread_dispatch}
 	, {NULL, NULL}
 	};
 
 static int thread_env_gc(lua_State* L) {
-	QEnv** ud = (QEnv**)lua_touserdata(L, 1);
-	QEnv* env = *ud;
-	*ud = NULL;
-	qenv_unref(env);
+	QEnv* ud = (QEnv*)lua_touserdata(L, 1);
+	TQueue* q = ud->q;
+	ud->q = NULL;
+	queue_unref(q);
 	return 0;
 }
 
 static int thread_env_create(lua_State* L) {
-	QEnv* env = (QEnv*)malloc(sizeof(QEnv));
-	QEnv** ud;
-	ud = (QEnv**)lua_newuserdata(L, sizeof(QEnv*));
+	TQueue* q = (TQueue*)malloc(sizeof(TQueue));
+	QEnv* ud = (QEnv*)lua_newuserdata(L, sizeof(QEnv));
+	memset(ud, 0, sizeof(QEnv));
 	if( luaL_newmetatable(L, "_@PussThreadEnv@_") ) {
 		lua_pushcfunction(L, thread_env_gc);
 		lua_setfield(L, -2, "__gc");
 	}
 	lua_setmetatable(L, -2);
 
-	memset(env, 0, sizeof(QEnv));
+	memset(q, 0, sizeof(TQueue));
 #ifdef _WIN32
-	env->ev = CreateEventA(NULL, TRUE, FALSE, NULL);
+	q->ev = CreateEventA(NULL, TRUE, FALSE, NULL);
 #else
-	pthread_cond_init(&env->cond, NULL);
+	pthread_cond_init(&q->cond, NULL);
 #endif
-	puss_mutex_init(&env->mutex);
+	puss_mutex_init(&q->mutex);
 
-	lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD);
-	env->L = lua_tothread(L, -1);
-	lua_pop(L, 1);
-	*ud = qenv_ref(env);
+	ud->q = queue_ref(q);
+	ud->detached = 0;
 	__puss_config__.state_set_key(L, PUSS_KEY_THREAD_ENV);
 	return 0;
 }

@@ -386,15 +386,15 @@ void rbx_iter_finish(RBXIter* iter) {
 
 	if (rt->iter == iter) {
 		rt->iter = iter->next;
+		return;
 	}
-	else {
-		for (p = rt->iter; p; p = p->next) {
-			if (p->next == iter) {
-				p->next = iter->next;
-				return;
-			}
+
+	for (p = rt->iter; p; p = p->next) {
+		if (p->next == iter) {
+			p->next = iter->next;
+			return;
 		}
-		assert(0 && "bad iter finish!");
 	}
+	assert(0 && "bad iter finish!");
 }
 

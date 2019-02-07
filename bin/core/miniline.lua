@@ -115,7 +115,7 @@ if select(1, ...)=='__miniline_thread__' then
 		_G[ev](...)
 	end
 
-	while puss.thread_status()==0 do
+	while not puss.thread_detached() do
 		if puss.thread_wait(5000) then
 			puss.trace_pcall(puss.thread_dispatch, on_thread_event)
 		end
