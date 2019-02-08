@@ -214,7 +214,7 @@ end
 local function on_thread_event(module, event, ...)
 	local m = puss.import(module)
 	if m then m[event](...) end
-	return true	-- nned more
+	return true	-- need more
 end
 
 local last_update_time = os.clock()

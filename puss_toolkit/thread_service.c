@@ -12,6 +12,8 @@
 
 #define PUSS_NAME_THREAD_MT		"_@PussThread@_"
 
+#define PUSS_DETACH_MSG_LEN		(~((size_t)0))
+
 typedef struct _TMsg	TMsg;
 typedef struct _TQueue	TQueue;
 
@@ -24,7 +26,6 @@ struct _TMsg {
 struct _TQueue {
 	PussMutex		mutex;
 	int				_ref;
-	TMsg			_detach;
 
 	// task queue
 #ifdef _WIN32
@@ -74,8 +75,7 @@ static void queue_unref(TQueue* q) {
 	while( q->head ) {
 		TMsg* msg = q->head;
 		q->head = msg->next;
-		if( msg != &q->_detach )
-			free(msg);
+		free(msg);
 	}
 
 	free(q);
@@ -144,15 +144,21 @@ static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
 
 static int puss_lua_thread_detach(lua_State* L) {
 	ThreadHandle* thread = (ThreadHandle*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
-	TQueue* env = thread->q;
-	thread->q = NULL;
+	TQueue* q = thread->q;
 	if( thread->tid ) {
-		if( env )
-			queue_push(env, &env->_detach);
+		if( q ) {
+			TMsg* detach_msg = (TMsg*)malloc(sizeof(TMsg));
+			if( !detach_msg )
+				return luaL_error(L, "detach no memory!");
+			detach_msg->next = NULL;
+			detach_msg->len = PUSS_DETACH_MSG_LEN;
+			queue_push(q, detach_msg);
+		}
 		puss_thread_detach(thread->tid);
 		thread->tid = 0;
 	}
-	queue_unref(env);
+	thread->q = NULL;
+	queue_unref(q);
 	return 0;
 }
 
@@ -204,7 +210,7 @@ static int puss_lua_thread_create(lua_State* L) {
 	lua_State* new_state;
 	ThreadHandle* ud;
 	int args_pos = 1;
-	if( lua_isuserdata(L, args_pos)==LUA_TUSERDATA )
+	if( lua_type(L, args_pos)==LUA_TUSERDATA )
 		shared = (ThreadHandle*)luaL_checkudata(L, args_pos++, PUSS_NAME_THREAD_MT);
 	if( lua_iscfunction(L, args_pos) )
 		create_arg.thread_main = lua_tocfunction(L, args_pos++);
@@ -294,7 +300,7 @@ static int puss_lua_thread_wait(lua_State* L) {
 	if( env->detached )
 		return 0;
 	q = env->q;
-	if( (wait_time==0) && (q->head==NULL) ) {
+	if( (wait_time>0) && (q->head==NULL) ) {
 #ifdef _WIN32
 		WaitForSingleObject(q->ev, wait_time);
 #else
@@ -344,9 +350,9 @@ static int puss_lua_thread_dispatch(lua_State* L) {
 	msg = queue_pop(q);
 	if( !msg )
 		return 0;
-	if( msg==&q->_detach ) {
+	if( msg->len==PUSS_DETACH_MSG_LEN ) {
 		env->detached = 1;
-		queue_push(q, msg);
+		free(msg);
 		return 0;
 	}
 
