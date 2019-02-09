@@ -112,13 +112,16 @@ if select(1, ...)=='__miniline_thread__' then
 	end
 
 	local function on_thread_event(ev, ...)
+		if ev==nil then return end
 		_G[ev](...)
 	end
 
+	local function thread_dispatch()
+		on_thread_event(puss.thread_wait(5000))
+	end
+
 	while not puss.thread_detached() do
-		if puss.thread_wait(5000) then
-			puss.trace_pcall(puss.thread_dispatch, on_thread_event)
-		end
+		puss.trace_pcall(thread_dispatch)
 	end
 
 	return

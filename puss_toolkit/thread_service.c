@@ -90,6 +90,13 @@ static void queue_unref(TQueue* q) {
 			(queue)->tail = msg; \
 		}
 
+#define task_queue_pop(queue, msg)	{ \
+			if( (msg = queue->head)!=NULL ) { \
+				queue->head = msg->next; \
+				msg->next = NULL; \
+			} \
+		}
+
 static void queue_push(TQueue* q, TMsg* task) {
 #ifdef _WIN32
 	puss_mutex_lock(&q->mutex);
@@ -121,6 +128,25 @@ static TMsg* queue_pop(TQueue* q) {
 #endif
 	}
 	puss_mutex_unlock(&q->mutex);
+	return res;
+}
+
+static TMsg* queue_wait(TQueue* q, uint32_t wait_time) {
+	TMsg* res = queue_pop(q);
+	if( (!res) && (wait_time>0) ) {
+#ifdef _WIN32
+		if( WaitForSingleObject(q->ev, wait_time)==WAIT_OBJECT_0 )
+			res = queue_pop(q);
+#else
+		puss_mutex_lock(&q->mutex);
+		task_queue_pop(q, res);
+		if( !res ) {
+			puss_pthread_cond_timedwait(&q->mutex, &q->cond, wait_time);
+			task_queue_pop(q, res);
+		}
+		puss_mutex_unlock(&q->mutex);
+#endif
+	}
 	return res;
 }
 
@@ -325,30 +351,35 @@ static int puss_lua_thread_post(lua_State* L) {
 	return 0;
 }
 
+static int simple_unpack_msg(lua_State* L) {
+	TMsg* msg = (TMsg*)lua_touserdata(L, 1);
+	puss_simple_unpack(L, msg->buf, msg->len);
+	return lua_gettop(L) - 1;
+}
+
 static int puss_lua_thread_wait(lua_State* L) {
-	uint32_t wait_time = (uint32_t)luaL_checkinteger(L, 1);
-	QEnv* env = puss_thread_env_ensure(L);
+	uint32_t wait_time = (uint32_t)luaL_optinteger(L, 1, 0);
+	QEnv* env;
 	TQueue* q;
-	if( env==NULL )
+	TMsg* msg;
+	int res;
+	if( (env = puss_thread_env_ensure(L))==NULL )
 		return 0;
-	if( env->q==NULL )
+	if( (q = env->q)==NULL )
 		return 0;
-	if( env->detached )
+	if( (msg = queue_wait(q, wait_time))==NULL )
 		return 0;
-	q = env->q;
-	if( (wait_time>0) && (q->head==NULL) ) {
-#ifdef _WIN32
-		WaitForSingleObject(q->ev, wait_time);
-#else
-		puss_mutex_lock(&q->mutex);
-		if( q->head==NULL ) {
-			puss_pthread_cond_timedwait(&q->mutex, &q->cond, wait_time);
-		}
-		puss_mutex_unlock(&q->mutex);
-#endif
+	if( msg->len==PUSS_DETACH_MSG_LEN ) {
+		env->detached = 1;
+		free(msg);
+		return 0;
 	}
-	lua_pushboolean(L, q->head!=NULL);
-	return 1;
+	lua_settop(L, 0);
+	lua_pushcfunction(L, simple_unpack_msg);
+	lua_pushlightuserdata(L, msg);
+	res = lua_pcall(L, 1, LUA_MULTRET, 0);
+	free(msg);
+	return res ? lua_error(L) : lua_gettop(L);
 }
 
 static int puss_lua_thread_detached(lua_State* L) {
@@ -362,41 +393,6 @@ static int puss_lua_thread_detached(lua_State* L) {
 	return 1;
 }
 
-static int simple_unpack_msg(lua_State* L) {
-	TMsg* msg = (TMsg*)lua_touserdata(L, 1);
-	puss_simple_unpack(L, msg->buf, msg->len);
-	return lua_gettop(L) - 1;
-}
-
-static int puss_lua_thread_dispatch(lua_State* L) {
-	QEnv* env = puss_thread_env_ensure(L);
-	int res = LUA_OK;
-	TQueue* q;
-	TMsg* msg;
-	luaL_checktype(L, 1, LUA_TFUNCTION);	// error handle
-	q = env ? env->q : NULL;
-	if( !q )
-		return 0;
-	msg = queue_pop(q);
-	if( !msg )
-		return 0;
-	if( msg->len==PUSS_DETACH_MSG_LEN ) {
-		env->detached = 1;
-		free(msg);
-		return 0;
-	}
-
-	lua_pushcfunction(L, simple_unpack_msg);
-	lua_pushlightuserdata(L, msg);
-	res = lua_pcall(L, 1, LUA_MULTRET, 0);
-	free(msg);
-	if( res )
-		return lua_error(L);
-
-	lua_call(L, lua_gettop(L)-1, LUA_MULTRET);
-	return lua_gettop(L);
-}
-
 static luaL_Reg thread_service_methods[] =
 	{ {"thread_owner", NULL}
 	, {"thread_detach", puss_lua_thread_detach}
@@ -404,7 +400,6 @@ static luaL_Reg thread_service_methods[] =
 	, {"thread_post", puss_lua_thread_post}
 	, {"thread_wait", puss_lua_thread_wait}
 	, {"thread_detached", puss_lua_thread_detached}
-	, {"thread_dispatch", puss_lua_thread_dispatch}
 	, {NULL, NULL}
 	};
 

@@ -637,16 +637,21 @@ end
 
 local function on_thread_event(module, event, ...)
 	-- print('on_thread_event', module, event, ...)
+	if not module then return end
 	local m = puss.import(module)
 	if m then m[event](...) end
 	return true	-- nned more
+end
+
+local function thread_dispatch()
+	on_thread_event(puss.thread_wait())
 end
 
 local last_update_time = os.clock()
 
 local function do_update()
 	for i=1,64 do
-		local ok, more = puss.trace_pcall(puss.thread_dispatch, on_thread_event)
+		local ok, more = puss.trace_pcall(thread_dispatch)
 		if ok and (not more) then break end
 	end
 
