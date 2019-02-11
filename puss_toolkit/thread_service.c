@@ -183,6 +183,12 @@ static int thread_env_create(lua_State* L) {
 	return 1;
 }
 
+static QEnv* puss_thread_env_fetch(lua_State* L) {
+	QEnv* env = puss_lua_get(L, PUSS_KEY_THREAD_ENV)==LUA_TUSERDATA ? lua_touserdata(L, -1) : NULL;
+	lua_pop(L, 1);
+	return env;
+}
+
 static QEnv* puss_thread_env_ensure(lua_State* L) {
 	int top = lua_gettop(L);
 	QEnv* env = NULL;
@@ -363,7 +369,7 @@ static int puss_lua_thread_wait(lua_State* L) {
 	TQueue* q;
 	TMsg* msg;
 	int res;
-	if( (env = puss_thread_env_ensure(L))==NULL )
+	if( (env = puss_thread_env_fetch(L))==NULL )
 		return 0;
 	if( (q = env->q)==NULL )
 		return 0;
@@ -387,7 +393,7 @@ static int puss_lua_thread_detached(lua_State* L) {
 	if( thread ) {
 		lua_pushboolean(L, thread->tid==0);
 	} else {
-		QEnv* env = puss_thread_env_ensure(L);
+		QEnv* env = puss_thread_env_fetch(L);
 		lua_pushboolean(L, env ? env->detached : 1);
 	}
 	return 1;

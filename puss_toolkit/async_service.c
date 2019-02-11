@@ -22,7 +22,7 @@ struct _GroupNode {
 };
 
 typedef struct _AsyncTaskName {
-	uint64_t		id;
+	lua_Integer		id;
 	lua_State*		co;
 } AsyncTaskName;
 
@@ -31,16 +31,16 @@ typedef struct _AsyncTask {
 	GroupNode		grp_node;
 	uint64_t		timeout;
 	lua_Integer		id;
+	lua_Integer		skey;
 	lua_State*		co;
-	uint64_t		skey;
 	GroupNode*		gkey;
 	// uservalue : co
 } AsyncTask;
 
 typedef struct _AsyncTaskService {
 	uint64_t		now;				// async task now
-	uint64_t		id_last;
-	uint64_t		skey_last;
+	lua_Integer		id_last;
+	lua_Integer		skey_last;
 	lua_Integer		count;
 
 	RBXTree			timers;
@@ -336,7 +336,7 @@ static int lua_async_service_wakeup(lua_State* L) {
 static int lua_async_service_resume(lua_State* L) {
 	AsyncTaskService* svs = lua_touserdata(L, SERVICE_INDEX);
 	void* h = (void*)luaL_checkinteger(L, 1);
-	uint64_t skey = (uint64_t)luaL_checkinteger(L, 2);
+	lua_Integer skey = luaL_checkinteger(L, 2);
 	int n = lua_gettop(L) - 2;
 	AsyncTask* task = NULL;
 	assert( lua_istable(L, TASK_MAP_INDEX) );
@@ -491,7 +491,7 @@ static int lua_async_task_alarm(lua_State* L) {
 		async_task_delay(svs, task, tms);
 		grp_list_reset(task, grp);
 		lua_pushinteger(L, (lua_Integer)L);
-		lua_pushinteger(L, (lua_Integer)(task->skey));
+		lua_pushinteger(L, task->skey);
 		return 2;
 	}
 
