@@ -334,6 +334,7 @@ static int puss_lua_simple_unpack(lua_State* L) {
 static luaL_Reg simple_pickle_methods[] =
 	{ {"simple_pack", puss_lua_simple_pack}
 	, {"simple_unpack", puss_lua_simple_unpack}
+	, {NULL, NULL}
 	};
 
 void puss_reg_simple_pickle(lua_State* L) {

@@ -754,6 +754,7 @@ static int glfw_inited = 0;
 
 static void do_platfrom_uninit(void) {
 	if( glfw_inited ) {
+		glfw_inited = 0;
 		glfwMakeContextCurrent(g_HideWindow);
 		imgui_texture_uninit();
 		glfwDestroyWindow(g_HideWindow);

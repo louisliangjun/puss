@@ -64,6 +64,8 @@ static const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 #ifdef _WIN32
 	#define WIN32_LEAN_AND_MEAN
 	#include <windows.h>
+#else
+	#include <unistd.h>
 #endif
 
 #ifdef _MSC_VER

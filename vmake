@@ -7,9 +7,9 @@ CXX = 'g++'
 AR  = 'ar -rc'
 DLL_SUFFIX = '.so'
 EXE_SUFFIX = ''
-CFLAGS  = {'-Wall'}
+CFLAGS  = {'-Wall', '-Wno-unused-function'}
 CXX_CFLAGS = {}
-PUSS_CONFIG = 'release'
+PUSS_CONFIG = ''
 
 if vlua.OS=='windows' then
 	EXE_SUFFIX = '.exe'
@@ -27,21 +27,20 @@ LUA_SRC_PATH = path_concat('3rd', 'lua-5.3.5', 'src')
 do
 	if vlua.match_arg('^%-debug$') then
 		array_push(CFLAGS, '-g', '-O0', '-D_DEBUG')
-		PUSS_CONFIG = 'debug'
+		PUSS_CONFIG = 'd'
 	else
 		array_push(CFLAGS, '-s', '-O2', '-DNDEBUG')
 	end
 
 	if vlua.match_arg('^%-asan$') then
 		array_push(CFLAGS, '-ggdb', '-fsanitize=address', '-fno-omit-frame-pointer')
-		PUSS_CONFIG = PUSS_CONFIG .. '_asan'
+		PUSS_CONFIG = PUSS_CONFIG .. 'a'
 	end
 end
 
-local PUSS_CONFIG_SHORTNAME = PUSS_CONFIG:gsub('^(%w)%w*_?(%w?)%w*$', '%1%2')
-OBJPATH = path_concat('objs', PUSS_CONFIG_SHORTNAME)
+OBJPATH = path_concat('objs', PUSS_CONFIG=='' and 'r' or PUSS_CONFIG)
 
-PUSS_CONFIG_SUFFIX = PUSS_CONFIG=='release' and '' or ('-'..PUSS_CONFIG)
+PUSS_CONFIG_SUFFIX = PUSS_CONFIG=='' and '' or ('-'..PUSS_CONFIG)
 
 -----------------------------
 -- common utils
@@ -88,10 +87,9 @@ end)
 vmake_target_add('puss', function(target)
 	vmake('luaproxy')
 	local slibs = vmake('puss_toolkit', 'lua53')
-	local suffix_flag = '-DPUSS_CONFIG=\\"'..PUSS_CONFIG..'\\"'
 	local incs = array_pack(INCLUDES, LUA_SRC_PATH, 'puss_toolkit')
-	local libs = vlua.OS=='windows' and '' or '-lm -ldl'
-	local objs = make_c2objs(target, nil, incs, suffix_flag)
+	local libs = vlua.OS=='windows' and '' or '-lm -ldl -lpthread'
+	local objs = make_c2objs(target, nil, incs)
 	local output = path_concat('bin', target..PUSS_CONFIG_SUFFIX..EXE_SUFFIX)
 	return make_target(output, {objs, slibs}, CC, CFLAGS, '-o', output, objs, slibs, libs)
 end)

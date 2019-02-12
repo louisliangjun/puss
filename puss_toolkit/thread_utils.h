@@ -27,6 +27,7 @@
 	#include <pthread.h>
 	#include <stdint.h>
 	#include <unistd.h>
+	#include <errno.h>
 	#include <time.h>
 	#include <sys/time.h>
 
@@ -44,7 +45,7 @@
 
 	#define puss_mutex_uninit	pthread_mutex_destroy
 	#define puss_mutex_lock		pthread_mutex_lock
-	#define puss_mutex_unlock	puss_mutex_unlock
+	#define puss_mutex_unlock	pthread_mutex_unlock
 
 	static inline int puss_pthread_cond_timedwait(pthread_cond_t* cond, PussMutex* lock, uint32_t wait_time_ms) {
 		struct timespec timeout;

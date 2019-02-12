@@ -496,14 +496,14 @@ static const luaL_Reg socket_lib_methods[] =
 #endif
 
 void puss_socket_reg(lua_State* L) {
-	if( !wsa_inited ) {
 #ifdef _WIN32
+	if( !wsa_inited ) {
 		WSADATA wsa_data;
 		WSAStartup(MAKEWORD(2,0),&wsa_data);
 		atexit(wsa_cleanup);
 		wsa_inited = 1;
-#endif
 	}
+#endif
 
 	if( luaL_newmetatable(L, PUSS_SOCKET_NAME) ) {
 		luaL_setfuncs(L, socket_methods, 0);

@@ -32,7 +32,7 @@ static const char* puss_args_lookup(int argc, char** argv, const char* key) {
 	return NULL;
 }
 
-static const char* puss_push_parse_args(lua_State* L, int* is_script_file, int argc, const char** argv) {
+static const char* puss_push_parse_args(lua_State* L, int* is_script_file, int argc, char** argv) {
 	int script_arg = 0;
 	int is_exec = 0;
 	lua_Integer n = 0;
@@ -123,10 +123,12 @@ static int puss_init(lua_State* L) {
 }
 
 int main(int argc, char* argv[]) {
-	const char* debug_level = puss_args_lookup(argc, argv, "--debug");
-	const char* console_mode = puss_args_lookup(argc, argv, "--console");
-	int reboot_as_debug_level = 0;
 	lua_State* L = NULL;
+	int reboot_as_debug_level = 0;
+	const char* debug_level = puss_args_lookup(argc, argv, "--debug");
+#ifdef _WIN32
+	const char* console_mode = puss_args_lookup(argc, argv, "--console");
+#endif
 	puss_config_init(argc, argv);
 	__puss_config_debug_level__ = (debug_level==NULL) ? 0 : (*debug_level=='\0' ? 1 : (int)strtol(debug_level, NULL, 10));
 	__puss_config__.state_new = puss_lua_debugger_newstate;

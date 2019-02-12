@@ -141,7 +141,7 @@ static TMsg* queue_wait(TQueue* q, uint32_t wait_time) {
 		puss_mutex_lock(&q->mutex);
 		task_queue_pop(q, res);
 		if( !res ) {
-			puss_pthread_cond_timedwait(&q->mutex, &q->cond, wait_time);
+			puss_pthread_cond_timedwait(&q->cond, &q->mutex, wait_time);
 			task_queue_pop(q, res);
 		}
 		puss_mutex_unlock(&q->mutex);
