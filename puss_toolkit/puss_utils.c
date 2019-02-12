@@ -51,6 +51,7 @@
 #else
 	#include <unistd.h>
 	#include <dirent.h>
+	#include <sys/time.h>
 #endif
 
 typedef struct _FStr {
@@ -314,11 +315,46 @@ not_found:
 	return tp;
 }
 
+static int puss_lua_timestamp(lua_State* L) {
+#ifdef _WIN32
+	#if defined(_MSC_VER) || defined(_MSC_EXTENSIONS)
+		#define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
+	#else
+		#define DELTA_EPOCH_IN_MICROSECS  11644473600000000ULL
+	#endif
+	FILETIME ft;
+	unsigned __int64 ret = 0;
+	GetSystemTimeAsFileTime(&ft);
+	ret |= ft.dwHighDateTime;
+	ret <<= 32;
+	ret |= ft.dwLowDateTime;
+
+	// converting file time to unix epoch
+	ret -= DELTA_EPOCH_IN_MICROSECS;
+	ret /= 10;  // convert into microseconds
+	lua_pushinteger(L, (lua_Integer)(ret / 1000));
+	lua_pushinteger(L, (lua_Integer)(ret / 1000000UL));
+	lua_pushinteger(L, (lua_Integer)(ret % 1000000UL));
+#else
+	struct timeval tv;
+	lua_Unsigned ret;
+	gettimeofday(&tv, 0);
+	ret = tv.tv_sec;
+	ret *= 1000;
+	ret += (tv.tv_usec / 1000);
+	lua_pushinteger(L, (lua_Integer)ret);
+	lua_pushinteger(L, (lua_Integer)tv.tv_sec);
+	lua_pushinteger(L, (lua_Integer)tv.tv_usec);
+#endif
+	return 3;
+}
+
 static luaL_Reg puss_utils_methods[] =
 	{ {"filename_format", puss_lua_filename_format}
 	, {"file_list", puss_lua_file_list}
 	, {"local_to_utf8", puss_lua_local_to_utf8}
 	, {"utf8_to_local", puss_lua_utf8_to_local}
+	, {"timestamp", puss_lua_timestamp}
 	, {NULL, NULL}
 	};
 

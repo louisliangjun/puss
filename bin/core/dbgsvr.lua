@@ -41,11 +41,12 @@ if puss._debug_proxy then
 		return do_reply(cmd, co, sk, puss_debug:__host_pcall('puss._debug_'..cmd, ...))
 	end
 
-	local broadcast_timeout = os.clock() + 0.25
+	local BROADCAST_INTERVAL = 200
+	local broadcast_timeout = puss.timestamp() + BROADCAST_INTERVAL
 
 	local function broadcast_hostinfo()
-		if os.clock() < broadcast_timeout then return end
-		broadcast_timeout = os.clock() + 0.25
+		if puss.timestamp() < broadcast_timeout then return end
+		broadcast_timeout = puss.timestamp() + BROADCAST_INTERVAL
 
 		if not listen_socket then
 			local s, a = net.listen(nil, 0, true)
@@ -59,11 +60,12 @@ if puss._debug_proxy then
 		-- print('* broadcast', BROADCAST_PORT, host_info)
 	end
 
-	local check_timeout = os.clock() + 0.25
+	local CHECK_INTERVAL = 200
+	local check_timeout = puss.timestamp() + CHECK_INTERVAL
 
 	local function check_client_connect(wait_time)
-		if os.clock() < check_timeout then return end
-		check_timeout = os.clock() + 0.25
+		if puss.timestamp() < check_timeout then return end
+		check_timeout = puss.timestamp() + CHECK_INTERVAL
 
 		if not listen_socket then return end
 		socket, address = net.accept(listen_socket, wait_time)
@@ -112,9 +114,9 @@ if puss._debug_proxy then
 	puss_debug:__reset(hook_main_update, false, 8192)	-- init
 
 	if type(WAIT_TIMEOUT)=='number' then
-		local wait_connect_timeout = os.clock() + WAIT_TIMEOUT
+		local wait_connect_timeout = puss.timestamp() + (WAIT_TIMEOUT*1000)
 		print('* debug wait',  WAIT_TIMEOUT)
-		while os.clock() < wait_connect_timeout do
+		while puss.timestamp() < wait_connect_timeout do
 			broadcast_hostinfo()
 			if check_client_connect(100) then
 				puss_debug:__reset(hook_main_update, true, 8192)

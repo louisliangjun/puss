@@ -213,12 +213,12 @@ do
 		return true
 	end
 
-	local last_update_time = os.clock()
+	local last_update_time = puss.timestamp()
 	local targets = {}
 
 	local function update_hosts()
-		local now = os.clock()
-		if (now - last_update_time) < 2 then
+		local now = puss.timestamp()
+		if (now - last_update_time) < 2000 then
 			for i=1,64 do
 				if not recver_update() then break end
 			end
@@ -647,7 +647,7 @@ local function thread_dispatch()
 	on_thread_event(puss.thread_wait())
 end
 
-local last_update_time = os.clock()
+local last_update_time = puss.timestamp()
 
 local function do_update()
 	for i=1,64 do
@@ -656,8 +656,8 @@ local function do_update()
 	end
 
 	do
-		local now = os.clock()
-		local delta = ((now - last_update_time) * 1000) // 1
+		local now = puss.timestamp()
+		local delta = now - last_update_time
 		last_update_time = now
 		puss.async_service_update(delta, 32)
 	end
