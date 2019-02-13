@@ -98,6 +98,43 @@ static int imgui_protect_pcall_lua(lua_State* L) {
 	return lua_gettop(L);
 }
 
+static int imgui_clipper_pcall_lua(lua_State* L) {
+	int arge = lua_gettop(L);
+	int items_count = items_count = (int)luaL_checkinteger(L, 1);
+	float items_height = -1.0f;
+	int args = 2;
+	if( !lua_isfunction(L, args) )
+		items_height = (float)luaL_checknumber(L, args++);
+	luaL_checktype(L, args++, LUA_TFUNCTION);
+	luaL_checkstack(L, (arge - args) + 8, NULL);
+	imgui_error_handle_push(L);
+	lua_replace(L, 1);
+	{
+		ImGuiListClipper clipper(items_count, items_height);
+		int base = g_StackProtected;
+		int top = g_Stack.size();
+		int narg = (3 + arge - args);
+		int i;
+		g_StackProtected = top;
+		while( clipper.Step() ) {
+			lua_settop(L, arge);
+			lua_pushvalue(L, args-1);	// function
+			lua_pushinteger(L, clipper.DisplayStart);
+			lua_pushinteger(L, clipper.DisplayEnd-1);
+			for( i=args; i<=arge; ++i )
+				lua_pushvalue(L, i);
+			lua_pcall(L, narg, 0, 1);
+		}
+		g_StackProtected = base;
+		while( g_Stack.size() > top ) {
+			int tp = g_Stack.back();
+			g_Stack.pop_back();
+			IMGUI_LUA_WRAP_STACK_POP(tp);
+		}
+	}
+	return 0;
+}
+
 static int imgui_getio_delta_time_lua(lua_State* L) {
 	ImGuiContext* ctx = ImGui::GetCurrentContext();
 	lua_pushnumber(L, ctx ? ctx->IO.DeltaTime : 0.0f);
@@ -524,6 +561,7 @@ static int im_scintilla_lexers(lua_State* L) {
 static luaL_Reg imgui_lua_apis[] =
 	{ {"set_error_handle", imgui_set_error_handle_lua}
 	, {"protect_pcall", imgui_protect_pcall_lua}
+	, {"clipper_pcall", imgui_clipper_pcall_lua}
 
 	, {"GetDropFiles", imgui_get_drop_files_lua}
 	, {"AddFontFromFileTTF", add_ttf_font_file_lua}
