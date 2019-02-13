@@ -119,8 +119,8 @@ static int imgui_clipper_pcall_lua(lua_State* L) {
 		while( clipper.Step() ) {
 			lua_settop(L, arge);
 			lua_pushvalue(L, args-1);	// function
-			lua_pushinteger(L, clipper.DisplayStart);
-			lua_pushinteger(L, clipper.DisplayEnd-1);
+			lua_pushinteger(L, clipper.DisplayStart+1);
+			lua_pushinteger(L, clipper.DisplayEnd);
 			for( i=args; i<=arge; ++i )
 				lua_pushvalue(L, i);
 			lua_pcall(L, narg, 0, 1);

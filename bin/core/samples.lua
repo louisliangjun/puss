@@ -345,7 +345,7 @@ local function draw_step(display_start, display_end, label)
 end
 
 function draw()
-	imgui.clipper_pcall(100, imgui.GetTextLineHeightWithSpacing(), draw_step, 'demo')
+	imgui.clipper_pcall(1000000, imgui.GetTextLineHeightWithSpacing(), draw_step, 'demo')
 end
 ]])
 
