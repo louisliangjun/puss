@@ -3,17 +3,6 @@
 static const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 	"local puss = ...\n"
 	"\n"
-	"puss.dofile = function(name, env, ...)\n"
-	"	local f, err = loadfile(name, 'bt', env or _ENV)\n"
-	"	if not f then error(string.format('dofile (%s) failed: %s', name, err)) end\n"
-	"	return f(...)\n"
-	"end\n"
-	"\n"
-	"local _logerr = function(err) print(debug.traceback(err,2)); return err; end\n"
-	"puss.logerr_handle = function(h) if type(h)=='function' then _logerr=h end; return _logerr end\n"
-	"puss.trace_pcall = function(f, ...) return xpcall(f, _logerr, ...) end\n"
-	"puss.trace_dofile = function(name, env, ...) return xpcall(puss.dofile, _logerr, name, env, ...) end\n"
-	"\n"
 	"local _loadmodule = function(name, env)\n"
 	"	local fname = puss.filename_format(puss._path .. '/' .. name:gsub('%.', '/') .. '.lua')\n"
 	"	local f, err = loadfile(fname, 'bt', env or _ENV)\n"
@@ -184,6 +173,85 @@ static int _default_error_handle(lua_State* L) {
 	return 1;
 }
 
+static int _puss_dostring(lua_State* L) {
+	const char* script = luaL_checkstring(L, 1);
+	if( lua_gettop(L) < 2 )
+		lua_pushnil(L);
+	if( !lua_isnil(L, 2) )
+		luaL_checktype(L, 2, LUA_TTABLE);
+	if( luaL_loadstring(L, script) )
+		return luaL_error(L, "load script(%s) failed: %s", script, lua_tostring(L, -1));
+	if( lua_istable(L, 2) ) {
+		lua_pushvalue(L, 2);
+		lua_setupvalue(L, -2, 1);
+	}
+	lua_replace(L, 2);
+	lua_call(L, lua_gettop(L)-2, LUA_MULTRET);
+	return lua_gettop(L) - 1;
+}
+
+static int _puss_dofile(lua_State* L) {
+	const char* name = luaL_checkstring(L, 1);
+	if( lua_gettop(L) < 2 )
+		lua_pushnil(L);
+	if( luaL_loadfile(L, name) )
+		return luaL_error(L, "loadfile(%s) failed: %s", name, lua_tostring(L, -1));
+	if( lua_istable(L, 2) ) {
+		lua_pushvalue(L, 2);
+		lua_setupvalue(L, -2, 1);
+	}
+	lua_replace(L, 2);
+	lua_call(L, lua_gettop(L)-2, LUA_MULTRET);
+	return lua_gettop(L) - 1;
+}
+
+static int _puss_logerr_handle(lua_State* L) {
+	if( lua_isfunction(L, 1) ) {
+		lua_pushvalue(L, 1);
+		__puss_config__.state_set_key(L, PUSS_KEY_ERROR_HANDLE);
+	}
+	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
+	return 1;
+}
+
+static int _finish_trace_pcall(lua_State *L, int status, lua_KContext extra) {
+	if (status != LUA_OK && status != LUA_YIELD) {
+		lua_pushboolean(L, 0);
+		lua_pushvalue(L, -2);
+		return 2;
+	}
+	return lua_gettop(L) - 1;
+}
+
+static int _puss_trace_pcall(lua_State* L) {
+	int status;
+	int n = lua_gettop(L);
+	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
+	lua_pushboolean(L, 1);
+	lua_rotate(L, 1, 2);  // <err, true, f, ...>
+	status = lua_pcallk(L, n - 1, LUA_MULTRET, 1, 0, _finish_trace_pcall);
+	return _finish_trace_pcall(L, status, 0);
+}
+
+static int _puss_trace_dofile(lua_State* L) {
+	int n = lua_gettop(L);
+	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
+	lua_pushcfunction(L, _puss_dofile);
+	lua_rotate(L, 1, 2);  // <err, _puss_dofile, ...>
+	lua_pushboolean(L, lua_pcall(L, n, LUA_MULTRET, 1)==LUA_OK );
+	lua_replace(L, 1);
+	return lua_gettop(L);
+}
+
+static luaL_Reg core_methods[] =
+	{ {"dostring", _puss_dostring}
+	, {"dofile", _puss_dofile}
+	, {"logerr_handle", _puss_logerr_handle}
+	, {"trace_pcall", _puss_trace_pcall}
+	, {"trace_dofile", _puss_trace_dofile}
+	, {NULL, NULL}
+	};
+
 static int luaopen_puss(lua_State* L) {
 	// check consts table
 	if( puss_lua_get(L, PUSS_KEY_CONST_TABLE)!=LUA_TTABLE ) {
@@ -235,6 +303,8 @@ static int luaopen_puss(lua_State* L) {
 #endif
 	lua_pushcclosure(L, _puss_lua_plugin_load, 4);
 	lua_setfield(L, -2, "load_plugin");	// puss.load_plugin
+
+	luaL_setfuncs(L, core_methods, 0);
 
 	// reg modules
 	puss_reg_puss_utils(L);

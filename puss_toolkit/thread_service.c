@@ -256,7 +256,6 @@ static ThreadHandle* puss_lua_thread_new(lua_State* L) {
 
 typedef struct _ThreadCreateArg {
 	TQueue*			owner_queue;
-	lua_CFunction	thread_main;
 	size_t			args_len;
 	void*			args_buf;
 } ThreadCreateArg;
@@ -273,19 +272,15 @@ static int do_thread_state_prepare(lua_State* L) {
 
 	lua_settop(L, 0);
 	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
-	if( arg->thread_main ) {
-		lua_pushcfunction(L, arg->thread_main);
-	} else {
-		puss_lua_get(L, PUSS_KEY_PUSS);
-		lua_getfield(L, -1, "dofile");
-		lua_replace(L, -2);
-	}
+	puss_lua_get(L, PUSS_KEY_PUSS);
+	lua_getfield(L, -1, "dostring");
+	lua_replace(L, -2);
 	puss_simple_unpack(L, arg->args_buf, arg->args_len);
 	return lua_gettop(L);
 }
 
 static int puss_lua_thread_create(lua_State* L) {
-	ThreadCreateArg create_arg = { NULL, NULL, 0, 0 };
+	ThreadCreateArg create_arg = { NULL, 0, 0 };
 	QEnv* new_env = NULL;
 	ThreadHandle* shared = NULL;
 	lua_State* new_state;
@@ -293,8 +288,6 @@ static int puss_lua_thread_create(lua_State* L) {
 	int args_pos = 1;
 	if( lua_type(L, args_pos)==LUA_TUSERDATA )
 		shared = (ThreadHandle*)luaL_checkudata(L, args_pos++, PUSS_NAME_THREAD_MT);
-	if( lua_iscfunction(L, args_pos) )
-		create_arg.thread_main = lua_tocfunction(L, args_pos++);
 	create_arg.args_buf = puss_simple_pack(&(create_arg.args_len), L, args_pos, -1);
 	create_arg.owner_queue = puss_thread_queue_ensure(L);
 	if( !create_arg.owner_queue )
