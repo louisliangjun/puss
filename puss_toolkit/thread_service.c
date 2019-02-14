@@ -262,20 +262,18 @@ typedef struct _ThreadCreateArg {
 
 static int do_thread_state_prepare(lua_State* L) {
 	ThreadCreateArg* arg = (ThreadCreateArg*)lua_touserdata(L, 1);
+	ThreadHandle* ud;
 	puss_lua_get(L, PUSS_KEY_PUSS);
-	{
-		ThreadHandle* ud = puss_lua_thread_new(L);
-		ud->tid = 0;	// owner not use tid
-		ud->q = queue_ref(arg->owner_queue);
-	}
+	ud = puss_lua_thread_new(L);
+	ud->tid = 0;	// owner not use tid
+	ud->q = queue_ref(arg->owner_queue);
 	lua_setfield(L, -2, "thread_owner");
 
 	lua_settop(L, 0);
 	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
-	puss_lua_get(L, PUSS_KEY_PUSS);
-	lua_getfield(L, -1, "dostring");
-	lua_replace(L, -2);
 	puss_simple_unpack(L, arg->args_buf, arg->args_len);
+	puss_get_value(L, lua_tostring(L, 2));
+	lua_replace(L, 2);
 	return lua_gettop(L);
 }
 
@@ -288,6 +286,7 @@ static int puss_lua_thread_create(lua_State* L) {
 	int args_pos = 1;
 	if( lua_type(L, args_pos)==LUA_TUSERDATA )
 		shared = (ThreadHandle*)luaL_checkudata(L, args_pos++, PUSS_NAME_THREAD_MT);
+	luaL_checktype(L, args_pos, LUA_TSTRING);	// MUST function name
 	create_arg.args_buf = puss_simple_pack(&(create_arg.args_len), L, args_pos, -1);
 	create_arg.owner_queue = puss_thread_queue_ensure(L);
 	if( !create_arg.owner_queue )

@@ -137,7 +137,7 @@ local open = false
 local input_buf = imgui.CreateByteArray(512)
 local cursor = 1
 local results = {}
-local thread = puss.thread_create(string.format("puss.trace_dofile('%s/core/miniline.lua', nil, '__miniline_thread__')", puss._path))
+local thread = puss.thread_create('puss.trace_dofile', string.format('%s/core/miniline.lua', puss._path), nil, '__miniline_thread__')
 
 shotcuts.register('miniline/open', 'Open Miniline', 'P', true, false, false, false)
 
