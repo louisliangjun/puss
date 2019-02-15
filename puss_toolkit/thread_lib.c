@@ -1,4 +1,4 @@
-// thread_service.c
+// thread_lib.c
 
 #include "puss_toolkit.h"
 

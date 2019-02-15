@@ -82,7 +82,7 @@
     <ClCompile Include="puss_utils.c" />
     <ClCompile Include="async_service.c" />
     <ClCompile Include="puss_core.c" />
-    <ClCompile Include="thread_service.c" />
+    <ClCompile Include="thread_lib.c" />
     <ClCompile Include="rbx_tree.c" />
     <ClCompile Include="simple_luastate.c" />
     <ClCompile Include="simple_pickle.c" />
