@@ -211,23 +211,7 @@ local function do_quit_update()
 	end
 end
 
-local function on_thread_event(module, event, ...)
-	if not module then return end
-	local m = puss.import(module)
-	if m then m[event](...) end
-	return true	-- need more
-end
-
-local function thread_dispatch()
-	on_thread_event(puss.thread_wait())
-end
-
 local function do_update()
-	for i=1,64 do
-		local ok, more = puss.trace_pcall(thread_dispatch)
-		if ok and (not more) then break end
-	end
-
 	imgui.protect_pcall(show_main_window)
 
 	do_quit_update()

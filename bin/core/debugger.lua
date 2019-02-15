@@ -635,25 +635,9 @@ local function show_main_window()
 	end
 end
 
-local function on_thread_event(module, event, ...)
-	-- print('on_thread_event', module, event, ...)
-	if not module then return true end	-- empty
-	local m = puss.import(module)
-	if m then m[event](...) end
-end
-
-local function thread_dispatch()
-	return on_thread_event(puss.thread_wait())
-end
-
 local last_update_time = puss.timestamp()
 
 local function do_update()
-	for i=1,64 do
-		local ok, empty = puss.trace_pcall(thread_dispatch)
-		if ok and empty then break end
-	end
-
 	do
 		local now = puss.timestamp()
 		local delta = now - last_update_time

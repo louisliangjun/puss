@@ -10,10 +10,10 @@ PUSS_DECLS_BEGIN
 // puss toolkit
 
 typedef enum _PussToolkitKey
-	{ PUSS_KEY_PUSS = 1
+	{ PUSS_KEY_INVALID = 0
+	, PUSS_KEY_PUSS
 	, PUSS_KEY_CONST_TABLE
 	, PUSS_KEY_ERROR_HANDLE
-	, PUSS_KEY_THREAD_ENV
 	} PussToolkitKey;
 
 typedef int  (*PussKeyGet)(lua_State* L, PussToolkitKey key);

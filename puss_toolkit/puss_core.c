@@ -36,6 +36,7 @@ static const char builtin_scripts[] = "-- puss_builtin.lua\n\n\n"
 	"	for name, env in pairs(modules) do\n"
 	"		puss.trace_pcall(_loadmodule, name, env)\n"
 	"	end\n"
+	"	collectgarbage()\n"
 	"end\n"
 	"\n"
 	;
