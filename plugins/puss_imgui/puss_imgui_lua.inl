@@ -100,7 +100,7 @@ static int imgui_protect_pcall_lua(lua_State* L) {
 
 static int imgui_clipper_pcall_lua(lua_State* L) {
 	int arge = lua_gettop(L);
-	int items_count = items_count = (int)luaL_checkinteger(L, 1);
+	int items_count = (int)luaL_checkinteger(L, 1);
 	float items_height = -1.0f;
 	int args = 2;
 	if( !lua_isfunction(L, args) )

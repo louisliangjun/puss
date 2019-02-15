@@ -256,15 +256,15 @@ static int thread_detach(lua_State* L) {
 
 static int thread_join(lua_State* L) {
 	THandle* ud = (THandle*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
-	PussThreadID tid = ud->tid;
-	if( !tid )
-		return 0;
-	ud->tid = 0;
+	if( ud->tid ) {
 #ifdef _WIN32
-	WaitForSingleObject(tid, INFINITE);
+		WaitForSingleObject(ud->tid, INFINITE);
 #else
-	pthread_join(tid);
+		void* ret = NULL;
+		pthread_join(ud->tid, &ret);
 #endif
+		ud->tid = 0;
+	}
 	return 0;
 }
 
