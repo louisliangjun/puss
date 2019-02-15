@@ -383,7 +383,7 @@ static int puss_lua_thread_create(lua_State* L) {
 	int n = lua_gettop(L);
 	PussThreadID* ud = lua_newuserdata(L, sizeof(PussThreadID));
 	lua_State* new_state;
-	TArg args[THREAD_ARGS_MAX];
+	TArg args[THREAD_ARGS_MAX+1];
 	if( n > THREAD_ARGS_MAX )
 		luaL_error(L, "too many args!");
 	luaL_checktype(L, 1, LUA_TSTRING);
