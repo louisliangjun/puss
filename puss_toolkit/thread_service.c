@@ -10,8 +10,8 @@
 
 #include "thread_utils.h"
 
-#define PUSS_NAME_QHANDLE_MT	"_@PussQHandle@_"
-#define PUSS_NAME_THANDLE_MT	"_@PussTHandle@_"
+#define PUSS_NAME_QUEUE_MT	"_@PussQueue@_"
+#define PUSS_NAME_THREAD_MT	"_@PussThread@_"
 
 typedef struct _TMsg	TMsg;
 typedef struct _TQueue	TQueue;
@@ -148,19 +148,15 @@ static TMsg* queue_wait(TQueue* q, uint32_t wait_time) {
 }
 
 static int tqueue_gc(lua_State* L) {
-	QHandle* ud = (QHandle*)luaL_checkudata(L, 1, PUSS_NAME_QHANDLE_MT);
+	QHandle* ud = (QHandle*)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
 	TQueue* q = ud->q;
-	if( ud->tid ) {
-		puss_thread_detach(ud->tid);
-		ud->tid = 0;
-	}
 	ud->q = NULL;
 	queue_unref(q);
 	return 0;
 }
 
 static int tqueue_refcount(lua_State* L) {
-	QHandle* ud = (QHandle*)luaL_checkudata(L, 1, PUSS_NAME_QHANDLE_MT);
+	QHandle* ud = (QHandle*)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
 	TQueue* q = ud->q;
 	lua_pushinteger(L, q ? q->_ref : 0);
 	return 1;
@@ -171,7 +167,7 @@ static int tqueue_push(lua_State* L) {
 	size_t len = 0;
 	void* pkt;
 	TMsg* msg;
-	QHandle* ud = (QHandle*)luaL_testudata(L, 1, PUSS_NAME_QHANDLE_MT);
+	QHandle* ud = (QHandle*)luaL_testudata(L, 1, PUSS_NAME_QUEUE_MT);
 	if( top < 2 )
 		return luaL_error(L, "thread post bad args!");
 	if( !ud->q )
@@ -194,7 +190,7 @@ static int simple_unpack_msg(lua_State* L) {
 }
 
 static int tqueue_pop(lua_State* L) {
-	QHandle* ud = (QHandle*)luaL_testudata(L, 1, PUSS_NAME_QHANDLE_MT);
+	QHandle* ud = (QHandle*)luaL_testudata(L, 1, PUSS_NAME_QUEUE_MT);
 	uint32_t wait_time = (uint32_t)luaL_optinteger(L, 2, 0);
 	TMsg* msg;
 	int res;
@@ -222,7 +218,7 @@ static luaL_Reg tqueue_methods[] =
 static QHandle* tqueue_create(lua_State* L, TQueue* q, int ensure_queue) {
 	QHandle* ud = (QHandle*)lua_newuserdata(L, sizeof(QHandle));
 	memset(ud, 0, sizeof(QHandle));
-	if( luaL_newmetatable(L, PUSS_NAME_QHANDLE_MT) ) {
+	if( luaL_newmetatable(L, PUSS_NAME_QUEUE_MT) ) {
 		luaL_setfuncs(L, tqueue_methods, 0);
 		lua_pushvalue(L, -1);
 		lua_setfield(L, -2, "__index");
@@ -245,25 +241,12 @@ static QHandle* tqueue_create(lua_State* L, TQueue* q, int ensure_queue) {
 	return ud;
 }
 
-static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
-	lua_State* L = (lua_State*)arg;
-
-	// thread main
-	assert( lua_isfunction(L, 1) );
-	assert( lua_isfunction(L, 2) );
-	lua_pcall(L, lua_gettop(L)-2, 0, 1);
-
-	// close state
-	lua_close(L);
-	return 0;
-}
-
 static int puss_lua_queue_create(lua_State* L) {
 	return tqueue_create(L, NULL, 1)->q ? 1 : luaL_error(L, "tqueue_create failed!");
 }
 
-static int thread_close(lua_State* L) {
-	THandle* ud = (THandle*)luaL_checkudata(L, 1, PUSS_NAME_THANDLE_MT);
+static int thread_detach(lua_State* L) {
+	THandle* ud = (THandle*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
 	if( ud->tid ) {
 		puss_thread_detach(ud->tid);
 		ud->tid = 0;
@@ -272,16 +255,25 @@ static int thread_close(lua_State* L) {
 }
 
 static int thread_join(lua_State* L) {
+	THandle* ud = (THandle*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
+	PussThreadID tid = ud->tid;
+	if( !tid )
+		return 0;
+	ud->tid = 0;
+#ifdef _WIN32
+	WaitForSingleObject(tid, INFINITE);
+#else
+	pthread_join(tid);
+#endif
+	return 0;
 }
 
-static luaL_Reg tqueue_methods[] =
-	{ {"__gc", thread_close}
+static luaL_Reg thread_methods[] =
+	{ {"__gc", thread_detach}
+	, {"detach", thread_detach}
 	, {"join", thread_join}
-	, {"close", thread_close}
 	, { NULL, NULL }
 	};
-
-#define THREAD_ARGS_MAX	32
 
 typedef struct _TArg {
 	int				type;
@@ -298,7 +290,7 @@ typedef struct _TArg {
 
 static void targs_build(lua_State* L, TArg* a, int n) {
 	int i;
-	for( i=2; i<=n; ++i ) {
+	for( i=1; i<=n; ++i ) {
 		a->type = lua_type(L, i);
 		switch( lua_type(L, i) ) {
 		case LUA_TNIL:
@@ -326,7 +318,7 @@ static void targs_build(lua_State* L, TArg* a, int n) {
 			a->s = lua_pushlstring(L, (const char*)a->p, a->len);
 			break;
 		case LUA_TUSERDATA:
-			a->q = ((QHandle*)luaL_checkudata(L, i, PUSS_NAME_QHANDLE_MT))->q;
+			a->q = ((QHandle*)luaL_checkudata(L, i, PUSS_NAME_QUEUE_MT))->q;
 			break;
 		default:
 			luaL_error(L, "not support arg type(%s)", lua_typename(L, a->type));
@@ -381,18 +373,41 @@ static int thread_prepare(lua_State* L) {
 	return lua_gettop(L);
 }
 
+static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
+	lua_State* L = (lua_State*)arg;
+
+	// thread main
+	assert( lua_isfunction(L, 1) );
+	assert( lua_isfunction(L, 2) );
+	lua_pcall(L, lua_gettop(L)-2, 0, 1);
+
+	// close state
+	lua_close(L);
+	return 0;
+}
+
+#define THREAD_ARGS_MAX	32
+
 static int puss_lua_thread_create(lua_State* L) {
-	QHandle* tq = luaL_testudata(L, 1, PUSS_NAME_QHANDLE_MT);
-	lua_State* new_state;
-	QHandle* ud;
-	TArg args[THREAD_ARGS_MAX];
 	int n = lua_gettop(L);
+	THandle* ud = lua_newuserdata(L, sizeof(THandle));
+	lua_State* new_state;
+	TArg args[THREAD_ARGS_MAX];
 	if( n > THREAD_ARGS_MAX )
 		luaL_error(L, "too many args!");
-	luaL_checktype(L, 2, LUA_TSTRING);
+	luaL_checktype(L, 1, LUA_TSTRING);
+
+	memset(ud, 0, sizeof(THandle));
+	if( luaL_newmetatable(L, PUSS_NAME_THREAD_MT) ) {
+		luaL_setfuncs(L, thread_methods, 0);
+		lua_pushvalue(L, -1);
+		lua_setfield(L, -2, "__index");
+	}
+	lua_setmetatable(L, -2);
+
 	memset(args, 0, sizeof(args));
 	targs_build(L, args, n);
-	ud = tqueue_create(L, tq->q, 0);
+
 	new_state = puss_lua_newstate();
 	if( !new_state )
 		return luaL_error(L, "new state failed!");
@@ -401,15 +416,11 @@ static int puss_lua_thread_create(lua_State* L) {
 	lua_pushcfunction(new_state, thread_prepare);
 	lua_pushlightuserdata(new_state, args);
 	if( lua_pcall(new_state, 1, LUA_MULTRET, 0) ) {
-		queue_unref(ud->q);
-		ud->q = NULL;
 		lua_close(new_state);
 		return luaL_error(L, "new state prepare failed!");
 	}
 
 	if( !puss_thread_create(&(ud->tid), thread_main_wrapper, new_state) ) {
-		queue_unref(ud->q);
-		ud->q = NULL;
 		lua_close(new_state);
 		return luaL_error(L, "create thread failed!");
 	}

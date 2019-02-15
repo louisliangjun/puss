@@ -115,7 +115,7 @@ if request_queue then
 
 	local function thread_dispatch()
 		local ev, a1, a2, a3 = request_queue:pop(5000)
-		print(request_queue:refcount(), 'thread wait', ev, a1, a2, a3)
+		-- print(request_queue:refcount(), 'thread wait', ev, a1, a2, a3)
 		local h = _G[ev]
 		if h then h(a1, a2, a3) end
 	end
@@ -140,7 +140,7 @@ local results = {}
 
 request_queue = puss.queue_create()
 response_queue = puss.queue_create()
-puss.thread_create(request_queue, 'puss.trace_dofile', string.format('%s/core/miniline.lua', puss._path), nil, request_queue, response_queue):close()
+puss.thread_create('puss.trace_dofile', string.format('%s/core/miniline.lua', puss._path), nil, request_queue, response_queue):detach()
 
 shotcuts.register('miniline/open', 'Open Miniline', 'P', true, false, false, false)
 
