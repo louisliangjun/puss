@@ -1032,8 +1032,25 @@ static int lua_debug_capture_error(lua_State* L) {
 		}
 		return 0;
 	}
+
+	static int _fetch_disasm(lua_State* L) {
+		PrintEnv PENV;
+		PrintEnv* _PENV = &PENV;
+		const LClosure* f = (const LClosure*)(lua_iscfunction(L, 1) ? NULL : lua_topointer(L, 1));
+		luaL_buffinit(L, &(PENV.B));
+		PENV.str[0] = '\0';
+		if( f ) {
+			Proto *p = f->p;
+			PrintFunction(p, 0);
+		}
+		luaL_pushresult(&(PENV.B));
+		return 1;
+	}
 #else
 	static int lua_debug_fetch_disasm(lua_State* L) {
+		return 0;
+	}
+	static int _fetch_disasm(lua_State* L) {
 		return 0;
 	}
 #endif
@@ -1095,7 +1112,9 @@ static void lua_debugger_clear(DebugEnv* env) {
 
 static int lua_debugger_debug(lua_State* hostL) {
 	DebugEnv* env = PUSS_DEBUG_ENV_FETCH(hostL);
-	if( lua_toboolean(hostL, 1) ) {
+	if( lua_isfunction(hostL, 1) )		// disasm <function>
+		return _fetch_disasm(hostL);
+	if( lua_toboolean(hostL, 1) ) {		// enable <true>
 		lua_State* L = env->debug_state;
 		const char* debugger_script = luaL_optstring(hostL, 2, PUSS_DEBUG_DEFAULT_SCRIPT);
 		size_t n = 0;
@@ -1129,9 +1148,9 @@ static int lua_debugger_debug(lua_State* hostL) {
 		} else {
 			lua_pop(L, 1);
 		}
-	} else if( lua_isboolean(hostL, 1) ) {
+	} else if( lua_isboolean(hostL, 1) ) {	// disable <false>
 		lua_debugger_clear(env);
-	} else if( env->debug_handle ) {
+	} else if( env->debug_handle ) {		// update <>
 		debug_handle_invoke(env, 0);
 	}
 

@@ -357,19 +357,26 @@ static int simple_unpack_msg(lua_State* L) {
 
 static int puss_lua_thread_wait(lua_State* L) {
 	uint32_t wait_time = (uint32_t)luaL_optinteger(L, 1, 0);
+	int ignore_detached = lua_toboolean(L, 2);
 	QEnv* env;
 	TQueue* q;
 	TMsg* msg;
 	int res;
 	if( (env = puss_thread_env_fetch(L))==NULL )
 		return 0;
+	if( (!ignore_detached) && env->detached )
+		return 0;
 	if( (q = env->q)==NULL )
 		return 0;
 	if( (msg = queue_wait(q, wait_time))==NULL )
 		return 0;
 	if( msg->len==PUSS_DETACH_MSG_LEN ) {
-		env->detached = 1;
-		free(msg);
+		if( env->detached ) {
+			queue_push(q, msg);
+		} else {
+			env->detached = 1;
+			free(msg);
+		}
 		return 0;
 	}
 	lua_settop(L, 0);
