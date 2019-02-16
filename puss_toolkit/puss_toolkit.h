@@ -14,7 +14,7 @@ typedef enum _PussToolkitKey
 	, PUSS_KEY_PUSS
 	, PUSS_KEY_CONST_TABLE
 	, PUSS_KEY_ERROR_HANDLE
-	, PUSS_KEY_SIGNAL_HANDLE
+	, PUSS_KEY_THREAD_EVENT_HANDLE
 	} PussToolkitKey;
 
 typedef int  (*PussKeyGet)(lua_State* L, PussToolkitKey key);

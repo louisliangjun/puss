@@ -2,9 +2,9 @@
 
 -- print('miniline.lua init', ...)
 
-local request_queue, response_queue = ...
+local response_queue = ...
 
-if request_queue then
+if response_queue then
 	local key_index = {}	-- { filename_or_dirname : true }
 	local files = {}	-- [ filepath : { keyX : weightX } ]
 
@@ -113,16 +113,9 @@ if request_queue then
 		response_queue:push(search_key, res)
 	end
 
-	local function thread_dispatch()
-		local ev, a1, a2, a3 = request_queue:pop(5000)
-		-- print(request_queue:refcount(), 'thread wait', ev, a1, a2, a3)
-		local h = _G[ev]
-		if h then h(a1, a2, a3) end
-	end
-
-	while request_queue:refcount() > 1 do
-		puss.trace_pcall(thread_dispatch)
-	end
+	repeat
+		-- idle
+	until puss.thread_wait()
 
 	return print('miniline thread quit!')
 end
@@ -138,9 +131,8 @@ local input_buf = imgui.CreateByteArray(512)
 local cursor = 1
 local results = {}
 
-request_queue = puss.queue_create()
 response_queue = puss.queue_create()
-puss.thread_create('puss.trace_dofile', string.format('%s/core/miniline.lua', puss._path), nil, request_queue, response_queue):detach()
+local thread = puss.thread_create('puss.trace_dofile', string.format('%s/core/miniline.lua', puss._path), nil, response_queue)
 
 shotcuts.register('miniline/open', 'Open Miniline', 'P', true, false, false, false)
 
@@ -161,7 +153,7 @@ do
 		local ver, folders = filebrowser.check_fetch_folders(last_index_ver)
 		-- print(last_index_ver, ver)
 		last_index_ver = ver
-		if folders then request_queue:push('rebuild_search_indexes', folders) end
+		if folders then thread:post('rebuild_search_indexes', folders) end
 	end
 end
 
@@ -173,7 +165,7 @@ local function draw_miniline()
 	if imgui.InputText('##input', input_buf) then
 		local str = input_buf:str()
 		-- print('start search', str)
-		request_queue:push('search', str)
+		thread:post('search', str)
 	end
 	imgui.SetItemDefaultFocus()
 	imgui.PopItemWidth()

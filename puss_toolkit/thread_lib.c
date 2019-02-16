@@ -25,6 +25,7 @@ struct _TMsg {
 struct _TQueue {
 	PussMutex		mutex;
 	int				_ref;
+	int				_detached;
 
 	// task queue
 #ifdef _WIN32
@@ -35,6 +36,41 @@ struct _TQueue {
 	TMsg*			head;
 	TMsg*			tail;
 };
+
+#ifdef _WIN32
+struct _TEnv {
+	int				_ref;
+	HANDLE			ev;
+};
+#endif
+
+typedef struct _QHandle {
+	TQueue*			q;
+#ifdef _WIN32
+	TQueue*			tq;
+#endif
+} QHandle;
+
+typedef struct _THandle {
+	PussThreadID	tid;
+#ifdef _WIN32
+	TQueue*			q;
+#endif
+} THandle;
+
+static TQueue* queue_new(void) {
+	TQueue* q = (TQueue*)malloc(sizeof(TQueue));
+	if( q ) {
+		memset(q, 0, sizeof(TQueue));
+#ifdef _WIN32
+		q->ev = CreateEventA(NULL, TRUE, FALSE, NULL);
+#else
+		pthread_cond_init(&q->cond, NULL);
+#endif
+		puss_mutex_init(&q->mutex);
+	}
+	return q;
+}
 
 static TQueue* queue_ref(TQueue* q) {
 	if( q ) {
@@ -139,35 +175,84 @@ static TMsg* queue_wait(TQueue* q, uint32_t wait_time) {
 	return res;
 }
 
+static void queue_pack_push(lua_State* L, TQueue* q, int start) {
+	size_t len = 0;
+	void* pkt;
+	TMsg* msg;
+	if( !q )
+		return;
+	pkt = puss_simple_pack(&len, L, start, -1);
+	msg = (TMsg*)malloc(sizeof(TMsg) + len);
+	if( !msg )
+		luaL_error(L, "no memory!");
+	msg->next = NULL;
+	msg->len = len;
+	memcpy(msg->buf, pkt, len);
+	queue_push(q, msg);
+}
+
+static int do_thread_event(lua_State* L) {
+	TMsg* msg = (TMsg*)lua_touserdata(L, 1);
+	int top;
+	lua_settop(L, 0);
+	puss_lua_get(L, PUSS_KEY_THREAD_EVENT_HANDLE);
+	puss_simple_unpack(L, msg->buf, msg->len);
+	top = lua_gettop(L);
+	if( lua_isfunction(L, 1) ) {
+		lua_call(L, top-1, 0);
+		return 0;
+	}
+
+	if( lua_type(L, 2)==LUA_TSTRING ) {
+		puss_get_value(L, lua_tostring(L, 2));
+		lua_replace(L, 2);
+	} else {
+		lua_pushglobaltable(L);
+		lua_replace(L, 1);
+		lua_pushvalue(L, 2);
+		lua_gettable(L, 1);
+		lua_replace(L, 2);
+	}
+	lua_call(L, top-2, 0);
+	return 0;
+}
+
+static int thread_event_handle(TQueue* tq, lua_State* L) {
+	while( tq->head ) {
+		TMsg* msg = queue_pop(tq);
+		if( !msg )
+			break;
+		if( L ) {
+			int top = lua_gettop(L);
+			puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
+			lua_pushcfunction(L, do_thread_event);
+			lua_pushlightuserdata(L, msg);
+			lua_pcall(L, 1, 0, top+1);
+			lua_settop(L, top);
+		}
+		free(msg);
+	}
+	return 0;
+}
+
 static int tqueue_close(lua_State* L) {
-	TQueue** ud = (TQueue**)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
-	TQueue* q = *ud;
-	*ud = NULL;
+	QHandle* ud = (QHandle*)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
+	TQueue* q = ud->q;
+	ud->q = NULL;
 	queue_unref(q);
 	return 0;
 }
 
 static int tqueue_refcount(lua_State* L) {
-	TQueue* q = *(TQueue**)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
+	QHandle* ud = (QHandle*)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
+	TQueue* q = ud->q;
 	lua_pushinteger(L, q ? q->_ref : 0);
 	return 1;
 }
 
 static int tqueue_push(lua_State* L) {
-	TQueue* q = *(TQueue**)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
-	size_t len = 0;
-	void* pkt;
-	TMsg* msg;
-	if( !q )
-		return 0;
-	pkt = puss_simple_pack(&len, L, 2, -1);
-	msg = (TMsg*)malloc(sizeof(TMsg) + len);
-	if( !msg )
-		return luaL_error(L, "no memory!");
-	msg->next = NULL;
-	msg->len = len;
-	memcpy(msg->buf, pkt, len);
-	queue_push(q, msg);
+	QHandle* ud = (QHandle*)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
+	queue_pack_push(L, ud->q, 2);
 	return 0;
 }
 
@@ -178,14 +263,37 @@ static int simple_unpack_msg(lua_State* L) {
 }
 
 static int tqueue_pop(lua_State* L) {
-	TQueue* q = *(TQueue**)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
+	QHandle* ud = (QHandle*)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
 	uint32_t wait_time = (uint32_t)luaL_optinteger(L, 2, 0);
-	TMsg* msg;
+	TQueue* q = ud->q;
+	TQueue* tq = ud->tq;
+	TMsg* msg = NULL;
 	int res;
-	if( !q )
+	if( tq ) thread_event_handle(tq, L);
+	if( !q ) return 0;
+
+#ifdef _WIN32
+	if( tq && (wait_time > 0) ) {
+		HANDLE evs[2] = { tq->ev, q->ev };	// wait for tq & q
+		switch( WaitForMultipleObjects(2, evs, FALSE, wait_time) ) {
+		case WAIT_OBJECT_0:
+			thread_event_handle(tq, L);
+			// not break;
+		case WAIT_OBJECT_0 + 1:
+			msg = queue_pop(q);
+			break;
+		default:
+			break;
+		}
+	} else {
+		msg = queue_wait(q, wait_time);
+	}
+#else
+	msg = queue_wait(q, wait_time);
+#endif
+	if( !msg )
 		return 0;
-	if( (msg = queue_wait(q, wait_time))==NULL )
-		return 0;
+
 	lua_settop(L, 0);
 	lua_pushcfunction(L, simple_unpack_msg);
 	lua_pushlightuserdata(L, msg);
@@ -203,9 +311,12 @@ static luaL_Reg tqueue_methods[] =
 	, { NULL, NULL }
 	};
 
-static TQueue** tqueue_create(lua_State* L, TQueue* q, int ensure_queue) {
-	TQueue** ud = (TQueue**)lua_newuserdata(L, sizeof(TQueue*));
-	*ud = NULL;
+static QHandle* tqueue_create(lua_State* L, TQueue* q, int ensure_queue) {
+	QHandle* ud = (QHandle*)lua_newuserdata(L, sizeof(QHandle));
+	ud->q = NULL;
+#ifdef _WIN32
+	ud->tq = 0;
+#endif
 	if( luaL_newmetatable(L, PUSS_NAME_QUEUE_MT) ) {
 		luaL_setfuncs(L, tqueue_methods, 0);
 		lua_pushvalue(L, -1);
@@ -213,47 +324,24 @@ static TQueue** tqueue_create(lua_State* L, TQueue* q, int ensure_queue) {
 	}
 	lua_setmetatable(L, -2);
 
-	if( !q && (ensure_queue) ) {
-		q = (TQueue*)malloc(sizeof(TQueue));
-		if( q ) {
-			memset(q, 0, sizeof(TQueue));
-#ifdef _WIN32
-			q->ev = CreateEventA(NULL, TRUE, FALSE, NULL);
-#else
-			pthread_cond_init(&q->cond, NULL);
-#endif
-			puss_mutex_init(&q->mutex);
-		}
-	}
-	*ud = queue_ref(q);
+	if( !q && (ensure_queue) )
+		q = queue_new();
+	ud->q = queue_ref(q);
 	return ud;
 }
 
 #ifdef _WIN32
 #else
-static __thread lua_State* thread_L;
-
 static void on_signal(int sig) {
-	lua_State* L = thread_L;
-	fprintf(stderr, "recv signal: %d %p\n", sig, L);
-	if( L && puss_lua_get(L, PUSS_KEY_SIGNAL_HANDLE)==LUA_TFUNCTION ) {
-		int top = lua_gettop(L);
-		puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
-		lua_insert(L, -2);
-		lua_pushinteger(L, sig);
-		lua_pcall(L, 1, 0, top);
-		lua_settop(L, top-1);
-	}
+	fprintf(stderr, "recv signal: %d %p\n", sig);
 }
 #endif
 
 static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
 	lua_State* L = (lua_State*)arg;
-#ifdef _WIN32
-#else
 	fprintf(stderr, "thread start: %p\n", L);
-	thread_L = L;
-	signal(SIGQUIT, on_signal);
+#ifndef _WIN32
+	signal(SIGUSR1, on_signal);
 #endif
 
 	// thread main
@@ -263,71 +351,64 @@ static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
 
 	// close state
 	lua_close(L);
-#ifdef _WIN32
-#else
-	thread_L = NULL;
 	fprintf(stderr, "thread exit: %p\n", L);
-#endif
 	return 0;
 }
 
 static int puss_lua_queue_create(lua_State* L) {
-	return (*tqueue_create(L, NULL, 1)) ? 1 : luaL_error(L, "tqueue_create failed!");
+	return tqueue_create(L, NULL, 1)->q ? 1 : luaL_error(L, "tqueue_create failed!");
 }
 
 static int thread_detach(lua_State* L) {
-	PussThreadID* ud = (PussThreadID*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
-	if( *ud ) {
-		puss_thread_detach(*ud);
-		*ud = 0;
+	THandle* ud = (THandle*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
+	if( ud->q ) {
+		ud->q->_detached = 1;
+		queue_unref(ud->q);
+		ud->q = NULL;
+	}
+	if( ud->tid ) {
+		puss_thread_detach(ud->tid);
+		ud->tid = 0;
 	}
 	return 0;
 }
 
 static int thread_join(lua_State* L) {
-	PussThreadID* ud = (PussThreadID*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
-	if( *ud ) {
+	THandle* ud = (THandle*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
+	if( ud->q ) {
+		ud->q->_detached = 1;
+		queue_unref(ud->q);
+		ud->q = NULL;
+	}
+	if( ud->tid ) {
 #ifdef _WIN32
-		WaitForSingleObject(*ud, INFINITE);
+		WaitForSingleObject(ud->tid, INFINITE);
 #else
 		void* ret = NULL;
 		pthread_join(*ud, &ret);
 #endif
-		*ud = 0;
+		ud->tid = 0;
 	}
 	return 0;
 }
 
-#ifdef _WIN32
-#else
-static int thread_kill(lua_State* L) {
-	PussThreadID* ud = (PussThreadID*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
-	if( *ud ) {
-		lua_pushinteger(L, pthread_kill(*ud, SIGQUIT));
+static int thread_post(lua_State* L) {
+	THandle* ud = (THandle*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
+	queue_pack_push(L, ud->q, 2);
+#ifndef _WIN32
+	if( ud->tid ) {
+		pthread_kill(*ud, SIGUSR1));
 		return 1;
 	}
-	return 0;
-}
-
-static int thread_exist(lua_State* L) {
-	PussThreadID* ud = (PussThreadID*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
-	if( *ud ) {
-		lua_pushinteger(L, pthread_kill(*ud, 0));
-		return 1;
-	}
-	return 0;
-}
 #endif
+	return 0;
+}
 
 static luaL_Reg thread_methods[] =
 	{ {"__gc", thread_detach}
 	, {"detach", thread_detach}
 	, {"join", thread_join}
-#ifdef _WIN32
-#else
-	, {"kill", thread_kill}
-	, {"exist", thread_exist}
-#endif
+	, {"post", thread_post}
 	, { NULL, NULL }
 	};
 
@@ -344,9 +425,8 @@ typedef struct _TArg {
 	};
 } TArg;
 
-static void targs_build(lua_State* L, TArg* a, int n) {
-	int i;
-	for( i=1; i<=n; ++i ) {
+static void targs_build(lua_State* L, TArg* a, int i, int n) {
+	for( ; i<=n; ++i ) {
 		a->type = lua_type(L, i);
 		switch( lua_type(L, i) ) {
 		case LUA_TNIL:
@@ -374,7 +454,7 @@ static void targs_build(lua_State* L, TArg* a, int n) {
 			a->s = lua_pushlstring(L, (const char*)a->p, a->len);
 			break;
 		case LUA_TUSERDATA:
-			a->q = *(TQueue**)luaL_checkudata(L, i, PUSS_NAME_QUEUE_MT);
+			a->q = ((QHandle*)luaL_checkudata(L, i, PUSS_NAME_QUEUE_MT))->q;
 			break;
 		default:
 			luaL_error(L, "not support arg type(%s)", lua_typename(L, a->type));
@@ -385,7 +465,7 @@ static void targs_build(lua_State* L, TArg* a, int n) {
 	a->type = LUA_TNONE;
 }
 
-static void targs_parse(lua_State* L, const TArg* a) {
+static void targs_parse(lua_State* L, const TArg* a, TQueue* tq) {
 	for( ; a->type!=LUA_TNONE; ++a ) {
 		switch( a->type ) {
 		case LUA_TNIL:
@@ -411,7 +491,7 @@ static void targs_parse(lua_State* L, const TArg* a) {
 			puss_simple_unpack(L, a->s, a->len);
 			break;
 		case LUA_TUSERDATA:
-			tqueue_create(L, a->q, 0);
+			tqueue_create(L, a->q, 0)->tq = tq;
 			break;
 		default:
 			break;
@@ -419,13 +499,44 @@ static void targs_parse(lua_State* L, const TArg* a) {
 	}
 }
 
+static int thread_wait(lua_State* L) {
+	QHandle* ud = (QHandle*)lua_touserdata(L, lua_upvalueindex(1));
+	lua_Integer ms = luaL_optinteger(L, 1, 0);
+	TQueue* tq = ud->q;
+#ifdef _WIN32
+	if( WaitForSingleObject(tq->ev, (DWORD)ms)==WAIT_OBJECT_0 )
+		thread_event_handle(tq, L);
+#else
+	thread_event_handle(tq, L);
+	usleep(ms*1000);
+	thread_event_handle(tq, L);
+#endif
+	lua_pushboolean(L, tq->_detached);
+	return 1;
+}
+
+static int thread_event_handle_reset(lua_State* L) {
+	luaL_checkany(L, 1);
+	lua_settop(L, 1);
+	__puss_config__.state_set_key(L, PUSS_KEY_THREAD_EVENT_HANDLE);
+	return 0;
+}
+
 static int thread_prepare(lua_State* L) {
 	TArg* args = (TArg*)lua_touserdata(L, 1);
+	TQueue* tq = (TQueue*)lua_touserdata(L, 2);
+	if( tq && puss_lua_get(L, PUSS_KEY_PUSS)==LUA_TTABLE ) {
+		tqueue_create(L, tq, 0);
+		lua_pushcclosure(L, thread_wait, 1);
+		lua_setfield(L, -2, "thread_wait");
+		lua_pushcfunction(L, thread_event_handle_reset);
+		lua_setfield(L, -2, "thread_event_handle_reset");
+	}
 	lua_settop(L, 0);
 	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
 	assert( args->type==LUA_TSTRING );
 	puss_get_value(L, args->s);
-	targs_parse(L, ++args);
+	targs_parse(L, ++args, tq);
 	return lua_gettop(L);
 }
 
@@ -433,14 +544,16 @@ static int thread_prepare(lua_State* L) {
 
 static int puss_lua_thread_create(lua_State* L) {
 	int n = lua_gettop(L);
-	PussThreadID* ud = lua_newuserdata(L, sizeof(PussThreadID));
+	int enable_thread_event = lua_toboolean(L, 1);
+	THandle* ud = lua_newuserdata(L, sizeof(THandle));
 	lua_State* new_state;
 	TArg args[THREAD_ARGS_MAX+1];
 	if( n > THREAD_ARGS_MAX )
-		luaL_error(L, "too many args!");
-	luaL_checktype(L, 1, LUA_TSTRING);
+		return luaL_error(L, "too many args!");
+	luaL_checktype(L, enable_thread_event ? 1 : 2, LUA_TSTRING);
 
-	*ud = 0;
+	ud->tid = 0;
+	ud->q = NULL;
 	if( luaL_newmetatable(L, PUSS_NAME_THREAD_MT) ) {
 		luaL_setfuncs(L, thread_methods, 0);
 		lua_pushvalue(L, -1);
@@ -448,8 +561,15 @@ static int puss_lua_thread_create(lua_State* L) {
 	}
 	lua_setmetatable(L, -2);
 
+	if( enable_thread_event ) {
+		TQueue* q = queue_new();
+		if( !q )
+			return luaL_error(L, "create thread queue failed!");
+		ud->q = queue_ref(q);
+	}
+
 	memset(args, 0, sizeof(args));
-	targs_build(L, args, n);
+	targs_build(L, args, enable_thread_event ? 1 : 2, n);
 
 	new_state = puss_lua_newstate();
 	if( !new_state )
@@ -458,12 +578,13 @@ static int puss_lua_thread_create(lua_State* L) {
 	lua_settop(new_state, 0);
 	lua_pushcfunction(new_state, thread_prepare);
 	lua_pushlightuserdata(new_state, args);
-	if( lua_pcall(new_state, 1, LUA_MULTRET, 0) ) {
+	lua_pushlightuserdata(new_state, ud->q);
+	if( lua_pcall(new_state, 2, LUA_MULTRET, 0) ) {
 		lua_close(new_state);
 		return luaL_error(L, "new state prepare failed!");
 	}
 
-	if( !puss_thread_create(ud, thread_main_wrapper, new_state) ) {
+	if( !puss_thread_create(&ud->tid, thread_main_wrapper, new_state) ) {
 		lua_close(new_state);
 		return luaL_error(L, "create thread failed!");
 	}
@@ -471,17 +592,9 @@ static int puss_lua_thread_create(lua_State* L) {
 	return 1;
 }
 
-static int puss_lua_thread_signal(lua_State* L) {
-	luaL_checkany(L, 1);
-	lua_settop(L, 1);
-	__puss_config__.state_set_key(L, PUSS_KEY_SIGNAL_HANDLE);
-	return 0;
-}
-
 static luaL_Reg thread_service_methods[] =
 	{ {"queue_create", puss_lua_queue_create}
 	, {"thread_create", puss_lua_thread_create}
-	, {"thread_signal", puss_lua_thread_signal}
 	, {NULL, NULL}
 	};
 
