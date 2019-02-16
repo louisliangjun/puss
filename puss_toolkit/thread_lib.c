@@ -325,21 +325,20 @@ static QHandle* tqueue_create(lua_State* L, TQueue* q, int ensure_queue) {
 }
 
 #ifndef _WIN32
+	static __thread lua_State* thread_L;
+	static __thread TQueue* thread_Q;
 
-static __thread lua_State* thread_L;
-static __thread TQueue* thread_Q;
-
-static void on_signal(int sig) {
-	fprintf(stderr, "recv signal: %d\n", sig);
-	if( thread_L && thread_Q ) {
-		thread_event_handle(thread_Q, thread_L);	
+	static void on_thread_signal(int sig) {
+		if( sig==SIGUSR1 && thread_L && thread_Q ) {
+			// fprintf(stderr, "recv signal: %d\n", sig);
+			thread_event_handle(thread_Q, thread_L);	
+		}
 	}
-}
 #endif
 
 static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
 	lua_State* L = (lua_State*)arg;
-	fprintf(stderr, "thread start: %p\n", L);
+	// fprintf(stderr, "thread start: %p\n", L);
 #ifndef _WIN32
 	thread_L = L;
 	thread_Q = lua_touserdata(L, -1);
@@ -358,7 +357,7 @@ static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
 	thread_L = NULL;
 #endif
 	lua_close(L);
-	fprintf(stderr, "thread exit: %p\n", L);
+	// fprintf(stderr, "thread exit: %p\n", L);
 	return 0;
 }
 
