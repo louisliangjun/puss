@@ -52,7 +52,7 @@
 		struct timespec timeout;
 		uint64_t ns = wait_time_ms;
 		clock_gettime(CLOCK_REALTIME, &timeout);
-		ns = ns * 1000 + timeout.tv_nsec;
+		ns = ns * 1000000 + timeout.tv_nsec;
 		timeout.tv_sec += ns / 1000000000;
 		timeout.tv_nsec = ns % 1000000000;
 		return pthread_cond_timedwait(cond, lock, &timeout)!=ETIMEDOUT;

@@ -46,16 +46,12 @@ struct _TEnv {
 
 typedef struct _QHandle {
 	TQueue*			q;
-#ifdef _WIN32
 	TQueue*			tq;
-#endif
 } QHandle;
 
 typedef struct _THandle {
 	PussThreadID	tid;
-#ifdef _WIN32
 	TQueue*			q;
-#endif
 } THandle;
 
 static TQueue* queue_new(void) {
@@ -314,9 +310,7 @@ static luaL_Reg tqueue_methods[] =
 static QHandle* tqueue_create(lua_State* L, TQueue* q, int ensure_queue) {
 	QHandle* ud = (QHandle*)lua_newuserdata(L, sizeof(QHandle));
 	ud->q = NULL;
-#ifdef _WIN32
 	ud->tq = 0;
-#endif
 	if( luaL_newmetatable(L, PUSS_NAME_QUEUE_MT) ) {
 		luaL_setfuncs(L, tqueue_methods, 0);
 		lua_pushvalue(L, -1);
@@ -330,10 +324,16 @@ static QHandle* tqueue_create(lua_State* L, TQueue* q, int ensure_queue) {
 	return ud;
 }
 
-#ifdef _WIN32
-#else
+#ifndef _WIN32
+
+static __thread lua_State* thread_L;
+static __thread TQueue* thread_Q;
+
 static void on_signal(int sig) {
-	fprintf(stderr, "recv signal: %d %p\n", sig);
+	fprintf(stderr, "recv signal: %d\n", sig);
+	if( thread_L && thread_Q ) {
+		thread_event_handle(thread_Q, thread_L);	
+	}
 }
 #endif
 
@@ -341,8 +341,11 @@ static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
 	lua_State* L = (lua_State*)arg;
 	fprintf(stderr, "thread start: %p\n", L);
 #ifndef _WIN32
+	thread_L = L;
+	thread_Q = lua_touserdata(L, -1);
 	signal(SIGUSR1, on_signal);
 #endif
+	lua_pop(L, 1);	// pop tq lightuserdata
 
 	// thread main
 	assert( lua_isfunction(L, 1) );
@@ -350,6 +353,10 @@ static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
 	lua_pcall(L, lua_gettop(L)-2, 0, 1);
 
 	// close state
+#ifndef _WIN32
+	thread_Q = NULL;
+	thread_L = NULL;
+#endif
 	lua_close(L);
 	fprintf(stderr, "thread exit: %p\n", L);
 	return 0;
@@ -385,7 +392,7 @@ static int thread_join(lua_State* L) {
 		WaitForSingleObject(ud->tid, INFINITE);
 #else
 		void* ret = NULL;
-		pthread_join(*ud, &ret);
+		pthread_join(ud->tid, &ret);
 #endif
 		ud->tid = 0;
 	}
@@ -397,7 +404,7 @@ static int thread_post(lua_State* L) {
 	queue_pack_push(L, ud->q, 2);
 #ifndef _WIN32
 	if( ud->tid ) {
-		pthread_kill(*ud, SIGUSR1));
+		pthread_kill(ud->tid, SIGUSR1);
 		return 1;
 	}
 #endif
@@ -509,7 +516,6 @@ static int thread_wait(lua_State* L) {
 #else
 	thread_event_handle(tq, L);
 	usleep(ms*1000);
-	thread_event_handle(tq, L);
 #endif
 	lua_pushboolean(L, tq->_detached);
 	return 1;
@@ -525,7 +531,8 @@ static int thread_event_handle_reset(lua_State* L) {
 static int thread_prepare(lua_State* L) {
 	TArg* args = (TArg*)lua_touserdata(L, 1);
 	TQueue* tq = (TQueue*)lua_touserdata(L, 2);
-	if( tq && puss_lua_get(L, PUSS_KEY_PUSS)==LUA_TTABLE ) {
+	if( tq ) {
+		puss_lua_get(L, PUSS_KEY_PUSS);
 		tqueue_create(L, tq, 0);
 		lua_pushcclosure(L, thread_wait, 1);
 		lua_setfield(L, -2, "thread_wait");
@@ -537,6 +544,7 @@ static int thread_prepare(lua_State* L) {
 	assert( args->type==LUA_TSTRING );
 	puss_get_value(L, args->s);
 	targs_parse(L, ++args, tq);
+	lua_pushlightuserdata(L, tq);
 	return lua_gettop(L);
 }
 
