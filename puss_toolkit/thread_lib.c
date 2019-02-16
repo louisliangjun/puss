@@ -154,7 +154,6 @@ static int tqueue_refcount(lua_State* L) {
 }
 
 static int tqueue_push(lua_State* L) {
-	int top = lua_gettop(L);
 	TQueue* q = *(TQueue**)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
 	size_t len = 0;
 	void* pkt;
@@ -230,6 +229,48 @@ static TQueue** tqueue_create(lua_State* L, TQueue* q, int ensure_queue) {
 	return ud;
 }
 
+#ifdef _WIN32
+#else
+static __thread lua_State* thread_L;
+
+static void on_signal(int sig) {
+	lua_State* L = thread_L;
+	fprintf(stderr, "recv signal: %d %p\n", sig, L);
+	if( L && puss_lua_get(L, PUSS_KEY_SIGNAL_HANDLE)==LUA_TFUNCTION ) {
+		int top = lua_gettop(L);
+		puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
+		lua_insert(L, -2);
+		lua_pushinteger(L, sig);
+		lua_pcall(L, 1, 0, top);
+		lua_settop(L, top-1);
+	}
+}
+#endif
+
+static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
+	lua_State* L = (lua_State*)arg;
+#ifdef _WIN32
+#else
+	fprintf(stderr, "thread start: %p\n", L);
+	thread_L = L;
+	signal(SIGQUIT, on_signal);
+#endif
+
+	// thread main
+	assert( lua_isfunction(L, 1) );
+	assert( lua_isfunction(L, 2) );
+	lua_pcall(L, lua_gettop(L)-2, 0, 1);
+
+	// close state
+	lua_close(L);
+#ifdef _WIN32
+#else
+	thread_L = NULL;
+	fprintf(stderr, "thread exit: %p\n", L);
+#endif
+	return 0;
+}
+
 static int puss_lua_queue_create(lua_State* L) {
 	return (*tqueue_create(L, NULL, 1)) ? 1 : luaL_error(L, "tqueue_create failed!");
 }
@@ -257,10 +298,36 @@ static int thread_join(lua_State* L) {
 	return 0;
 }
 
+#ifdef _WIN32
+#else
+static int thread_kill(lua_State* L) {
+	PussThreadID* ud = (PussThreadID*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
+	if( *ud ) {
+		lua_pushinteger(L, pthread_kill(*ud, SIGQUIT));
+		return 1;
+	}
+	return 0;
+}
+
+static int thread_exist(lua_State* L) {
+	PussThreadID* ud = (PussThreadID*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
+	if( *ud ) {
+		lua_pushinteger(L, pthread_kill(*ud, 0));
+		return 1;
+	}
+	return 0;
+}
+#endif
+
 static luaL_Reg thread_methods[] =
 	{ {"__gc", thread_detach}
 	, {"detach", thread_detach}
 	, {"join", thread_join}
+#ifdef _WIN32
+#else
+	, {"kill", thread_kill}
+	, {"exist", thread_exist}
+#endif
 	, { NULL, NULL }
 	};
 
@@ -362,19 +429,6 @@ static int thread_prepare(lua_State* L) {
 	return lua_gettop(L);
 }
 
-static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
-	lua_State* L = (lua_State*)arg;
-
-	// thread main
-	assert( lua_isfunction(L, 1) );
-	assert( lua_isfunction(L, 2) );
-	lua_pcall(L, lua_gettop(L)-2, 0, 1);
-
-	// close state
-	lua_close(L);
-	return 0;
-}
-
 #define THREAD_ARGS_MAX	32
 
 static int puss_lua_thread_create(lua_State* L) {
@@ -417,9 +471,17 @@ static int puss_lua_thread_create(lua_State* L) {
 	return 1;
 }
 
+static int puss_lua_thread_signal(lua_State* L) {
+	luaL_checkany(L, 1);
+	lua_settop(L, 1);
+	__puss_config__.state_set_key(L, PUSS_KEY_SIGNAL_HANDLE);
+	return 0;
+}
+
 static luaL_Reg thread_service_methods[] =
 	{ {"queue_create", puss_lua_queue_create}
 	, {"thread_create", puss_lua_thread_create}
+	, {"thread_signal", puss_lua_thread_signal}
 	, {NULL, NULL}
 	};
 

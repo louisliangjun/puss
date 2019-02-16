@@ -349,12 +349,23 @@ static int puss_lua_timestamp(lua_State* L) {
 	return 3;
 }
 
+static int puss_lua_sleep(lua_State* L) {
+	lua_Integer ms = luaL_checkinteger(L, 1);
+#ifdef _WIN32
+	Sleep((DWORD)ms);
+#else
+	usleep(ms*1000);
+#endif
+	return 3;
+}
+
 static luaL_Reg puss_utils_methods[] =
 	{ {"filename_format", puss_lua_filename_format}
 	, {"file_list", puss_lua_file_list}
 	, {"local_to_utf8", puss_lua_local_to_utf8}
 	, {"utf8_to_local", puss_lua_utf8_to_local}
 	, {"timestamp", puss_lua_timestamp}
+	, {"sleep", puss_lua_sleep}
 	, {NULL, NULL}
 	};
 

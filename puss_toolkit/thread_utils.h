@@ -30,6 +30,7 @@
 	#include <errno.h>
 	#include <time.h>
 	#include <sys/time.h>
+	#include <sys/signal.h>
 
 	typedef pthread_mutex_t		PussMutex;
 	typedef pthread_t			PussThreadID;
