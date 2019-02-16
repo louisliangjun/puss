@@ -139,7 +139,7 @@ static TMsg* queue_wait(TQueue* q, uint32_t wait_time) {
 	return res;
 }
 
-static int tqueue_gc(lua_State* L) {
+static int tqueue_close(lua_State* L) {
 	TQueue** ud = (TQueue**)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
 	TQueue* q = *ud;
 	*ud = NULL;
@@ -159,10 +159,16 @@ static int tqueue_push(lua_State* L) {
 	size_t len = 0;
 	void* pkt;
 	TMsg* msg;
-	if( top < 2 )
-		return luaL_error(L, "thread post bad args!");
 	if( !q )
 		return 0;
+	if( top < 2 ) {
+#ifdef _WIN32
+		SetEvent(q->ev);
+#else
+		pthread_cond_signal(&q->cond);
+#endif
+		return 0;
+	}
 	pkt = puss_simple_pack(&len, L, 2, -1);
 	msg = (TMsg*)malloc(sizeof(TMsg) + len);
 	if( !msg )
@@ -198,8 +204,8 @@ static int tqueue_pop(lua_State* L) {
 }
 
 static luaL_Reg tqueue_methods[] =
-	{ {"__gc", tqueue_gc}
-	, {"close", tqueue_gc}
+	{ {"__gc", tqueue_close}
+	, {"close", tqueue_close}
 	, {"refcount", tqueue_refcount}
 	, {"push", tqueue_push}
 	, {"pop", tqueue_pop}
