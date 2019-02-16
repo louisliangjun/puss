@@ -161,14 +161,6 @@ static int tqueue_push(lua_State* L) {
 	TMsg* msg;
 	if( !q )
 		return 0;
-	if( top < 2 ) {
-#ifdef _WIN32
-		SetEvent(q->ev);
-#else
-		pthread_cond_signal(&q->cond);
-#endif
-		return 0;
-	}
 	pkt = puss_simple_pack(&len, L, 2, -1);
 	msg = (TMsg*)malloc(sizeof(TMsg) + len);
 	if( !msg )
