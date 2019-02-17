@@ -4,7 +4,7 @@ local function test1()
 	local t = puss.thread_create(false, 'puss.dostring', [[
 		print('start', ...)
 		local step = 0
-		assert( puss.thread_event_handle_reset==nil )
+		assert( puss.thread_signal==nil )
 		assert( puss.thread_wait==nil )
 		while step < 3 do
 			step = step + 1
@@ -41,7 +41,7 @@ local function test3()
 	local t = puss.thread_create('puss.dostring', [[
 		print('start', ...)
 		local step = 0
-		puss.thread_event_handle_reset(function(...)
+		puss.thread_signal(function(...)
 			print('  [EV]', ...)
 			step = step + 1
 		end)
@@ -67,7 +67,7 @@ local function test4(enable_wait)
 		local name, q = ...
 		print('start', name)
 		local step = 0
-		puss.thread_event_handle_reset(function(...)
+		puss.thread_signal(function(...)
 			print('  [EV]', ...)
 			step = step + 1
 		end)

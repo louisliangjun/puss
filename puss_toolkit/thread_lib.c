@@ -126,13 +126,10 @@ static void queue_push(TQueue* q, TMsg* task) {
 		SetEvent(q->ev);
 	puss_mutex_unlock(&q->mutex);
 #else
-	int need_event;
 	puss_mutex_lock(&q->mutex);
 	task_queue_push(q, task);
-	need_event = (q->head==task);
 	puss_mutex_unlock(&q->mutex);
-	if( need_event )
-		pthread_cond_signal(&q->cond);
+	pthread_cond_signal(&q->cond);
 #endif
 }
 
@@ -194,7 +191,7 @@ static int do_thread_event(lua_State* L) {
 	return 0;
 }
 
-static int thread_event_handle(TQueue* tq, lua_State* L) {
+static int thread_signal_handle(TQueue* tq, lua_State* L) {
 	while( tq->head ) {
 		TMsg* msg = queue_pop(tq);
 		if( !msg )
@@ -220,13 +217,6 @@ static int tqueue_close(lua_State* L) {
 	return 0;
 }
 
-static int tqueue_refcount(lua_State* L) {
-	QHandle* ud = (QHandle*)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
-	TQueue* q = ud->q;
-	lua_pushinteger(L, q ? q->_ref : 0);
-	return 1;
-}
-
 static int tqueue_push(lua_State* L) {
 	QHandle* ud = (QHandle*)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
 	queue_pack_push(L, ud->q, 2);
@@ -246,17 +236,18 @@ static int tqueue_pop(lua_State* L) {
 	TQueue* tq = ud->tq;
 	TMsg* msg = NULL;
 	int res;
-	if( tq ) thread_event_handle(tq, L);
+	if( tq ) thread_signal_handle(tq, L);
 	if( !q ) return 0;
 
 	msg = queue_pop(q);
-	if( (!msg) && (wait_time > 0) ) {
+	if( !msg ) {
+	       if( wait_time==0 ) return 0;
 #ifdef _WIN32
 		if( tq ) {
 			HANDLE evs[2] = { tq->ev, q->ev };	// wait for tq & q
 			switch( WaitForMultipleObjects(2, evs, FALSE, wait_time) ) {
 			case WAIT_OBJECT_0:
-				thread_event_handle(tq, L);
+				thread_signal_handle(tq, L);
 				// not break;
 			case WAIT_OBJECT_0 + 1:
 				msg = queue_pop(q);
@@ -276,10 +267,9 @@ static int tqueue_pop(lua_State* L) {
 		}
 		puss_mutex_unlock(&q->mutex);
 #endif
-	}
 
-	if( !msg )
-		return 0;
+		if( !msg ) return 0;
+	}
 
 	lua_settop(L, 0);
 	lua_pushcfunction(L, simple_unpack_msg);
@@ -292,7 +282,6 @@ static int tqueue_pop(lua_State* L) {
 static luaL_Reg tqueue_methods[] =
 	{ {"__gc", tqueue_close}
 	, {"close", tqueue_close}
-	, {"refcount", tqueue_refcount}
 	, {"push", tqueue_push}
 	, {"pop", tqueue_pop}
 	, { NULL, NULL }
@@ -322,7 +311,7 @@ static QHandle* tqueue_create(lua_State* L, TQueue* q, int ensure_queue) {
 	static void on_thread_signal(int sig) {
 		if( sig==SIGUSR1 && thread_L && thread_Q ) {
 			// fprintf(stderr, "recv signal: %d\n", sig);
-			thread_event_handle(thread_Q, thread_L);	
+			thread_signal_handle(thread_Q, thread_L);	
 		}
 	}
 #endif
@@ -333,7 +322,7 @@ static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
 #ifndef _WIN32
 	thread_L = L;
 	thread_Q = lua_touserdata(L, -1);
-	signal(SIGUSR1, on_signal);
+	signal(SIGUSR1, on_thread_signal);
 #endif
 	lua_pop(L, 1);	// pop tq lightuserdata
 
@@ -502,16 +491,16 @@ static int thread_wait(lua_State* L) {
 	TQueue* tq = ud->q;
 #ifdef _WIN32
 	if( WaitForSingleObject(tq->ev, (DWORD)ms)==WAIT_OBJECT_0 )
-		thread_event_handle(tq, L);
+		thread_signal_handle(tq, L);
 #else
-	thread_event_handle(tq, L);
+	thread_signal_handle(tq, L);
 	usleep(ms*1000);
 #endif
 	lua_pushboolean(L, tq->_detached);
 	return 1;
 }
 
-static int thread_event_handle_reset(lua_State* L) {
+static int thread_signal(lua_State* L) {
 	luaL_checkany(L, 1);
 	lua_settop(L, 1);
 	__puss_config__.state_set_key(L, PUSS_KEY_THREAD_EVENT_HANDLE);
@@ -526,8 +515,8 @@ static int thread_prepare(lua_State* L) {
 		tqueue_create(L, tq, 0);
 		lua_pushcclosure(L, thread_wait, 1);
 		lua_setfield(L, -2, "thread_wait");
-		lua_pushcfunction(L, thread_event_handle_reset);
-		lua_setfield(L, -2, "thread_event_handle_reset");
+		lua_pushcfunction(L, thread_signal);
+		lua_setfield(L, -2, "thread_signal");
 	}
 	lua_settop(L, 0);
 	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
