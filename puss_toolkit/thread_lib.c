@@ -152,25 +152,6 @@ static TMsg* queue_pop(TQueue* q) {
 	return res;
 }
 
-static TMsg* queue_wait(TQueue* q, uint32_t wait_time) {
-	TMsg* res = queue_pop(q);
-#ifdef _WIN32
-	if( (!res) && (WaitForSingleObject(q->ev, wait_time)==WAIT_OBJECT_0) )
-		res = queue_pop(q);
-#else
-	if( (!res) && (wait_time>0) ) {
-		puss_mutex_lock(&q->mutex);
-		task_queue_pop(q, res);
-		if( !res ) {
-			puss_pthread_cond_timedwait(&q->cond, &q->mutex, wait_time);
-			task_queue_pop(q, res);
-		}
-		puss_mutex_unlock(&q->mutex);
-	}
-#endif
-	return res;
-}
-
 static void queue_pack_push(lua_State* L, TQueue* q, int start) {
 	size_t len = 0;
 	void* pkt;
@@ -268,10 +249,10 @@ static int tqueue_pop(lua_State* L) {
 	if( tq ) thread_event_handle(tq, L);
 	if( !q ) return 0;
 
+	msg = queue_pop(q);
+	if( (!msg) && (wait_time > 0) ) {
 #ifdef _WIN32
-	if( tq ) {
-		msg = queue_pop(q);
-		if( !msg ) {
+		if( tq ) {
 			HANDLE evs[2] = { tq->ev, q->ev };	// wait for tq & q
 			switch( WaitForMultipleObjects(2, evs, FALSE, wait_time) ) {
 			case WAIT_OBJECT_0:
@@ -283,13 +264,20 @@ static int tqueue_pop(lua_State* L) {
 			default:
 				break;
 			}
+		} else if( WaitForSingleObject(q->ev, wait_time)==WAIT_OBJECT_0 ) {
+			msg = queue_pop(q);
 		}
-	} else {
-		msg = queue_wait(q, wait_time);
-	}
 #else
-	msg = queue_wait(q, wait_time);
+		puss_mutex_lock(&q->mutex);
+		task_queue_pop(q, msg);
+		if( !msg ) {
+			puss_pthread_cond_timedwait(&q->cond, &q->mutex, wait_time);
+			task_queue_pop(q, msg);
+		}
+		puss_mutex_unlock(&q->mutex);
 #endif
+	}
+
 	if( !msg )
 		return 0;
 
