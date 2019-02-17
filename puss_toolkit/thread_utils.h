@@ -48,16 +48,6 @@
 	#define puss_mutex_lock		pthread_mutex_lock
 	#define puss_mutex_unlock	pthread_mutex_unlock
 
-	static inline int puss_pthread_cond_timedwait(pthread_cond_t* cond, PussMutex* lock, uint32_t wait_time_ms) {
-		struct timespec timeout;
-		uint64_t ns = wait_time_ms;
-		clock_gettime(CLOCK_REALTIME, &timeout);
-		ns = ns * 1000000 + timeout.tv_nsec;
-		timeout.tv_sec += ns / 1000000000;
-		timeout.tv_nsec = ns % 1000000000;
-		return pthread_cond_timedwait(cond, lock, &timeout)!=ETIMEDOUT;
-	}
-
 	static inline int puss_thread_create(PussThreadID* ptid, PussThreadFun fun, void* arg) {
 		int ret = pthread_create(ptid, NULL, fun, arg);
 		return ret==0;

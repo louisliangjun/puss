@@ -259,13 +259,21 @@ static int tqueue_pop(lua_State* L) {
 			msg = queue_pop(q);
 		}
 #else
-		puss_mutex_lock(&q->mutex);
-		task_queue_pop(q, msg);
-		if( !msg ) {
-			puss_pthread_cond_timedwait(&q->cond, &q->mutex, wait_time);
-			task_queue_pop(q, msg);
+		{
+			struct timespec timeout;
+			uint64_t ns = wait_time;
+			clock_gettime(CLOCK_REALTIME, &timeout);
+			ns = ns * 1000000 + timeout.tv_nsec;
+			timeout.tv_sec += ns / 1000000000;
+			timeout.tv_nsec = ns % 1000000000;
+			puss_mutex_lock(&q->mutex);
+			for(;;) {
+				task_queue_pop(q, msg);
+				if( msg ) break;
+				if( pthread_cond_timedwait(cond, lock, &timeout)==ETIMEDOUT ) break;
+			}
+			puss_mutex_unlock(&q->mutex);
 		}
-		puss_mutex_unlock(&q->mutex);
 #endif
 
 		if( !msg ) return 0;
