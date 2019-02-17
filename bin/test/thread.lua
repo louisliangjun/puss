@@ -92,9 +92,46 @@ local function test4(enable_wait)
 	t:join()
 end
 
+local function test5(enable_wait)
+	local n = 10000000
+	local q = puss.queue_create()
+	local qc = puss.queue_create()
+	local s = [[
+		local name, q, qc = ...
+		print('start', name)
+		qc:pop(10000000)
+		print('recv start')
+		local ts = puss.timestamp()
+		local i = 0
+		while q:pop(100) do
+			i = i + 1
+		end
+		local te = puss.timestamp()
+		return print('exit', name, i, te-ts)
+	]]
+	local t1 = puss.thread_create('puss.dostring', s, nil, 't5.1', q, qc)
+	local t2 = puss.thread_create(false, 'puss.dostring', s, nil, 't5.2', q, qc)
+
+	do
+		puss.sleep(500)
+		local ts = puss.timestamp()
+		for i=1,n do
+			q:push(i)
+		end
+		local te = puss.timestamp()
+		print('send use', te-ts)
+		qc:push('start_recv 1')
+		qc:push('start_recv 2')
+	end
+
+	t1:join()
+	t2:join()
+end
+
 function __main__()
 	print(pcall(test1))
 	print(pcall(test2))
 	print(pcall(test3))
 	print(pcall(test4))
+	print(pcall(test5))
 end
