@@ -134,5 +134,4 @@ function __main__()
 	print(pcall(test3))
 	print(pcall(test4))
 	print(pcall(test5))
-	os.execute('pause')
 end

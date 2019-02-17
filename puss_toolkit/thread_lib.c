@@ -270,7 +270,7 @@ static int tqueue_pop(lua_State* L) {
 			for(;;) {
 				task_queue_pop(q, msg);
 				if( msg ) break;
-				if( pthread_cond_timedwait(cond, lock, &timeout)==ETIMEDOUT ) break;
+				if( pthread_cond_timedwait(&q->cond, &q->mutex, &timeout)==ETIMEDOUT ) break;
 			}
 			puss_mutex_unlock(&q->mutex);
 		}
