@@ -111,13 +111,6 @@ static void queue_unref(TQueue* q) {
 			(queue)->tail = msg; \
 		}
 
-#define task_queue_pop(queue, msg)	{ \
-			if( (msg = queue->head)!=NULL ) { \
-				queue->head = msg->next; \
-				msg->next = NULL; \
-			} \
-		}
-
 static void queue_push(TQueue* q, TMsg* task) {
 #ifdef _WIN32
 	puss_mutex_lock(&q->mutex);
@@ -128,16 +121,15 @@ static void queue_push(TQueue* q, TMsg* task) {
 #else
 	puss_mutex_lock(&q->mutex);
 	task_queue_push(q, task);
-	puss_mutex_unlock(&q->mutex);
 	pthread_cond_signal(&q->cond);
+	puss_mutex_unlock(&q->mutex);
 #endif
 }
 
 static TMsg* queue_pop(TQueue* q) {
 	TMsg* res = NULL;
 	puss_mutex_lock(&q->mutex);
-	if( q->head ) {
-		res = q->head;
+	if( (res = q->head) != NULL ) {
 		q->head = res->next;
 		res->next = NULL;
 #ifdef _WIN32
@@ -239,45 +231,46 @@ static int tqueue_pop(lua_State* L) {
 	if( tq ) thread_signal_handle(tq, L);
 	if( !q ) return 0;
 
-	msg = queue_pop(q);
-	if( !msg ) {
-	       if( wait_time==0 ) return 0;
 #ifdef _WIN32
+	if( ((msg = queue_pop(q))==NULL) && (wait_time > 0) ) {
 		if( tq ) {
 			HANDLE evs[2] = { tq->ev, q->ev };	// wait for tq & q
 			switch( WaitForMultipleObjects(2, evs, FALSE, wait_time) ) {
 			case WAIT_OBJECT_0:
 				thread_signal_handle(tq, L);
-				// not break;
+				break;
 			case WAIT_OBJECT_0 + 1:
-				msg = queue_pop(q);
 				break;
 			default:
-				break;
+				return 0;
 			}
-		} else if( WaitForSingleObject(q->ev, wait_time)==WAIT_OBJECT_0 ) {
-			msg = queue_pop(q);
+		} else if( WaitForSingleObject(q->ev, wait_time)!=WAIT_OBJECT_0 ) {
+			return 0;
 		}
+		msg = queue_pop(q);
+	}
 #else
-		{
-			struct timespec timeout;
-			uint64_t ns = wait_time;
-			clock_gettime(CLOCK_REALTIME, &timeout);
-			ns = ns * 1000000 + timeout.tv_nsec;
-			timeout.tv_sec += ns / 1000000000;
-			timeout.tv_nsec = ns % 1000000000;
-			puss_mutex_lock(&q->mutex);
-			for(;;) {
-				task_queue_pop(q, msg);
-				if( msg ) break;
-				if( pthread_cond_timedwait(&q->cond, &q->mutex, &timeout)==ETIMEDOUT ) break;
-			}
-			puss_mutex_unlock(&q->mutex);
+	puss_mutex_lock(&q->mutex);
+	if( (msg = q->head) != NULL ) {
+		q->head = msg->next;
+		msg->next = NULL;
+	} else if( wait_time > 0 ) {
+		struct timespec timeout;
+		uint64_t ns = wait_time;
+		clock_gettime(CLOCK_REALTIME, &timeout);
+		ns = ns * 1000000 + timeout.tv_nsec;
+		timeout.tv_sec += ns / 1000000000;
+		timeout.tv_nsec = ns % 1000000000;
+		pthread_cond_timedwait(&q->cond, &q->mutex, &timeout);
+		if( (msg = q->head) != NULL ) {
+			q->head = msg->next;
+			msg->next = NULL;
 		}
+	}
+	puss_mutex_unlock(&q->mutex);
 #endif
 
-		if( !msg ) return 0;
-	}
+	if( !msg ) return 0;
 
 	lua_settop(L, 0);
 	lua_pushcfunction(L, simple_unpack_msg);
