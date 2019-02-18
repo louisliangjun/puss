@@ -490,11 +490,11 @@ static int thread_wait(lua_State* L) {
 	QHandle* ud = (QHandle*)lua_touserdata(L, lua_upvalueindex(1));
 	lua_Integer ms = luaL_optinteger(L, 1, 0);
 	TQueue* tq = ud->q;
+	thread_signal_handle(tq, L);
 #ifdef _WIN32
 	if( WaitForSingleObject(tq->ev, (DWORD)ms)==WAIT_OBJECT_0 )
 		thread_signal_handle(tq, L);
 #else
-	thread_signal_handle(tq, L);
 	usleep(ms*1000);
 #endif
 	lua_pushboolean(L, tq->_detached);
