@@ -39,7 +39,9 @@ struct _TQueue {
 
 typedef struct _QHandle {
 	TQueue*			q;
+#ifdef _WIN32
 	TQueue*			tq;
+#endif
 } QHandle;
 
 typedef struct _THandle {
@@ -135,12 +137,12 @@ static TMsg* queue_pop(TQueue* q) {
 	return res;
 }
 
-static void queue_pack_push(lua_State* L, TQueue* q, int start) {
+static int queue_pack_push(lua_State* L, TQueue* q, int start) {
 	size_t len = 0;
 	void* pkt;
 	TMsg* msg;
 	if( !q )
-		return;
+		return 0;
 	pkt = puss_simple_pack(&len, L, start, -1);
 	msg = (TMsg*)malloc(sizeof(TMsg) + len);
 	if( !msg )
@@ -149,6 +151,7 @@ static void queue_pack_push(lua_State* L, TQueue* q, int start) {
 	msg->len = len;
 	memcpy(msg->buf, pkt, len);
 	queue_push(q, msg);
+	return 1;
 }
 
 static int do_thread_event(lua_State* L) {
@@ -194,17 +197,32 @@ static void thread_signal_handle(TQueue* tq, lua_State* L) {
 	}
 }
 
+#ifndef _WIN32
+static __thread TQueue* thread_Q;
+static __thread lua_State* thread_L;
+
+static void thread_queue_signal(int sig) {
+	// fprintf(stderr, "recv signal: %d\n", sig);
+	if( thread_L ) {
+		assert( thread_Q );
+		thread_signal_handle(thread_Q, thread_L);	
+	}
+}
+#endif
+
 static int tqueue_close(lua_State* L) {
 	QHandle* ud = (QHandle*)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
 	ud->q = queue_unref(ud->q);
+#ifdef _WIN32
 	ud->tq = queue_unref(ud->tq);
+#endif
 	return 0;
 }
 
 static int tqueue_push(lua_State* L) {
 	QHandle* ud = (QHandle*)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
-	queue_pack_push(L, ud->q, 2);
-	return 0;
+	lua_pushboolean(L, queue_pack_push(L, ud->q, 2));
+	return 1;
 }
 
 static int simple_unpack_msg(lua_State* L) {
@@ -217,7 +235,11 @@ static int tqueue_pop(lua_State* L) {
 	QHandle* ud = (QHandle*)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
 	uint32_t wait_time = (uint32_t)luaL_optinteger(L, 2, 0);
 	TQueue* q = ud->q;
+#ifdef _WIN32
 	TQueue* tq = ud->tq;
+#else
+	TQueue* tq = thread_Q
+#endif
 	TMsg* msg = NULL;
 	int res;
 	if( tq ) thread_signal_handle(tq, L);
@@ -253,7 +275,9 @@ static int tqueue_pop(lua_State* L) {
 		ns = ns * 1000000 + timeout.tv_nsec;
 		timeout.tv_sec += ns / 1000000000;
 		timeout.tv_nsec = ns % 1000000000;
+		thread_L = L;
 		pthread_cond_timedwait(&q->cond, &q->mutex, &timeout);
+		thread_L = NULL;
 		if( (msg = q->head) != NULL ) {
 			q->head = msg->next;
 			msg->next = NULL;
@@ -369,14 +393,15 @@ static int thread_join(lua_State* L) {
 
 static int thread_post(lua_State* L) {
 	THandle* ud = (THandle*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
-	queue_pack_push(L, ud->q, 2);
+	int ok = queue_pack_push(L, ud->q, 2);
 #ifndef _WIN32
-	if( ud->tid ) {
+	if( ok && ud->tid ) {
 		pthread_kill(ud->tid, SIGUSR1);
 		return 1;
 	}
 #endif
-	return 0;
+	lua_pushboolean(L, 1);
+	return 1;
 }
 
 static luaL_Reg thread_methods[] =
@@ -440,7 +465,12 @@ static void targs_build(lua_State* L, TArg* a, int i, int n) {
 	a->type = LUA_TNONE;
 }
 
-static void targs_parse(lua_State* L, const TArg* a, TQueue* tq) {
+static void targs_parse(lua_State* L
+#ifdef _WIN32
+	, TQueue* tq
+#endif
+	, const TArg* a)
+{
 	for( ; a->type!=LUA_TNONE; ++a ) {
 		switch( a->type ) {
 		case LUA_TNIL:
@@ -466,7 +496,11 @@ static void targs_parse(lua_State* L, const TArg* a, TQueue* tq) {
 			puss_simple_unpack(L, a->s, a->len);
 			break;
 		case LUA_TUSERDATA:
-			tqueue_create(L, a->q, 0)->tq = queue_ref(tq);
+			tqueue_create(L, a->q, 0)
+#ifdef _WIN32
+				->tq = queue_ref(tq)
+#endif
+			;
 			break;
 		default:
 			break;
@@ -477,19 +511,20 @@ static void targs_parse(lua_State* L, const TArg* a, TQueue* tq) {
 static int thread_wait(lua_State* L) {
 	QHandle* ud = (QHandle*)lua_touserdata(L, lua_upvalueindex(1));
 	lua_Integer ms = luaL_optinteger(L, 1, 0);
-	TQueue* tq = ud->q;
-	if( tq ) {
-		thread_signal_handle(tq, L);
+	if( ud->q ) {
+		thread_signal_handle(ud->q, L);
 #ifdef _WIN32
-		if( (ms > 0) && WaitForSingleObject(tq->ev, (DWORD)ms)==WAIT_OBJECT_0 )
-			thread_signal_handle(tq, L);
+		if( (ms > 0) && WaitForSingleObject(ud->q->ev, (DWORD)ms)==WAIT_OBJECT_0 )
+			thread_signal_handle(ud->q, L);
 #else
-		if( tq && (ms > 0) )
+		if( ms > 0 ) {
+			thread_L = L;
 			usleep(ms*1000);
-		tq = ud->q;	// after thread_signal_handle
+			thread_L = NULL;
+		}
 #endif
 	}
-	lua_pushboolean(L, tq ? tq->_detached : 1);
+	lua_pushboolean(L, ud->q ? ud->q->_detached : 1);
 	return 1;
 }
 
@@ -515,7 +550,12 @@ static int thread_prepare(lua_State* L) {
 	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
 	assert( args->type==LUA_TSTRING );
 	puss_get_value(L, args->s);
-	targs_parse(L, ++args, tq);
+#ifdef _WIN32
+	targs_parse(L, tq, ++args);
+#else
+	targs_parse(L, ++args);
+	lua_pushlightuserdata(L, tq);
+#endif
 	lua_pushlightuserdata(L, tq);
 	return lua_gettop(L);
 }
