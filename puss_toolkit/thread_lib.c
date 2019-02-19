@@ -37,13 +37,6 @@ struct _TQueue {
 	TMsg*			tail;
 };
 
-#ifdef _WIN32
-struct _TEnv {
-	int				_ref;
-	HANDLE			ev;
-};
-#endif
-
 typedef struct _QHandle {
 	TQueue*			q;
 	TQueue*			tq;
@@ -203,8 +196,8 @@ static void thread_signal_handle(TQueue* tq, lua_State* L) {
 
 static int tqueue_close(lua_State* L) {
 	QHandle* ud = (QHandle*)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
-	TQueue* q = ud->q;
-	ud->q = queue_unref(q);
+	ud->q = queue_unref(ud->q);
+	ud->tq = queue_unref(ud->tq);
 	return 0;
 }
 
