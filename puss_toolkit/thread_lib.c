@@ -321,18 +321,6 @@ static QHandle* tqueue_create(lua_State* L, TQueue* q, int ensure_queue) {
 	return ud;
 }
 
-#ifndef _WIN32
-	static __thread lua_State* thread_L;
-	static __thread TQueue* thread_Q;
-
-	static void on_thread_signal(int sig) {
-		if( sig==SIGUSR1 && thread_L && thread_Q ) {
-			// fprintf(stderr, "recv signal: %d\n", sig);
-			thread_signal_handle(thread_Q, thread_L);	
-		}
-	}
-#endif
-
 static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
 	lua_State* L = (lua_State*)arg;
 	// fprintf(stderr, "thread start: %p\n", L);
@@ -343,13 +331,12 @@ static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
 	lua_pop(L, 1);	// pop tq lightuserdata
 	lua_pcall(L, lua_gettop(L)-2, 0, 1);	// thread main
 #else
-	thread_L = L;
 	thread_Q = queue_ref(lua_touserdata(L, -1));
-	signal(SIGUSR1, on_thread_signal);
+	if( thread_Q )
+		signal(SIGUSR1, thread_signal_handle);
 	lua_pop(L, 1);	// pop tq lightuserdata
 	lua_pcall(L, lua_gettop(L)-2, 0, 1);	// thread main
 	thread_Q = queue_unref(thread_Q);
-	thread_L = NULL;
 #endif
 	lua_close(L);
 	// fprintf(stderr, "thread exit: %p\n", L);
@@ -400,7 +387,7 @@ static int thread_post(lua_State* L) {
 		return 1;
 	}
 #endif
-	lua_pushboolean(L, 1);
+	lua_pushboolean(L, ok);
 	return 1;
 }
 
