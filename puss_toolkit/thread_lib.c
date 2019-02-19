@@ -466,7 +466,7 @@ static void targs_parse(lua_State* L, const TArg* a, TQueue* tq) {
 			puss_simple_unpack(L, a->s, a->len);
 			break;
 		case LUA_TUSERDATA:
-			tqueue_create(L, a->q, 0)->tq = tq;
+			tqueue_create(L, a->q, 0)->tq = queue_ref(tq);
 			break;
 		default:
 			break;

@@ -129,9 +129,9 @@ local function test5(enable_wait)
 end
 
 function __main__()
-	print(pcall(test1))
-	print(pcall(test2))
-	print(pcall(test3))
-	print(pcall(test4))
-	print(pcall(test5))
+	print(pcall(test1)); collectgarbage();
+	print(pcall(test2)); collectgarbage();
+	print(pcall(test3)); collectgarbage();
+	print(pcall(test4)); collectgarbage();
+	print(pcall(test5)); collectgarbage();
 end
