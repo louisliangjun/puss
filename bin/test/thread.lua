@@ -93,7 +93,7 @@ local function test4(enable_wait)
 end
 
 local function test5(enable_wait)
-	local n = 10000000
+	local n = 1000000
 	local q = puss.queue_create()
 	local qc = puss.queue_create()
 	local s = [[
@@ -134,4 +134,6 @@ function __main__()
 	print(pcall(test3)); collectgarbage();
 	print(pcall(test4)); collectgarbage();
 	print(pcall(test5)); collectgarbage();
+
+	if puss.OS=='win32' then os.execute('pause') end
 end

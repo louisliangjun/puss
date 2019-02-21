@@ -238,7 +238,7 @@ static int tqueue_pop(lua_State* L) {
 #ifdef _WIN32
 	TQueue* tq = ud->tq;
 #else
-	TQueue* tq = thread_Q
+	TQueue* tq = thread_Q;
 #endif
 	TMsg* msg = NULL;
 	int res;
@@ -307,7 +307,9 @@ static luaL_Reg tqueue_methods[] =
 static QHandle* tqueue_create(lua_State* L, TQueue* q, int ensure_queue) {
 	QHandle* ud = (QHandle*)lua_newuserdata(L, sizeof(QHandle));
 	ud->q = NULL;
+#ifdef _WIN32
 	ud->tq = 0;
+#endif
 	if( luaL_newmetatable(L, PUSS_NAME_QUEUE_MT) ) {
 		luaL_setfuncs(L, tqueue_methods, 0);
 		lua_pushvalue(L, -1);
@@ -328,12 +330,11 @@ static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
 	assert( lua_isfunction(L, 2) );
 
 #ifdef _WIN32
-	lua_pop(L, 1);	// pop tq lightuserdata
 	lua_pcall(L, lua_gettop(L)-2, 0, 1);	// thread main
 #else
 	thread_Q = queue_ref(lua_touserdata(L, -1));
 	if( thread_Q )
-		signal(SIGUSR1, thread_signal_handle);
+		signal(SIGUSR1, thread_queue_signal);
 	lua_pop(L, 1);	// pop tq lightuserdata
 	lua_pcall(L, lua_gettop(L)-2, 0, 1);	// thread main
 	thread_Q = queue_unref(thread_Q);

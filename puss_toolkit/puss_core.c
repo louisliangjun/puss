@@ -286,6 +286,13 @@ static int luaopen_puss(lua_State* L) {
 	lua_pushstring(L, __puss_config__.app_name);
 	lua_setfield(L, -2, "_self");		// puss._self
 
+#ifdef _WIN32
+	lua_pushstring(L, "win32");			// OS
+#else
+	lua_pushstring(L, "unix");
+#endif
+	lua_setfield(L, -2, "OS");			// puss.OS
+
 	lua_newtable(L);					// up[1]: plugins
 	lua_pushvalue(L, -2);
 	lua_setfield(L, -2, "puss");		// puss plugins["puss"] = puss-self
