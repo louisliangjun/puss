@@ -19,7 +19,6 @@ typedef enum _PussToolkitKey
 
 typedef int  (*PussKeyGet)(lua_State* L, PussToolkitKey key);
 typedef void (*PussKeySet)(lua_State* L, PussToolkitKey key);
-
 typedef lua_State* (*PussStateNew)(void);
 
 typedef struct _PussConfig {
@@ -36,6 +35,9 @@ typedef struct _PussConfig {
 	PussStateNew	state_new;
 	PussKeyGet		state_get_key;
 	PussKeySet		state_set_key;
+
+	lua_CFunction	plugin_loader_reg;
+	luaL_Reg*		extra_builtin_reg;
 } PussConfig;
 
 extern PussConfig	__puss_config__;
@@ -54,13 +56,13 @@ int			puss_simple_unpack(lua_State* L, const void* pkt, size_t len);
 
 // puss builtin modules declare
 
-int			puss_load_builtins(lua_State* L);
+int			puss_toolkit_open(lua_State* L);
 
-void		puss_reg_puss_utils(lua_State* L);
-void		puss_reg_simple_pickle(lua_State* L);
-void		puss_reg_simple_luastate(lua_State* L);
-void		puss_reg_async_service(lua_State* L);
-void		puss_reg_thread_service(lua_State* L);
+int			puss_reg_puss_utils(lua_State* L);
+int			puss_reg_simple_pickle(lua_State* L);
+int			puss_reg_simple_luastate(lua_State* L);
+int			puss_reg_async_service(lua_State* L);
+int			puss_reg_thread_service(lua_State* L);
 
 PUSS_DECLS_END
 

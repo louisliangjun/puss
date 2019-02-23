@@ -369,6 +369,7 @@ static luaL_Reg puss_utils_methods[] =
 	, {NULL, NULL}
 	};
 
-void puss_reg_puss_utils(lua_State* L) {
+int puss_reg_puss_utils(lua_State* L) {
 	luaL_setfuncs(L, puss_utils_methods, 0);
+	return 0;
 }

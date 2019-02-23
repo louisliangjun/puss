@@ -1,6 +1,6 @@
 #!./tools/vlua
 
-dofile('tools/vmake_base.lua')
+dofile('tools/vmake.lua')
 
 CC  = 'gcc'
 CXX = 'g++'
@@ -11,7 +11,7 @@ CFLAGS  = {'-Wall', '-Wno-unused-function'}
 CXX_CFLAGS = {}
 PUSS_CONFIG = ''
 
-if vlua.OS=='windows' then
+if puss.OS=='win32' then
 	EXE_SUFFIX = '.exe'
 	DLL_SUFFIX = '.dll'
 	array_push(CFLAGS, '-D_WIN32')
@@ -25,14 +25,14 @@ LUA_SRC_PATH = path_concat('3rd', 'lua-5.3.5', 'src')
 
 -- debug && asan
 do
-	if vlua.match_arg('^%-debug$') then
+	if puss.match_arg('^%-debug$') then
 		array_push(CFLAGS, '-g', '-O0', '-D_DEBUG')
 		PUSS_CONFIG = 'd'
 	else
 		array_push(CFLAGS, '-s', '-O2', '-DNDEBUG')
 	end
 
-	if vlua.match_arg('^%-asan$') then
+	if puss.match_arg('^%-asan$') then
 		array_push(CFLAGS, '-ggdb', '-fsanitize=address', '-fno-omit-frame-pointer')
 		PUSS_CONFIG = PUSS_CONFIG .. 'a'
 	end
@@ -77,7 +77,7 @@ vmake_target_add('', function(target)
 end)
 
 vmake_target_add('clean', function(target)
-	local rm = vlua.OS=='windows' and 'rd /S /Q ' or 'rm -rf '
+	local rm = puss.OS=='win32' and 'rd /S /Q ' or 'rm -rf '
 	os.execute(rm .. 'objs')
 end)
 
@@ -88,7 +88,7 @@ vmake_target_add('puss', function(target)
 	vmake('luaproxy')
 	local slibs = vmake('puss_toolkit', 'lua53')
 	local incs = array_pack(INCLUDES, LUA_SRC_PATH, 'puss_toolkit')
-	local libs = vlua.OS=='windows' and '' or '-lm -ldl -lpthread'
+	local libs = puss.OS=='win32' and '' or '-lm -ldl -lpthread'
 	local objs = make_c2objs(target, nil, incs)
 	local output = path_concat('bin', target..PUSS_CONFIG_SUFFIX..EXE_SUFFIX)
 	return make_target(output, {objs, slibs}, CC, CFLAGS, '-o', output, objs, slibs, libs)
@@ -116,14 +116,14 @@ vmake_target_add('luaproxy', function(target)
 	end
 
 	make_target(path_concat(GEN_INCLUDE_PATH, '.dummy'), nil
-		, vlua.self, luaproxy_lua
+		, puss._path..'/'..puss._self, luaproxy_lua
 		, '-path="'..PUSS_INCLUDE_PATH..'"'
 		, '-gen="'..GEN_INCLUDE_PATH..'"'
 		)
 end)
 
 vmake_target_add('lua53', function(target)
-	local cflags = vlua.OS=='windows' and '' or '-DLUA_USE_LINUX'
+	local cflags = puss.OS=='win32' and '' or '-DLUA_USE_LINUX'
 	local srcs = scan_files(LUA_SRC_PATH, function(f)
 		if f=='lua.c' then return end
 		if f=='luac.c' then return end
@@ -138,7 +138,7 @@ vmake_target_add('puss_system', function(target)
 	vmake('luaproxy')
 	local objs = make_c2objs(path_concat('plugins', target), nil, INCLUDES, '-fPIC', '-fvisibility=hidden')
 	local output = path_concat('bin', 'plugins', target..PUSS_CONFIG_SUFFIX..DLL_SUFFIX)
-	local libs = vlua.OS=='windows' and '-lwsock32' or ''
+	local libs = puss.OS=='win32' and '-lwsock32' or ''
 	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs, libs)
 end)
 
@@ -160,7 +160,7 @@ vmake_target_add('imgui_wrap', function(target)
 	end
 
 	make_target(path_concat(GEN_INCLUDE_PATH, '.dummy'), nil
-		, vlua.self, imgui_wrap
+		, puss._path..'/'..puss._self, imgui_wrap
 		, '-src='..src
 		, '-out='..GEN_INCLUDE_PATH
 		)
@@ -183,7 +183,7 @@ vmake_target_add('scintilla_iface', function(target)
 		, scintilla_iface
 		}
 	return make_target( scintilla_output, deps
-		, vlua.self, scintilla_iface_lua
+		, puss._path..'/'..puss._self, scintilla_iface_lua
 		, '-input='..scintilla_iface
 		, '-output='..scintilla_output
 		)
@@ -215,34 +215,44 @@ end)
 -----------------------------
 -- puss imgui
 
-vmake_target_add('puss_imgui', function(target)
+local function make_puss_imgui(target)
 	vmake('luaproxy', 'imgui_wrap', 'scintilla_iface')
 	local slibs = vmake('scintilla')
-	local src = path_concat('plugins', target)
+	local src = path_concat('plugins', 'puss_imgui')
 	local incs = array_pack(
 		{ INCLUDES
 		, SCINTILLA_INCLUDE_PATH
 		, path_concat(SCINTILLA_ROOT_PATH, 'src')
 		, path_concat(SCINTILLA_ROOT_PATH, 'lexlib')
 		, src
-		, path_concat(src, 'gl3w')
 		, path_concat(src, 'imgui')
 		})
-	local flags = shell('pkg-config --static --cflags glfw3')
-	local libs = shell('pkg-config --static --libs glfw3')
-	flags = array_pack(flags, '-DPUSS_IMGUI_USE_GLFW', '-DSCI_LEXER')
-	if vlua.OS=='windows' then
-		libs = array_pack(libs, '-lopengl32')
+	local flags
+	local libs
+	local objpath
+	local gl3wobjs = {}
+	if (puss.OS=='win32' and target=='puss_imgui') then
+		flags = '-DUNICODE -D_UNICODE -DPUSS_IMGUI_USE_DX11 -DSCI_LEXER -DFOX'
+		libs  = '-ld3dcompiler -ldxgi -ld3d11 -lgdi32'
 	else
-		flags = array_pack(flags, '-DFOX')
-		libs = array_pack(libs, '-lGL')
+		flags = shell('pkg-config --static --cflags glfw3')
+		libs  = shell('pkg-config --static --libs glfw3')
+		flags = array_pack(flags, '-DPUSS_IMGUI_USE_GLFW', '-DSCI_LEXER', '-DFOX')
+		libs  = array_pack(libs, (puss.OS=='win32') and '-lopengl32' or '-lGL')
+		objpath = OBJPATH..'gl'
+		incs = array_pack(incs, path_concat(src, 'gl3w'))
+		gl3wobjs = make_c2objs(path_concat(src, 'gl3w'), objpath, incs, '-fPIC', '-fvisibility=hidden')
 	end
-	
+
 	local srcs = scan_files(src, function(f) return f:match('^.+%.cpp$') end, nil, true)
-	local gl3wobjs = make_c2objs(path_concat(src, 'gl3w'), nil, incs, '-fPIC', '-fvisibility=hidden')
-	local imguiobjs = make_cpp2objs(path_concat(src, 'imgui'), nil, incs, '-fPIC', '-fvisibility=hidden', flags)
-	local objs = make_cpp2objs(srcs, nil, incs, '-fPIC', '-fvisibility=hidden', flags)
+	local objs = make_cpp2objs(srcs, objpath, incs, '-fPIC', '-fvisibility=hidden', flags)
+	local imguiobjs = make_cpp2objs(path_concat(src, 'imgui'), objpath, incs, '-fPIC', '-fvisibility=hidden', flags)
 	local output = path_concat('bin', 'plugins', target..PUSS_CONFIG_SUFFIX..DLL_SUFFIX)
 	return make_target(output, {objs, imguiobjs, gl3wobjs}, CXX, CFLAGS, flags, '-shared', '-o', output, objs, imguiobjs, gl3wobjs, slibs, libs)
-end)
+end
 
+vmake_target_add('puss_imgui', make_puss_imgui)
+
+if puss.OS=='win32' then
+	vmake_target_add('puss_imgui_glfw', make_puss_imgui)
+end

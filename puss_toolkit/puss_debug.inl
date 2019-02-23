@@ -1089,7 +1089,7 @@ static DebugEnv* lua_debugger_new(lua_Alloc f, void* ud) {
 	}
 	lua_pop(L, 1);
 	luaL_openlibs(L);
-	lua_pushcfunction(L, puss_load_builtins);
+	lua_pushcfunction(L, puss_toolkit_open);
 	if (lua_pcall(L, 0, 0, 0)) {
 		lua_writestringerror("[Puss] load builtins failed: %s\n", lua_tostring(L, -1));
 		lua_close(L);
@@ -1191,7 +1191,7 @@ static lua_State* puss_lua_debugger_newstate(void) {
 	L = lua_newstate(alloc, alloc_tag);
 	if( L ) {
 		luaL_openlibs(L);
-		lua_pushcfunction(L, puss_load_builtins);
+		lua_pushcfunction(L, puss_toolkit_open);
 		if( lua_pcall(L, 0, 0, 0) ) {
 			lua_writestringerror("[Puss] load builtins failed: %s\n", lua_tostring(L, -1));
 			lua_close(L);

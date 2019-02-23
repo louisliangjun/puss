@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "puss_plugin.inl"
 #include "puss_debug.inl"
 
 #define PUSS_DEFAULT_SCRIPT_FILE "default.lua"
@@ -132,6 +133,7 @@ int main(int argc, char* argv[]) {
 	puss_config_init(argc, argv);
 	__puss_config_debug_level__ = (debug_level==NULL) ? 0 : (*debug_level=='\0' ? 1 : (int)strtol(debug_level, NULL, 10));
 	__puss_config__.state_new = puss_lua_debugger_newstate;
+	__puss_config__.plugin_loader_reg = puss_plugin_loader_reg;
 
 restart_label:
 #ifdef _WIN32

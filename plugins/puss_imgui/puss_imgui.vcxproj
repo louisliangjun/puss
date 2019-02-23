@@ -303,7 +303,6 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)3rd\glfw-3.2.1.bin.WIN64\lib-vc2013\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent>
       <Command>$(PussRoot)vmake imgui_wrap scintilla_iface</Command>
@@ -320,7 +319,6 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)3rd\glfw-3.2.1.bin.WIN64\lib-vc2013\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent>
       <Command>$(PussRoot)vmake imgui_wrap scintilla_iface</Command>

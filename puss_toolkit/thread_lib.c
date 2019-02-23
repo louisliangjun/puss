@@ -544,7 +544,6 @@ static int thread_prepare(lua_State* L) {
 	targs_parse(L, ++args);
 	lua_pushlightuserdata(L, tq);
 #endif
-	lua_pushlightuserdata(L, tq);
 	return lua_gettop(L);
 }
 
@@ -606,6 +605,7 @@ static luaL_Reg thread_service_methods[] =
 	, {NULL, NULL}
 	};
 
-void puss_reg_thread_service(lua_State* L) {
+int puss_reg_thread_service(lua_State* L) {
 	luaL_setfuncs(L, thread_service_methods, 0);
+	return 0;
 }

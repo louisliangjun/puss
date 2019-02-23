@@ -105,7 +105,8 @@ static int simple_luastate_new(lua_State* L) {
 	return 1;
 }
 
-void puss_reg_simple_luastate(lua_State* L) {
+int puss_reg_simple_luastate(lua_State* L) {
 	lua_pushcfunction(L, simple_luastate_new);
 	lua_setfield(L, -2, "simple_luastate_new");	// puss.simple_luastate_new
+	return 0;
 }

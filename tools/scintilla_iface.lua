@@ -109,8 +109,8 @@ local function ScintillaFaceReadFromFile(name)
 end
 
 function main()
-	local iface_filename = vlua.match_arg('^%-input=(.+)$')
-	local output_filename = vlua.match_arg('^%-output=(.+)$')
+	local iface_filename = puss.match_arg('^%-input=(.+)$')
+	local output_filename = puss.match_arg('^%-output=(.+)$')
 	if not( iface_filename and output_filename ) then error('parse -input && -output failed!') end
 	
 	local iface = ScintillaFaceReadFromFile(iface_filename)
