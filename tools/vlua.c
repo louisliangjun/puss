@@ -5,12 +5,6 @@
 #ifdef _WIN32
 	#define WIN32_LEAN_AND_MEAN
 	#include <windows.h>
-#else
-	#include <sys/types.h>
-	#include <sys/time.h>
-	#include <unistd.h>
-	#include <limits.h>
-	#include <errno.h>
 #endif
 
 #include <sys/stat.h>
