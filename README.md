@@ -19,6 +19,7 @@ project file struct
   |     |
   |     +-- puss_macros.h
   |     +-- puss_plugin.h
+  |     +-- puss_lua.h
   |
   +-- <plugins>    # puss plugins source
   |     |
@@ -28,9 +29,11 @@ project file struct
   |
   +-- <tools>
   |     |
-  |     +-- vlua.exe          # NOTICE : need build from vlua.c & lua53
+  |     +-- vlua.exe          # prebuild vlua in win32
   |     +-- vlua.c            # vlua source code
-  |     +-- vmake_base.lua    # vmake used lua utils
+  |     +-- vlua_build.cmd    # build vlua script in mingw
+  |     +-- vlua_build.sh     # build vlua script in linux
+  |     +-- vmake.lua         # vmake base script
   |
   +-- vmake        # puss solution makefile
   +-- vmake.cmd    # for windows
@@ -39,11 +42,6 @@ project file struct
 
 vlua - make tool with lua script
 -----------
-
-* linux compile: gcc -s -O2 -pthread -Wall -o vlua ./vlua.c -llua -lm -ldl
-* mingw compile: cd ../3rd/lua-5.3.4 && make mingw && gcc -s -O2 -Wall -I../3rd/lua-5.3.4/src -o vlua ./vlua.c ../3rd/lua-5.3.4/src/liblua.a -lm
-
-* more tips: see ./tools/vlua.c
 
 * all projects use one make script: ./vmake
 * usage : ./vmake [targets] [-options], options MUST startswith "-"
