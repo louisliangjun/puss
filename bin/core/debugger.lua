@@ -289,6 +289,7 @@ local function debug_toolbar()
 		else
 			stack_list_clear()
 			socket = nil
+			use_capture_error = nil
 		end
 	else
 		if tool_button('Connect', 'Connect ...', 10) then
@@ -321,19 +322,23 @@ local function debug_toolbar()
 		page_line_op_active = 'jmp_to'
 	end
 	imgui.SameLine(nil, 2)
-	if use_capture_error==true then
-		imgui.PushStyleColor(ImGuiCol_Text, 1, 0, 0, 1)
-	elseif use_capture_error==false then
-		imgui.PushStyleColor(ImGuiCol_Text, 0.75, 0.75, 0.75, 0.75)
-	else
-		imgui.PushStyleColor(ImGuiCol_Text, 0.5, 0.5, 0.5, 0.5)
+	do
+		local r,g,b,a,icon,tip
+		if use_capture_error==true then
+			r,g,b,a,icon,tip = 1,0,0,1,8,'In Captured Execption'
+		elseif use_capture_error==false then
+			r,g,b,a,icon,tip = 0.75,0.75,0.75,0.75,7, 'Capture Execption'
+		else
+			r,g,b,a,icon,tip = 0.5,0.5,0.5,0.5,7, 'Capture Execption'
+		end
+		imgui.PushStyleColor(ImGuiCol_Text,r,g,b,a)
+		if tool_button('Err', tip, icon) then
+			debugger_rpc(function(ok, capture)
+				if ok then use_capture_error = capture end
+			end, 'capture_error')
+		end
+		imgui.PopStyleColor()
 	end
-	if tool_button('Err', 'Execption breakpoint', 7) then
-		debugger_rpc(function(ok, capture)
-			if ok then use_capture_error = capture end
-		end, 'capture_error')
-	end
-	imgui.PopStyleColor()
 	imgui.SameLine(nil, 0)
 	if tool_button('ASM', 'print ASM to console', 12) then
 		debugger_rpc(nil, 'fetch_disasm', stack_current)
