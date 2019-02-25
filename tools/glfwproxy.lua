@@ -44,10 +44,10 @@ function main()
 	local apis = {}
 	local enums = {}
 
-	local root = vlua.match_arg('^%-path=(.+)$') or '.'
+	local root = puss.match_arg('^%-path=(.+)$') or '.'
 
-	pasre_header(apis, enums, vlua.filename_format(root..'/glfw3.h'))
-	pasre_header(apis, enums, vlua.filename_format(root..'/glfw3native.h'))
+	pasre_header(apis, enums, puss.filename_format(root..'/glfw3.h'))
+	pasre_header(apis, enums, puss.filename_format(root..'/glfw3native.h'))
 
 	local function generate_file(filename, cb)
 		local output_lines = {}
@@ -78,19 +78,19 @@ function main()
 		if last_expose then writeln('#endif') end
 	end
 
-	generate_file(vlua.filename_format(root..'/'..'glfw3proxy.symbols'), function(writeln)
+	generate_file(puss.filename_format(root..'/'..'glfw3proxy.symbols'), function(writeln)
 		generate_line(apis, writeln, function(writeln, ret, name, args)
 			writeln('__GLFWPROXY_SYMBOL(', name, ')')
 		end)
 	end)
 
-	generate_file(vlua.filename_format(root..'/'..'glfw3proxy.enums'), function(writeln)
+	generate_file(puss.filename_format(root..'/'..'glfw3proxy.enums'), function(writeln)
 		generate_line(enums, writeln, function(writeln, enum)
 			writeln('__GLFWPROXY_ENUM(', enum, ')')
 		end)
 	end)
 
-	generate_file(vlua.filename_format(root..'/'..'glfw3proxy.h'), function(writeln)
+	generate_file(puss.filename_format(root..'/'..'glfw3proxy.h'), function(writeln)
 		writeln('// NOTICE : generate by glfwproxy.lua')
 		writeln()
 		writeln('#ifndef _GLFW_PROXY_H__')
@@ -152,7 +152,7 @@ vmake_target_add('puss_glfw_proxy', function(target)
 		and check_deps(path_concat(dst, 'glfw3proxy.enums'), deps)
 		)
 	then
-		shell_execute(vlua.self, glfwproxy_lua, '-path="'..dst..'"')
+		shell_execute(puss._path..'/'..puss._self, glfwproxy_lua, '-path="'..dst..'"')
 	end
 end)
 
@@ -169,7 +169,7 @@ vmake_target_add('puss_glfw', function(target)
 		}
 	local objs = make_c2objs(srcpath, INCLUDES, '-fPIC', '-fvisibility=hidden')
 	local output = path_concat('bin', 'modules', target..PUSS_MODULE_SUFFIX..'.so')
-	return make_target(output, {vlua.script, objs}, CC, CFLAGS, '-shared', '-o', output, objs, libs)
+	return make_target(output, {puss._script, objs}, CC, CFLAGS, '-shared', '-o', output, objs, libs)
 end)
 
 --]]

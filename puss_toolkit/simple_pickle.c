@@ -337,6 +337,7 @@ static luaL_Reg simple_pickle_methods[] =
 	, {NULL, NULL}
 	};
 
-void puss_reg_simple_pickle(lua_State* L) {
+int puss_reg_simple_pickle(lua_State* L) {
 	luaL_setfuncs(L, simple_pickle_methods, 0);
+	return 0;
 }

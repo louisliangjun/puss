@@ -542,7 +542,7 @@ static luaL_Reg async_task_service_methods[] =
 	, {NULL, NULL}
 	};
 
-void puss_reg_async_service(lua_State* L) {
+int puss_reg_async_service(lua_State* L) {
 	AsyncTaskService* svs = lua_newuserdata(L, sizeof(AsyncTaskService));
 	memset(svs, 0, sizeof(AsyncTaskService));
 	rbx_init(&(svs->timers));
@@ -557,4 +557,5 @@ void puss_reg_async_service(lua_State* L) {
 	lua_newtable(L);	// tasks map
 	lua_newtable(L);	// groups map
 	luaL_setfuncs(L, async_task_service_methods, 3);
+	return 0;
 }
