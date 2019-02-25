@@ -25,6 +25,8 @@ project file struct
   |     |
   |     +-- <...plugin...>    # plugin plugins
   |
+  +-- <puss_toolkit> # puss toolkit lib
+  |
   +-- <puss>       # puss exe project source
   |
   +-- <tools>
