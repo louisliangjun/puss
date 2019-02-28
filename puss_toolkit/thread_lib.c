@@ -372,6 +372,7 @@ static void targs_build(lua_State* L, TArg* a, int i, int n) {
 		case LUA_TTABLE:
 			a->p = puss_simple_pack(&a->len, L, i, i);
 			a->s = lua_pushlstring(L, (const char*)a->p, a->len);
+			lua_replace(L, i);
 			break;
 		case LUA_TUSERDATA:
 			a->q = *((TQueue**)luaL_checkudata(L, i, PUSS_NAME_QUEUE_MT));
