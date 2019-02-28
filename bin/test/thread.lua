@@ -20,7 +20,7 @@ local function test2()
 		while step < 4 do
 			step = step + 1
 			print('wait 5s', step, ...)
-			puss.thread_wait(5000)
+			if puss.thread_wait(5000) then break end
 		end
 		return print('exit', step, ...)
 	]], nil, 't2')
@@ -69,7 +69,7 @@ local function test4(enable_wait)
 			print('  [EV]', ...)
 			step = step + 1
 		end
-		while step < 10 do
+		while step < 6 do
 			step = step + 1
 			local msg, i = q:pop()
 			if msg then

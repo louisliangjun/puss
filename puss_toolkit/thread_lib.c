@@ -161,7 +161,7 @@ static int queue_pack_push(lua_State* L, TQueue* q, int start) {
 	}
 
 	static inline void fill_timeout(struct timespec* timeout, uint32_t wait_time_ms) {
-		uint64_t ns = wait_time;
+		uint64_t ns = wait_time_ms;
 		clock_gettime(CLOCK_REALTIME, timeout);
 		ns = ns * 1000000 + timeout->tv_nsec;
 		timeout->tv_sec += ns / 1000000000;
