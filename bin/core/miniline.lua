@@ -159,22 +159,15 @@ end
 
 local function draw_miniline()
 	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_ESCAPE) then open = false end
-	imgui.SetWindowFocus()
-	imgui.SetKeyboardFocusHere()
 	imgui.PushItemWidth(480)
 	if imgui.InputText('##input', input_buf) then
 		local str = input_buf:str()
 		-- print('start search', str)
 		thread:post('search', str)
 	end
-	imgui.SetItemDefaultFocus()
+	--imgui.SetItemDefaultFocus()
 	imgui.PopItemWidth()
-	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_ENTER) then
-		local target = results[cursor]
-		open, cursor = false, 1
-		input_buf:strcpy('')
-		if target then docs.open(target) end
-	end
+
 	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_UP) then
 		if cursor > 1 then cursor = cursor - 1 end
 	end
@@ -182,14 +175,30 @@ local function draw_miniline()
 		if cursor < #results then cursor = cursor + 1 end
 	end
 
+	local sel
+	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_ENTER) then
+		sel = cursor
+	end
 	for i=1,24 do
 		local r = results[i]
 		if not r then break end
 		if i==cursor then
-			imgui.Text(r)
+			imgui.PushStyleColor(ImGuiCol_Text,1,1,0,1)
 		else
-			imgui.TextDisabled(r)
+			imgui.PushStyleColor(ImGuiCol_Text,0.5,0.5,0.5,1)
 		end
+		if imgui.Selectable(r) then
+			print(r, i, sel)
+			sel = i
+		end
+		imgui.PopStyleColor()
+	end
+
+	if sel then
+		local target = results[sel]
+		open, cursor = false, 1
+		input_buf:strcpy('')
+		if target then docs.open(target) end
 	end
 end
 
@@ -200,10 +209,10 @@ end
 
 __exports.update = function(x, y, w, h)
 	puss.trace_pcall(on_thread_response)
-
+	local press_ok = false
 	if not open then
 		if not shotcuts.is_pressed('miniline/open') then return end
-		open = true
+		press_ok = 1
 		results = {}
 	end
 
@@ -212,6 +221,12 @@ __exports.update = function(x, y, w, h)
 	local show
 	imgui.SetNextWindowPos(x + w - 520, y + 60, ImGuiCond_Always)
 	show, open = imgui.Begin('##miniline', true, MINILINE_FLAGS)
-	if show then draw_miniline() end
+	if show then
+		if press_ok then
+			imgui.SetWindowFocus()
+			imgui.SetKeyboardFocusHere()
+		end
+		draw_miniline()
+	end
     imgui.End()
 end
