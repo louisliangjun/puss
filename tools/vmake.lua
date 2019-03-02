@@ -1,6 +1,6 @@
 -- vmake.lua
 
-if puss.match_arg('^%-help$') then
+if vlua.match_arg('^%-help$') then
 	print('usage: vmake [target] [-options]')
 	print('  vmake [target] -vmake-trace')
 	print('  vmake -help')
@@ -11,68 +11,12 @@ function trace()
 	-- default not print
 end
 
-if puss.match_arg('^%-vmake%-trace$') then
+if vlua.match_arg('^%-vmake%-trace$') then
 	trace = function(...)
 		local t = {'>', ...}
 		for i,v in ipairs(t) do t[i] = tostring(v) end
 		print(table.concat(t, ' '))
 	end
-end
-
--- thread pool
-puss.thread_pool_new = function(name, nthread, script)
-	local THREAD_POOL_THREAD_SCRIPT = [[
-		local request_queue, response_queue, script = ...
-		if script then
-			local f, e = load(script, '<thread-main>', 'bt')
-			if f then f() else error(e) end
-		end
-		local function handle_request(k, pt, ...)
-			if not pt then return end
-			-- print('** start', k, pt, ...)
-			response_queue:push(k, pt, puss.trace_pcall(_G[pt], ...))
-			-- print('** finish' , k, pt, ...)
-		end
-		local function wait_request(ms)
-			handle_request(request_queue:pop(ms))
-		end
-			puss.sleep(3000)
-		while true do
-			puss.trace_pcall(wait_request, 2000)
-		end
-	]]
-
-	local request_queue = puss.queue_create()
-	local response_queue = puss.queue_create()
-	local remain = 0
-	local threads = {}
-	for i=1,nthread do
-		threads[i] = puss.thread_create(false, 'puss.dostring', THREAD_POOL_THREAD_SCRIPT, nil, request_queue, response_queue, script)
-	end
-	local pool = {}
-	local tasks = {}
-	pool.run = function(k, pt, ...)
-		assert( pt )
-		assert( request_queue:push(k, pt, ...) )
-		-- print('@@ insert:', k, pt, ...)
-		remain = remain + 1
-		tasks[k] = true
-	end
-	local function do_return(h, k, pt, ...)
-		if not pt then return end
-		remain = remain - 1
-		tasks[k] = nil
-		h(k, ...)
-	end
-	local function handle_response(h)
-		return do_return(h, response_queue:pop(3000))
-	end
-	pool.wait = function(handle)
-		while remain > 0 do
-			puss.trace_pcall(handle_response, handle)
-		end
-	end
-	return pool
 end
 
 -- utils
@@ -135,7 +79,7 @@ function table_convert(tbl, convert)
 end
 
 function path_concat(...)
-	local pth = puss.filename_format( table.concat(array_pack(...), '/') )
+	local pth = vlua.filename_format( table.concat(array_pack(...), '/') )
 	return pth
 end
 
@@ -159,7 +103,7 @@ function scan_files(path, matcher, no_path_prefix, no_loop)
 	local outs = {}
 
 	local function scan(base, pth)
-		local fs, ds = puss.file_list(base .. pth)
+		local fs, ds = vlua.file_list(base .. pth)
 		for _,f in ipairs(fs) do
 			if matcher(f) then
 				table.insert(outs, pth .. f)
@@ -181,7 +125,7 @@ function scan_and_lookup_file(cflags, filename)
 	local cflags = args_concat(cflags)
 	for pth in cflags:gmatch('%-I([^ ]+)') do
 		local f = path_concat(pth, filename)
-		local exist, size, mtime = puss.file_stat(f)
+		local exist, size, mtime = vlua.file_stat(f)
 		if exist then return f, size, mtime end
 	end
 end
@@ -195,7 +139,7 @@ function fetch_includes_by_regex(src, include_paths)
 		if paths==nil then return false end
 		for _, pth in ipairs(paths) do
 			local inc_file = path_concat(pth, inc)
-			local exist, size, mtime = puss.file_stat(inc_file)
+			local exist, size, mtime = vlua.file_stat(inc_file)
 			if exist then
 				res[inc_file] = mtime
 				return true
@@ -237,7 +181,7 @@ function mkdir_by_targets(targets)
 	table.sort(dirs, function(a,b) return #a<#b end)
 	for _, dir in ipairs(dirs) do
 		trace('mkdir', dir)
-		puss.file_mkdir(dir)
+		vlua.file_mkdir(dir)
 	end
 end
 
@@ -249,14 +193,14 @@ end
 function check_deps(target, deps)
 	local target_mtime
 	do
-		local exist, size, mtime = puss.file_stat(target)
+		local exist, size, mtime = vlua.file_stat(target)
 		if not exist then return false end
 		target_mtime = mtime
 	end 
 
 	local function do_check(dep)
 		if type(dep)=='string' then
-			local exist, size, mtime = puss.file_stat(dep)
+			local exist, size, mtime = vlua.file_stat(dep)
 			if not exist then return false end
 			if target_mtime < mtime then return false end
 		elseif type(dep)=='table' then
@@ -293,7 +237,7 @@ function compile_tasks_create(...)
 end
 
 function compile_tasks_fetch_deps(tasks, include_paths)
-	assert( puss.thread_pool, "MUST in main thread!" )
+	assert( vlua.thread_pool, "MUST in main thread!" )
 	local includes = {}	-- filename : incs_array
 	local index = {}	-- filename : mtime
 
@@ -301,7 +245,7 @@ function compile_tasks_fetch_deps(tasks, include_paths)
 		local old_mtime = index[src]
 		if old_mtime==nil or old_mtime < mtime then
 			index[src] = mtime
-			puss.thread_pool.run(src, 'fetch_includes_by_regex', src, include_paths)
+			vlua.thread_pool:run(src, 'fetch_includes_by_regex', src, include_paths)
 		end
 	end
 
@@ -311,13 +255,17 @@ function compile_tasks_fetch_deps(tasks, include_paths)
 			for k,v in pairs(t) do print(k,v) end
 			error('comile bad <task>.src!')
 		end
-		local exist, size, mtime = puss.file_stat(t.src)
+		local exist, size, mtime = vlua.file_stat(t.src)
 		if not exist then error('file not found: ' .. t.src) end
 		parse_file(t.src, mtime)
 	end
 
-	puss.thread_pool.wait(function(src, ok, res)
+	vlua.thread_pool:wait(function(src, ok, res)
 		trace('fetch_includes_by_regex', src)
+		if not res then
+			print('!!!', src, ok, res)
+			os.exit(1)
+		end
 		local incs = {}
 		includes[src] = incs
 		for inc, mtime in pairs(res) do
@@ -344,7 +292,7 @@ end
 
 function compile_tasks_src2obj(tasks, objpath_build, parent_replace)
 	for _, t in ipairs(tasks) do
-		local src, is_abs_path = puss.filename_format(t.src)
+		local src, is_abs_path = vlua.filename_format(t.src)
 		local prefix, suffix = src:match('(.*)%.([^\\/]*)$')
 		local obj_suffix = suffix and suffix:gsub('c', 'o'):gsub('C', 'O')
 		local obj = (obj_suffix==suffix) and (src .. '.ooo') or (prefix .. '.' .. obj_suffix)
@@ -363,13 +311,13 @@ function compile_tasks_make_obj_dirs(tasks)
 end
 
 function compile_tasks_build(tasks, command_build)	-- command_build(task) is commands
-	assert( puss.thread_pool, "MUST in main thread!" )
+	assert( vlua.thread_pool, "MUST in main thread!" )
 	for _, t in pairs(tasks) do
 		local deps = next(t.deps) and t.deps or {t.src}
 		trace('check_deps_execute:', command_build(t))
-		puss.thread_pool.run(t.src, 'check_deps_execute', t.obj, deps, command_build(t))
+		vlua.thread_pool:run(t.src, 'check_deps_execute', t.obj, deps, command_build(t))
 	end
-	puss.thread_pool.wait(function(src, ok, res, code)
+	vlua.thread_pool:wait(function(src, ok, res, code)
 		if ok then
 			trace('build target(', src, ') succeed')
 		else
@@ -396,79 +344,8 @@ function make_copy(filename, target_path, source_path)
 	local target = path_concat(target_path, filename)
 	local source = path_concat(source_path, filename)
 	if not check_deps(target, source) then
-		puss.file_copy(source, target)
+		vlua.file_copy(source, target)
 	end
 	return target
 end
 
-if puss._main==nil then
-	puss.__run_thread_script = function(script)
-		local f, e = load(script, '<thread-script', 'b')
-		if f then return f() end
-		error('thread script run error:' .. tostring(e))
-	end
-else
-	-- main thread
-	do
-		local n = tonumber(puss.match_arg('^%-j(%d+)$') or '4') or 4
-		if n > 0 then
-			-- delay create thread pool!
-			local function ensure_thread_pool()
-				-- print('creat thread', n)
-				local pool = puss.thread_pool_new('WorkThread', n, puss._main)
-				puss.thread_pool = pool
-				return pool
-			end
-			puss.thread_pool =
-				{ run = function(...) return ensure_thread_pool().run(...) end
-				, wait = function(...) return ensure_thread_pool().wait(...) end
-				}
-		end
-	end
-end
-
-local __targets = {}	-- target : process
-local __maked_targets = {}
-
-function vmake_target_all()
-	return __targets
-end
-
-function vmake_target_add(target, process)
-	assert(__targets[target]==nil, 'target('..tostring(target)..') already exist!')
-	__targets[target] = process
-end
-
-local function _make(target)
-	local output = __maked_targets[target]
-	if output then return output end
-	__maked_targets[target] = '<building>'
-	local f = __targets[target]
-	if f then
-		output = f(target) or '<no-output>'
-		__maked_targets[target] = output
-		return output
-	end
-	error('unknown target: '..tostring(target))
-end
-
-function vmake(...)
-	local n = select('#', ...)
-	if n < 2 then return _make(...) end
-	local res = {}
-	for i=1,n do
-		local t = select(i, ...)
-		res[i] = _make(t)
-	end
-	return res
-end
-
-function main()
-	local targets = {}
-	for _,v in ipairs(puss.fetch_args()) do
-		local t = v:match('^[_%w]+$')
-		if t then table.insert(targets, t) end
-	end
-	if #targets==0 then table.insert(targets, '') end
-	vmake(table.unpack(targets))
-end

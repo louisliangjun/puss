@@ -48,12 +48,12 @@ function main()
 		table.insert(apis, {ret, name, args, anames, vaargs})
 	end
 
-	local root = puss.match_arg('^%-path=(.+)$') or '.'
-	local gen = puss.match_arg('^%-gen=(.+)$') or '.'
+	local root = vlua.match_arg('^%-path=(.+)$') or '.'
+	local gen = vlua.match_arg('^%-gen=(.+)$') or '.'
 
-	pasre_header(gen_api, puss.filename_format(root..'/lua.h'))
-	pasre_header(gen_api, puss.filename_format(root..'/lauxlib.h'))
-	pasre_header(gen_api, puss.filename_format(root..'/lualib.h'))
+	pasre_header(gen_api, vlua.filename_format(root..'/lua.h'))
+	pasre_header(gen_api, vlua.filename_format(root..'/lauxlib.h'))
+	pasre_header(gen_api, vlua.filename_format(root..'/lualib.h'))
 
 	local function generate_file(filename, cb)
 		local output_lines = {}
@@ -70,13 +70,13 @@ function main()
 		f:close()
 	end
 
-	generate_file(puss.filename_format(gen..'/'..'luaproxy.symbols'), function(writeln)
+	generate_file(vlua.filename_format(gen..'/'..'luaproxy.symbols'), function(writeln)
 		for _,v in ipairs(apis) do
 			writeln('__LUAPROXY_SYMBOL(', v[2], ')')
 		end
 	end)
 
-	generate_file(puss.filename_format(root..'/'..'luaproxy.h'), function(writeln)
+	generate_file(vlua.filename_format(root..'/'..'luaproxy.h'), function(writeln)
 		writeln('// NOTICE : generate by luaproxy.lua')
 		writeln()
 		writeln('#ifndef _LUA_PROXY_H__')
@@ -117,7 +117,7 @@ function main()
 
 	-- NOTICE : now not need use importlib
 	--[[
-	generate_file(puss.filename_format(root..'/'..'luaproxy_importlib.inl'), function(writeln)
+	generate_file(vlua.filename_format(root..'/'..'luaproxy_importlib.inl'), function(writeln)
 		writeln('static LuaProxy* __lua_proxy_imp__ = 0;')
 		writeln('static void __lua_proxy_import__(LuaProxy* proxy) { __lua_proxy_imp__=proxy; }')
 		writeln()

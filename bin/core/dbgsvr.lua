@@ -341,6 +341,10 @@ end
 puss._debug_execute_script = function(level, script)
 	--print('* host execute_script', level, script)
 	local info = debug.getinfo(level + 2, 'f')
+	local function get_from_env(key)
+		local k, v = debug.getupvalue(info.func, 1)
+		if k == '_ENV' then return v[key] end
+	end
 	local function ul_read_wrapper(t, key)
 		for i=1,255 do
 			local k, v = debug.getlocal(level + 3, i)
@@ -352,10 +356,9 @@ puss._debug_execute_script = function(level, script)
 			if not k then break end
 			if k == key then return v end
 		end
-		do
-			local k, v = debug.getupvalue(info.func, 1)
-			if k == '_ENV' then return v[key] end
-		end
+		local ok, res = pcall(get_from_env, key)
+		if ok and res~=nil then return res end
+		return _G[key]	-- NOTICE: for debugger test
 	end
 	local function ul_write_wrapper(t, key, val)
 		for i=1,255 do

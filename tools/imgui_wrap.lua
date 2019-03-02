@@ -574,8 +574,8 @@ overrides.Value = [[return lua_type(L, 2)==LUA_TNUMBER ? (lua_isinteger(L, 2) ? 
 overrides.MenuItem = [[int selected=lua_toboolean(L,3); wrap_MenuItem_ssbb(L); lua_pushboolean(L, lua_toboolean(L,-1) ? !selected : selected); return 2;]]
 
 function main()
-	local out = puss.match_arg('^%-out=(.+)$') or '.'
-	local src = puss.match_arg('^%-src=(.+)$') or './include'
+	local out = vlua.match_arg('^%-out=(.+)$') or '.'
+	local src = vlua.match_arg('^%-src=(.+)$') or './include'
 
 	local inttypes = {}
 	local apis = {}
@@ -688,7 +688,7 @@ function main()
 		f:close()
 	end
 
-	generate_file(puss.filename_format(out..'/'..'imgui_enums.inl'), function(dst)
+	generate_file(vlua.filename_format(out..'/'..'imgui_enums.inl'), function(dst)
 		local last_macro
 		for _,v in ipairs(enums) do
 			local enum, macro = table.unpack(v)
@@ -703,7 +703,7 @@ function main()
 		dst:writeln()
 	end)
 
-	generate_file(puss.filename_format(out..'/'..'imgui_lua.inl'), function(dst)
+	generate_file(vlua.filename_format(out..'/'..'imgui_lua.inl'), function(dst)
 		local functions = {}
 
 		local RE_UINT = '^unsigned%s+int$'			-- unsigned int
@@ -1249,7 +1249,7 @@ function main()
 		dst:writeln()
 	end)
 
-	generate_file(puss.filename_format(out..'/'..'imgui_wraps.inl'), function(dst)
+	generate_file(vlua.filename_format(out..'/'..'imgui_wraps.inl'), function(dst)
 		local ws = {}
 		for w in pairs(wraps) do table.insert(ws, w) end
 		table.sort(ws)
@@ -1259,7 +1259,7 @@ function main()
 		dst:writeln()
 	end)
 
-	generate_file(puss.filename_format(out..'/'..'imgui_apis.txt'), function(dst)
+	generate_file(vlua.filename_format(out..'/'..'imgui_apis.txt'), function(dst)
 		local function gen_fun(w, wrap_name)
 			local desc = docs[wrap_name]
 			if not desc then return end

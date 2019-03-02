@@ -90,11 +90,11 @@ local function parse_enums(enums, segs)
 end
 
 function main()
-	local out = puss.match_arg('^%-out=(.+)$') or '.'
-	local gen = puss.match_arg('^%-gen=(.+)$') or '.'
+	local out = vlua.match_arg('^%-out=(.+)$') or '.'
+	local gen = vlua.match_arg('^%-gen=(.+)$') or '.'
 	local lines = {}
 	do
-		local fname = puss.match_arg('^%-src=(.+)$') or 'nuklear.h'
+		local fname = vlua.match_arg('^%-src=(.+)$') or 'nuklear.h'
 		for line in io.lines(fname) do
 			-- #endif /* NK_NUKLEAR_H_ */
 			table_insert(lines, line)
@@ -143,7 +143,7 @@ function main()
 	local rename_symbols = {}
 	for _, name in ipairs(same_name_symbols) do rename_symbols[name] = '__'..name end
 
-	generate_file(puss.filename_format(out..'/'..'nuklear.h'), function(writeln)
+	generate_file(vlua.filename_format(out..'/'..'nuklear.h'), function(writeln)
 		writeln('/* NOTICE : generate by nuklearproxy.lua */')
 		writeln()
 		writeln(header)
@@ -157,7 +157,7 @@ function main()
 		end
 	end)
 
-	generate_file(puss.filename_format(out..'/'..'nuklear_proxy.h'), function(writeln)
+	generate_file(vlua.filename_format(out..'/'..'nuklear_proxy.h'), function(writeln)
 		writeln('#ifndef __INC_NUKLEAR_PROXY_H__')
 		writeln('#define __INC_NUKLEAR_PROXY_H__')
 		writeln()
@@ -198,7 +198,7 @@ function main()
 		writeln()
 	end)
 
-	generate_file(puss.filename_format(gen..'/'..'nuklear.symbols'), function(writeln)
+	generate_file(vlua.filename_format(gen..'/'..'nuklear.symbols'), function(writeln)
 		for _, segv in ipairs(apis) do
 			local seg, syms = table.unpack(segv)
 			if seg then
@@ -215,7 +215,7 @@ function main()
 		end
 	end)
 
-	generate_file(puss.filename_format(gen..'/'..'nuklear.enums'), function(writeln)
+	generate_file(vlua.filename_format(gen..'/'..'nuklear.enums'), function(writeln)
 		for _, segv in ipairs(enums) do
 			local seg, syms = table.unpack(segv)
 			if seg then

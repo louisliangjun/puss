@@ -121,7 +121,11 @@ __exports.update = function()
 	for i,v in ipairs(root_folders) do
 		local show, open = imgui.CollapsingHeader(v._label, true)
 		if not open then remove_id = i end
-		if show then show_folder(v, v) end
+		if show then
+			imgui.PushID(v._label)
+			show_folder(v, v)
+			imgui.PopID()
+		end
 	end
 	if remove_id then table.remove(root_folders, remove_id) end
 end
