@@ -602,18 +602,39 @@ ListBox *ListBox::Allocate() {
 	return lb;
 }
 
+class MenuIM {
+public:
+	struct Item {
+		const char*	name;
+		int			cmd;
+		bool		enabled;
+	};
+public:
+	char			title[32];
+	Point			point;
+	ImVector<Item>	items;
+};
+
 Menu::Menu() : mid(0) {
 }
 
 void Menu::CreatePopUp() {
-	Destroy();
+	MenuIM* m = new MenuIM;
+	sprintf(m->title, "%p", m);
+	mid = (MenuID)m;
 }
 
 void Menu::Destroy() {
+	delete (MenuIM*)mid;
 	mid = 0;
 }
 
 void Menu::Show(Point pt, Window &w) {
+	MenuIM* m = (MenuIM*)mid;
+	if( !m )
+		return;
+	m->point = pt;
+	ImGui::OpenPopup(m->title);
 }
 
 ColourDesired Platform::Chrome() {
@@ -769,6 +790,10 @@ public:
 	{
 		view.bufferedDraw = false;
 		wMain = (WindowID)&mainWindow;
+		for(int i=0; i<tickPlatform; ++i) {
+			timerIntervals[i] = 0;
+			timers[i] = 0.0f;
+		}
 	}
 	virtual ~ScintillaIM() {
 	}
@@ -872,12 +897,7 @@ public: 	// Public for scintilla_send_message
 			if(!PointInSelection(pt))
 				SetEmptySelection(PositionFromLocation(pt));
 			if(ShouldDisplayPopup(pt)) {
-				// PopUp menu
-				// Convert to screen
-				int ox = 0;
-				int oy = 0;
-				// gdk_window_get_origin(PWindow(wMain), &ox, &oy);
-				ContextMenu(Point(pt.x + ox, pt.y + oy));
+				ContextMenu(Point(pt.x, pt.y));
 			} else {
 				RightButtonDownWithModifiers(pt, now, modifiers);
 			}
@@ -905,34 +925,15 @@ public: 	// Public for scintilla_send_message
             // Process text input (before we check for Return because using some IME will effectively send a Return?)
             // We ignore CTRL inputs, but need to allow ALT+CTRL as some keyboards (e.g. German) use AltGR (which _is_ Alt+Ctrl) to input certain characters.
             if( !(io.KeyCtrl && !io.KeyAlt) && (!pdoc->IsReadOnly()) ) {
-#if 0
-				ImWchar imws[IM_ARRAYSIZE(io.InputCharacters)];
-				ImWchar* endp = imws;
-				// remove backspace & escape
-				{
-					ImWchar* ps = io.InputCharacters;
-					ImWchar* pe = ps + IM_ARRAYSIZE(io.InputCharacters);
-					for( ; ps<pe; ++ps ) {
-						ImWchar c = *ps;
-						if( c==0 )	break;
-						if( c==SCK_ESCAPE || c==SCK_BACK )	continue;
-						*endp++ = (char)c;
-					}
-				}
-				char utf8[IM_ARRAYSIZE(io.InputCharacters)*6+8];
-				int len = ImTextStrToUtf8(utf8, IM_ARRAYSIZE(io.InputCharacters)*6, imws, endp);
-#else
-				char utf8[IM_ARRAYSIZE(io.InputCharacters)*6+8];
-				ImWchar* text_end = io.InputCharacters;
-                for (int n = 0; n < IM_ARRAYSIZE(io.InputCharacters) && io.InputCharacters[n]; n++) {
-					++text_end;
-				}
-				int len = ImTextStrToUtf8(utf8, IM_ARRAYSIZE(io.InputCharacters)*6, io.InputCharacters, text_end);
-#endif
+				char utf8[6];
+				ImWchar* iter = io.InputCharacters;
+				ImWchar* end = iter + IM_ARRAYSIZE(io.InputCharacters);
 				ClearSelection();
-				const int inserted = pdoc->InsertString(CurrentPosition(), utf8, len);
-				if(inserted > 0) {
-					MovePositionTo(CurrentPosition() + inserted);
+				for( ; iter<end; ++iter ) {
+					if( *iter==0 )
+						break;
+					int len = ImTextStrToUtf8(utf8, 6, iter, iter+1);
+					AddCharUTF(utf8, len);
 				}
 			}
             // Consume characters
@@ -972,12 +973,34 @@ public: 	// Public for scintilla_send_message
 		if( hovered || HaveMouseCapture() ) {
 			HandleMouseEvents(io, id, hovered, wRect, now, modifiers);
 		}
-		SetFocusState(ImGui::IsWindowFocused());
+		bool focused = ImGui::IsWindowFocused();
+		if( focused != hasFocus ) {
+			SetFocusState(focused);
+		}
 		if( hasFocus ) {
 			HandleKeyboardEvents(io, now, modifiers);
 		}
 	}
+	void PaintPopup() {
+		MenuIM* m = (MenuIM*)popup.GetID();
+		if( !m ) return;
+		if( ImGui::BeginPopupContextItem(m->title) ) {
+			for( int i=0; i<m->items.size(); ++i ) {
+				const char* name = m->items[i].name;
+				bool* selected = NULL;
+				bool enabled = m->items[i].enabled;
+				if( !name[0] ) {
+					ImGui::Separator();
+				}else if( ImGui::MenuItem(name, NULL, selected, enabled) ) {
+					ImGui::CloseCurrentPopup();
+					Command(m->items[i].cmd);
+				}
+			}
+			ImGui::EndPopup();
+		}
+	}
 	void Draw(ImGuiWindow* window) {
+		ImGuiIO& io = ImGui::GetIO();
 		float totalHeight = (float)((pdoc->LinesTotal() + 1) * vs.lineHeight);
 		float totalWidth = (float)(scrollWidth * vs.aveCharWidth);
 		ImVec2 total_sz(window->ClipRect.GetSize());
@@ -1012,12 +1035,27 @@ public: 	// Public for scintilla_send_message
 			ctx->PlatformImePosViewport = window->Viewport;
 		}
 
+		// timers
+		for( int i=0; i<tickPlatform; ++i ) {
+			if( timerIntervals[i] ) {
+				timers[i] -= io.DeltaTime;
+				if( timers[i] <= 0.0f ) {
+					timers[i] = ((float)timerIntervals[i]) * 0.001f;
+					TickFor((TickReason)i);
+				}
+			}
+		}
+
+		// idle
+		idler.state = idler.state && Idle();
+
 		// render
 		std::unique_ptr<Surface> surfaceWindow(Surface::Allocate(SC_TECHNOLOGY_DEFAULT));
 		surfaceWindow->Init(0, wMain.GetID());
 
 		PRectangle rc = GetClientRectangle();
 		Paint(surfaceWindow.get(), rc);
+		PaintPopup();
 		surfaceWindow->Release();
 	}
 	void Update(bool draw, ScintillaIMCallback cb, void* ud) {
@@ -1036,14 +1074,18 @@ private:
 		return 0;
 	}
 	bool FineTickerRunning(TickReason reason) override {
-		return false;
+		return timerIntervals[reason] > 0;
 	}
 	void FineTickerStart(TickReason reason, int millis, int tolerance) override {
+		timerIntervals[reason] = millis;
+		timers[reason] = ((float)millis) * 0.001f;
 	}
 	void FineTickerCancel(TickReason reason) override {
+		timerIntervals[reason] = 0;
 	}
 	bool SetIdle(bool on) override {
-		return true;
+		idler.state = on;
+		return on;
 	}
 	void SetMouseCapture(bool on) override {
 		captureMouse = on;
@@ -1348,8 +1390,17 @@ private:
 	}
 #endif
 	void CreateCallTipWindow(PRectangle rc) override {
+		if( !ct.wCallTip.Created() ) {
+			// TODO : 
+			ct.wCallTip = (WindowID)&mainWindow;
+			ct.wDraw = ct.wCallTip;
+		}
 	}
 	void AddToPopUp(const char *label, int cmd = 0, bool enabled = true) override {
+		MenuIM* m = (MenuIM*)popup.GetID();
+		if( !m ) return;
+		MenuIM::Item item = { label, cmd, enabled };
+		m->items.push_back(item);
 	}
 	void ClaimSelection() override {
 	}
@@ -1359,6 +1410,8 @@ private:
 	WindowIM mainWindow;
 	ScintillaIMCallback notify_callback;
 	void* notify_callback_ud;
+	int timerIntervals[tickPlatform];
+	float timers[tickPlatform];
 };
 
 ScintillaIM* scintilla_imgui_create() {

@@ -885,8 +885,8 @@ static VLUA_THREAD_DECLARE(work_thread, _arg) {
 	VLuaThreadPool* pool = arg->pool;
 	lua_State* L = arg->state;
 	VLuaThreadTask* task = NULL;
-
-	while( !(pool->stop) ) {
+	int running = 1;
+	while( running ) {
 		task = vlua_thread_task_mq_pop(&(pool->req_mq));
 		if( task->req ) {
 			lua_settop(L, 0);
@@ -898,6 +898,8 @@ static VLUA_THREAD_DECLARE(work_thread, _arg) {
 				const char* e = lua_tolstring(L, -1, &n);
 				thread_task_reset_packet(task, e, n);
 			}
+		} else {
+			running = 0;
 		}
 		vlua_thread_task_mq_push(&(pool->resp_mq), task);
 	}
