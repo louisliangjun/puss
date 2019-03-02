@@ -1409,9 +1409,13 @@ static int run(lua_State* L, const char* script, int is_script_file) {
 		"end\n"
 		"\n"
 		"function main()\n"
-		"	local target = vlua.match_arg('^[_%w]+$') or '' -- make target, default ''\n"
-		"	-- print('start vmake target \"'..tostring(target)..'\"')\n"
-		"	vmake(target)\n"
+		"	local targets = {}\n"
+		"	for _,v in ipairs(vlua.fetch_args()) do\n"
+		"		local t = v:match('^[_%w]+$')\n"
+		"		if t then table.insert(targets, t) end\n"
+		"	end\n"
+		"	if #targets==0 then table.insert(targets, '') end\n"
+		"	vmake(table.unpack(targets))\n"
 		"end\n"
 		;
 
