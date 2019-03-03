@@ -269,6 +269,10 @@ local function do_reset_styles(sv, lang)
 	sv:SetMouseSelectionRectangularSwitch(true)
 	sv:SetVirtualSpaceOptions(SCVS_RECTANGULARSELECTION)
 
+	sv:SetUseTabs(true)
+	sv:SetTabIndents(true)
+	sv:SetIndentationGuides(SC_IV_LOOKBOTH)
+
 	if setting.margin_linenum then
 		sv:SetMarginTypeN(0, SC_MARGIN_NUMBER)
 		sv:SetMarginWidthN(0, sv:TextWidth(STYLE_LINENUMBER, "_99999"))

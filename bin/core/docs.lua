@@ -295,12 +295,31 @@ local function on_margin_click(sv, modifiers, pos, margin)
 	puss.trace_pcall(hook, 'docs_page_on_margin_click', sv:get('page'), modifiers, pos, margin)
 end
 
+
+local function on_auto_indent(sv, updated)
+	sv:set(SCN_UPDATEUI, nil)
+	local pos = sv:GetCurrentPos()
+	local line = sv:LineFromPosition(pos)
+	if line <= 0 then return end
+	local ret, str = sv:GetLine(line-1)
+	-- print('on_auto_indent', updated, pos, line, ret, str)
+	str = str:match('^([ \t]+)')
+	if str then sv:ReplaceSel(str) end
+end
+
+local function on_char_added(sv, ch)
+	if ch==10 or ch==13 then
+		sv:set(SCN_UPDATEUI, on_auto_indent)
+	end
+end
+
 local function new_doc(label, lang, filepath)
 	local page = pages.create(label, _ENV)
 	local sv = sci.create(lang)
 	-- sv:SetViewWS(SCWS_VISIBLEALWAYS)
 	sv:set('page', page)
 	sv:set(SCN_MARGINCLICK, on_margin_click)
+	sv:set(SCN_CHARADDED, on_char_added)
 	page.lang = lang
 	page.sv = sv
 	page.filepath = filepath

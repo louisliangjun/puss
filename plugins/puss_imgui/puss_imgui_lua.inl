@@ -338,7 +338,6 @@ static int _lua__sci_send_wrap(lua_State* L) {
 			int len = (int)scintilla_imgui_send(*ud, decl->message, wparam, lparam);
 			if( len <= 0 )
 				return luaL_error(L, "lparam stringresult fetch length failed!");
-			wparam = (uptr_t)len;
 			lparam = (sptr_t)lua_newuserdata(L, (size_t)len);
 		}
 		break;
