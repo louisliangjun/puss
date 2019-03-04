@@ -165,7 +165,7 @@ local function draw_miniline()
 		-- print('start search', str)
 		thread:post('search', str)
 	end
-	--imgui.SetItemDefaultFocus()
+	imgui.SetItemDefaultFocus()
 	imgui.PopItemWidth()
 
 	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_UP) then
@@ -225,6 +225,10 @@ __exports.update = function(x, y, w, h)
 		if press_ok then
 			imgui.SetWindowFocus()
 			imgui.SetKeyboardFocusHere()
+		else
+			if not imgui.IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) then
+				open = false
+			end
 		end
 		draw_miniline()
 	end

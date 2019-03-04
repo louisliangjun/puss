@@ -632,7 +632,9 @@ static void ImGui_ImplDX11_InitPlatformInterface()
 
 static void ImGui_ImplDX11_ShutdownPlatformInterface()
 {
-    ImGui::DestroyPlatformWindows();
+	if( ImGui::GetCurrentContext() ) {
+		ImGui::DestroyPlatformWindows();
+	}
 }
 
 #endif  //PUSS_IMGUI_USE_DX11
