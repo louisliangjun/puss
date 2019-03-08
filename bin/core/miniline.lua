@@ -159,7 +159,9 @@ end
 
 local function draw_miniline()
 	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_ESCAPE) then open = false end
-	imgui.PushItemWidth(480)
+	imgui.Text('file')
+	imgui.SameLine()
+	imgui.PushItemWidth(420)
 	if imgui.InputText('##input', input_buf) then
 		local str = input_buf:str()
 		-- print('start search', str)
@@ -175,10 +177,7 @@ local function draw_miniline()
 		if cursor < #results then cursor = cursor + 1 end
 	end
 
-	local sel
-	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_ENTER) then
-		sel = cursor
-	end
+	local sel = imgui.IsShortcutPressed(PUSS_IMGUI_KEY_ENTER) and cursor
 	for i=1,24 do
 		local r = results[i]
 		if not r then break end
@@ -207,7 +206,7 @@ local function on_thread_response()
 	if key then results = res or {} end
 end
 
-__exports.update = function(x, y, w, h)
+__exports.update = function(show, x, y, w, h)
 	puss.trace_pcall(on_thread_response)
 	local press_ok = false
 	if not open then
@@ -218,9 +217,8 @@ __exports.update = function(x, y, w, h)
 
 	check_refresh_index()
 
-	local show
-	imgui.SetNextWindowPos(x + w - 520, y + 60, ImGuiCond_Always)
-	show, open = imgui.Begin('##miniline', true, MINILINE_FLAGS)
+	imgui.SetNextWindowPos(x + w - 520, y + 75, ImGuiCond_Always)
+	show, open = imgui.Begin('##miniline', show, MINILINE_FLAGS)
 	if show then
 		if press_ok then
 			imgui.SetWindowFocus()
@@ -233,4 +231,5 @@ __exports.update = function(x, y, w, h)
 		draw_miniline()
 	end
     imgui.End()
+    return show
 end

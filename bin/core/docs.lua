@@ -77,40 +77,20 @@ local function page_call(page, cb, ...)
 	imgui.EndChild()
 end
 
-local function finish_show_dialog(page, active)
-	if imgui.IsWindowFocused() and imgui.IsKeyPressed(PUSS_IMGUI_KEY_ESCAPE) then
-		page.dialog_mode = nil
-		active = true
-	end
-	if active then
-		imgui.SetKeyboardFocusHere(-1)
-	end
-end
+local FINDREPLACE_FLAGS = ( ImGuiWindowFlags_NoMove
+	| ImGuiWindowFlags_NoDocking
+	| ImGuiWindowFlags_NoTitleBar
+	| ImGuiWindowFlags_NoResize
+	| ImGuiWindowFlags_AlwaysAutoResize
+	| ImGuiWindowFlags_NoSavedSettings
+	| ImGuiWindowFlags_NoNav
+	)
 
-local function show_dialog_jump(page, active)
-	if active then
-		local line = page.sv:LineFromPosition(page.sv:GetCurrentPos())
-		inbuf:strcpy(tostring(line+1))
-	end
-
-	if imgui.InputText('##JumpText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue|ImGuiInputTextFlags_CharsDecimal) then
-		local line = tonumber(inbuf:str())
-		if line then
-			active = false
-			page.dialog_mode = nil	-- hide dialog
-			page.scroll_to_line = line-1
-		else
-			active = true
-		end
-	end
-
-	finish_show_dialog(page, active)
-end
-
-local function do_search(sv, text, length, search_prev)
+local function do_search(sv, text, search_prev)
 	local search_flags = 0
 	sv:SetSearchFlags(search_flags)
 
+	local length = #text
 	local ps = sv:GetSelectionStart()
 	local pe = sv:GetSelectionEnd()
 	if search_prev then
@@ -143,73 +123,146 @@ local function do_search(sv, text, length, search_prev)
 	end
 end
 
-local function start_show_dialog_find_replace(page, active, has_replace)
+local dialog_active = false
+local dialog_modes = {}
+
+local function check_dialog_mode(page)
+	for k in pairs(dialog_modes) do
+		if shotcuts.is_pressed(k) then
+			dialog_active = true
+			page.dialog_mode = k
+			break
+		end
+	end
+end
+
+local function show_dialog_begin()
+	local vid, x, y, w, h = imgui.GetWindowViewport()
+	imgui.SetNextWindowPos(x + w - 320, y + 75, ImGuiCond_Always)
+	return imgui.Begin('##findreplace', true, FINDREPLACE_FLAGS)
+end
+
+local function start_show_dialog_find_replace(page, has_replace, ignore_key_focus)
+	local active = dialog_active
+	dialog_active = nil
+
 	if active then
 		page_call(page, function(sv)
-			local len, txt = sv:GetSelText()
+			local len, text = sv:GetSelText()
 			if len==0 then return end
-			inbuf:strcpy(txt)
-			if page.find_text~= txt then
-				page.find_text = txt
-				sci.find_text_fill_all_indicator(page.sv, txt)
+			if text:byte(-1)==0 then text = text:sub(1,-2) end
+			inbuf:strcpy(text)
+			if page.find_text ~= text then
+				page.find_text = text
+				sci.find_text_fill_all_indicator(page.sv, text)
 			end
 		end)
 	end
 
-	if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
-		local text = inbuf:str()
-		local length = #text
-		active = true
-		if length==0 then return end
-
-		if page.find_text~= text then
-			page.find_text = text
-			sci.find_text_fill_all_indicator(page.sv, text)
+	local search
+	if show_dialog_begin() then
+		imgui.Text('find')
+		imgui.SameLine()
+		if active then
+			imgui.SetWindowFocus()
+			imgui.SetKeyboardFocusHere()
+		else
+			check_dialog_mode(page)
 		end
+		imgui.BeginGroup()
+		if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
+			local text = inbuf:str()
+			active = true
+			if #text==0 then return end
+			if page.find_text ~= text then
+				page.find_text = text
+				sci.find_text_fill_all_indicator(page.sv, text)
+			end
+			search = (imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT)) and 1 or 2
+		end
+		imgui.SetItemDefaultFocus()
 
-		local search_prev = imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT)
-		page_call(page, do_search, text, length, search_prev)
-	end
+		if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_UP) then search = 1 end
+		if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_DOWN) then search = 2 end
 
-	if has_replace then
-		if imgui.InputText('##ReplaceText', rebuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
-			print(mode, rebuf:str())
+		if has_replace then
+			if imgui.InputText('##ReplaceText', rebuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
+				print(mode, rebuf:str())
+			end
+		end
+		imgui.EndGroup()
+		if not imgui.IsWindowFocused() then
+			active, page.dialog_mode = true, nil
+		elseif imgui.IsKeyPressed(PUSS_IMGUI_KEY_ESCAPE) then
+			active, page.dialog_mode = true, nil
+		end
+		if active then
+			if not ignore_key_focus then imgui.SetKeyboardFocusHere(-1) end
 		end
 	end
-
-	return active
+	imgui.End()
+	if search then page_call(page, do_search, page.find_text, search==1) end
 end
 
-local function show_dialog_find(page, active)
-	active = start_show_dialog_find_replace(page, active)
-	finish_show_dialog(page, active)
+dialog_modes['docs/jump'] = function(page)
+	local active = dialog_active
+	dialog_active = nil
+
+	if active then
+		local line = page.sv:LineFromPosition(page.sv:GetCurrentPos())
+		inbuf:strcpy(tostring(line+1))
+	end
+
+	if show_dialog_begin() then
+		imgui.Text('jump')
+		imgui.SameLine()
+		if active then
+			imgui.SetWindowFocus()
+			imgui.SetKeyboardFocusHere()
+		else
+			check_dialog_mode(page)
+		end
+		if imgui.InputText('##JumpText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue|ImGuiInputTextFlags_CharsDecimal) then
+			local line = tonumber(inbuf:str())
+			if line then
+				active, page.dialog_mode = false, nil	-- hide dialog
+				page.scroll_to_line = line-1
+			else
+				active = true
+			end
+		end
+		if imgui.IsWindowFocused() and imgui.IsKeyPressed(PUSS_IMGUI_KEY_ESCAPE) then
+			active, page.dialog_mode = true, nil
+		end
+		if active then
+			imgui.SetKeyboardFocusHere(-1)
+		end
+	end
+	imgui.End()
+
 end
 
-local function show_dialog_quick_find(page, active)
-	start_show_dialog_find_replace(page, active and (imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_CONTROL) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_CONTROL)))
-	finish_show_dialog(page, false)
+dialog_modes['docs/find'] = function(page)
+	start_show_dialog_find_replace(page)
+end
+
+dialog_modes['docs/replace'] = function(page)
+	start_show_dialog_find_replace(page, true)
+end
+
+dialog_modes['docs/quick_find'] = function(page)
+	local active = dialog_active
+	dialog_active = active and (imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_CONTROL) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_CONTROL))
+	start_show_dialog_find_replace(page, nil, true)
 
 	if active then
 		page_call(page, function(sv)
 			local text = inbuf:str()
-			local length = #text
 			local search_prev = imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT)
-			do_search(sv, text, length, search_prev)
+			do_search(sv, text, search_prev)
 		end)
 	end
 end
-
-local function show_dialog_replace(page, active)
-	active = start_show_dialog_find_replace(page, active, true)
-	finish_show_dialog(page, active)
-end
-
-local dialog_modes =
-	{ {'jump', 'docs/jump', 1, show_dialog_jump}
-	, {'find', 'docs/find', 1, show_dialog_find}
-	, {'find', 'docs/quick_find', 1, show_dialog_quick_find}
-	, {'replace', 'docs/replace', 2, show_dialog_replace}
-	}
 
 function tabs_page_draw(page, active_page)
 	if (not page.saving) and shotcuts.is_pressed('docs/save') then do_save_page(page) end
@@ -217,23 +270,9 @@ function tabs_page_draw(page, active_page)
 	puss.trace_pcall(hook, 'docs_page_before_draw', page)
 	if page.saving then draw_saving_bar(page) end
 
-	local active
 	if imgui.IsWindowFocused(ImGuiFocusedFlags_ChildWindows) then
-		for i,v in ipairs(dialog_modes) do
-			if shotcuts.is_pressed(v[2]) then
-				active = i
-				break
-			end
-		end
+		check_dialog_mode(page)
 	end
-
-	local mode = active
-	if active then
-		page.dialog_mode = mode
-	else
-		mode = page.dialog_mode
-	end
-	mode = mode and dialog_modes[mode]
 
 	if active_page then
 		sci.reset_styles(page.sv, page.lang)
@@ -251,27 +290,18 @@ function tabs_page_draw(page, active_page)
 		end)
 	end
 
-	local height = mode and -(mode[3] * imgui.GetFrameHeightWithSpacing()) or nil
-	imgui.BeginChild(page.label, nil, height, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
+	imgui.BeginChild(page.label, nil, nil, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
 		local sv = page.sv
 		sv()
 		page.unsaved = sv:GetModify()
 		puss.trace_pcall(hook, 'docs_page_after_draw', page)
 	imgui.EndChild()
 
-	if mode then
-		imgui.BeginGroup()
-		imgui.Text(mode[1])
-		imgui.SameLine()
-		imgui.BeginGroup()
-		mode[4](page, active)
-		imgui.EndGroup()
-		imgui.EndGroup()
+	if page.dialog_mode then
+		dialog_modes[page.dialog_mode](page)
 
 		if not page.dialog_mode then
-			page_call(page, function(sv)
-				imgui.SetWindowFocus()
-			end)
+			page_call(page, function(sv) imgui.SetWindowFocus() end)
 		end
 	end
 end
@@ -294,7 +324,6 @@ end
 local function on_margin_click(sv, modifiers, pos, margin)
 	puss.trace_pcall(hook, 'docs_page_on_margin_click', sv:get('page'), modifiers, pos, margin)
 end
-
 
 local function on_auto_indent(sv, updated)
 	sv:set(SCN_UPDATEUI, nil)
