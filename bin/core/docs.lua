@@ -38,7 +38,7 @@ local function do_save_page(page)
 		page.unsaved = nil
 	end
 
-	local len, ctx = page.sv:GetText(page.sv:GetTextLength())
+	local len, ctx = page.sv:GetText(page.sv:GetTextLength()+1)
 	page.saving = true
 	puss.trace_pcall(hook, 'docs_page_on_save', page_after_save, page.filepath, ctx)
 end
@@ -392,8 +392,15 @@ __exports.open = function(file, line)
 		else
 			page = new_doc(label, sci.guess_language(name), filepath)
 		end
-		page.sv:SetText(ctx)
-		page.sv:EmptyUndoBuffer()
+		local sv = page.sv
+		if ctx:find('\r\n') then
+			sv:SetEOLMode(SC_EOL_CRLF)
+		elseif ctx:find('\n') then
+			sv:SetEOLMode(SC_EOL_LF)
+		end
+		sv:SetText(ctx)
+		sv:ConvertEOLs(sv:GetEOLMode())
+		sv:EmptyUndoBuffer()
 		if line then page.scroll_to_line = line end
 	end
 
