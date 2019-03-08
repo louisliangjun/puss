@@ -115,7 +115,7 @@ if response_queue then
 
 	repeat
 		-- idle
-	until puss.thread_wait()
+	until puss.thread_wait(1000)
 
 	return print('miniline thread quit!')
 end
