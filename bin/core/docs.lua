@@ -399,7 +399,7 @@ __exports.open = function(file, line)
 			sv:SetEOLMode(SC_EOL_LF)
 		end
 		sv:SetText(ctx)
-		sv:ConvertEOLs(sv:GetEOLMode())
+		-- sv:ConvertEOLs(sv:GetEOLMode())
 		sv:EmptyUndoBuffer()
 		if line then page.scroll_to_line = line end
 	end
