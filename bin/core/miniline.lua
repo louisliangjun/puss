@@ -215,7 +215,7 @@ __exports.update = function(show, x, y, w, h)
 
 	check_refresh_index()
 
-	imgui.SetNextWindowPos(x + w - 520, y + 75, ImGuiCond_Always)
+	imgui.SetNextWindowPos(x + (w * 0.5), y + 64, ImGuiCond_Always, 0.6, 0)
 	show, open = imgui.Begin('##miniline', show, MINILINE_FLAGS)
 	if show then
 		if imgui.IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) then
