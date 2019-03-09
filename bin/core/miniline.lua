@@ -208,10 +208,8 @@ end
 
 __exports.update = function(show, x, y, w, h)
 	puss.trace_pcall(on_thread_response)
-	local press_ok = false
 	if not open then
 		if not shotcuts.is_pressed('miniline/open') then return end
-		press_ok = 1
 		results = {}
 	end
 
@@ -220,13 +218,10 @@ __exports.update = function(show, x, y, w, h)
 	imgui.SetNextWindowPos(x + w - 520, y + 75, ImGuiCond_Always)
 	show, open = imgui.Begin('##miniline', show, MINILINE_FLAGS)
 	if show then
-		if press_ok then
-			imgui.SetWindowFocus()
+		if imgui.IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) then
 			imgui.SetKeyboardFocusHere()
 		else
-			if not imgui.IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) then
-				open = false
-			end
+			open = false
 		end
 		draw_miniline()
 	end

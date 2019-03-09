@@ -142,34 +142,27 @@ local function show_dialog_begin()
 	return imgui.Begin('##findreplace', true, FINDREPLACE_FLAGS)
 end
 
-local function start_show_dialog_find_replace(page, has_replace, ignore_key_focus)
-	local active = dialog_active
-	dialog_active = nil
+local function active_find_text(page)
+	page_call(page, function(sv)
+		local len, text = sv:GetSelText()
+		if len==0 then return end
+		if text:byte(-1)==0 then text = text:sub(1,-2) end
+		inbuf:strcpy(text)
+		if page.find_text ~= text then
+			page.find_text = text
+			sci.find_text_fill_all_indicator(page.sv, text)
+		end
+	end)
+end
 
-	if active then
-		page_call(page, function(sv)
-			local len, text = sv:GetSelText()
-			if len==0 then return end
-			if text:byte(-1)==0 then text = text:sub(1,-2) end
-			inbuf:strcpy(text)
-			if page.find_text ~= text then
-				page.find_text = text
-				sci.find_text_fill_all_indicator(page.sv, text)
-			end
-		end)
-	end
+local function show_dialog_find(page, active)
+	if active then active_find_text(page) end
 
 	local search
 	if show_dialog_begin() then
 		imgui.Text('find')
 		imgui.SameLine()
-		if active then
-			imgui.SetWindowFocus()
-			imgui.SetKeyboardFocusHere()
-		else
-			check_dialog_mode(page)
-		end
-		imgui.BeginGroup()
+		if not active then check_dialog_mode(page) end
 		if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
 			local text = inbuf:str()
 			active = true
@@ -185,22 +178,16 @@ local function start_show_dialog_find_replace(page, has_replace, ignore_key_focu
 		if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_UP) then search = 1 end
 		if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_DOWN) then search = 2 end
 
-		if has_replace then
-			if imgui.InputText('##ReplaceText', rebuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
-				print(mode, rebuf:str())
-			end
-		end
-		imgui.EndGroup()
 		if not imgui.IsWindowFocused() then
 			active, page.dialog_mode = true, nil
 		elseif imgui.IsKeyPressed(PUSS_IMGUI_KEY_ESCAPE) then
 			active, page.dialog_mode = true, nil
-		end
-		if active then
-			if not ignore_key_focus then imgui.SetKeyboardFocusHere(-1) end
+		else
+			imgui.SetKeyboardFocusHere()
 		end
 	end
 	imgui.End()
+
 	if search then page_call(page, do_search, page.find_text, search==1) end
 end
 
@@ -243,17 +230,58 @@ dialog_modes['docs/jump'] = function(page)
 end
 
 dialog_modes['docs/find'] = function(page)
-	start_show_dialog_find_replace(page)
+	local active = dialog_active
+	dialog_active = nil
+	show_dialog_find(page, active)
 end
 
 dialog_modes['docs/replace'] = function(page)
-	start_show_dialog_find_replace(page, true)
+	local active = dialog_active
+	dialog_active = nil
+	if active then active_find_text(page) end
+
+	local search
+	if show_dialog_begin() then
+		imgui.Text('find')
+		imgui.SameLine()
+		imgui.BeginGroup()
+		if not active then check_dialog_mode(page) end
+		if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
+			local text = inbuf:str()
+			active = true
+			if #text==0 then return end
+			if page.find_text ~= text then
+				page.find_text = text
+				sci.find_text_fill_all_indicator(page.sv, text)
+			end
+			search = (imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT)) and 1 or 2
+		end
+		imgui.SetItemDefaultFocus()
+
+		if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_UP) then search = 1 end
+		if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_DOWN) then search = 2 end
+
+		imgui.InputText('##ReplaceText', rebuf)
+
+		imgui.EndGroup()
+
+		if not imgui.IsWindowFocused() then
+			active, page.dialog_mode = true, nil
+		elseif imgui.IsKeyPressed(PUSS_IMGUI_KEY_ESCAPE) then
+			active, page.dialog_mode = true, nil
+		elseif active then
+			imgui.SetKeyboardFocusHere()
+		end
+	end
+	imgui.End()
+
+	if search then page_call(page, do_search, page.find_text, search==1) end
 end
 
 dialog_modes['docs/quick_find'] = function(page)
 	local active = dialog_active
-	dialog_active = active and (imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_CONTROL) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_CONTROL))
-	start_show_dialog_find_replace(page, nil, true)
+	dialog_active = nil
+	show_dialog_find(page, active and (imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_CONTROL) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_CONTROL)))
 
 	if active then
 		page_call(page, function(sv)
