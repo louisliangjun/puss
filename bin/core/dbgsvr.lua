@@ -300,24 +300,19 @@ end
 local function fetch_value_subs(value)
 	local start = #vars + 1
 	local vt = type(value)
+	if vt~='table' and vt~='userdata' then return end
+	local range = vars[value]
+	if range then return range end
+	local mt = getmetatable(value)
+	if mt then table.insert(vars, {'M', '@metatable', mt}) end
 	if vt=='table' then
-		local range = vars[value]
-		if range then return do_ret(vars, range[1], range[2]) end
-		local mt = getmetatable(value)
-		if mt then table.insert(vars, {'M', '@metatable', mt}) end
 		pcall(fetch_table_elems, vars, value)
-	elseif vt=='userdata' then
-		local range = vars[value]
-		if range then return do_ret(vars, range[1], range[2]) end
-		local mt = getmetatable(value)
-		if mt then table.insert(vars, {'M', '@metatable', mt}) end
+	else
 		local uv = debug.getuservalue(value)
 		if uv then table.insert(vars, {'P', '@uservalue', uv, value, modify=var_modify_uservalue}) end
-	else
-		return
 	end
 	table.insert(vars, {'H', nil, value})
-	local range = {start, #vars - 1, idx = #vars}
+	local range = {start, #vars - 1, ref = #vars}
 	vars[value] = range
 	return range
 end
@@ -382,12 +377,12 @@ end
 puss._debug_hover = function(level, script)
 	local v = puss._debug_execute_script(level + 1, 'return ' .. script)
 	local vt, vv = lua_type_desc_of(v)
-	local idx
+	local ref
 	if vt=='T' or vt=='U' then
 		local range = vars[v] or fetch_value_subs(v)
-		idx = range.idx
+		ref = range.ref
 	end
-	return vt, vv, idx
+	return vt, vv, ref
 end
 
 puss._debug_fetch_file = function(filepath)
