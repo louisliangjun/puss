@@ -141,10 +141,10 @@ local function show_dialog_begin(page, label)
 	local right, top
 	imgui.BeginChild(page.label)
 	right, top = imgui.GetWindowPos()
-	right = right + imgui.GetWindowWidth()
+	right = right + imgui.GetWindowWidth() - imgui.GetStyle(ImGuiStyleVar_ScrollbarSize)
 	imgui.EndChild()
 
-	imgui.SetNextWindowPos(right-16, top, ImGuiCond_Always, 1, 0)
+	imgui.SetNextWindowPos(right, top, ImGuiCond_Always, 1, 0)
 	if not imgui.Begin('##findreplace', true, FINDREPLACE_FLAGS) then return false end
 	if not imgui.IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) then page.dialog = nil end
 	if imgui.IsKeyPressed(PUSS_IMGUI_KEY_ESCAPE) then page.dialog = nil end

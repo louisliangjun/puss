@@ -135,6 +135,40 @@ static int imgui_clipper_pcall_lua(lua_State* L) {
 	return 0;
 }
 
+static int im_scintilla_get_style(lua_State* L) {
+	ImGuiStyleVar var = (ImGuiStyleVar)luaL_checkinteger(L, 1);
+	ImGuiStyle& style = ImGui::GetStyle();
+	switch(var) {
+#define GET_STYLE_FLOAT(field)	case ImGuiStyleVar_ ## field:	lua_pushnumber(L, style. field);	return 1
+#define GET_STYLE_VEC2(field)	case ImGuiStyleVar_ ## field:	lua_pushnumber(L, style. field .x);	lua_pushnumber(L, style. field .y);	return 2
+	GET_STYLE_FLOAT(Alpha);
+	GET_STYLE_VEC2(WindowPadding);
+	GET_STYLE_FLOAT(WindowRounding);
+	GET_STYLE_FLOAT(WindowBorderSize);
+	GET_STYLE_VEC2(WindowMinSize);
+	GET_STYLE_VEC2(WindowTitleAlign);
+	GET_STYLE_FLOAT(ChildRounding);
+	GET_STYLE_FLOAT(ChildBorderSize);
+	GET_STYLE_FLOAT(PopupRounding);
+	GET_STYLE_FLOAT(PopupBorderSize);
+	GET_STYLE_VEC2(FramePadding);
+	GET_STYLE_FLOAT(FrameRounding);
+	GET_STYLE_FLOAT(FrameBorderSize);
+	GET_STYLE_VEC2(ItemSpacing);
+	GET_STYLE_VEC2(ItemInnerSpacing);
+	GET_STYLE_FLOAT(IndentSpacing);
+	GET_STYLE_FLOAT(ScrollbarSize);
+	GET_STYLE_FLOAT(ScrollbarRounding);
+	GET_STYLE_FLOAT(GrabMinSize);
+	GET_STYLE_FLOAT(GrabRounding);
+	GET_STYLE_FLOAT(TabRounding);
+	GET_STYLE_VEC2(ButtonTextAlign);
+#undef GET_STYLE_VEC2
+#undef GET_STYLE_FLOAT
+	}
+	return 0;
+}
+
 static int imgui_getio_delta_time_lua(lua_State* L) {
 	ImGuiContext* ctx = ImGui::GetCurrentContext();
 	lua_pushnumber(L, ctx ? ctx->IO.DeltaTime : 0.0f);
@@ -571,6 +605,7 @@ static luaL_Reg imgui_lua_apis[] =
 	, {"CreateScintilla", im_scintilla_create}
 	, {"GetScintillaLexers", im_scintilla_lexers}
 
+	, {"GetStyle", im_scintilla_get_style}
 	, {"GetIODeltaTime", imgui_getio_delta_time_lua}
 	, {"IsShortcutPressed", imgui_is_shortcut_pressed_lua}
 	, {"FetchExtraKeys", imgui_fetch_extra_keys_lua}
