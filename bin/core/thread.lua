@@ -1,4 +1,4 @@
--- thread.lua
+-- core.thread
 
 local REPLY_QUERY = 1
 local REPLY_ASYNC = 2

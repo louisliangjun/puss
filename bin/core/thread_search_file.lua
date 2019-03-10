@@ -1,14 +1,17 @@
 -- core.thread_files
 
-local key_index = {}	-- { filename_or_dirname : true }
-local files = {}	-- [ filepath : { keyX : weightX } ]
+local diskfs = puss.import('core.diskfs')
+
+local fkeys = {}	-- { filename_or_dirname : true }
+local files = {}	-- { filepath : { keyX : weightX } }
+local sorted_files = {}	-- array[filepath]
 
 local function do_build(parent, path_keys)
 	-- print('build', parent)
 	local fs, ds = puss.file_list(parent, true)
 	for _, f in ipairs(fs) do
 		local fk = f:lower()
-		key_index[fk] = true
+		fkeys[fk] = true
 
 		local file_keys = {}
 		for i,dk in pairs(path_keys) do file_keys[dk]=1 end
@@ -17,7 +20,7 @@ local function do_build(parent, path_keys)
 	end
 	for _, d in ipairs(ds) do
 		local dk = d:lower()
-		key_index[dk] = (key_index[dk] or 0) + 1
+		fkeys[dk] = (fkeys[dk] or 0) + 1
 		table.insert(path_keys, dk)
 		do_build(parent..'/'..d, path_keys)
 		table.remove(path_keys)
@@ -26,7 +29,7 @@ end
 
 _G.search_indexes_rebuild = function(root_folders)
 	print('rebuild index start')
-	key_index, files = {}, {}
+	fkeys, files, sorted_files = {}, {}, {}
 	if root_folders then
 		for i,v in ipairs(root_folders) do
 			print('  rebuild index:', v)
@@ -35,6 +38,8 @@ _G.search_indexes_rebuild = function(root_folders)
 	end
 	print('rebuild index finished')
 	-- for k in pairs(files) do print(k) end
+	for k in pairs(files) do table.insert(sorted_files, k) end
+	table.sort(sorted_files)
 end
 
 local function fetch_weight_in_file_keys(file_keys, keys)
@@ -48,12 +53,12 @@ local function fetch_weight_in_file_keys(file_keys, keys)
 	return weight
 end
 
-local function do_search(search_key)
+local function do_file_search(search_key)
 	local all_keys = {}	-- [ {key1=true, key2=true, ...}, ... ]
 	for key in search_key:gmatch('%S+') do
 		key = key:lower()
 		local keys = {}
-		for k in pairs(key_index) do
+		for k in pairs(fkeys) do
 			if k:find(key, 1, true) then
 				keys[k] = true
 			end
@@ -103,7 +108,32 @@ end
 
 _G.search_file = function(search_key)
 	-- print('search start: ', search_key)
-	local res = do_search(search_key)
+	local res = do_file_search(search_key)
+	-- print('search', search_key, #res)
+	return search_key, res
+end
+
+local function do_search_in_file(res, filepath, search_key)
+	local n = 0
+	for line in io.lines(filepath) do
+		n = n + 1
+		if line:find(search_key) then
+			table.insert(res, {filepath, n, line})
+		end
+	end
+end
+
+local function do_text_search(search_key)
+	local res = {}
+	for _, filepath in ipairs(sorted_files) do
+		puss.trace_pcall(do_search_in_file, res, filepath, search_key)
+	end
+	return res
+end
+
+_G.search_text = function(search_key)
+	-- print('search start: ', search_key)
+	local res = do_text_search(search_key)
 	-- print('search', search_key, #res)
 	return search_key, res
 end

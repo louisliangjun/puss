@@ -9,6 +9,7 @@ local samples = puss.import('core.samples')
 local diskfs = puss.import('core.diskfs')
 local miniline = puss.import('core.miniline')
 local thread = puss.import('core.thread')
+local search = puss.import('core.search')
 
 local run_sign = true
 
@@ -18,6 +19,7 @@ show_imgui_metrics = show_imgui_metrics or false
 show_samples_window = show_samples_window or false
 show_console_window = show_console_window or false
 show_shutcut_window = show_shutcut_window or false
+show_search_window = show_search_window or false
 
 function docs_page_on_load(page_after_load, filepath)
 	local ctx = diskfs.load(filepath)
@@ -49,6 +51,7 @@ local function main_menu()
 		active, show_samples_window = imgui.MenuItem('Samples', nil, show_samples_window)
 		active, show_console_window = imgui.MenuItem('Conosle', nil, show_console_window)
 		active, show_shutcut_window = imgui.MenuItem('Shutcut', nil, show_shutcut_window)
+		active, show_search_window = imgui.MenuItem('Search', nil, show_search_window)
 		imgui.Separator()
 		if imgui.MenuItem('Reload', 'Ctrl+F12') then puss.reload() end
 		imgui.Separator()
@@ -175,6 +178,9 @@ local function show_main_window()
 	end
 	if show_shutcut_window then
 		show_shutcut_window = shotcuts.update(show_shutcut_window)
+	end
+	if show_search_window then
+		show_search_window = search.update(show_search_window)
 	end
 end
 
