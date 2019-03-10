@@ -1,4 +1,4 @@
--- app.lua
+-- core.app
 
 local shotcuts = puss.import('core.shotcuts')
 local pages = puss.import('core.pages')
@@ -8,6 +8,7 @@ local console = puss.import('core.console')
 local samples = puss.import('core.samples')
 local diskfs = puss.import('core.diskfs')
 local miniline = puss.import('core.miniline')
+local thread = puss.import('core.thread')
 
 local run_sign = true
 
@@ -212,8 +213,8 @@ local function do_quit_update()
 end
 
 local function do_update()
+	thread.update()
 	imgui.protect_pcall(show_main_window)
-
 	do_quit_update()
 end
 

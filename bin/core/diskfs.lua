@@ -1,4 +1,4 @@
--- diskfs.lua
+-- core.diskfs
 
 local O_WRITE, O_READ = 'w', 'r'
 

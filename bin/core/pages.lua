@@ -1,4 +1,4 @@
--- pages.lua
+-- core.pages
 
 _pages = _pages or {}
 _index = _index or setmetatable({}, {__mode='v'})

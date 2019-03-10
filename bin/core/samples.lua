@@ -1,4 +1,4 @@
--- samples.lua
+-- core.samples
 
 local sci = puss.import('core.sci')
 

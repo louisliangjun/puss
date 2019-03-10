@@ -1,4 +1,4 @@
--- shotcuts.lua
+-- core.shotcuts
 
 local keys = {}	-- keyname: code
 do

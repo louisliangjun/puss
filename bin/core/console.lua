@@ -1,4 +1,4 @@
--- console.lua
+-- core.console
 
 _output = _output or {}
 _outbuf = _outbuf or imgui.CreateByteArray(32*1024)

@@ -1,4 +1,4 @@
--- net.lua
+-- core.net
 
 local puss_system = puss.load_plugin('puss_system')
 local puss_socket_new = puss_system.socket_new

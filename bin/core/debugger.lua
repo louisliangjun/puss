@@ -1,4 +1,4 @@
--- debugger.lua
+-- core.debugger
 
 local shotcuts = puss.import('core.shotcuts')
 local pages = puss.import('core.pages')

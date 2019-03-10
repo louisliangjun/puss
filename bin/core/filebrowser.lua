@@ -1,4 +1,4 @@
--- filebrowser.lua
+-- core.filebrowser
 
 local docs = puss.import('core.docs')
 

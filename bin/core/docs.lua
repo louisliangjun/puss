@@ -1,4 +1,4 @@
--- docs.lua
+-- core.docs
 
 local pages = puss.import('core.pages')
 local sci = puss.import('core.sci')

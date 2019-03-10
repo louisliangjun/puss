@@ -1,4 +1,4 @@
--- sci.lua
+-- core.sci
 
 local language_settings = {}
 
