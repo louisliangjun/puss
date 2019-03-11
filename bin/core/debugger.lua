@@ -7,6 +7,7 @@ local filebrowser = puss.import('core.filebrowser')
 local console = puss.import('core.console')
 local miniline = puss.import('core.miniline')
 local net = puss.import('core.net')
+local thread = puss.import('core.thread')
 
 docs.setup(function(event, ...)
 	local f = _ENV[event]
@@ -589,6 +590,7 @@ local EDITOR_WINDOW_FLAGS = ( ImGuiWindowFlags_NoScrollbar
 local function editor_window()
 	imgui.Begin("Editor", nil, EDITOR_WINDOW_FLAGS)
 	pages.update()
+	miniline.update()
 	imgui.End()
 end
 
@@ -632,7 +634,6 @@ local function show_main_window()
 	imgui.SetNextWindowPos(x + left_size, y + menu_size, ImGuiCond_FirstUseEver)
 	imgui.SetNextWindowSize(w - left_size, h - menu_size, ImGuiCond_FirstUseEver)
 	editor_window()
-	miniline.update(x, y, w, h)
 	debug_window()
 
 	if show_console_window then
@@ -649,6 +650,8 @@ local function do_update()
 		last_update_time = now
 		puss.async_service_update(delta, 32)
 	end
+
+	thread.update()
 
 	imgui.protect_pcall(show_main_window)
 

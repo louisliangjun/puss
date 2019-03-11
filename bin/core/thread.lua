@@ -39,7 +39,7 @@ if thread_name then
 		repeat
 			puss.trace_pcall(wait_request)
 			puss.debug()
-		until puss.thread_wait(handle_request, 2000, request_queue)
+		until puss.thread_wait(handle_request, 50, request_queue)
 	else
 		repeat
 			puss.trace_pcall(wait_request)
