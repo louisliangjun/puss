@@ -98,6 +98,7 @@ local function editor_window()
 		end
 	end
 	pages.update()
+	miniline.update()
 	imgui.End()
 end
 
@@ -161,8 +162,6 @@ local function show_main_window()
 	imgui.SetNextWindowPos(x + left_size, y + menu_size, ImGuiCond_FirstUseEver)
 	imgui.SetNextWindowSize(w - left_size, h - menu_size, ImGuiCond_FirstUseEver)
 	editor_window()
-
-	miniline.update(true, x, y, w, h)
 
 	if show_imgui_demos then
 		show_imgui_demos = imgui.ShowDemoWindow(show_imgui_demos)

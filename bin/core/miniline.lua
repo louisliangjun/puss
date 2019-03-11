@@ -6,7 +6,6 @@ local docs = puss.import('core.docs')
 local thread = puss.import('core.thread')
 
 local inbuf = imgui.CreateByteArray(512)
-local open = false
 local cursor = 1
 local results = {}
 
@@ -41,8 +40,8 @@ do
 	end
 end
 
-local function draw_miniline()
-	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_ESCAPE) then open = false end
+local function show_miniline()
+	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_ESCAPE) then imgui.CloseCurrentPopup() end
 	imgui.Text('file')
 	imgui.SameLine()
 	imgui.PushItemWidth(420)
@@ -54,12 +53,8 @@ local function draw_miniline()
 	imgui.SetItemDefaultFocus()
 	imgui.PopItemWidth()
 
-	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_UP) then
-		if cursor > 1 then cursor = cursor - 1 end
-	end
-	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_DOWN) then
-		if cursor < #results then cursor = cursor + 1 end
-	end
+	if (cursor > 1) and imgui.IsShortcutPressed(PUSS_IMGUI_KEY_UP) then cursor = cursor - 1 end
+	if (cursor < #results) and imgui.IsShortcutPressed(PUSS_IMGUI_KEY_DOWN) then cursor = cursor + 1 end
 
 	local sel = imgui.IsShortcutPressed(PUSS_IMGUI_KEY_ENTER) and cursor
 	for i=1,24 do
@@ -79,30 +74,25 @@ local function draw_miniline()
 
 	if sel then
 		local target = results[sel]
-		open, cursor = false, 1
+		cursor = 1
 		inbuf:strcpy('')
 		if target then docs.open(target) end
+		imgui.CloseCurrentPopup()
 	end
 end
 
-__exports.update = function(show, x, y, w, h)
-	if not open then
-		if not shotcuts.is_pressed('miniline/open') then return end
-		results = {}
-	end
-
+__exports.update = function()
 	check_refresh_index()
 
-	imgui.SetNextWindowPos(x + (w * 0.5), y + 64, ImGuiCond_Always, 0.6, 0)
-	show, open = imgui.Begin('##miniline', show, MINILINE_FLAGS)
-	if show then
-		if imgui.IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) then
-			imgui.SetKeyboardFocusHere()
-		else
-			open = false
-		end
-		draw_miniline()
+	local x, y = imgui.GetWindowPos()
+	imgui.SetNextWindowPos(x + (imgui.GetWindowWidth() * 0.5), y + 48, ImGuiCond_Always, 0.5, 0)
+	if imgui.BeginPopup('##miniline') then
+		if imgui.IsWindowFocused() then imgui.SetKeyboardFocusHere() end
+		if imgui.IsAnyMouseDown() and (not imgui.IsWindowHovered()) then imgui.CloseCurrentPopup() end
+		show_miniline()
+		imgui.EndPopup()
+	elseif shotcuts.is_pressed('miniline/open') then
+		results = {}
+		imgui.OpenPopup('##miniline')
 	end
-    imgui.End()
-    return show
 end

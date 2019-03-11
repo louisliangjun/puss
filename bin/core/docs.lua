@@ -5,8 +5,8 @@ local sci = puss.import('core.sci')
 local shotcuts = puss.import('core.shotcuts')
 local hook = _hook or function(event, ...) end
 
-_inbuf = _inbuf or imgui.CreateByteArray(4*1024, 'find text')
-_rebuf = _rebuf or imgui.CreateByteArray(4*1024, 'TODO : replace text')
+_inbuf = _inbuf or imgui.CreateByteArray(4*1024)
+_rebuf = _rebuf or imgui.CreateByteArray(4*1024)
 local inbuf = _inbuf
 local rebuf = _rebuf
 
@@ -78,15 +78,6 @@ local function page_call(page, cb, ...)
 	imgui.EndChild()
 end
 
-local FINDREPLACE_FLAGS = ( ImGuiWindowFlags_NoMove
-	| ImGuiWindowFlags_NoDocking
-	| ImGuiWindowFlags_NoTitleBar
-	| ImGuiWindowFlags_NoResize
-	| ImGuiWindowFlags_AlwaysAutoResize
-	| ImGuiWindowFlags_NoSavedSettings
-	| ImGuiWindowFlags_NoNav
-	)
-
 local function do_search(sv, text, search_prev)
 	local search_flags = 0
 	sv:SetSearchFlags(search_flags)
@@ -132,24 +123,26 @@ local function check_dialog_mode(page)
 		if shotcuts.is_pressed(k) then
 			dialog_active = true
 			page.dialog = v
+			imgui.OpenPopup('##findreplace')
 			break
 		end
 	end
 end
 
 local function show_dialog_begin(page, label)
-	local right, top
-	imgui.BeginChild(page.label)
-	right, top = imgui.GetWindowPos()
-	right = right + imgui.GetWindowWidth() - imgui.GetStyle(ImGuiStyleVar_ScrollbarSize)
-	imgui.EndChild()
-
-	imgui.SetNextWindowPos(right, top, ImGuiCond_Always, 1, 0)
-	if not imgui.Begin('##findreplace', true, FINDREPLACE_FLAGS) then return false end
-	if not imgui.IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) then page.dialog = nil end
-	if imgui.IsKeyPressed(PUSS_IMGUI_KEY_ESCAPE) then page.dialog = nil end
+	local x, y = imgui.GetWindowPos()
+	local w = imgui.GetWindowWidth()
+	imgui.SetNextWindowPos(x + w - imgui.GetStyle(ImGuiStyleVar_ScrollbarSize), y + 48, ImGuiCond_Always, 1, 0)
+	if not imgui.BeginPopup('##findreplace') then
+		page.dialog = nil
+		return false
+	end
+	if imgui.IsWindowFocused() then imgui.SetKeyboardFocusHere() end
+	if imgui.IsAnyMouseDown() and (not imgui.IsWindowHovered()) then imgui.CloseCurrentPopup() end
+	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_ESCAPE) then imgui.CloseCurrentPopup() end
 	imgui.Text(label)
 	if not active then check_dialog_mode(page) end
+	imgui.SameLine()
 	imgui.SetKeyboardFocusHere()
 	return true
 end
@@ -172,7 +165,6 @@ local function show_dialog_find(page, active)
 
 	local search
 	if show_dialog_begin(page, 'find') then
-		imgui.SameLine()
 		if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
 			local text = inbuf:str()
 			if #text==0 then return end
@@ -186,8 +178,8 @@ local function show_dialog_find(page, active)
 
 		if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_UP) then search = 1 end
 		if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_DOWN) then search = 2 end
+		imgui.EndPopup()
 	end
-	imgui.End()
 
 	if search then page_call(page, do_search, page.find_text, search==1) end
 end
@@ -202,18 +194,18 @@ dialog_modes['docs/jump'] = function(page)
 	end
 
 	if show_dialog_begin(page, 'jump') then
-		imgui.SameLine()
 		if imgui.InputText('##JumpText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue|ImGuiInputTextFlags_CharsDecimal) then
 			local line = tonumber(inbuf:str())
 			if line then
 				page.dialog = nil	-- hide dialog
 				page.scroll_to_line = line-1
+				imgui.CloseCurrentPopup()
 			else
 				active = true
 			end
 		end
+		imgui.EndPopup()
 	end
-	imgui.End()
 end
 
 dialog_modes['docs/find'] = function(page)
@@ -229,7 +221,6 @@ dialog_modes['docs/replace'] = function(page)
 
 	local search
 	if show_dialog_begin(page, 'find') then
-		imgui.SameLine()
 		imgui.BeginGroup()
 		if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
 			local text = inbuf:str()
@@ -248,8 +239,8 @@ dialog_modes['docs/replace'] = function(page)
 		imgui.InputText('##ReplaceText', rebuf)
 
 		imgui.EndGroup()
+		imgui.EndPopup()
 	end
-	imgui.End()
 
 	if search then page_call(page, do_search, page.find_text, search==1) end
 end
