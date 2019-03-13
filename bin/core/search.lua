@@ -1,6 +1,7 @@
 -- core.search
 
 local thread = puss.import('core.thread')
+local docs = puss.import('core.docs')
 
 local inbuf = imgui.CreateByteArray(4*1024)
 local current_key = ''
@@ -16,24 +17,24 @@ local function show_result()
 	end
 	imgui.PopItemWidth()
 
-	imgui.Columns(3)
 	for i, v in pairs(results) do
-		imgui.Text(v[1])
-		imgui.NextColumn()
+		imgui.PushStyleColor(ImGuiCol_Text, 0.75, 0.75, 0, 1)
+		local active = imgui.Selectable(v[1])
+		imgui.PopStyleColor()
+		imgui.SameLine()
 		imgui.Text(v[2])
-		imgui.NextColumn()
-		if imgui.Selectable(v[3]) then
-			print(table.unpack(v))
+		if active then
+			local file, line = v[1]:match('^(.+):(%d+)$')
+			print('open', file, line)
+			docs.open(file, math.tointeger(line)-1)
 		end
-		imgui.NextColumn()
 	end
-	imgui.Columns(1)
 end
 
 __exports.on_search_result = function(key, filepath, res)
 	if current_key~=key then return end
 	for i=1,#res,2 do
-		table.insert(results, {filepath, res[i], res[i+1]})
+		table.insert(results, {string.format('%s:%s', filepath, res[i]), res[i+1]})
 	end
 end
 

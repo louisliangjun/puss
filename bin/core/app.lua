@@ -19,7 +19,7 @@ show_imgui_metrics = show_imgui_metrics or false
 show_samples_window = show_samples_window or false
 show_console_window = show_console_window or false
 show_shutcut_window = show_shutcut_window or false
-show_search_window = show_search_window or false
+show_search_window = show_search_window or true
 
 function docs_page_on_load(page_after_load, filepath)
 	local ctx = diskfs.load(filepath)

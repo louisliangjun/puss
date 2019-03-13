@@ -283,8 +283,6 @@ void rbx_init(RBXTree* tree) {
 	__rbx_list_init(&(tree->list));
 }
 
-#define __rbx_no_brother(node) ((node)->next->color!=RBX_BROTHER)
-
 void rbx_insert(RBXNode* node, RBXNode* parent, RBXNode** link, RBXTree* tree) {
 	assert( node && link && tree);
 	assert( node!=parent );
@@ -302,7 +300,7 @@ void rbx_insert(RBXNode* node, RBXNode* parent, RBXNode** link, RBXTree* tree) {
 		assert( parent==*link );
 		node->color = RBX_BROTHER;
 		// node->parent = 0;
-		if( first->color==RBX_BROTHER ) {
+		if( first && first->color==RBX_BROTHER ) {
 			parent = first->left;	// use parent as insert pos
 			__brother_list_add(node, parent, first);
 		} else {
@@ -317,7 +315,7 @@ void rbx_insert(RBXNode* node, RBXNode* parent, RBXNode** link, RBXTree* tree) {
 		} else {
 			RBXNode* first = parent->next;
 			assert( link==&(parent->right) );
-			if( first->color==RBX_BROTHER )
+			if( first && first->color==RBX_BROTHER )
 				parent = first->left;	// use parent as insert pos
 		}
 	}
@@ -337,12 +335,12 @@ void rbx_erase(RBXNode* node, RBXTree* tree) {
 	}
 
 	if( node->color==RBX_BROTHER ) {
-		__brother_list_del(node->prev, node->next);
-	} else if( node->next->color==RBX_BROTHER ) {
+		__brother_list_del(node->left, node->right);
+	} else if( node->next && node->next->color==RBX_BROTHER ) {
 		// replace node with brother list's first child
 		RBXNode* parent = node->parent;
 		RBXNode* first = node->next;
-		__brother_list_del(first->prev, first->next);
+		__brother_list_del(first->left, first->right);
 
 		first->color = node->color;
 		first->parent = parent;

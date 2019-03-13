@@ -138,10 +138,9 @@ local function do_text_search(search_key)
 		if ok and res then puss.thread_notify('core.search', 'on_search_result', search_key, filepath, res) end
 		puss.async_task_sleep(1)
 	end
-	return res
+	if current_search_task==thread_self then current_search_task = nil end
 end
 
 _G.search_text = function(search_key)
-	-- print('search start: ', search_key)
 	puss.async_service_run(do_text_search, search_key)
 end
