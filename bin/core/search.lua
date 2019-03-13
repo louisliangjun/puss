@@ -12,7 +12,7 @@ local function show_result()
 		local text = inbuf:str()
 		if #text==0 then return end
 		current_key, results = text, {}
-		thread.query('core.search', 'on_search_result', 'search_text', text)
+		thread.query(nil, nil, 'search_text', text)
 	end
 	imgui.PopItemWidth()
 
@@ -30,8 +30,11 @@ local function show_result()
 	imgui.Columns(1)
 end
 
-__exports.on_search_result = function(ok, key, res)
-	if ok and current_key==key then results = res end
+__exports.on_search_result = function(key, filepath, res)
+	if current_key~=key then return end
+	for i=1,#res,2 do
+		table.insert(results, {filepath, res[i], res[i+1]})
+	end
 end
 
 __exports.update = function(show)

@@ -387,8 +387,15 @@ static int lua_async_service_update(lua_State* L) {
 		async_task_resume(L, svs, task, 0);	// on timer, not need
 	}
 
-	lua_pushboolean(L, task!=NULL);
-	return 1;
+	lua_pushboolean(L, task!=NULL);	// need more
+
+	task = list->next;
+	if( task ) {
+		lua_pushinteger(L, task->timeout - now);	// next interval
+	} else {
+		lua_pushinteger(L, LUA_MAXINTEGER);
+	}
+	return 2;
 }
 
 static int lua_async_service_group_reg(lua_State* L) {

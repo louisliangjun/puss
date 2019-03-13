@@ -32,19 +32,43 @@ if thread_name then
 		handle_request(request_queue:pop())
 	end
 
+	puss.thread_notify = function(module_name, handle_name, ...)
+		response_queue:push(REPLY_QUERY, module_name, handle_name, ...)
+	end
+
 	puss.import('core.thread_search_file')
 
-	if puss.debug then
-		puss.debug(true, nil, 'thread')
-		repeat
-			puss.trace_pcall(wait_request)
-			puss.debug()
-		until puss.thread_wait(handle_request, 50, request_queue)
-	else
-		repeat
-			puss.trace_pcall(wait_request)
-		until puss.thread_wait(handle_request, 2000, request_queue)
+	local last_update_time = puss.timestamp()
+	local wait_timeout = 100
+
+	local function idle()
+		puss.trace_pcall(wait_request)
+
+		local now = puss.timestamp()
+		local delta = now - last_update_time
+		last_update_time = now
+		local more, first_timeout = puss.async_service_update(delta, 32)
+		if first_timeout < 0 then
+			first_timeout = 0
+		elseif first_timeout > 1000 then
+			first_timeout = 1000
+		end
+		wait_timeout = first_timeout
 	end
+
+	if puss.debug then
+		puss.async_service_run(function()
+			puss.debug(true, nil, 'thread')
+			while true do
+				puss.debug()
+				puss.async_task_sleep(50)
+			end
+		end)
+	end
+
+	repeat
+		puss.trace_pcall(idle)
+	until puss.thread_wait(handle_request, wait_timeout, request_queue)
 
 	return print(thread_name, 'thread exit')
 end

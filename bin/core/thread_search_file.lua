@@ -113,27 +113,35 @@ _G.search_file = function(search_key)
 	return search_key, res
 end
 
-local function do_search_in_file(res, filepath, search_key)
+local function do_search_in_file(filepath, search_key)
 	local n = 0
+	local res
 	for line in io.lines(filepath) do
 		n = n + 1
 		if line:find(search_key) then
-			table.insert(res, {filepath, n, line})
+			res = res or {}
+			table.insert(res, n)
+			table.insert(res, line)
 		end
 	end
+	return res
 end
 
+local current_search_task
+
 local function do_text_search(search_key)
-	local res = {}
+	local thread_self = puss.async_task_self()
+	current_search_task = thread_self
 	for _, filepath in ipairs(sorted_files) do
-		puss.trace_pcall(do_search_in_file, res, filepath, search_key)
+		local ok, res = puss.trace_pcall(do_search_in_file, filepath, search_key)
+		if current_search_task~=thread_self then break end
+		if ok and res then puss.thread_notify('core.search', 'on_search_result', search_key, filepath, res) end
+		puss.async_task_sleep(1)
 	end
 	return res
 end
 
 _G.search_text = function(search_key)
 	-- print('search start: ', search_key)
-	local res = do_text_search(search_key)
-	-- print('search', search_key, #res)
-	return search_key, res
+	puss.async_service_run(do_text_search, search_key)
 end
