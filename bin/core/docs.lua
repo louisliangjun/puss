@@ -248,15 +248,17 @@ end
 dialog_modes['docs/quick_find'] = function(page)
 	local active = dialog_active
 	dialog_active = nil
-	show_dialog_find(page, active and (imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_CONTROL) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_CONTROL)))
+	if not active then return end
 
-	if active then
-		page_call(page, function(sv)
-			local text = inbuf:str()
-			local search_prev = imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT)
-			do_search(sv, text, search_prev)
-		end)
+	if(imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_CONTROL) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_CONTROL)) then
+		active_find_text(page)
 	end
+
+	page_call(page, function(sv)
+		local text = inbuf:str()
+		local search_prev = imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT)
+		do_search(sv, text, search_prev)
+	end)
 end
 
 function tabs_page_draw(page, active_page)
