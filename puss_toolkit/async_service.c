@@ -390,7 +390,7 @@ static int lua_async_service_update(lua_State* L) {
 	lua_pushboolean(L, task!=NULL);	// need more
 
 	task = (AsyncTask*)(list->next);
-	if( task ) {
+	if( task && (task->timeout <= TIMEOUT_MAX) ) {
 		lua_pushinteger(L, task->timeout - now);	// next interval
 	} else {
 		lua_pushinteger(L, LUA_MAXINTEGER);
