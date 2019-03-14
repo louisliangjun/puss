@@ -602,6 +602,8 @@ ListBox *ListBox::Allocate() {
 	return lb;
 }
 
+const char* MENU_TITLE = "PussIMSciMenu";
+
 class MenuIM {
 public:
 	struct Item {
@@ -610,7 +612,6 @@ public:
 		bool		enabled;
 	};
 public:
-	char			title[32];
 	Point			point;
 	ImVector<Item>	items;
 };
@@ -620,7 +621,6 @@ Menu::Menu() : mid(0) {
 
 void Menu::CreatePopUp() {
 	MenuIM* m = new MenuIM;
-	sprintf(m->title, "%p", m);
 	mid = (MenuID)m;
 }
 
@@ -634,7 +634,7 @@ void Menu::Show(Point pt, Window &w) {
 	if( !m )
 		return;
 	m->point = pt;
-	ImGui::OpenPopup(m->title);
+	ImGui::OpenPopup(MENU_TITLE);
 }
 
 ColourDesired Platform::Chrome() {
@@ -984,7 +984,7 @@ public: 	// Public for scintilla_send_message
 	void PaintPopup() {
 		MenuIM* m = (MenuIM*)popup.GetID();
 		if( !m ) return;
-		if( ImGui::BeginPopupContextItem(m->title) ) {
+		if( ImGui::BeginPopupContextItem(MENU_TITLE) ) {
 			for( int i=0; i<m->items.size(); ++i ) {
 				const char* name = m->items[i].name;
 				bool* selected = NULL;
