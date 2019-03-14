@@ -3,21 +3,27 @@
 local thread = puss.import('core.thread')
 local docs = puss.import('core.docs')
 
-local inbuf = imgui.CreateByteArray(4*1024)
-local current_key = ''
+local inbuf = imgui.CreateByteArray(1024)
+local ftbuf = imgui.CreateByteArray(1024, 'lua c h inl cpp hpp cxx hxx')
+local current_key
+local current_progress
 local results = {}
 
-local function show_result()
-	imgui.PushItemWidth(-1)
-	if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
-		local text = inbuf:str()
-		if #text==0 then return end
-		current_key, results = text, {}
-		thread.query(nil, nil, 'search_text', text)
+local function start_search(text)
+	local filter
+	if text and #text > 0 then
+		filter = {}
+		for suffix in ftbuf:str():gmatch('%S+') do filter[suffix]=true end
+		current_key, current_progress, results = text, '', {}
+	else
+		text = nil
 	end
-	imgui.PopItemWidth()
+	thread.query(nil, nil, 'search_text', text, filter)
+end
 
-	for i, v in pairs(results) do
+local function show_result(ps, pe)
+	for i=ps,pe do
+		local v = results[i]
 		imgui.PushStyleColor(ImGuiCol_Text, 0.75, 0.75, 0, 1)
 		local active = imgui.Selectable(v[1])
 		imgui.PopStyleColor()
@@ -28,6 +34,46 @@ local function show_result()
 			print('open', file, line)
 			docs.open(file, math.tointeger(line)-1)
 		end
+	end
+end
+
+local function show_search_ui()
+	if current_key then
+		if imgui.Button('Cancel') then start_search() end
+		imgui.SameLine()
+		imgui.PushItemWidth(-1)
+		imgui.Text(current_progress)
+		imgui.PopItemWidth()
+	else
+		imgui.Text('Search')
+		imgui.SameLine()
+		local reclaim_focus
+		imgui.PushItemWidth(-1)
+		if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
+			start_search(inbuf:str())
+			reclaim_focus = true
+		end
+		imgui.PopItemWidth()
+		if reclaim_focus then imgui.SetKeyboardFocusHere(-1) end
+		imgui.Text('Filter')
+		imgui.SameLine()
+
+		imgui.PushItemWidth(-1)
+		imgui.InputText('##FilterText', ftbuf)
+		imgui.PopItemWidth()
+	end
+
+	imgui.BeginChild('##SearchResults')
+	imgui.clipper_pcall(#results, show_result)
+	imgui.EndChild()
+end
+
+__exports.on_search_progress = function(key, index, total, filepath)
+	if current_key~=key then return end
+	if index < total then
+		current_progress = string.format('[%s/%s] - %s', index, total, filepath)
+	else
+		current_key, current_progress = nil, nil
 	end
 end
 
@@ -42,7 +88,7 @@ __exports.update = function(show)
 	local res
 	imgui.SetNextWindowSize(640, 480, ImGuiCond_FirstUseEver)
 	res, show = imgui.Begin("SearchResult", show)
-	if res then show_result() end
+	if res then show_search_ui() end
 	imgui.End()
 	return show
 end

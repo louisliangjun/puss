@@ -1,5 +1,6 @@
 -- core.filebrowser
 
+local pages = puss.import('core.pages')
 local docs = puss.import('core.docs')
 
 --[[
@@ -23,6 +24,10 @@ root_dir : dir {
 _root_version = _root_version or 0
 _root_folders = _root_folders or {}
 local root_folders = _root_folders
+
+local current_selected_label
+local current_expand_need
+local current_expand_file
 
 __exports.check_fetch_folders = function(ver)
 	if ver==_root_version then return ver end
@@ -71,7 +76,9 @@ local function fill_folder(dir, root)
 	local index, dirs, files = {}, {}, {}
 	dir.index, dir.dirs, dir.files = index, dirs, files
 
+	local exfile = current_expand_file
 	root._list(dir.path, function(ok, fs, ds)
+		current_expand_need = 'force'
 		if not ok then
 			dir.index, dir.dirs, dir.files = nil, nil, nil
 			return
@@ -90,12 +97,17 @@ end
 local DIR_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick
 local FILE_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen
 
-local function show_folder(dir, root)
+local function show_folder(dir, root, depth)
 	if not dir.index then fill_folder(dir, root) end
 	if dir.dirs then
 		for _,v in ipairs(dir.dirs) do
+			local matched = (current_expand_file and depth and v.name==current_expand_file[depth])
+			if matched and current_expand_need then
+				print('   expand', v.name)
+				imgui.SetNextTreeNodeOpen(true)
+			end
 			if imgui.TreeNodeEx(v.name, DIR_FLAGS, v.name) then
-				show_folder(v, root)
+				show_folder(v, root, matched and (depth+1))
 				imgui.TreePop()
 			end
 			-- if imgui.IsItemClicked() then print('dir', v.path) end
@@ -105,8 +117,16 @@ local function show_folder(dir, root)
 	local file_clicked
 	if dir.files then
 		for _,v in ipairs(dir.files) do
-			imgui.TreeNodeEx(v.name, FILE_FLAGS, v.name)
+			local matched = (current_expand_file and depth and v.name==current_expand_file[depth])
+			local flags = FILE_FLAGS
+			if matched then flags = flags | ImGuiTreeNodeFlags_Selected end
+			imgui.TreeNodeEx(v.name, flags, v.name)
 			if imgui.IsItemClicked() then file_clicked = v end
+			if matched and current_expand_need then
+				print('scroll here')
+				current_expand_need = false
+				if not imgui.IsItemVisible() then imgui.SetScrollHereY() end
+			end
 		end
 
 		if file_clicked then
@@ -116,17 +136,48 @@ local function show_folder(dir, root)
 	end
 end
 
+local function check_expand_file()
+	local selected = pages.selected()
+	if current_selected_label == selected then return end
+	current_selected_label = selected
+	-- print(selected)
+
+	current_expand_file = nil
+	local filepath = current_selected_label:match('.*###(.+)$')
+	if not filepath then return end
+
+	for i,v in ipairs(root_folders) do
+		local path = v.path
+		if filepath:sub(#path+1,#path+1)=='/' and filepath:sub(1, #path)==path then
+			current_expand_file = {path}
+			path = filepath:sub(#path+2)
+			for s in path:gmatch('[^/]+') do
+				table.insert(current_expand_file, s)
+			end
+		end
+	end
+
+	if current_expand_file then
+		print(table.unpack(current_expand_file))
+		current_expand_need = true
+	end
+end
+
 __exports.update = function()
+	current_expand_need = current_expand_need=='force'
+	check_expand_file()
+
 	local remove_id
 	for i,v in ipairs(root_folders) do
+		local matched = (current_expand_file and v.path==current_expand_file[1])
+		if matched and current_expand_need then imgui.SetNextTreeNodeOpen(true) end
 		local show, open = imgui.CollapsingHeader(v._label, true)
 		if not open then remove_id = i end
 		if show then
 			imgui.PushID(v._label)
-			show_folder(v, v)
+			show_folder(v, v, matched and 2)
 			imgui.PopID()
 		end
 	end
 	if remove_id then table.remove(root_folders, remove_id) end
 end
-

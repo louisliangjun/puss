@@ -1,7 +1,5 @@
 -- core.thread_files
 
-local diskfs = puss.import('core.diskfs')
-
 local fkeys = {}	-- { filename_or_dirname : true }
 local files = {}	-- { filepath : { keyX : weightX } }
 local sorted_files = {}	-- array[filepath]
@@ -116,7 +114,7 @@ end
 local function do_search_in_file(filepath, search_key)
 	local n = 0
 	local res
-	for line in io.lines(filepath) do
+	for line in io.lines(puss.utf8_to_local(filepath)) do
 		n = n + 1
 		if line:find(search_key) then
 			res = res or {}
@@ -127,20 +125,41 @@ local function do_search_in_file(filepath, search_key)
 	return res
 end
 
+local function check_filter(filepath, filters)
+	if not (filters and next(filters)) then return true end
+	local suffix = filepath:match('.*%.(%w+)$')
+	if suffix and filters[suffix] then return true end
+end
+
 local current_search_task
 
-local function do_text_search(search_key)
+local function do_text_search(search_key, filters)
 	local thread_self = puss.async_task_self()
+	local last = puss.timestamp()
+	local n = #sorted_files
 	current_search_task = thread_self
-	for _, filepath in ipairs(sorted_files) do
-		local ok, res = puss.trace_pcall(do_search_in_file, filepath, search_key)
-		if current_search_task~=thread_self then break end
-		if ok and res then puss.thread_notify('core.search', 'on_search_result', search_key, filepath, res) end
-		puss.async_task_sleep(1)
+	puss.thread_notify('core.search', 'on_search_progress', search_key, 0, n, '[start...]')
+	for i, filepath in ipairs(sorted_files) do
+		if check_filter(filepath, filters) then
+			local ok, res = puss.trace_pcall(do_search_in_file, filepath, search_key)
+			if current_search_task~=thread_self then break end
+			if ok and res then puss.thread_notify('core.search', 'on_search_result', search_key, filepath, res, i, n) end
+			puss.async_task_sleep(1)
+		end
+		local now = puss.timestamp()
+		if (now - last) > 500 then
+			last = now
+			puss.thread_notify('core.search', 'on_search_progress', search_key, i, n, filepath)
+		end
 	end
+	puss.thread_notify('core.search', 'on_search_progress', search_key, n, n, '[finished]')
 	if current_search_task==thread_self then current_search_task = nil end
 end
 
-_G.search_text = function(search_key)
-	puss.async_service_run(do_text_search, search_key)
+_G.search_text = function(search_key, filters)
+	if search_key then
+		puss.async_service_run(do_text_search, search_key, filters)
+	else
+		current_search_task = nil
+	end
 end

@@ -69,6 +69,10 @@ __exports.active = function(label)
 	next_active_page_label = label
 end
 
+__exports.selected = function()
+	return selected_page_label
+end
+
 __exports.lookup = function(label)
 	return index[label]
 end
