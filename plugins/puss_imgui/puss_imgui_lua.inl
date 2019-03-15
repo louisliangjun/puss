@@ -426,6 +426,7 @@ static int _lua__sci_send_wrap(lua_State* L) {
 
 static void im_scintilla_on_notify(lua_State* L, ScintillaIM* sci, const SCNotification* ev, int error_handle) {
 	int top = lua_gettop(L);
+	luaL_checkstack(L, 16, NULL);
 	if( lua_getuservalue(L, 1)!=LUA_TTABLE )
 		return;
 	if( lua_rawgeti(L, -1, ev->nmhdr.code)!=LUA_TFUNCTION )
@@ -545,7 +546,8 @@ static void im_scintilla_update_callback(ScintillaIM* sci, const SCNotification*
 		lua_pushvalue(L, 1);	// self
 		imgui_error_handle_push(L);
 		lua_replace(L, 1);
-		lua_insert(L, 3);
+		if( lua_gettop(L) > 3 )
+			lua_insert(L, 3);
 		lua_pcall(L, lua_gettop(L)-2, LUA_MULTRET, 1);
 	}
 }
@@ -563,6 +565,12 @@ static int im_scintilla_get_data(lua_State* L) {
 	lua_pushvalue(L, 2);
 	lua_gettable(L, -2);
 	return 1;
+}
+
+static int im_scintilla_dirty_scroll(lua_State* L) {
+	ScintillaIM** ud = (ScintillaIM**)luaL_checkudata(L, 1, LUA_IM_SCI_NAME);
+	scintilla_imgui_dirty_scroll(*ud);
+	return 0;
 }
 
 static int im_scintilla_set_data(lua_State* L) {
@@ -644,6 +652,7 @@ static void lua_register_scintilla(lua_State* L) {
 			, {"__call",im_scintilla_update}
 			, {"__gc",im_scintilla_destroy}
 			, {"destroy",im_scintilla_destroy}
+			, {"dirty_scroll",im_scintilla_dirty_scroll}
 			, {"set",im_scintilla_set_data}
 			, {"get",im_scintilla_get_data}
 			, {NULL, NULL}

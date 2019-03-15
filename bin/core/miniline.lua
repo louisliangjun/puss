@@ -3,9 +3,11 @@
 local shotcuts = puss.import('core.shotcuts')
 local filebrowser = puss.import('core.filebrowser')
 local docs = puss.import('core.docs')
+local pages = puss.import('core.pages')
 local thread = puss.import('core.thread')
 
 local inbuf = imgui.CreateByteArray(512)
+local focused = false
 local cursor = 1
 local results = {}
 
@@ -50,8 +52,14 @@ local function show_miniline()
 		-- print('start search', str)
 		thread.query('core.miniline', 'on_search_result', 'search_file', str)
 	end
-	imgui.SetItemDefaultFocus()
 	imgui.PopItemWidth()
+	if not focused then
+		if imgui.IsItemActive() then
+			focused = true
+		else
+			imgui.SetKeyboardFocusHere(-1)
+		end
+	end
 
 	if (cursor > 1) and imgui.IsShortcutPressed(PUSS_IMGUI_KEY_UP) then cursor = cursor - 1 end
 	if (cursor < #results) and imgui.IsShortcutPressed(PUSS_IMGUI_KEY_DOWN) then cursor = cursor + 1 end
@@ -66,20 +74,22 @@ local function show_miniline()
 			imgui.PushStyleColor(ImGuiCol_Text,0.5,0.5,0.5,1)
 		end
 		if imgui.Selectable(r) then
-			print(r, i, sel)
 			sel = i
+			print(r, i, sel)
 		end
 		imgui.PopStyleColor()
 	end
 
 	if sel then
 		local target = results[sel]
+		print(sel, target)
 		cursor = 1
-		inbuf:strcpy('')
-		if target then docs.open(target) end
+		docs.open(target)
 		imgui.CloseCurrentPopup()
 	end
 end
+
+local POPUP_LABEL = '##miniline'
 
 __exports.update = function()
 	check_refresh_index()
@@ -87,12 +97,11 @@ __exports.update = function()
 	local x, y = imgui.GetWindowPos()
 	imgui.SetNextWindowPos(x + (imgui.GetWindowWidth() * 0.5), y + 48, ImGuiCond_Always, 0.5, 0)
 	if imgui.BeginPopup('##miniline') then
-		if imgui.IsWindowFocused() then imgui.SetKeyboardFocusHere() end
-		if imgui.IsAnyMouseDown() and (not imgui.IsWindowHovered()) then imgui.CloseCurrentPopup() end
 		show_miniline()
 		imgui.EndPopup()
 	elseif shotcuts.is_pressed('miniline/open') then
-		results = {}
+		focused, results = false, {}
+		inbuf:strcpy('')
 		imgui.OpenPopup('##miniline')
 	end
 end

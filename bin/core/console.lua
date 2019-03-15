@@ -85,13 +85,10 @@ local function console_update()
 	end
 	imgui.Separator()
 
-	local active, reclaim_focus = false, false
 	if imgui.InputTextMultiline('##ConsoleInput', inbuf, -1, -1, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AllowTabInput) then
-		reclaim_focus = true
-		active = true
+		puss.trace_pcall(console_execute, inbuf:str())
+		imgui.SetKeyboardFocusHere(-1)
 	end
-	if active then puss.trace_pcall(console_execute, inbuf:str()) end
-	if reclaim_focus then imgui.SetKeyboardFocusHere(-1) end
 end
 
 __exports.update = function(show)

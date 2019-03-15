@@ -797,6 +797,7 @@ class ScintillaIM : public ScintillaBase {
 public:
 	ScintillaIM()
 		: captureMouse(false)
+		, scrollDirty(false)
 		, rectangularSelectionModifier(SCMOD_ALT)
 		, notify_callback(NULL)
 		, notify_callback_ud(0)
@@ -878,9 +879,6 @@ public: 	// Public for scintilla_send_message
 		// const bool focus_requested_by_tab = focus_requested && !focus_requested_by_code;
 		const bool user_clicked = hovered && io.MouseClicked[0];
 		const bool user_scrolled = hovered && (io.MouseWheel != 0.0f || io.MouseWheelH != 0.0f);
-		if( user_scrolled ) {
-			scroll = window->Scroll;
-		}
 	    if( focus_requested || user_clicked || user_scrolled ) {
 			// fprintf(stderr, "grab focus!\n");
 			ImGui::SetActiveID(id, window);
@@ -1037,7 +1035,13 @@ public: 	// Public for scintilla_send_message
 			ImGui::Dummy(total_sz);
 		}
 
-		window->Scroll = scroll;
+		if( scrollDirty ) {
+			scrollDirty = false;
+			ImGui::SetScrollX(scroll.x);
+			ImGui::SetScrollY(scroll.y);
+		} else {
+			scroll = window->Scroll;
+		}
 		SetXYScroll(XYScrollPosition(scroll.x / vs.aveCharWidth, scroll.y / vs.lineHeight));
 		// fprintf(stderr, "scroll pos: %d, %d\n", xOffset, topLine);
 		mainWindow.pos = window->Pos;
@@ -1093,6 +1097,9 @@ public: 	// Public for scintilla_send_message
 		notify_callback = NULL;
 		notify_callback_ud = NULL;
 	}
+	void DirtyScroll() {
+		scrollDirty = true;
+	}
 private:
 	sptr_t DefWndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) override {
 		return 0;
@@ -1140,22 +1147,16 @@ private:
 	}
 	void SetVerticalScrollPos() override {
 		scroll.y = topLine * vs.lineHeight;
-		if( mainWindow.win ) {
-			mainWindow.win->Scroll.y = scroll.y;
-		}
+		scrollDirty = true;
 	}
 	void SetHorizontalScrollPos() override {
 		scroll.x = xOffset * vs.aveCharWidth;
-		if( mainWindow.win ) {
-			mainWindow.win->Scroll.x = scroll.x;
-		}
+		scrollDirty = true;
 	}
 	bool ModifyScrollBars(Sci::Line nMax, Sci::Line nPage) override {
 		scroll.y = topLine * vs.lineHeight;
 		scroll.x = xOffset * vs.aveCharWidth;
-		if( mainWindow.win ) {
-			mainWindow.win->Scroll = scroll;
-		}
+		scrollDirty = true;
 		return false;
 	}
 	void NotifyChange() override {
@@ -1433,9 +1434,10 @@ private:
 	}
 private:
 	bool captureMouse;
+	bool scrollDirty;
+	ImVec2 scroll;
 	int rectangularSelectionModifier;
 	WindowIM mainWindow;
-	ImVec2 scroll;
 	ScintillaIMCallback notify_callback;
 	void* notify_callback_ud;
 	int timerIntervals[tickPlatform];
@@ -1456,4 +1458,8 @@ void scintilla_imgui_update(ScintillaIM* sci, bool draw, ScintillaIMCallback cb,
 
 sptr_t scintilla_imgui_send(ScintillaIM* sci, unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 	return sci ? sci->WndProc(iMessage, wParam, lParam) : NULL;
+}
+
+void scintilla_imgui_dirty_scroll(ScintillaIM* sci) {
+	if( sci ) { sci->DirtyScroll(); }
 }
