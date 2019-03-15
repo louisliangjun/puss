@@ -103,7 +103,7 @@ local function show_folder(dir, root, depth)
 		for _,v in ipairs(dir.dirs) do
 			local matched = (current_expand_file and depth and v.name==current_expand_file[depth])
 			if matched and current_expand_need then
-				print('   expand', v.name)
+				-- print('   expand', v.name)
 				imgui.SetNextTreeNodeOpen(true)
 			end
 			if imgui.TreeNodeEx(v.name, DIR_FLAGS, v.name) then
@@ -123,7 +123,6 @@ local function show_folder(dir, root, depth)
 			imgui.TreeNodeEx(v.name, flags, v.name)
 			if imgui.IsItemClicked() then file_clicked = v end
 			if matched and current_expand_need then
-				print('scroll here')
 				current_expand_need = false
 				if not imgui.IsItemVisible() then imgui.SetScrollHereY() end
 			end
@@ -158,7 +157,7 @@ local function check_expand_file()
 	end
 
 	if current_expand_file then
-		print(table.unpack(current_expand_file))
+		-- print(table.unpack(current_expand_file))
 		current_expand_need = true
 	end
 end

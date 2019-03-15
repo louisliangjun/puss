@@ -134,10 +134,13 @@ inline ImFont* im_font_cast(Font& font) {
 
 class WindowIM {
 public:
-	WindowIM() : win(0) {
+	WindowIM() : win(0), modified(false) {
 	}
 public:
 	ImGuiWindow*	win;
+	bool			modified;
+	ImVec2			pos;
+	ImVec2			size;
 };
 
 class SurfaceImpl : public Surface {
@@ -171,9 +174,7 @@ public:
 	void Init(WindowID wid) override {
 		WindowIM* w = (WindowIM*)wid;
 		PLATFORM_ASSERT(w);
-		if( w->win ) {
-			offset = w->win->Pos;
-		}
+		offset = w->pos;
 		inited = true;
 	}
 	void Init(SurfaceID sid, WindowID wid) override {
@@ -458,39 +459,45 @@ void Window::Destroy() {
 PRectangle Window::GetPosition() {
 	WindowIM* w = (WindowIM*)wid;
 	PRectangle rc;
-	if( w && w->win ) {
-		rc.left = w->win->Pos.x;
-		rc.right = rc.left + w->win->Size.x;
-		rc.top = w->win->Pos.y;
-		rc.bottom = rc.top + w->win->Size.y;
+	if( w ) {
+		rc.left = w->pos.x;
+		rc.right = rc.left + w->size.x;
+		rc.top = w->pos.y;
+		rc.bottom = rc.top + w->size.y;
 	}
 	return rc;
 }
 
 void Window::SetPosition(PRectangle rc) {
 	WindowIM* w = (WindowIM*)wid;
-	if( w && w->win ) {
-		w->win->Pos.x = rc.left;
-		w->win->Pos.y = rc.top;
-		w->win->Size.x = rc.Width();
-		w->win->Size.y = rc.Height();
+	if( w )	{
+		w->pos.x = rc.left;
+		w->pos.y = rc.top;
+		w->size.x = rc.Width();
+		w->size.y = rc.Height();
+		if( w->win ) {
+			w->win->Pos = w->pos;
+			w->win->Size = w->size;
+		} else {
+			w->modified = true;
+		}
 	}
 }
 
 void Window::SetPositionRelative(PRectangle rc, Window relativeTo) {
 	WindowIM* w = (WindowIM*)wid;
-	if( w && w->win ) {
+	if( w ) {
 		WindowIM* wndRelativeTo = (WindowIM*)(relativeTo.GetID());
 		XYPOSITION ox = 0;
 		XYPOSITION oy = 0;
 		PRectangle rcMonitor(0, 0, 1920, 1080);
-		if( wndRelativeTo && wndRelativeTo->win ) {
-			ox = wndRelativeTo->win->Pos.x;
-			oy = wndRelativeTo->win->Pos.y;
+		if( wndRelativeTo ) {
+			ox = wndRelativeTo->pos.x;
+			oy = wndRelativeTo->pos.y;
 			rcMonitor.left = ox;
 			rcMonitor.top = oy;
-			rcMonitor.right = ox + wndRelativeTo->win->Size.x;
-			rcMonitor.bottom = oy + wndRelativeTo->win->Size.y;
+			rcMonitor.right = ox + wndRelativeTo->size.x;
+			rcMonitor.bottom = oy + wndRelativeTo->size.y;
 		}
 		ox += rc.left;
 		oy += rc.top;
@@ -507,10 +514,16 @@ void Window::SetPositionRelative(PRectangle rc, Window relativeTo) {
 		else if (oy + sizey > rcMonitor.top + rcMonitor.Height())
 			oy = rcMonitor.top + rcMonitor.Height() - sizey;
 
-		w->win->Pos.x = ox;
-		w->win->Pos.y = oy;
-		w->win->Size.x = ox + sizex;
-		w->win->Size.y = oy + sizey;
+		w->pos.x = ox;
+		w->pos.y = oy;
+		w->size.x = ox + sizex;
+		w->size.y = oy + sizey;
+		if( w->win ) {
+			w->win->Pos = w->pos;
+			w->win->Size = w->size;
+		} else {
+			w->modified = true;
+		}
 	}
 }
 
@@ -790,6 +803,8 @@ public:
 	{
 		view.bufferedDraw = false;
 		wMain = (WindowID)&mainWindow;
+		mainWindow.size.x = 10240;
+		mainWindow.size.y = 10240;
 		for(int i=0; i<tickPlatform; ++i) {
 			timerIntervals[i] = 0;
 			timers[i] = 0.0f;
@@ -857,13 +872,15 @@ public: 	// Public for scintilla_send_message
 		return 0;
 	}
 	void HandleMouseEvents(ImGuiIO& io, ImGuiID id, bool hovered, const PRectangle& wRect, unsigned int now, int modifiers) {
-		ImGuiWindow* window = ImGui::GetCurrentWindow();
+		ImGuiWindow* window = mainWindow.win;
 		const bool focus_requested = ImGui::FocusableItemRegister(window, id);
 		// const bool focus_requested_by_code = focus_requested && (window->FocusIdxAllCounter == window->FocusIdxAllRequestCurrent);
 		// const bool focus_requested_by_tab = focus_requested && !focus_requested_by_code;
 		const bool user_clicked = hovered && io.MouseClicked[0];
 		const bool user_scrolled = hovered && (io.MouseWheel != 0.0f || io.MouseWheelH != 0.0f);
-
+		if( user_scrolled ) {
+			scroll = window->Scroll;
+		}
 	    if( focus_requested || user_clicked || user_scrolled ) {
 			// fprintf(stderr, "grab focus!\n");
 			ImGui::SetActiveID(id, window);
@@ -1000,18 +1017,12 @@ public: 	// Public for scintilla_send_message
 		}
 	}
 	void Draw(ImGuiWindow* window) {
-		ImGuiIO& io = ImGui::GetIO();
 		float totalHeight = (float)((pdoc->LinesTotal() + 1) * vs.lineHeight);
 		float totalWidth = (float)(scrollWidth * vs.aveCharWidth);
 		ImVec2 total_sz(window->ClipRect.GetSize());
+
 		horizontalScrollBarVisible = (totalWidth > total_sz.x);
 		verticalScrollBarVisible = (totalHeight > total_sz.y);
-
-		// input
-		HandleInputEvents(window->ID, window->ClipRect);
-
-		SetXYScroll(XYScrollPosition(window->Scroll.x / vs.aveCharWidth, window->Scroll.y / vs.lineHeight));
-		// fprintf(stderr, "scroll pos: %d, %d\n", xOffset, topLine);
 
 		// scrollbar
 		if( horizontalScrollBarVisible ) {
@@ -1026,6 +1037,12 @@ public: 	// Public for scintilla_send_message
 			ImGui::Dummy(total_sz);
 		}
 
+		window->Scroll = scroll;
+		SetXYScroll(XYScrollPosition(scroll.x / vs.aveCharWidth, scroll.y / vs.lineHeight));
+		// fprintf(stderr, "scroll pos: %d, %d\n", xOffset, topLine);
+		mainWindow.pos = window->Pos;
+		mainWindow.size = window->Size;
+
 		// ime
 		if( hasFocus ) {
 			ImGuiContext* ctx = ImGui::GetCurrentContext();
@@ -1036,6 +1053,7 @@ public: 	// Public for scintilla_send_message
 		}
 
 		// timers
+		ImGuiIO& io = ImGui::GetIO();
 		for( int i=0; i<tickPlatform; ++i ) {
 			if( timerIntervals[i] ) {
 				timers[i] -= io.DeltaTime;
@@ -1059,15 +1077,21 @@ public: 	// Public for scintilla_send_message
 		surfaceWindow->Release();
 	}
 	void Update(bool draw, ScintillaIMCallback cb, void* ud) {
-		ImGuiWindow* window = ImGui::GetCurrentContext() ? ImGui::GetCurrentWindow() : NULL;
-		mainWindow.win = window;
 		notify_callback = cb;
 		notify_callback_ud = ud;
-		if( cb ) { cb(this, NULL, ud); }
-		if( draw && window ) { Draw(window); }
+		if( draw ) {
+			ImGuiWindow* window = ImGui::GetCurrentContext() ? ImGui::GetCurrentWindow() : NULL;
+			if( window ) {
+				mainWindow.win = window;
+				HandleInputEvents(window->ID, window->ClipRect);
+				Draw(window);
+				mainWindow.win = NULL;
+			}
+		} if( cb ) {
+			cb(this, NULL, ud);
+		}
 		notify_callback = NULL;
 		notify_callback_ud = NULL;
-		mainWindow.win = NULL;
 	}
 private:
 	sptr_t DefWndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) override {
@@ -1115,19 +1139,22 @@ private:
 		return rc;
 	}
 	void SetVerticalScrollPos() override {
+		scroll.y = topLine * vs.lineHeight;
 		if( mainWindow.win ) {
-			mainWindow.win->Scroll.y = topLine * vs.lineHeight;
+			mainWindow.win->Scroll.y = scroll.y;
 		}
 	}
 	void SetHorizontalScrollPos() override {
+		scroll.x = xOffset * vs.aveCharWidth;
 		if( mainWindow.win ) {
-			mainWindow.win->Scroll.x = xOffset * vs.aveCharWidth;
+			mainWindow.win->Scroll.x = scroll.x;
 		}
 	}
 	bool ModifyScrollBars(Sci::Line nMax, Sci::Line nPage) override {
+		scroll.y = topLine * vs.lineHeight;
+		scroll.x = xOffset * vs.aveCharWidth;
 		if( mainWindow.win ) {
-			mainWindow.win->Scroll.y = topLine * vs.lineHeight;
-			mainWindow.win->Scroll.x = xOffset * vs.aveCharWidth;
+			mainWindow.win->Scroll = scroll;
 		}
 		return false;
 	}
@@ -1408,6 +1435,7 @@ private:
 	bool captureMouse;
 	int rectangularSelectionModifier;
 	WindowIM mainWindow;
+	ImVec2 scroll;
 	ScintillaIMCallback notify_callback;
 	void* notify_callback_ud;
 	int timerIntervals[tickPlatform];

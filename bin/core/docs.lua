@@ -72,8 +72,10 @@ local function draw_saving_bar(page)
 	end
 end
 
+local DOC_LABEL = '##SourceView'
+
 local function page_call(page, cb, ...)
-	imgui.BeginChild(page.label)
+	imgui.BeginChild(DOC_LABEL)
 		page.sv(cb, ...)
 	imgui.EndChild()
 end
@@ -272,20 +274,21 @@ function tabs_page_draw(page, active_page)
 		imgui.SetNextWindowFocus()
 	end
 
-	if page.scroll_to_line then
-		local line = page.scroll_to_line
-		page.scroll_to_line = nil
+	local scroll_to_line = page.scroll_to_line
 
-		page_call(page, function(sv)
-			sv:GotoLine(line)
+	imgui.BeginChild(DOC_LABEL, nil, nil, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
+		local sv = page.sv
+		if scroll_to_line then
+			page.scroll_to_line = nil
+			sv:GotoLine(scroll_to_line)
 			sv:ScrollCaret()
 			imgui.SetWindowFocus()
-		end)
-	end
-
-	imgui.BeginChild(page.label, nil, nil, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
-		local sv = page.sv
-		sv()
+			sv()
+			sv:GotoLine(scroll_to_line)
+			sv:ScrollCaret()
+		else
+			sv()
+		end
 		page.unsaved = sv:GetModify()
 		puss.trace_pcall(hook, 'docs_page_after_draw', page)
 	imgui.EndChild()

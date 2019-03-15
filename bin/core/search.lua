@@ -31,7 +31,7 @@ local function show_result(ps, pe)
 		imgui.Text(v[2])
 		if active then
 			local file, line = v[1]:match('^(.+):(%d+)$')
-			print('open', file, line)
+			-- print('open', file, line)
 			docs.open(file, math.tointeger(line)-1)
 		end
 	end

@@ -58,7 +58,7 @@ if thread_name then
 
 	if puss.debug then
 		puss.async_service_run(function()
-			puss.debug(true, nil, 'thread')
+			puss.debug(true, nil, thread_name)
 			while true do
 				puss.debug()
 				puss.async_task_sleep(50)

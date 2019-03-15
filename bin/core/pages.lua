@@ -15,7 +15,19 @@ local TABSBAR_FLAGS = ( ImGuiTabBarFlags_Reorderable
 __exports.update = function()
     if not imgui.BeginTabBar('PussMainTabsBar', TABSBAR_FLAGS) then return end
 
-	-- set active, must after draw tabs
+	-- destroy closed tabs
+	for i=#pages,1,-1 do
+		local page = pages[i]
+		if not page.was_open then
+			local destroy = page.module.tabs_page_destroy
+			if destroy then imgui.protect_pcall(destroy, page) end
+			index[page.label] = nil
+			imgui.SetTabItemClosed(page.label)
+			table.remove(pages, i)
+		end
+	end
+
+	-- set active
 	local active = next_active_page_label
 	if active then
 		next_active_page_label = nil
@@ -28,7 +40,9 @@ __exports.update = function()
 	for i, page in ipairs(pages) do
 		local label = page.label
 		page.was_open = page.open
-		selected, page.open = imgui.BeginTabItem(label, page.open, page.unsaved and ImGuiTabItemFlags_UnsavedDocument or ImGuiTabItemFlags_None)
+		local flags = ImGuiTabItemFlags_NoPushId
+		if page.unsaved then flags = flags | ImGuiTabItemFlags_UnsavedDocument end
+		selected, page.open = imgui.BeginTabItem(label, page.open, flags)
 		if selected then
 			local last = selected_page_label
 			selected_page_label = label
@@ -40,18 +54,11 @@ __exports.update = function()
 
 	imgui.EndTabBar()
 
-	-- close 
-	for i=#pages,1,-1 do
-		local page = pages[i]
+	-- close tabs
+	for i, page in ipairs(pages) do
 		if not page.open then
 			local close = page.module.tabs_page_close
 			if close then imgui.protect_pcall(close, page) end
-		end
-		if not page.was_open then
-			local destroy = page.module.tabs_page_destroy
-			if destroy then imgui.protect_pcall(destroy, page) end
-			index[page.label] = nil
-			table.remove(pages, i)
 		end
 	end
 end
