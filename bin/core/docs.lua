@@ -122,6 +122,7 @@ local dialog_modes = {}
 local dialog_active = false
 local dialog_focused = false
 local dialog_show
+local view_set_focus
 
 local function check_dialog_mode(page)
 	for k,v in pairs(dialog_modes) do
@@ -191,23 +192,37 @@ dialog_modes['docs/jump'] = function(page, active)
 	end
 end
 
-local function find_input_text(page)
-	local search
-	if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
-		local text = inbuf:str()
-		if #text==0 then return end
-		if page.find_text ~= text then
-			page.find_text = text
-			sci.find_text_fill_all_indicator(page.sv, text)
-		end
-		search = (imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT)) and 1 or 2
-		imgui.SetKeyboardFocusHere(-1)
-	end
-	focus_last_input()
+local find_input_text
+do
+	local FINDTEXT_FLAGS = ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue|ImGuiInputTextFlags_CallbackAlways
+	local last_text
 
-	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_UP) then search = 1 end
-	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_DOWN) then search = 2 end
-	return search
+	local function find_input_text_on_edit(ev, page)
+		local text = ev.Buf
+		if last_text==text then return end
+		last_text = text
+		sci.find_text_fill_all_indicator(page.sv, text)
+	end
+
+	find_input_text = function(page)
+		local search
+		if imgui.InputText('##FindText', inbuf, FINDTEXT_FLAGS, find_input_text_on_edit, page) then
+			local text = inbuf:str()
+			if #text > 0 then
+				if page.find_text ~= text then
+					page.find_text = text
+					sci.find_text_fill_all_indicator(page.sv, text)
+				end
+				search = (imgui.IsKeyDown(PUSS_IMGUI_KEY_LEFT_SHIFT) or imgui.IsKeyDown(PUSS_IMGUI_KEY_RIGHT_SHIFT)) and 1 or 2
+			end
+			imgui.SetKeyboardFocusHere(-1)
+		end
+		focus_last_input()
+
+		if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_UP) then search = 1 end
+		if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_DOWN) then search = 2 end
+		return search
+	end
 end
 
 dialog_modes['docs/find'] = function(page, active)
@@ -269,11 +284,14 @@ function tabs_page_draw(page, active_page)
 
 	imgui.BeginChild(DOC_LABEL, nil, nil, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
 		local sv = page.sv
+		if view_set_focus then
+			view_set_focus = false
+			imgui.SetWindowFocus()
+		end
 		if scroll_to_line then
 			page.scroll_to_line = nil
 			sv:GotoLine(scroll_to_line)
 			sv:ScrollCaret()
-			imgui.SetWindowFocus()
 			sv()
 			sv:GotoLine(scroll_to_line)
 			sv:ScrollCaret()
@@ -283,7 +301,9 @@ function tabs_page_draw(page, active_page)
 		page.unsaved = sv:GetModify()
 		puss.trace_pcall(hook, 'docs_page_after_draw', page)
 
-		if imgui.IsWindowFocused(ImGuiFocusedFlags_ChildWindows) then check_dialog_mode(page) end
+		-- if imgui.IsWindowFocused(ImGuiFocusedFlags_ChildWindows) then check_dialog_mode(page) end
+		check_dialog_mode(page)
+
 		if dialog_show then
 			local active = dialog_active
 			dialog_active = false
@@ -363,10 +383,19 @@ local function lookup_page(filepath)
 end
 
 __exports.open = function(file, line)
+	if not file then
+		view_set_focus = true
+		return
+	end
+
 	local filepath, name, label, page = lookup_page(file)
 	if page then
 		if line then page.scroll_to_line = line end
-		pages.active(label)
+		if label ~= pages.selected() then
+			pages.active(label)
+		else
+			view_set_focus = true
+		end
 		return
 	end
 

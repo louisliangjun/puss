@@ -43,7 +43,11 @@ do
 end
 
 local function show_miniline()
-	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_ESCAPE) then imgui.CloseCurrentPopup() end
+	if imgui.IsShortcutPressed(PUSS_IMGUI_KEY_ESCAPE) then
+		imgui.CloseCurrentPopup()
+		docs.open()
+		return
+	end
 	imgui.Text('file')
 	imgui.SameLine()
 	imgui.PushItemWidth(420)

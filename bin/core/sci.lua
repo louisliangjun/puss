@@ -310,6 +310,7 @@ end
 __exports.find_text_fill_all_indicator = function(sv, text)
 	sv:SetIndicatorCurrent(INDICATOR_FINDTEXT)
 	sv:IndicatorClearRange(0, sv:GetLength())
+	if not text or #text==0 then return end
 
 	local pos, rs, re = 0, 0, 0
 	while true do
