@@ -13,6 +13,22 @@ local DEFAULT_STYLE_PREPROCESSOR = 0x00808080
 local DEFAULT_STYLE_OPERATOR = 0x7F007F00
 local DEFAULT_STYLE_IDENTIFIER = 0x00000000
 
+local function do_auto_indent_impl(sv, mode)
+	sv:set(SCN_UPDATEUI, nil)
+	local pos = sv:GetCurrentPos()
+	local line = sv:LineFromPosition(pos)
+	if line <= 0 then return end
+	local indent = sv:GetLineIndentation(line-1)
+	indent = indent + mode * (sv:GetTabIndents() and sv:GetTabWidth() or sv:GetIndent())
+	if indent <= 0 then return end
+	sv:SetLineIndentation(line, indent)
+	sv:SetEmptySelection(sv:GetLineIndentPosition(line))
+end
+
+local function do_auto_indent(sv) do_auto_indent_impl(sv, 0) end
+local function do_auto_indent_inc(sv) do_auto_indent_impl(sv, 1) end
+local function do_auto_indent_dec(sv) do_auto_indent_impl(sv, -1) end
+
 local default_setting =
 	{ language = 'Text'
 	, lexer = nil
@@ -23,6 +39,7 @@ local default_setting =
 	, margin_bp = true
 	, sel_back = 0xe8bb9f
 	, caret_line = 0xcfcfb0
+	, auto_indent = nil	-- SCN_CHARADDED
 	}
 
 local language_builders = {}
@@ -61,6 +78,27 @@ language_builders.lua = function(setting)
 		, [SCE_LUA_WORD8] = DEFAULT_STYLE_DEFAULT
 		, [SCE_LUA_LABEL] = 0x0000FF00
 		}
+
+	local indent_map = { ['do']=1, ['else']=1, ['elseif']=1, ['then']=1, ['repeat']=1 }
+
+	setting.auto_indent = function(sv, ch)
+		if ch~=10 and ch~=13 then return end
+		local pos = sv:GetCurrentPos()
+		local line = sv:LineFromPosition(pos)
+		if line <= 0 then return end
+		local ret, text = sv:GetLine(line-1)
+		local last_word = text:match('.-(%w+)%s*$')
+		local indent_mark = indent_map[last_word]
+		if indent_mark then
+			sv:set(SCN_UPDATEUI, (indent_mark>0) and do_auto_indent_inc or do_auto_indent_dec)
+		else
+			if text:match('.*function[_%s%w]*%(.*%)%s*$') then
+				sv:set(SCN_UPDATEUI, do_auto_indent_inc)
+			else
+				sv:set(SCN_UPDATEUI, do_auto_indent)
+			end
+		end
+	end
 end
 
 language_builders.cpp = function(setting)
@@ -117,6 +155,25 @@ language_builders.cpp = function(setting)
 		, [SCE_C_TASKMARKER] = DEFAULT_STYLE_DEFAULT
 		, [SCE_C_ESCAPESEQUENCE] = DEFAULT_STYLE_DEFAULT
 		}
+
+	local indent_map =
+		{ ['{']=1, [':']=1, ['else']=1
+		}
+
+	setting.auto_indent = function(sv, ch)
+		if ch~=10 and ch~=13 then return end
+		local pos = sv:GetCurrentPos()
+		local line = sv:LineFromPosition(pos)
+		if line <= 0 then return end
+		local ret, text = sv:GetLine(line-1)
+		local last_word = text:match('([{:])%s*$') or text:match('.-(%w+)%s*$')
+		local indent_mark = indent_map[last_word]
+		if indent_mark then
+			sv:set(SCN_UPDATEUI, (indent_mark>0) and do_auto_indent_inc or do_auto_indent_dec)
+		else
+			sv:set(SCN_UPDATEUI, do_auto_indent)
+		end
+	end
 end
 
 language_builders.sql = function(setting)
@@ -293,6 +350,8 @@ local function do_reset_styles(sv, lang)
 		sv:MarkerSetBack(0, 0x2000c0)
 		sv:MarkerDefine(0, SC_MARK_ROUNDRECT)
 	end
+
+	sv:set(SCN_CHARADDED, setting.auto_indent)
 
 	sv:IndicSetStyle(INDICATOR_FINDTEXT, INDIC_FULLBOX)
 
