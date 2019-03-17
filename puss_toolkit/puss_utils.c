@@ -90,7 +90,9 @@ size_t puss_format_filename(char* fname) {
 	char* s = fname;
 	char sep = '/';
 #ifdef _WIN32
-	if( ((s[0]>='a' && s[1]<='z') || (s[0]>='A' && s[1]<='Z')) && (s[1]==':') ) {
+	if( ((s[0]>='a' && s[0]<='z') || (s[0]>='A' && s[0]<='Z')) && (s[1]==':') ) {
+		if( (s[0]>='a' && s[0]<='z') )
+		s[0] = (s[0] - 'a' + 'A');
 		cur->s = s;
 		cur->n = 2;
 		s += 2;

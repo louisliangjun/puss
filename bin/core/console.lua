@@ -80,7 +80,7 @@ local function console_update()
 	if output_changed then
 		output_changed = false
 		imgui.BeginChild(imgui.GetID(CONSOLE_OUTPUT_NAME))
-			imgui.SetScrollY(imgui.GetScrollMaxY())
+			imgui.SetScrollY(imgui.GetScrollMaxY() + 128)
 		imgui.EndChild()
 	end
 	imgui.Separator()

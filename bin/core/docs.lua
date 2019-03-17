@@ -364,6 +364,11 @@ local function lookup_page(filepath)
 	return filepath, name, label, page
 end
 
+__exports.lookup = function(file)
+	local filepath, name, label, page = lookup_page(file)
+	return page, label
+end
+
 __exports.open = function(file, line)
 	if not file then
 		view_set_focus = true

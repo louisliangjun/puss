@@ -91,11 +91,7 @@ language_builders.lua = function(setting)
 		if indent_mark then
 			sv:set(SCN_UPDATEUI, (indent_mark>0) and do_auto_indent_inc or do_auto_indent_dec)
 		else
-			if text:match('.*function[_%s%w]*%(.*%)%s*$') then
-				sv:set(SCN_UPDATEUI, do_auto_indent_inc)
-			else
-				sv:set(SCN_UPDATEUI, do_auto_indent)
-			end
+			sv:set(SCN_UPDATEUI, do_auto_indent)
 		end
 	end
 
