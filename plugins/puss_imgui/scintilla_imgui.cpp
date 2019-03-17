@@ -799,13 +799,13 @@ public:
 		: captureMouse(false)
 		, scrollDirty(false)
 		, rectangularSelectionModifier(SCMOD_ALT)
-		, notify_callback(NULL)
-		, notify_callback_ud(0)
+		, notifyCallback(NULL)
+		, notifyCallbackUD(0)
 	{
 		view.bufferedDraw = false;
 		wMain = (WindowID)&mainWindow;
-		mainWindow.size.x = 10240;
-		mainWindow.size.y = 10240;
+		mainWindow.size.x = 800;
+		mainWindow.size.y = 600;
 		for(int i=0; i<tickPlatform; ++i) {
 			timerIntervals[i] = 0;
 			timers[i] = 0.0f;
@@ -966,6 +966,8 @@ public: 	// Public for scintilla_send_message
 		TryKeyDownWithModifiers(ImGuiKey_DownArrow, SCK_DOWN, modifiers);
 		TryKeyDownWithModifiers(ImGuiKey_Home, SCK_HOME, modifiers);
 		TryKeyDownWithModifiers(ImGuiKey_End, SCK_END, modifiers);
+		TryKeyDownWithModifiers(ImGuiKey_PageUp, SCK_PRIOR, modifiers);
+		TryKeyDownWithModifiers(ImGuiKey_PageDown, SCK_NEXT, modifiers);
 		TryKeyDownWithModifiers(ImGuiKey_Delete, SCK_DELETE, modifiers);
 		TryKeyDownWithModifiers(ImGuiKey_Backspace, SCK_BACK, modifiers);
 		TryKeyDownWithModifiers(ImGuiKey_Tab, SCK_TAB, modifiers);
@@ -976,8 +978,8 @@ public: 	// Public for scintilla_send_message
 		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_Z)) ) { Undo(); }
 		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_Y)) || (io.KeyCtrl && io.KeyShift && !io.KeyAlt && !io.KeySuper && IsKeyPressedMap(ImGuiKey_Z)) ) { Redo(); }
 		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_X)) || (is_shift_key_only && IsKeyPressedMap(ImGuiKey_Delete)) ) { Cut(); }
-        if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_C)) || (is_ctrl_key_only  && IsKeyPressedMap(ImGuiKey_Insert)) ) { Copy(); }
-        if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_V)) || (is_shift_key_only && IsKeyPressedMap(ImGuiKey_Insert)) ) { Paste(); }
+		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_C)) || (is_ctrl_key_only  && IsKeyPressedMap(ImGuiKey_Insert)) ) { Copy(); }
+		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_V)) || (is_shift_key_only && IsKeyPressedMap(ImGuiKey_Insert)) ) { Paste(); }
     }
 	void HandleInputEvents(ImGuiID id, const ImRect& bb) {
 		ImGuiIO& io = ImGui::GetIO();
@@ -1078,11 +1080,12 @@ public: 	// Public for scintilla_send_message
 		PRectangle rc = GetClientRectangle();
 		Paint(surfaceWindow.get(), rc);
 		PaintPopup();
+
 		surfaceWindow->Release();
 	}
 	void Update(bool draw, ScintillaIMCallback cb, void* ud) {
-		notify_callback = cb;
-		notify_callback_ud = ud;
+		notifyCallback = cb;
+		notifyCallbackUD = ud;
 		if( draw ) {
 			ImGuiWindow* window = ImGui::GetCurrentContext() ? ImGui::GetCurrentWindow() : NULL;
 			if( window ) {
@@ -1094,8 +1097,8 @@ public: 	// Public for scintilla_send_message
 		} if( cb ) {
 			cb(this, NULL, ud);
 		}
-		notify_callback = NULL;
-		notify_callback_ud = NULL;
+		notifyCallback = NULL;
+		notifyCallbackUD = NULL;
 	}
 	void DirtyScroll() {
 		scrollDirty = true;
@@ -1162,22 +1165,13 @@ private:
 	void NotifyChange() override {
 	}
 	void NotifyParent(SCNotification scn) override {
-		if( notify_callback ) {
-			notify_callback(this, &scn, notify_callback_ud);
+		if( notifyCallback ) {
+			notifyCallback(this, &scn, notifyCallbackUD);
 		}
 	}
 	
 #ifdef _WIN32
 	void Copy() override {
-		//Platform::DebugPrintf("Copy\n");
-		if (!sel.Empty()) {
-			SelectionText selectedText;
-			CopySelectionRange(&selectedText);
-			CopyToClipboard(selectedText);
-		}
-	}
-
-	void CopyAllowLine() override {
 		SelectionText selectedText;
 		CopySelectionRange(&selectedText, true);
 		CopyToClipboard(selectedText);
@@ -1418,11 +1412,6 @@ private:
 	}
 #endif
 	void CreateCallTipWindow(PRectangle rc) override {
-		if( !ct.wCallTip.Created() ) {
-			// TODO : 
-			ct.wCallTip = (WindowID)&mainWindow;
-			ct.wDraw = ct.wCallTip;
-		}
 	}
 	void AddToPopUp(const char *label, int cmd = 0, bool enabled = true) override {
 		MenuIM* m = (MenuIM*)popup.GetID();
@@ -1438,8 +1427,8 @@ private:
 	ImVec2 scroll;
 	int rectangularSelectionModifier;
 	WindowIM mainWindow;
-	ScintillaIMCallback notify_callback;
-	void* notify_callback_ud;
+	ScintillaIMCallback notifyCallback;
+	void* notifyCallbackUD;
 	int timerIntervals[tickPlatform];
 	float timers[tickPlatform];
 };

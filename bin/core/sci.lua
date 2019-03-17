@@ -39,7 +39,7 @@ local default_setting =
 	, margin_bp = true
 	, sel_back = 0xe8bb9f
 	, caret_line = 0xcfcfb0
-	, auto_indent = nil	-- SCN_CHARADDED
+	, on_char_added = nil
 	}
 
 local language_builders = {}
@@ -81,8 +81,7 @@ language_builders.lua = function(setting)
 
 	local indent_map = { ['do']=1, ['else']=1, ['elseif']=1, ['then']=1, ['repeat']=1 }
 
-	setting.auto_indent = function(sv, ch)
-		if ch~=10 and ch~=13 then return end
+	local function on_auto_indent(sv)
 		local pos = sv:GetCurrentPos()
 		local line = sv:LineFromPosition(pos)
 		if line <= 0 then return end
@@ -98,6 +97,10 @@ language_builders.lua = function(setting)
 				sv:set(SCN_UPDATEUI, do_auto_indent)
 			end
 		end
+	end
+
+	setting.on_char_added = function(sv, ch)
+		if ch==10 or ch==13 then return on_auto_indent(sv) end
 	end
 end
 
@@ -160,8 +163,7 @@ language_builders.cpp = function(setting)
 		{ ['{']=1, [':']=1, ['else']=1
 		}
 
-	setting.auto_indent = function(sv, ch)
-		if ch~=10 and ch~=13 then return end
+	local function on_auto_indent(sv)
 		local pos = sv:GetCurrentPos()
 		local line = sv:LineFromPosition(pos)
 		if line <= 0 then return end
@@ -173,6 +175,10 @@ language_builders.cpp = function(setting)
 		else
 			sv:set(SCN_UPDATEUI, do_auto_indent)
 		end
+	end
+
+	setting.on_char_added = function(sv, ch)
+		if ch==10 or ch==13 then return on_auto_indent(sv) end
 	end
 end
 
@@ -351,7 +357,7 @@ local function do_reset_styles(sv, lang)
 		sv:MarkerDefine(0, SC_MARK_ROUNDRECT)
 	end
 
-	sv:set(SCN_CHARADDED, setting.auto_indent)
+	sv:set(SCN_CHARADDED, setting.on_char_added)
 
 	sv:IndicSetStyle(INDICATOR_FINDTEXT, INDIC_FULLBOX)
 
