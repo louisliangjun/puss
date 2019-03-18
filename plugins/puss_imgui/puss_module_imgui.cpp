@@ -835,18 +835,22 @@ static int imgui_destroy_lua(lua_State* L) {
 
 static int imgui_set_should_close_lua(lua_State* L) {
 	int value = lua_toboolean(L, 1);
-	ImGuiViewport* viewport = ImGui::FindViewportByPlatformHandle(g_Window);
-	if( viewport ) {
-		viewport->PlatformRequestClose = value ? true : false;
+	if( ImGui::GetCurrentContext() ) {
+		ImGuiViewport* viewport = ImGui::FindViewportByPlatformHandle(g_Window);
+		if( viewport ) {
+			viewport->PlatformRequestClose = value ? true : false;
+		}
 	}
 	return 0;
 }
 
 static int imgui_should_close_lua(lua_State* L) {
-	ImGuiViewport* viewport = ImGui::FindViewportByPlatformHandle(g_Window);
-	if( viewport ) {
-		lua_pushboolean(L, viewport->PlatformRequestClose ? 1 : 0);
-		return 1;
+	if( ImGui::GetCurrentContext() ) {
+		ImGuiViewport* viewport = ImGui::FindViewportByPlatformHandle(g_Window);
+		if( viewport ) {
+			lua_pushboolean(L, viewport->PlatformRequestClose ? 1 : 0);
+			return 1;
+		}
 	}
 	lua_pushboolean(L, 0);
 	return 1;
