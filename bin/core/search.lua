@@ -5,6 +5,7 @@ local docs = puss.import('core.docs')
 
 local inbuf = imgui.CreateByteArray(1024)
 local ftbuf = imgui.CreateByteArray(1024, 'lua c h inl cpp hpp cxx hxx')
+local current_sel
 local current_key
 local current_progress
 local results = {}
@@ -25,11 +26,12 @@ local function show_result(ps, pe)
 	for i=ps,pe do
 		local v = results[i]
 		imgui.PushStyleColor(ImGuiCol_Text, 0.75, 0.75, 0, 1)
-		local active = imgui.Selectable(v[1])
+		local active = imgui.Selectable(v[1], current_sel==v)
 		imgui.PopStyleColor()
 		imgui.SameLine()
 		imgui.Text(v[2])
 		if active then
+			current_sel = v
 			local file, line = v[1]:match('^(.+):(%d+)$')
 			-- print('open', file, line)
 			docs.open(file, math.tointeger(line)-1)
