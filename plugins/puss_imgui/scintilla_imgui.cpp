@@ -1045,6 +1045,7 @@ public: 	// Public for scintilla_send_message
 			scroll = window->Scroll;
 		}
 		SetXYScroll(XYScrollPosition(scroll.x / vs.aveCharWidth, scroll.y / vs.lineHeight));
+		scrollDirty = false;
 		// fprintf(stderr, "scroll pos: %d, %d\n", xOffset, topLine);
 		mainWindow.pos = window->Pos;
 		mainWindow.size = window->Size;
