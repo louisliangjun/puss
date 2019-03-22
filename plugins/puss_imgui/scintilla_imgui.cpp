@@ -1038,7 +1038,6 @@ public: 	// Public for scintilla_send_message
 		}
 
 		if( scrollDirty ) {
-			scrollDirty = false;
 			ImGui::SetScrollX(scroll.x);
 			ImGui::SetScrollY(scroll.y);
 		} else {

@@ -22,6 +22,7 @@ __exports.update = function()
 			local destroy = page.module.tabs_page_destroy
 			if destroy then imgui.protect_pcall(destroy, page) end
 			index[page.label] = nil
+			if selected_page_label==page.label then selected_page_label = nil end
 			imgui.SetTabItemClosed(page.label)
 			table.remove(pages, i)
 		end
