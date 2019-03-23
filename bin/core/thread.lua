@@ -86,9 +86,9 @@ end
 local function check_thread_args(resp_module, resp_handle, pt)
 	if resp_module then
 		local module = modules[resp_module]
-		assert( module)
+		assert( module, 'not find module:'..tostring(resp_module) )
 		if resp_handle then
-			assert( module[resp_handle] )
+			assert( module[resp_handle], 'not find handle:'..tostring(resp_handle) )
 		end
 	end
 	assert( pt )

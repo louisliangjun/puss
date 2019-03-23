@@ -13,19 +13,6 @@ local results = {}
 
 shotcuts.register('search/next', 'Next search result', 'F4', false, false, false, false)
 
-local function start_search(text)
-	local filter
-	current_sel = 0
-	if text and #text > 0 then
-		filter = {}
-		for suffix in ftbuf:str():gmatch('%S+') do filter[suffix]=true end
-		current_key, current_progress, results = text, '', {}
-	else
-		text = nil
-	end
-	thread.query(nil, nil, 'search_text', text, filter)
-end
-
 local function show_result(ps, pe)
 	for i=ps,pe do
 		local v = results[i]
@@ -52,20 +39,22 @@ local function show_search_ui()
 		imgui.Text(current_progress)
 		imgui.PopItemWidth()
 	else
-		imgui.Text('Search')
+		if imgui.Button('SearchText:') then start_search(inbuf:str(), ftbuf:str()) end
 		imgui.SameLine()
 		local reclaim_focus
+		
 		imgui.PushItemWidth(-1)
 		if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
-			start_search(inbuf:str())
+			start_search(inbuf:str(), ftbuf:str())
 			reclaim_focus = true
 		end
-		imgui.PopItemWidth()
 		if reclaim_focus then imgui.SetKeyboardFocusHere(-1) end
-		imgui.Text('Filter')
+		if imgui.Button('ResetFilter') then
+			local filter = {}
+			for suffix in ftbuf:str():gmatch('%S+') do filter[suffix]=true end
+			thread.broadcast(nil, nil, 'set_suffix_filter', filter)
+		end
 		imgui.SameLine()
-
-		imgui.PushItemWidth(-1)
 		imgui.InputText('##FilterText', ftbuf)
 		imgui.PopItemWidth()
 	end
@@ -109,6 +98,16 @@ __exports.on_search_result = function(key, filepath, res)
 	for i=1,#res,2 do
 		table.insert(results, {string.format('%s:%s', filepath, res[i]), res[i+1]})
 	end
+end
+
+__exports.start_search = function(text)
+	current_sel = 0
+	if text and #text > 0 then
+		current_key, current_progress, results = text, '', {}
+	else
+		text = nil
+	end
+	thread.query(nil, nil, 'search_text', text)
 end
 
 __exports.update = function(show)

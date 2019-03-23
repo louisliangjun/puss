@@ -132,15 +132,16 @@ local function check_filter(filepath, filters)
 end
 
 local current_search_task
+local current_search_filter
 
-local function do_text_search(search_key, filters)
+local function do_text_search(search_key)
 	local thread_self = puss.async_task_self()
 	local last = puss.timestamp()
 	local n = #sorted_files
 	current_search_task = thread_self
 	puss.thread_notify('core.search', 'on_search_progress', search_key, 0, n, '[start...]')
 	for i, filepath in ipairs(sorted_files) do
-		if check_filter(filepath, filters) then
+		if current_search_filter==nil or check_filter(filepath, current_search_filter) then
 			local ok, res = puss.trace_pcall(do_search_in_file, filepath, search_key)
 			if current_search_task~=thread_self then break end
 			if ok and res then puss.thread_notify('core.search', 'on_search_result', search_key, filepath, res, i, n) end
@@ -156,9 +157,13 @@ local function do_text_search(search_key, filters)
 	if current_search_task==thread_self then current_search_task = nil end
 end
 
-_G.search_text = function(search_key, filters)
+_G.set_suffix_filter = function(filters)
+	current_search_filter = filters
+end
+
+_G.search_text = function(search_key)
 	if search_key then
-		puss.async_service_run(do_text_search, search_key, filters)
+		puss.async_service_run(do_text_search, search_key)
 	else
 		current_search_task = nil
 	end
