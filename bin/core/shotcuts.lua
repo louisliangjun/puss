@@ -57,7 +57,13 @@ end
 __exports.register = function(name, desc, key, ctrl, shift, alt, super)
 	local code = keys[key]
 	if not code then error('shotcut_register() not support key:'..tostring(key)) end
-	shotcuts[name] = { name, desc or '', key, code, ctrl, shift, alt, super }
+	local sctrl, sshift, salt, ssuper = '', '', '', ''
+	if ctrl then sctrl='Ctrl+' elseif ctrl==nil then sctrl='[Ctrl]' end
+	if shift then sshift='Shift+' elseif shift==nil then sshift='[Shift]' end
+	if alt then salt='Alt+' elseif alt==nil then salt='[Alt]' end
+	if super then ssuper='Super+' elseif super==nil then ssuper='[Super]' end
+	local skey = string.format('%s%s%s%s%s', sctrl, sshift, salt, ssuper, key)
+	shotcuts[name] = { name, desc or '', skey, code, ctrl, shift, alt, super }
 	shotcut_sorted = nil
 end
 
@@ -76,3 +82,7 @@ __exports.is_pressed = function(name)
 	return imgui.IsShortcutPressed(table.unpack(info, 4))
 end
 
+__exports.menu_item = function(name, ...)
+	local info = shotcuts[name]
+	return imgui.MenuItem(info[2], info[3], ...)
+end

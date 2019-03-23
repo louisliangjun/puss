@@ -1,5 +1,7 @@
 -- core.pages
 
+local shotcuts = puss.import('core.shotcuts')
+
 _pages = _pages or {}
 _index = _index or setmetatable({}, {__mode='v'})
 local pages = _pages
@@ -11,6 +13,9 @@ local TABSBAR_FLAGS = ( ImGuiTabBarFlags_Reorderable
 	| ImGuiTabBarFlags_AutoSelectNewTabs
 	| ImGuiTabBarFlags_FittingPolicyScroll
 	)
+
+shotcuts.register('page/save_all', 'Save all pages', 'S', true, true, false, false)
+shotcuts.register('page/close_all', 'Close all pages', 'W', true, true, false, false)
 
 __exports.update = function()
     if not imgui.BeginTabBar('PussMainTabsBar', TABSBAR_FLAGS) then return end
@@ -62,6 +67,9 @@ __exports.update = function()
 			if close then imgui.protect_pcall(close, page) end
 		end
 	end
+
+	if shotcuts.is_pressed('page/save_ all') then save_all() end
+	if shotcuts.is_pressed('page/close_all') then close_all() end
 end
 
 __exports.create = function(label, module)
@@ -85,6 +93,19 @@ __exports.lookup = function(label)
 	return index[label]
 end
 
+__exports.save = function(check_only)
+	local page = index[selected_page_label]
+	if not page then return end
+	local save = page.module.tabs_page_save
+	if save then save(page) end
+end
+
+__exports.close = function()
+	local page = index[selected_page_label]
+	if not page then return end
+	page.open = false
+end
+
 __exports.save_all = function(check_only)
 	if not check_only then
 		for _, page in ipairs(pages) do
@@ -96,10 +117,25 @@ __exports.save_all = function(check_only)
 	local all_saved = true
 	for _, page in ipairs(pages) do
 		if page.unsaved then
-			all_saved = false
+			all_saved = false 
 			break
 		end
 	end
 	return all_saved
 end
 
+__exports.close_all = function()
+	for i=#pages,1,-1 do
+		local page = pages[i]
+		if page.unsaved then
+			page.open = false
+		else
+			local destroy = page.module.tabs_page_destroy
+			if destroy then imgui.protect_pcall(destroy, page) end
+			index[page.label] = nil
+			if selected_page_label==page.label then selected_page_label = nil end
+			imgui.SetTabItemClosed(page.label)
+			table.remove(pages, i)
+		end
+	end
+end

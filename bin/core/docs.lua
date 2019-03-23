@@ -16,7 +16,6 @@ shotcuts.register('docs/find', 'Find in file', 'F', true, false, false, false)
 shotcuts.register('docs/jump', 'Jump in file', 'G', true, false, false, false)
 shotcuts.register('docs/replace', 'Replace in file', 'H', true, false, false, false)
 shotcuts.register('docs/quick_find', 'Quick find in file', 'F3', nil, nil, false, false)
-shotcuts.register('docs/find_file', 'Find file', 'P', true, false, false, false)
 
 local function do_save_page(page)
 	page.unsaved = page.sv:GetModify()
@@ -85,8 +84,9 @@ local function do_search(sv, text, search_prev)
 	sv:SetSearchFlags(search_flags)
 
 	local length = #text
-	local ps = sv:GetSelectionStart()
-	local pe = sv:GetSelectionEnd()
+	local last_ps = sv:GetSelectionStart()
+	local last_pe = sv:GetSelectionEnd()
+	local ps, pe = last_ps, last_pe
 	if search_prev then
 		sv:SetTargetStart(ps)
 		sv:SetTargetEnd(0)
@@ -108,13 +108,14 @@ local function do_search(sv, text, search_prev)
 			ps = pe
 		end
 	end
+
 	if ps < 0 then
-		sv:ClearSelections()
+		ps, pe = last_ps, last_pe
 	else
 		pe = ps + #text
-		sv:SetSelection(ps, pe)
-		sv:ScrollRange(ps, pe)
 	end
+	sv:SetSelection(ps, pe)
+	sv:ScrollRange(ps, pe)
 end
 
 local DIALOG_LABEL = '##DocPopup'
@@ -124,9 +125,14 @@ local dialog_focused = false
 local dialog_show
 local view_set_focus
 
+local edit_menu_clicked = nil
+
 local function check_dialog_mode(page)
+	local op = edit_menu_clicked
+	edit_menu_clicked = nil
+
 	for k,v in pairs(dialog_modes) do
-		if shotcuts.is_pressed(k) then
+		if op==k or shotcuts.is_pressed(k) then
 			dialog_active, dialog_focused = true, false
 			dialog_show = v
 			imgui.OpenPopup(DIALOG_LABEL)
@@ -318,6 +324,7 @@ end
 
 function tabs_page_close(page)
 	if page.unsaved then
+		page.saving_tips = 'file not saved, need save ?'
 		page.saving = true
 		page.open = true
 	end
@@ -431,3 +438,6 @@ __exports.setup = function(new_hook)
 	hook = _hook
 end
 
+__exports.edit_menu_click = function(name)
+	edit_menu_clicked = name
+end

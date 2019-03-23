@@ -139,6 +139,7 @@ local function check_expand_file()
 	local selected = pages.selected()
 	if current_selected_label == selected then return end
 	current_selected_label = selected
+	if not current_selected_label then return end
 	-- print(selected)
 
 	current_expand_file = nil

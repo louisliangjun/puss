@@ -45,7 +45,22 @@ shotcuts.register('app/reload', 'Reload scripts', 'F12', true, false, false, fal
 local function main_menu()
 	local active
 	if not imgui.BeginMenuBar() then return end
+	if imgui.BeginMenu('File') then
+		if shotcuts.menu_item('docs/close') then pages.close() end
+		if shotcuts.menu_item('docs/save') then pages.save() end
+		imgui.Separator()
+		if shotcuts.menu_item('page/close_all') then pages.close_all() end
+		if shotcuts.menu_item('page/save_all') then pages.save_all() end
+		imgui.EndMenu()
+	end
+	if imgui.BeginMenu('Edit') then
+		if shotcuts.menu_item('docs/find') then docs.edit_menu_click('docs/find') end
+		if shotcuts.menu_item('docs/jump') then docs.edit_menu_click('docs/jump') end
+		imgui.EndMenu()
+	end
 	if imgui.BeginMenu('Window') then
+		if shotcuts.menu_item('miniline/open') then miniline.open() end
+		imgui.Separator()
 		active, show_console_window = imgui.MenuItem('Conosle', nil, show_console_window)
 		active, show_shutcut_window = imgui.MenuItem('Shutcut', nil, show_shutcut_window)
 		active, show_search_window = imgui.MenuItem('Search', nil, show_search_window)

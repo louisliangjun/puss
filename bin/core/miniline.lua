@@ -94,16 +94,24 @@ local function show_miniline()
 end
 
 local POPUP_LABEL = '##miniline'
+local open_sign = false
+
+__exports.open = function()
+	open_sign = true
+end
 
 __exports.update = function()
 	check_refresh_index()
+
+	local op = open_sign
+	open_sign = false
 
 	local x, y = imgui.GetWindowPos()
 	imgui.SetNextWindowPos(x + (imgui.GetWindowWidth() * 0.5), y + 48, ImGuiCond_Always, 0.5, 0)
 	if imgui.BeginPopup('##miniline') then
 		show_miniline()
 		imgui.EndPopup()
-	elseif shotcuts.is_pressed('miniline/open') then
+	elseif op or shotcuts.is_pressed('miniline/open') then
 		focused, results = false, {}
 		inbuf:strcpy('')
 		imgui.OpenPopup('##miniline')
