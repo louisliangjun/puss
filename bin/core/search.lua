@@ -1,17 +1,21 @@
 -- core.search
 
+local shotcuts = puss.import('core.shotcuts')
 local thread = puss.import('core.thread')
 local docs = puss.import('core.docs')
 
 local inbuf = imgui.CreateByteArray(1024)
 local ftbuf = imgui.CreateByteArray(1024, 'lua c h inl cpp hpp cxx hxx')
-local current_sel
+local current_sel = 0
 local current_key
 local current_progress
 local results = {}
 
+shotcuts.register('search/next', 'Next search result', 'F4', false, false, false, false)
+
 local function start_search(text)
 	local filter
+	current_sel = 0
 	if text and #text > 0 then
 		filter = {}
 		for suffix in ftbuf:str():gmatch('%S+') do filter[suffix]=true end
@@ -26,12 +30,13 @@ local function show_result(ps, pe)
 	for i=ps,pe do
 		local v = results[i]
 		imgui.PushStyleColor(ImGuiCol_Text, 0.75, 0.75, 0, 1)
-		local active = imgui.Selectable(v[1], current_sel==v)
+		local sel = (current_sel==i)
+		local active = imgui.Selectable(v[1], sel)
 		imgui.PopStyleColor()
 		imgui.SameLine()
 		imgui.Text(v[2])
 		if active then
-			current_sel = v
+			current_sel = i
 			local file, line = v[1]:match('^(.+):(%d+)$')
 			-- print('open', file, line)
 			docs.open(file, math.tointeger(line)-1)
@@ -66,7 +71,27 @@ local function show_search_ui()
 	end
 
 	imgui.BeginChild('##SearchResults')
-	imgui.clipper_pcall(#results, show_result)
+	local line_height = imgui.GetTextLineHeight()
+	local jump_next = shotcuts.is_pressed('search/next')
+	if jump_next and current_sel <= #results then
+		current_sel = current_sel + 1
+		local v = results[current_sel]
+		if v then
+			local file, line = v[1]:match('^(.+):(%d+)$')
+			-- print('open', file, line)
+			docs.open(file, math.tointeger(line)-1)
+
+			local pos = (current_sel - 1) * line_height
+			local top = imgui.GetScrollY()
+			local h = imgui.GetWindowHeight()
+			if pos <= top then
+				imgui.SetScrollY(pos)
+			elseif pos >= (top+h-5*line_height) then
+				imgui.SetScrollY(pos+5*line_height-h)
+			end
+		end
+	end
+	imgui.clipper_pcall(#results, line_height, show_result)
 	imgui.EndChild()
 end
 
