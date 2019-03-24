@@ -570,6 +570,15 @@ static void _win32_vk_map_init() {
 	_win32_vk_map[VK_OEM_NEC_EQUAL] = PUSS_IMGUI_KEY_KP_EQUAL;
 }
 
+static  BOOL CALLBACK on_enum_icons(HMODULE hModule, LPCWSTR lpType, LPWSTR lpName, LONG_PTR lParam) {
+	HICON icon = LoadIconW(hModule, lpName);
+	if( icon ) {
+		puss_imgui_wc.hIcon = icon;
+		return FALSE;
+	}
+	return TRUE;
+}
+
 BOOL WINAPI DllMain(HANDLE hinstDLL, DWORD dwReason, LPVOID lpvReserved) {
 	switch (dwReason) {
 	case DLL_PROCESS_ATTACH:
@@ -577,6 +586,10 @@ BOOL WINAPI DllMain(HANDLE hinstDLL, DWORD dwReason, LPVOID lpvReserved) {
 		puss_imgui_wc.lpfnWndProc = WndProc;
 		puss_imgui_wc.hInstance = (HINSTANCE)hinstDLL;
 		// puss_imgui_wc.hIcon = LoadIcon(puss_imgui_wc.hInstance, MAKEINTRESOURCE(IDI_ICON1));
+		{
+			HMODULE exe = GetModuleHandle(NULL);
+			EnumResourceNamesW(exe, RT_GROUP_ICON, on_enum_icons, NULL);
+		}
 		RegisterClassEx(&puss_imgui_wc);
 		_win32_vk_map_init();
 		break;

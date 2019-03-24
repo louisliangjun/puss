@@ -190,4 +190,10 @@
       <UniqueIdentifier>{51e8ea16-c1ac-487f-a1a7-4d60f46c609a}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="puss.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="puss.rc" />
+  </ItemGroup>
 </Project>

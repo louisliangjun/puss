@@ -11,6 +11,7 @@
 *.VC.db-wal
 *.VC.db-shm
 *.VC.db
+*.aps
 *.ipch
 *.suo
 *.sdf

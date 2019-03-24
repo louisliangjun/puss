@@ -82,6 +82,12 @@
       <Project>{6203c836-94e5-4eae-9520-012e449058cf}</Project>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="puss.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="puss.rc" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{C9A46A5F-2AB1-40DE-A134-A37346E47E9C}</ProjectGuid>
