@@ -21,14 +21,27 @@ show_console_window = show_console_window or false
 show_shutcut_window = show_shutcut_window or false
 show_search_window = show_search_window or true
 
-function docs_page_on_load(page_after_load, filepath)
-	local ctx = diskfs.load(filepath)
-	return page_after_load(ctx)
+local function file_skey_fetch(filepath)
+	local ok, st = puss.stat(filepath, true)
+	if not ok then return end
+	return string.format('%s_%s_%s', st.size, st.mtime, st.ctime)
 end
 
-function docs_page_on_save(page_after_save, filepath, ctx)
+function docs_page_on_load(page_after_load, filepath)
+	local ctx = diskfs.load(filepath)
+	return page_after_load(ctx, file_skey_fetch(filepath))
+end
+
+function docs_page_on_save(page_after_save, filepath, ctx, file_skey)
+	local now_file_skey = file_skey_fetch(filepath)
+	if now_file_skey ~= file_skey then
+		return page_after_save(false, now_file_skey)
+	end
 	local ok = diskfs.save(filepath, ctx)
-	page_after_save(ok)
+	if not ok then
+		return page_after_save(false, now_file_skey)
+	end
+	return page_after_save(ok, file_skey_fetch(filepath))
 end
 
 docs.setup(function(event, ...)

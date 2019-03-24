@@ -123,7 +123,7 @@ local function show_folder(dir, root, depth)
 			imgui.TreeNodeEx(v.name, flags, v.name)
 			if imgui.IsItemClicked() then file_clicked = v end
 			if matched and current_expand_need then
-				print(matched, current_expand_need)
+				-- print(matched, current_expand_need)
 				current_expand_need = false
 				if not imgui.IsItemVisible() then imgui.SetScrollHereY() end
 			end
@@ -169,7 +169,7 @@ __exports.update = function()
 
 	imgui.BeginChild('##folders')
 	current_expand_need = current_expand_need=='force'
-	if current_expand_need then print(current_expand_need) end
+	-- if current_expand_need then print(current_expand_need) end
 	check_expand_file()
 
 	local remove_id

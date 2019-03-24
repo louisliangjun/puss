@@ -117,7 +117,7 @@ __exports.save_all = function(check_only)
 	local all_saved = true
 	for _, page in ipairs(pages) do
 		if page.unsaved then
-			all_saved = false 
+			all_saved = false
 			break
 		end
 	end
@@ -128,7 +128,8 @@ __exports.close_all = function()
 	for i=#pages,1,-1 do
 		local page = pages[i]
 		if page.unsaved then
-			page.open = false
+			local close = page.module.tabs_page_close
+			if close then imgui.protect_pcall(close, page) end
 		else
 			local destroy = page.module.tabs_page_destroy
 			if destroy then imgui.protect_pcall(destroy, page) end

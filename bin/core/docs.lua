@@ -27,20 +27,25 @@ local function do_save_page(page)
 		return
 	end
 
-	local function page_after_save(ok)
+	local function page_after_save(ok, file_skey)
 		if not ok then
-			page.saving_tips = 'save file failed, maybe readonly.'
+			if page.file_skey==file_skey then				
+				page.saving_tips = 'file modified by other.'
+			else
+				page.saving_tips = 'save file failed, maybe readonly.'
+			end
 			return
 		end
 		page.sv:SetSavePoint()
 		page.saving = nil
 		page.saving_tip = nil
 		page.unsaved = nil
+		page.file_skey = file_skey
 	end
 
 	local len, ctx = page.sv:GetText(page.sv:GetTextLength()+1)
 	page.saving = true
-	puss.trace_pcall(hook, 'docs_page_on_save', page_after_save, page.filepath, ctx)
+	puss.trace_pcall(hook, 'docs_page_on_save', page_after_save, page.filepath, ctx, page.file_skey)
 end
 
 local function draw_saving_bar(page)
@@ -393,7 +398,7 @@ __exports.open = function(file, line)
 		return
 	end
 
-	local function page_after_load(ctx)
+	local function page_after_load(ctx, file_skey)
 		if not ctx then return end
 		page = pages.lookup(filepath)
 		if page then
@@ -410,6 +415,7 @@ __exports.open = function(file, line)
 		sv:SetText(ctx)
 		-- sv:ConvertEOLs(sv:GetEOLMode())
 		sv:EmptyUndoBuffer()
+		page.file_skey = file_skey
 		if line then page.scroll_to_line = line end
 	end
 

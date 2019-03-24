@@ -553,13 +553,19 @@ function docs_page_after_draw(page)
 	imgui.WindowDrawListAddRectFilled(x,y+(line-top-1)*th,x+w,y+(line-top)*th,0x3FFF00FF)
 end
 
+local function file_skey_fetch(filepath)
+	local ok, st = puss.stat(filepath, true)
+	if not ok then return end
+	return string.format('%s_%s_%s', st.size, st.mtime, st.ctime)
+end
+
 function docs_page_on_load(page_after_load, filepath)
 	if use_local_fs then
 		local f = io.open(puss.utf8_to_local(filepath), 'r')
 		if not f then return end
 		local ctx = f:read('*a')
 		f:close()
-		return page_after_load(ctx)
+		return page_after_load(ctx, file_skey_fetch(filepath))
 	end
 
 	debugger_rpc(function(ok, ctx)
@@ -568,12 +574,16 @@ function docs_page_on_load(page_after_load, filepath)
 	end, 'fetch_file', filepath)
 end
 
-function docs_page_on_save(page_after_save, filepath, ctx)
+function docs_page_on_save(page_after_save, filepath, ctx, file_skey)
+	local now_file_skey = file_skey_fetch(filepath)
+	if now_file_skey ~= file_skey then
+		return page_after_save(false, now_file_skey)
+	end
 	local f = io.open(puss.utf8_to_local(filepath), 'w')
-	if not f then return page_after_save(false) end
+	if not f then return page_after_save(false, now_file_skey) end
 	f:write(ctx)
 	f:close()
-	page_after_save(true)
+	return page_after_save(true, file_skey_fetch(filepath))
 end
 
 function docs_page_on_margin_click(page, modifiers, pos, margin)
