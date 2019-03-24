@@ -183,7 +183,7 @@ static int puss_lua_filename_format(lua_State* L) {
 	static int _lua_utf16_to_local(lua_State* L) { return _lua_wch2mbcs(L, 1, 0, "local"); }
 
 	static int puss_lua_file_list(lua_State* L) {
-		BOOL utf8 = lua_toboolean(L, 2);
+		BOOL utf8 = lua_isboolean(L, 2) && lua_toboolean(L, 2);
 		const WCHAR* wpath;
 		lua_Integer nfile = 0;
 		lua_Integer ndir = 0;
@@ -232,6 +232,53 @@ static int puss_lua_filename_format(lua_State* L) {
 		return 2;
 	}
 
+	static inline UINT64 uint64_cast(DWORD hi, DWORD lo) {
+		UINT64 r = hi;
+		r <<= 32;
+		r += lo;
+		return r;
+	}
+
+	static UINT64 unix_timestamp_cast(DWORD hi, DWORD lo) {
+		UINT64 r = hi;
+		r <<= 32;
+		r += lo;
+		return r / 10000000ULL - 11644473600ULL;
+	}
+
+	static int puss_lua_stat(lua_State* L) {
+		BOOL utf8 = lua_toboolean(L, 2);
+		const WCHAR* wfilename;
+		WIN32_FILE_ATTRIBUTE_DATA attrs;
+
+		// replace arg1 with(append \\*.* & convert to utf16)
+		lua_pushcfunction(L, utf8 ? _lua_utf8_to_utf16 : _lua_local_to_utf16);
+		lua_pushvalue(L, 1);
+		lua_call(L, 1, 1);
+		lua_replace(L, 1);
+		wfilename = (const WCHAR*)luaL_checkstring(L, 1);
+
+		memset(&attrs, 0, sizeof(WIN32_FILE_ATTRIBUTE_DATA));
+		if( !GetFileAttributesExW(wfilename, GetFileExInfoStandard, &attrs) ) {
+			DWORD err = GetLastError();
+			lua_pushboolean(L, 0);
+			lua_pushinteger(L, (lua_Integer)err);
+			return 2;
+		}
+		lua_pushboolean(L, 1);
+		if( lua_istable(L, -2) )
+			lua_pushvalue(L, -2);
+		else
+			lua_newtable(L);
+		lua_pushboolean(L, (attrs.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)!=0);	lua_setfield(L, -2, "dir");
+		lua_pushinteger(L, (lua_Integer)uint64_cast(attrs.nFileSizeHigh, attrs.nFileSizeLow));	lua_setfield(L, -2, "size");
+		lua_pushinteger(L, (lua_Integer)unix_timestamp_cast(attrs.ftLastWriteTime.dwHighDateTime, attrs.ftLastWriteTime.dwLowDateTime));	lua_setfield(L, -2, "mtime");
+		lua_pushinteger(L, (lua_Integer)unix_timestamp_cast(attrs.ftCreationTime.dwHighDateTime, attrs.ftCreationTime.dwLowDateTime));	lua_setfield(L, -2, "ctime");
+		lua_pushinteger(L, (lua_Integer)unix_timestamp_cast(attrs.ftLastAccessTime.dwHighDateTime, attrs.ftLastAccessTime.dwLowDateTime));	lua_setfield(L, -2, "atime");
+		lua_pushinteger(L, (lua_Integer)attrs.dwFileAttributes);	lua_setfield(L, -2, "attrs");
+		return 2;
+	}
+
 	static int puss_lua_local_to_utf8(lua_State* L) {
 		_lua_mbcs2wch(L, 1, 0, "local");
 		return _lua_wch2mbcs(L, -1, CP_UTF8, "utf8");
@@ -267,6 +314,30 @@ static int puss_lua_filename_format(lua_State* L) {
 			}
 		}
 		closedir(dir);
+		return 2;
+	}
+
+	static int puss_lua_stat(lua_State* L) {
+		struct stat64 st;
+		int res = stat64(filename, &st);
+		if( stat64(filename, &st)!=0 ) {
+			lua_pushboolean(L, 0);
+			lua_pushinteger(L, errno());
+			return 2;
+		}
+		lua_pushboolean(L, 1);
+		if( lua_istable(L, -2) )
+			lua_pushvalue(L, -2);
+		else
+			lua_newtable(L);
+		lua_pushboolean(L, (st.st_mode & _S_IFDIR)!=0);	lua_setfield(L, -2, "dir");
+		lua_pushinteger(L, (lua_Integer)st.st_size);	lua_setfield(L, -2, "size");
+		lua_pushinteger(L, (lua_Integer)st.st_mtime);	lua_setfield(L, -2, "mtime");
+		lua_pushinteger(L, (lua_Integer)st.st_ctime);	lua_setfield(L, -2, "ctime");
+		lua_pushinteger(L, (lua_Integer)st.st_atime);	lua_setfield(L, -2, "atime");
+		lua_pushinteger(L, (lua_Integer)attrs.st_mode);	lua_setfield(L, -2, "mode");
+		lua_pushinteger(L, (lua_Integer)attrs.st_gid);	lua_setfield(L, -2, "gid");
+		lua_pushinteger(L, (lua_Integer)attrs.st_uid);	lua_setfield(L, -2, "uid");
 		return 2;
 	}
 
@@ -364,6 +435,7 @@ static int puss_lua_sleep(lua_State* L) {
 static luaL_Reg puss_utils_methods[] =
 	{ {"filename_format", puss_lua_filename_format}
 	, {"file_list", puss_lua_file_list}
+	, {"stat", puss_lua_stat}
 	, {"local_to_utf8", puss_lua_local_to_utf8}
 	, {"utf8_to_local", puss_lua_utf8_to_local}
 	, {"timestamp", puss_lua_timestamp}

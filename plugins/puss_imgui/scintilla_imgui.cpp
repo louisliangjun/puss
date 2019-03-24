@@ -1170,13 +1170,13 @@ private:
 		}
 	}
 	
-#ifdef _WIN32
 	void Copy() override {
 		SelectionText selectedText;
 		CopySelectionRange(&selectedText, true);
 		CopyToClipboard(selectedText);
 	}
 
+#ifdef _WIN32
 	bool CanPaste() override {
 		if (!Editor::CanPaste())
 			return false;
@@ -1324,6 +1324,7 @@ private:
 			}
 		}
 		::CloseClipboard();
+		EnsureCaretVisible();
 		Redraw();
 	}
 
@@ -1392,13 +1393,6 @@ private:
 #else
 	void CopyToClipboard(const SelectionText &selectedText) override {
 		ImGui::SetClipboardText(selectedText.Data());
-	}
-	void Copy() override {
-		if (!sel.Empty()) {
-			SelectionText selectedText;
-			CopySelectionRange(&selectedText);
-			CopyToClipboard(selectedText);
-		}
 	}
 	void Paste() override {
 		const char* text = ImGui::GetClipboardText();

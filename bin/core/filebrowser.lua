@@ -72,13 +72,13 @@ __exports.remove_folders = function()
 	_root_version = _root_version + 1
 end
 
-local function fill_folder(dir, root)
+local function fill_folder(dir, root, matched)
 	local index, dirs, files = {}, {}, {}
 	dir.index, dir.dirs, dir.files = index, dirs, files
 
 	local exfile = current_expand_file
 	root._list(dir.path, function(ok, fs, ds)
-		current_expand_need = 'force'
+		if matched then current_expand_need = 'force' end
 		if not ok then
 			dir.index, dir.dirs, dir.files = nil, nil, nil
 			return
@@ -98,7 +98,7 @@ local DIR_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoub
 local FILE_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen
 
 local function show_folder(dir, root, depth)
-	if not dir.index then fill_folder(dir, root) end
+	if not dir.index then fill_folder(dir, root, depth) end
 	if dir.dirs then
 		for _,v in ipairs(dir.dirs) do
 			local matched = (current_expand_file and depth and v.name==current_expand_file[depth])
@@ -123,6 +123,7 @@ local function show_folder(dir, root, depth)
 			imgui.TreeNodeEx(v.name, flags, v.name)
 			if imgui.IsItemClicked() then file_clicked = v end
 			if matched and current_expand_need then
+				print(matched, current_expand_need)
 				current_expand_need = false
 				if not imgui.IsItemVisible() then imgui.SetScrollHereY() end
 			end
@@ -164,7 +165,11 @@ local function check_expand_file()
 end
 
 __exports.update = function()
+	-- TODO : toolbar
+
+	imgui.BeginChild('##folders')
 	current_expand_need = current_expand_need=='force'
+	if current_expand_need then print(current_expand_need) end
 	check_expand_file()
 
 	local remove_id
@@ -180,4 +185,5 @@ __exports.update = function()
 		end
 	end
 	if remove_id then table.remove(root_folders, remove_id) end
+	imgui.EndChild()
 end
