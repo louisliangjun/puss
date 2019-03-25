@@ -5,7 +5,6 @@ local thread = puss.import('core.thread')
 local docs = puss.import('core.docs')
 
 local inbuf = imgui.CreateByteArray(1024)
-local ftbuf = imgui.CreateByteArray(1024, 'lua c h inl cpp hpp cxx hxx')
 local current_sel = 0
 local current_key
 local current_progress
@@ -39,24 +38,17 @@ local function show_search_ui()
 		imgui.Text(current_progress)
 		imgui.PopItemWidth()
 	else
-		if imgui.Button('SearchText:') then start_search(inbuf:str(), ftbuf:str()) end
+		if imgui.Button('SearchText:') then start_search(inbuf:str()) end
 		imgui.SameLine()
 		local reclaim_focus
 		
 		imgui.PushItemWidth(-1)
 		if imgui.InputText('##FindText', inbuf, ImGuiInputTextFlags_AutoSelectAll|ImGuiInputTextFlags_EnterReturnsTrue) then
-			start_search(inbuf:str(), ftbuf:str())
+			start_search(inbuf:str())
 			reclaim_focus = true
 		end
-		if reclaim_focus then imgui.SetKeyboardFocusHere(-1) end
-		if imgui.Button('ResetFilter') then
-			local filter = {}
-			for suffix in ftbuf:str():gmatch('%S+') do filter[suffix]=true end
-			thread.broadcast(nil, nil, 'set_suffix_filter', filter)
-		end
-		imgui.SameLine()
-		imgui.InputText('##FilterText', ftbuf)
 		imgui.PopItemWidth()
+		if reclaim_focus then imgui.SetKeyboardFocusHere(-1) end
 	end
 
 	imgui.BeginChild('##SearchResults')

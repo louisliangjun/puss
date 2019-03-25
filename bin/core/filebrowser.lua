@@ -2,6 +2,8 @@
 
 local pages = puss.import('core.pages')
 local docs = puss.import('core.docs')
+local icons = puss.import('core.icons')
+local thread = puss.import('core.thread')
 
 --[[
 file {
@@ -24,6 +26,18 @@ root_dir : dir {
 _root_version = _root_version or 0
 _root_folders = _root_folders or {}
 local root_folders = _root_folders
+
+local setting_open = false
+local ftbuf = imgui.CreateByteArray(1024, 'lua c h inl cpp hpp cxx hxx')
+local suffix_filter = {}
+
+local function refresh_suffix_filter()
+	suffix_filter = {}
+	for suffix in ftbuf:str():gmatch('%S+') do suffix_filter[suffix]=true end
+	thread.broadcast(nil, nil, 'set_suffix_filter', suffix_filter)
+end
+
+refresh_suffix_filter()
 
 local current_selected_label
 local current_expand_need
@@ -72,6 +86,12 @@ __exports.remove_folders = function()
 	_root_version = _root_version + 1
 end
 
+local function check_filter(filepath, filters)
+	if not (filters and next(filters)) then return true end
+	local suffix = filepath:match('.*%.(%w+)$')
+	if suffix and filters[suffix] then return true end
+end
+
 local function fill_folder(dir, root, matched)
 	local index, dirs, files = {}, {}, {}
 	dir.index, dir.dirs, dir.files = index, dirs, files
@@ -89,7 +109,9 @@ local function fill_folder(dir, root, matched)
 			table.insert(dirs, {name=v, path=dir.path..'/'..v})
 		end
 		for i,v in ipairs(fs) do
-			table.insert(files, {name=v, parent=dir})
+			if check_filter(v, suffix_filter) then
+				table.insert(files, {name=v, parent=dir})
+			end
 		end
 	end)
 end
@@ -165,7 +187,23 @@ local function check_expand_file()
 end
 
 __exports.update = function()
-	-- TODO : toolbar
+	if icons.button('Setting', 'setting', 24) then setting_open = not setting_open end
+	imgui.SameLine()
+	if icons.button('Refresh', 'refresh', 24, 'refresh all folders') then
+		for i,v in ipairs(root_folders) do
+			v.index, v.dirs, v.files = nil, nil, nil
+		end
+	end
+
+	if setting_open then
+		imgui.Separator()
+		imgui.PushItemWidth(-1)
+		if imgui.Button('ResetFilter') then refresh_suffix_filter() end
+		imgui.SameLine()
+		imgui.InputText('##FilterText', ftbuf)
+		imgui.PopItemWidth()
+		imgui.Separator()
+	end
 
 	imgui.BeginChild('##folders')
 	current_expand_need = current_expand_need=='force'
