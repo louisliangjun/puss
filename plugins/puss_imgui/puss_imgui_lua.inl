@@ -135,7 +135,7 @@ static int imgui_clipper_pcall_lua(lua_State* L) {
 	return 0;
 }
 
-static int im_scintilla_get_style(lua_State* L) {
+static int imgui_get_style_var(lua_State* L) {
 	ImGuiStyleVar var = (ImGuiStyleVar)luaL_checkinteger(L, 1);
 	ImGuiStyle& style = ImGui::GetStyle();
 	switch(var) {
@@ -613,7 +613,7 @@ static luaL_Reg imgui_lua_apis[] =
 	, {"CreateScintilla", im_scintilla_create}
 	, {"GetScintillaLexers", im_scintilla_lexers}
 
-	, {"GetStyle", im_scintilla_get_style}
+	, {"GetStyleVar", imgui_get_style_var}
 	, {"GetIODeltaTime", imgui_getio_delta_time_lua}
 	, {"IsShortcutPressed", imgui_is_shortcut_pressed_lua}
 	, {"FetchExtraKeys", imgui_fetch_extra_keys_lua}

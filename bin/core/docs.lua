@@ -149,7 +149,7 @@ end
 local function show_dialog_begin(page, label)
 	local x, y = imgui.GetWindowPos()
 	local w = imgui.GetWindowWidth()
-	imgui.SetNextWindowPos(x + w - imgui.GetStyle(ImGuiStyleVar_ScrollbarSize), y, ImGuiCond_Always, 1, 0)
+	imgui.SetNextWindowPos(x + w - imgui.GetStyleVar(ImGuiStyleVar_ScrollbarSize), y, ImGuiCond_Always, 1, 0)
 	if not imgui.BeginPopup(DIALOG_LABEL) then
 		dialog_show = nil
 		return false

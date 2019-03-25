@@ -15,7 +15,7 @@ shotcuts.register('search/next', 'Next search result', 'F4', false, false, false
 local function show_result(ps, pe)
 	for i=ps,pe do
 		local v = results[i]
-		imgui.PushStyleColor(ImGuiCol_Text, 0.75, 0.75, 0, 1)
+		imgui.PushStyleColor(ImGuiCol_Text, 0.5, 0.5, 0, 1)
 		local sel = (current_sel==i)
 		local active = imgui.Selectable(v[1], sel)
 		imgui.PopStyleColor()
