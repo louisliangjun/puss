@@ -585,7 +585,9 @@ BOOL WINAPI DllMain(HANDLE hinstDLL, DWORD dwReason, LPVOID lpvReserved) {
 		puss_imgui_wc.lpfnWndProc = WndProc;
 		puss_imgui_wc.hInstance = (HINSTANCE)hinstDLL;
 		// puss_imgui_wc.hIcon = LoadIcon(puss_imgui_wc.hInstance, MAKEINTRESOURCE(IDI_ICON1));
-		EnumResourceNamesW(GetModuleHandle(NULL), RT_GROUP_ICON, on_enum_icons, NULL);
+		puss_imgui_wc.hIcon = LoadIconW(GetModuleHandle(NULL), L"IDI_PUSS");
+		if( !puss_imgui_wc.hIcon )
+			EnumResourceNamesW(GetModuleHandle(NULL), RT_GROUP_ICON, on_enum_icons, NULL);
 		RegisterClassEx(&puss_imgui_wc);
 		_win32_vk_map_init();
 		break;
