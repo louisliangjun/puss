@@ -11,8 +11,6 @@ local focused = false
 local cursor = 1
 local results = {}
 
-local response_queue = puss.queue_create()
-
 shotcuts.register('miniline/open', 'Open Miniline', 'P', true, false, false, false)
 
 __exports.on_search_result = function(ok, key, res)

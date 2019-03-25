@@ -29,7 +29,7 @@ local function do_save_page(page)
 
 	local function page_after_save(ok, file_skey)
 		if not ok then
-			if page.file_skey==file_skey then				
+			if page.file_skey~=file_skey then				
 				page.saving_tips = 'file modified by other.'
 			else
 				page.saving_tips = 'save file failed, maybe readonly.'
