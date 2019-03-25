@@ -19,14 +19,13 @@ pcall(function()
 	__icons_tex = ICONS_TEX
 end)
 
-
-__exports.button = function(label, icon, size, hint)
+local function image_button(label, icon, size, hint, tint_r, tint_g, tint_b, tint_a, frame_padding, bg_r, bg_g, bg_b, bg_a)
 	local clicked
 	if type(icon)=='string' then icon = ICONS[icon] end
 	if icon and ICONS_TEX then
 		local u = ICON_HEIGHT / ICON_WIDTH
 		imgui.PushID(label)
-		clicked = imgui.ImageButton(ICONS_TEX, size, size, u*(icon-1), 0, u*icon, 1)
+		clicked = imgui.ImageButton(ICONS_TEX, size, size, u*(icon-1), 0, u*icon, 1, frame_padding, bg_r, bg_g, bg_b, bg_a, tint_r, tint_g, tint_b, tint_a)
 		imgui.PopID()
 	else
 		clicked = imgui.Button(label)
@@ -38,3 +37,6 @@ __exports.button = function(label, icon, size, hint)
 	end
 	return clicked
 end
+
+__exports.button = image_button
+

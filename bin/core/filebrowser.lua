@@ -186,13 +186,18 @@ local function check_expand_file()
 	end
 end
 
+local function refresh_folders()
+	for i,v in ipairs(root_folders) do
+		v.index, v.dirs, v.files = nil, nil, nil
+	end
+end
+
 __exports.update = function()
-	if icons.button('Setting', 'setting', 24) then setting_open = not setting_open end
+	if icons.button('Refresh', 'refresh', 24, 'refresh all folders') then refresh_folders() end
 	imgui.SameLine()
-	if icons.button('Refresh', 'refresh', 24, 'refresh all folders') then
-		for i,v in ipairs(root_folders) do
-			v.index, v.dirs, v.files = nil, nil, nil
-		end
+	if icons.button('Setting', 'setting', 24, 'close setting panel', 1, 1, 1, setting_open and 0.5 or 1) then
+		if setting_open then refresh_folders() end
+		setting_open = not setting_open
 	end
 
 	if setting_open then
@@ -202,9 +207,9 @@ __exports.update = function()
 		imgui.SameLine()
 		imgui.InputText('##FilterText', ftbuf)
 		imgui.PopItemWidth()
-		imgui.Separator()
 	end
 
+	imgui.Separator()
 	imgui.BeginChild('##folders')
 	current_expand_need = current_expand_need=='force'
 	-- if current_expand_need then print(current_expand_need) end
