@@ -73,7 +73,7 @@ local function show_search_ui()
 			end
 		end
 	end
-	imgui.clipper_pcall(#results, line_height, show_result)
+	imgui.clipper_pcall(#results+5, line_height, show_result)
 	imgui.EndChild()
 end
 
