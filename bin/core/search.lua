@@ -19,8 +19,9 @@ local function show_result(ps, pe)
 		local sel = (current_sel==i)
 		local active = imgui.Selectable(v[1], sel)
 		imgui.PopStyleColor()
-		imgui.SameLine()
-		imgui.Text(v[2])
+		imgui.SameLine(nil, 0);	imgui.Text(v[2])
+		imgui.SameLine(nil, 0);	imgui.PushStyleColor(ImGuiCol_Text, 0.7, 0.5, 0, 1);	imgui.Text(v[3]);	imgui.PopStyleColor()
+		imgui.SameLine(nil, 0);	imgui.Text(v[4])
 		if active then
 			current_sel = i
 			local file, line = v[1]:match('^(.+):(%d+)$')
@@ -87,8 +88,10 @@ end
 
 __exports.on_search_result = function(key, filepath, res)
 	if current_key~=key then return end
-	for i=1,#res,2 do
-		table.insert(results, {string.format('%s:%s', filepath, res[i]), res[i+1]})
+	local offset = #results
+	for i, v in ipairs(res) do
+		local line, a, b, c = table.unpack(v)
+		results[offset+i] = {string.format('%s:%s', filepath, line), a, b, c}
 	end
 end
 

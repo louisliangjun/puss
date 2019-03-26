@@ -115,10 +115,10 @@ local function do_search_in_file(filepath, search_key)
 	local res
 	for line in io.lines(puss.utf8_to_local(filepath)) do
 		n = n + 1
-		if line:find(search_key, 1, true) then
+		local ps, pe = line:find(search_key, 1, true)
+		if ps then
 			res = res or {}
-			table.insert(res, n)
-			table.insert(res, line)
+			res[#res+1] = {n, line:sub(1,ps-1), line:sub(ps,pe), line:sub(pe+1)}
 		end
 	end
 	return res
