@@ -12,12 +12,13 @@ local function do_build(parent, path_keys)
 		fkeys[fk] = true
 
 		local file_keys = {}
-		for i,dk in pairs(path_keys) do file_keys[dk]=i end
-		file_keys[fk] = 10000
+		for i,dk in pairs(path_keys) do file_keys[dk]=i*1000 end
+		file_keys[fk] = 10000000
 		files[parent..'/'..f] = file_keys
 	end
 	for _, d in ipairs(ds) do
 		local dk = d:lower()
+		fkeys[dk] = true
 		table.insert(path_keys, dk)
 		do_build(parent..'/'..d, path_keys)
 		table.remove(path_keys)
@@ -52,7 +53,7 @@ end
 
 local function do_file_search(search_key)
 	local all_keys = {}	-- [ {key1=true, key2=true, ...}, ... ]
-	for key in search_key:gmatch('%S+') do
+	for key in search_key:gmatch('[^%s/\\]+') do
 		key = key:lower()
 		local keys = {}
 		for k in pairs(fkeys) do
