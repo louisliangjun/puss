@@ -51,7 +51,9 @@
 #else
 	#include <unistd.h>
 	#include <dirent.h>
+	#include <errno.h>
 	#include <sys/time.h>
+	#include <sys/stat.h>
 #endif
 
 typedef struct _FStr {
@@ -318,11 +320,12 @@ static int puss_lua_filename_format(lua_State* L) {
 	}
 
 	static int puss_lua_stat(lua_State* L) {
-		struct stat64 st;
-		int res = stat64(filename, &st);
-		if( stat64(filename, &st)!=0 ) {
+		struct stat st;
+		const char* filename = luaL_checkstring(L, 1);
+		int res = stat(filename, &st);
+		if( res ) {
 			lua_pushboolean(L, 0);
-			lua_pushinteger(L, errno());
+			lua_pushinteger(L, errno);
 			return 2;
 		}
 		lua_pushboolean(L, 1);
@@ -330,14 +333,14 @@ static int puss_lua_filename_format(lua_State* L) {
 			lua_pushvalue(L, -2);
 		else
 			lua_newtable(L);
-		lua_pushboolean(L, (st.st_mode & _S_IFDIR)!=0);	lua_setfield(L, -2, "dir");
+		lua_pushboolean(L, (st.st_mode & S_IFDIR)!=0);	lua_setfield(L, -2, "dir");
 		lua_pushinteger(L, (lua_Integer)st.st_size);	lua_setfield(L, -2, "size");
 		lua_pushinteger(L, (lua_Integer)st.st_mtime);	lua_setfield(L, -2, "mtime");
 		lua_pushinteger(L, (lua_Integer)st.st_ctime);	lua_setfield(L, -2, "ctime");
 		lua_pushinteger(L, (lua_Integer)st.st_atime);	lua_setfield(L, -2, "atime");
-		lua_pushinteger(L, (lua_Integer)attrs.st_mode);	lua_setfield(L, -2, "mode");
-		lua_pushinteger(L, (lua_Integer)attrs.st_gid);	lua_setfield(L, -2, "gid");
-		lua_pushinteger(L, (lua_Integer)attrs.st_uid);	lua_setfield(L, -2, "uid");
+		lua_pushinteger(L, (lua_Integer)st.st_mode);	lua_setfield(L, -2, "mode");
+		lua_pushinteger(L, (lua_Integer)st.st_gid);	lua_setfield(L, -2, "gid");
+		lua_pushinteger(L, (lua_Integer)st.st_uid);	lua_setfield(L, -2, "uid");
 		return 2;
 	}
 
