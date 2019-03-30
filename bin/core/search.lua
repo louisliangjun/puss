@@ -15,6 +15,7 @@ shotcuts.register('search/next', 'Next search result', 'F4', false, false, false
 local function show_result(ps, pe)
 	for i=ps,pe do
 		local v = results[i]
+		if not v then break end
 		imgui.PushStyleColor(ImGuiCol_Text, 0.5, 0.5, 0, 1)
 		local sel = (current_sel==i)
 		local active = imgui.Selectable(v[1], sel)
@@ -61,7 +62,7 @@ local function show_search_ui()
 		if v then
 			local file, line = v[1]:match('^(.+):(%d+)$')
 			-- print('open', file, line)
-			docs.open(file, math.tointeger(line)-1)
+			docs.open(file, math.tointeger(line)-1, v[3])
 
 			local pos = (current_sel - 1) * line_height
 			local top = imgui.GetScrollY()

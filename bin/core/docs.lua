@@ -194,7 +194,7 @@ dialog_modes['docs/jump'] = function(page, active)
 			local line = tonumber(inbuf:str())
 			if line then
 				dialog_show = nil	-- hide dialog
-				page.scroll_to_line = line-1
+				page.scroll_to_line, page.scroll_to_search_text = line-1, nil
 				imgui.CloseCurrentPopup()
 			end
 		end
@@ -291,35 +291,39 @@ function tabs_page_draw(page, active_page)
 		imgui.SetNextWindowFocus()
 	end
 
-	local scroll_to_line = page.scroll_to_line
-
 	imgui.BeginChild(DOC_LABEL, nil, nil, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
-		local sv = page.sv
-		if view_set_focus then
-			view_set_focus = false
-			imgui.SetWindowFocus()
-		end
-		if scroll_to_line then
-			page.scroll_to_line = nil
-			sv:GotoLine(scroll_to_line)
-			sv:ScrollCaret()
-			sv()
-			sv:GotoLine(scroll_to_line)
-			sv:ScrollCaret()
+	local sv = page.sv
+	if view_set_focus then
+		view_set_focus = false
+		imgui.SetWindowFocus()
+	end
+
+	local scroll_to_line, search_text = page.scroll_to_line, page.scroll_to_search_text
+	if scroll_to_line then
+		page.scroll_to_line, page.scroll_to_search_text = nil, nil
+		sv:GotoLine(scroll_to_line)
+		sv:ScrollCaret()
+		sv()
+		if search_text then
+			do_search(sv, search_text)
 		else
-			sv()
+			sv:GotoLine(scroll_to_line)
+			sv:ScrollCaret()
 		end
-		page.unsaved = sv:GetModify()
-		puss.trace_pcall(hook, 'docs_page_after_draw', page)
+	else
+		sv()
+	end
+	page.unsaved = sv:GetModify()
+	puss.trace_pcall(hook, 'docs_page_after_draw', page)
 
-		-- if imgui.IsWindowFocused(ImGuiFocusedFlags_ChildWindows) then check_dialog_mode(page) end
-		check_dialog_mode(page)
+	-- if imgui.IsWindowFocused(ImGuiFocusedFlags_ChildWindows) then check_dialog_mode(page) end
+	check_dialog_mode(page)
 
-		if dialog_show then
-			local active = dialog_active
-			dialog_active = false
-			dialog_show(page, active)
-		end
+	if dialog_show then
+		local active = dialog_active
+		dialog_active = false
+		dialog_show(page, active)
+	end
 	imgui.EndChild()
 end
 
@@ -381,7 +385,7 @@ __exports.lookup = function(file)
 	return page, label
 end
 
-__exports.open = function(file, line)
+__exports.open = function(file, line, search_text)
 	if not file then
 		view_set_focus = true
 		return
@@ -389,7 +393,7 @@ __exports.open = function(file, line)
 
 	local filepath, name, label, page = lookup_page(file)
 	if page then
-		if line then page.scroll_to_line = line end
+		if line then page.scroll_to_line, page.scroll_to_search_text = line, search_text end
 		if label ~= pages.selected() then
 			pages.active(label)
 		else
@@ -416,7 +420,7 @@ __exports.open = function(file, line)
 		-- sv:ConvertEOLs(sv:GetEOLMode())
 		sv:EmptyUndoBuffer()
 		page.file_skey = file_skey
-		if line then page.scroll_to_line = line end
+		if line then page.scroll_to_line, page.scroll_to_search_text = line, search_text end
 	end
 
 	puss.trace_pcall(hook, 'docs_page_on_load', page_after_load, filepath)

@@ -68,7 +68,7 @@ __exports.update = function()
 		end
 	end
 
-	if shotcuts.is_pressed('page/save_ all') then save_all() end
+	if shotcuts.is_pressed('page/save_all') then save_all() end
 	if shotcuts.is_pressed('page/close_all') then close_all() end
 end
 
@@ -130,13 +130,14 @@ __exports.close_all = function()
 		if page.unsaved then
 			local close = page.module.tabs_page_close
 			if close then imgui.protect_pcall(close, page) end
-		else
-			local destroy = page.module.tabs_page_destroy
-			if destroy then imgui.protect_pcall(destroy, page) end
-			index[page.label] = nil
-			if selected_page_label==page.label then selected_page_label = nil end
-			imgui.SetTabItemClosed(page.label)
-			table.remove(pages, i)
+			break
 		end
+
+		local destroy = page.module.tabs_page_destroy
+		if destroy then imgui.protect_pcall(destroy, page) end
+		index[page.label] = nil
+		if selected_page_label==page.label then selected_page_label = nil end
+		imgui.SetTabItemClosed(page.label)
+		table.remove(pages, i)
 	end
 end
