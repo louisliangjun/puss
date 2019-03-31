@@ -298,17 +298,9 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 
 			if( res > 0 ) {
 				POINT pos;
-				g_DropFiles.resize(res);
-				g_DropPos = ImVec2(-FLT_MAX, -FLT_MAX);
-				if (!::GetCursorPos(&pos))
-					break;
-				// Our back-end can tell which window is under the mouse cursor (not every back-end can), so pass that info to imgui
-				if (HWND hovered_hwnd = ::WindowFromPoint(pos)) {
-					if (ImGuiViewport* viewport = ImGui::FindViewportByPlatformHandle((void*)hovered_hwnd)) {
-						POINT client_pos = pos;
-						::ScreenToClient(hovered_hwnd, &client_pos);
-						g_DropPos = ImVec2(viewport->Pos.x + (float)client_pos.x, viewport->Pos.y + (float)client_pos.y);
-					}
+				if( GetCursorPos(&pos) ) {
+					g_DropFiles.resize(res);
+					g_DropPos = ImVec2((float)(pos.x), (float)(pos.y));
 				}
 			} else {
 				g_DropFiles.clear();
@@ -678,6 +670,17 @@ static void ImGui_Puss_DropCallback(GLFWwindow* w, int count, const char** files
 		g_DropFiles.push_back('\n');
 	}
 	glfwFocusWindow(w);
+
+	{
+		int wx = 0;
+		int wy = 0;
+		double mx = -FLT_MAX;
+		double my = -FLT_MAX;
+		glfwGetWindowPos(w, &wx, &wy);
+		glfwGetCursorPos(w, &mx, &my);
+		g_DropPos.x = (float)(wx + mx);
+		g_DropPos.y = (float)(wy + my);
+	}
 }
 
 static bool create_window(const char* title, int width, int height) {
