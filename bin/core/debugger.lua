@@ -604,6 +604,17 @@ local function editor_window()
 	imgui.End()
 end
 
+local function fs_list(dir, callback)
+	if use_local_fs then
+		local fs, ds = puss.file_list(dir, true)
+		callback(true, fs, ds)
+	elseif socket and socket:valid() then
+		debugger_rpc(callback, 'file_list', dir)
+	else
+		callback(false)
+	end
+end
+
 local MAIN_DOCK_WINDOW_FLAGS = ( ImGuiWindowFlags_NoTitleBar
 	| ImGuiWindowFlags_NoCollapse
 	| ImGuiWindowFlags_NoResize
@@ -638,7 +649,7 @@ local function show_main_window()
 	imgui.SetNextWindowPos(x, y + menu_size, ImGuiCond_FirstUseEver)
 	imgui.SetNextWindowSize(left_size, h - menu_size, ImGuiCond_FirstUseEver)
 	imgui.Begin("FileBrowser")
-	filebrowser.update()
+	filebrowser.update(fs_list)
 	imgui.End()
 
 	imgui.SetNextWindowPos(x + left_size, y + menu_size, ImGuiCond_FirstUseEver)
@@ -667,17 +678,6 @@ local function do_update()
 
 	if run_sign and imgui.should_close() then
 		run_sign = false
-	end
-end
-
-local function fs_list(dir, callback)
-	if use_local_fs then
-		local fs, ds = puss.file_list(dir, true)
-		callback(true, fs, ds)
-	elseif socket and socket:valid() then
-		debugger_rpc(callback, 'file_list', dir)
-	else
-		callback(false)
 	end
 end
 

@@ -27,8 +27,9 @@ _root_version = _root_version or 0
 _root_folders = _root_folders or {}
 local root_folders = _root_folders
 
-local setting_open = false
+local panel = nil
 local ftbuf = imgui.CreateByteArray(1024, 'lua c h inl cpp hpp cxx hxx')
+local ptbuf = imgui.CreateByteArray(1024)
 local suffix_filter = {}
 
 local function refresh_suffix_filter()
@@ -192,21 +193,44 @@ local function refresh_folders()
 	end
 end
 
-__exports.update = function()
+__exports.update = function(async_list_dir)
+	if panel then
+		if icons.button('Close', 'delete', 24, 'close panel', 0.6, 0, 0, 1) then
+			local close_panel = panel
+			panel = nil
+			if close_panel=='Setting' then refresh_folders() end
+		end
+		imgui.SameLine(nil, 16)
+	end
+	if icons.button('Setting', 'setting', 24, 'close setting panel') then panel = 'Setting' end
+	imgui.SameLine()
 	if icons.button('Refresh', 'refresh', 24, 'refresh all folders') then refresh_folders() end
 	imgui.SameLine()
-	if icons.button('Setting', 'setting', 24, 'close setting panel', 1, 1, 1, setting_open and 0.5 or 1) then
-		if setting_open then refresh_folders() end
-		setting_open = not setting_open
-	end
+	if icons.button('Add', 'add', 24, 'add new folder') then panel = 'Add' end
 
-	if setting_open then
+	if panel then
 		imgui.Separator()
 		imgui.PushItemWidth(-1)
-		if imgui.Button('ResetFilter') then refresh_suffix_filter() end
-		imgui.SameLine()
-		imgui.InputText('##FilterText', ftbuf)
+		if panel=='Setting' then
+			if imgui.Button('ResetFilter') then refresh_suffix_filter() end
+			imgui.SameLine()
+			imgui.InputText('##FilterText', ftbuf)
+		elseif panel=='Add' then
+			if imgui.Button('Add Path') then append_folder(puss.filename_format(ptbuf:str(), true), async_list_dir) end
+			imgui.SameLine()
+			imgui.InputText('##PathText', ptbuf)
+		end
 		imgui.PopItemWidth()
+	end
+
+	local drop_folders_here = imgui.GetDropFiles(true)
+	if drop_folders_here then
+		for path in drop_folders_here:gmatch('(.-)\n') do
+			local ok, st = puss.stat(path, true)
+			if ok and st.dir then
+				append_folder(puss.filename_format(path, true), async_list_dir)
+			end
+		end
 	end
 
 	imgui.Separator()

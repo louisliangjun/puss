@@ -135,16 +135,7 @@ end
 
 local function filebrowser_window()
 	imgui.Begin("FileBrowser")
-	filebrowser.update()
-	local drop_folders_here = imgui.GetDropFiles(true)
-	if drop_folders_here then
-		for path in drop_folders_here:gmatch('(.-)\n') do
-			local ok, st = puss.stat(path, true)
-			if ok and st.dir then
-				filebrowser.append_folder(puss.filename_format(path, true), fs_list)
-			end
-		end
-	end
+	filebrowser.update(fs_list)
 	imgui.End()
 end
 
