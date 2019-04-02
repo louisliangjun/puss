@@ -27,7 +27,6 @@ _root_version = _root_version or 0
 _root_folders = _root_folders or {}
 local root_folders = _root_folders
 
-local panel = nil
 local ftbuf = imgui.CreateByteArray(1024, 'lua c h inl cpp hpp cxx hxx')
 local ptbuf = imgui.CreateByteArray(1024)
 local suffix_filter = {}
@@ -193,6 +192,9 @@ local function refresh_folders()
 	end
 end
 
+local open_setting = false
+local open_add_dir = false
+
 __exports.update = function(async_list_dir)
 	if panel then
 		if icons.button('Close', 'delete', 24, 'close panel', 0.6, 0, 0, 1) then
@@ -202,24 +204,27 @@ __exports.update = function(async_list_dir)
 		end
 		imgui.SameLine(nil, 16)
 	end
-	if icons.button('Setting', 'setting', 24, 'close setting panel') then panel = 'Setting' end
+	if icons.button('Setting', 'setting', 24, 'close setting panel', open_setting and 0.4 or 1) then open_setting = not open_setting end
 	imgui.SameLine()
 	if icons.button('Refresh', 'refresh', 24, 'refresh all folders') then refresh_folders() end
 	imgui.SameLine()
-	if icons.button('Add', 'add', 24, 'add new folder') then panel = 'Add' end
+	if icons.button('Add', 'add', 24, 'add new folder', open_add_dir and 0.4 or 1) then open_add_dir = not open_add_dir end
 
-	if panel then
+	if open_setting then
 		imgui.Separator()
+		if imgui.Button('ResetFilter') then refresh_suffix_filter() end
+		imgui.SameLine()
 		imgui.PushItemWidth(-1)
-		if panel=='Setting' then
-			if imgui.Button('ResetFilter') then refresh_suffix_filter() end
-			imgui.SameLine()
-			imgui.InputText('##FilterText', ftbuf)
-		elseif panel=='Add' then
-			if imgui.Button('Add Path') then append_folder(puss.filename_format(ptbuf:str(), true), async_list_dir) end
-			imgui.SameLine()
-			imgui.InputText('##PathText', ptbuf)
-		end
+		imgui.InputText('##FilterText', ftbuf)
+		imgui.PopItemWidth()
+	end
+
+	if open_add_dir then
+		imgui.Separator()
+		if imgui.Button('Add Path') then append_folder(puss.filename_format(ptbuf:str(), true), async_list_dir) end
+		imgui.SameLine()
+		imgui.PushItemWidth(-1)
+		imgui.InputText('##PathText', ptbuf)
 		imgui.PopItemWidth()
 	end
 
