@@ -28,7 +28,7 @@ _root_folders = _root_folders or {}
 local root_folders = _root_folders
 
 local ftbuf = imgui.CreateByteArray(1024, 'lua c h inl cpp hpp cxx hxx')
-local ptbuf = imgui.CreateByteArray(1024)
+local ptbuf = imgui.CreateByteArray(1024, puss._path)
 local suffix_filter = {}
 
 local function refresh_suffix_filter()
@@ -206,9 +206,9 @@ __exports.update = function(async_list_dir)
 	end
 	if icons.button('Setting', 'setting', 24, 'close setting panel', open_setting and 0.4 or 1) then open_setting = not open_setting end
 	imgui.SameLine()
-	if icons.button('Refresh', 'refresh', 24, 'refresh all folders') then refresh_folders() end
-	imgui.SameLine()
 	if icons.button('Add', 'add', 24, 'add new folder', open_add_dir and 0.4 or 1) then open_add_dir = not open_add_dir end
+	imgui.SameLine()
+	if icons.button('Refresh', 'refresh', 24, 'refresh all folders') then refresh_folders() end
 
 	if open_setting then
 		imgui.Separator()
