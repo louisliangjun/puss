@@ -112,13 +112,23 @@ static inline XYPOSITION XYPositionMin(XYPOSITION a, XYPOSITION b) {
 	return a < b ? a : b;
 }
 
+class FontIM {
+public:
+	FontIM() : size(kDefaultFontSize) {}
+public:
+	float	size;
+};
+
 Font::Font() : fid(0) {}
 
 Font::~Font() {}
 
 void Font::Create(const FontParameters &fp) {
+	FontIM* ft;
 	Release();
-	// NOTICE imgui maybe free, but SciFont unknown this: fid = ImGui::GetFont();
+	ft = new FontIM();
+	ft->size = fp.size;
+	fid = ft;
 }
 
 void Font::Release() {
@@ -127,7 +137,14 @@ void Font::Release() {
 	}
 }
 
-inline ImFont* im_font_cast(Font& font) {
+static FontIM null_font;
+
+inline FontIM& im_font_cast(Font& font) {
+	FontIM* ft = (FontIM*)(font.GetID());
+	return ft ? *ft : null_font;
+}
+
+inline ImFont* im_font_current() {
 	// NOTICE imgui maybe free, but SciFont unknown this: return (ImFont*)font.GetID();
 	return ImGui::GetCurrentContext() ? ImGui::GetFont() : NULL;
 }
@@ -350,13 +367,24 @@ public:
 	}
 
 public:
-	void DrawTextBase(PRectangle rc, Font &font_, XYPOSITION ybase, const char *s, int len, ColourDesired fore) {
+	void DrawTextBase(PRectangle rc, Font &font, XYPOSITION ybase, const char *s, int len, ColourDesired fore) {
 		ImDrawList* canvas = ImGui::GetWindowDrawList();
-		ImVec2 pos(offset.x + rc.left, offset.y + rc.top);
-		ImVec4 rect(pos.x, pos.y, offset.x + rc.right, offset.y + rc.bottom);
-		ImFont* font = im_font_cast(font_);
-		if( font ) {
-			canvas->AddText(font, font->FontSize * font_scale, pos, SetPenColour(fore), s, s+len, 0.0f, &rect);
+		ImVec2 a(offset.x + rc.left, offset.y + rc.top);
+		ImVec2 b(offset.x + rc.right, offset.y + rc.bottom);
+		;
+		float font_size = im_font_cast(font).size;
+		if( font_size < 4.0f ) {
+			canvas->PathLineTo(ImVec2(a.x+0.5f, a.y+0.5f));
+			canvas->PathLineTo(ImVec2(b.x-0.5f, a.y+0.5f));
+			canvas->PathLineTo(ImVec2(b.x-0.5f, b.y-0.5f));
+			canvas->PathLineTo(ImVec2(a.x+0.5f, b.y-0.5f));
+			canvas->PathFillConvex(SetPenColour(fore));
+		} else {
+			ImFont* imfont = im_font_current();
+			if( imfont ) {
+				ImVec4 rect(a.x, a.y, b.x, b.y);
+				canvas->AddText(imfont, im_font_cast(font).size, a, SetPenColour(fore), s, s+len, 0.0f, &rect);
+			}
 		}
 #if 0
 		canvas->PathRect(ImVec2(rect.x, rect.y), ImVec2(rect.z, rect.w));
@@ -380,8 +408,8 @@ public:
 			}
 		}
 	}
-	XYPOSITION DoMeasureWidths(Font &font_, const char *s, int len, XYPOSITION *positions) {
-		ImFont* font = im_font_cast(font_);
+	XYPOSITION DoMeasureWidths(Font &font, const char *s, int len, XYPOSITION *positions) {
+		ImFont* imfont = im_font_current();
 		XYPOSITION w = 0.0f;
 		unsigned int wch = 0;
 		const char *e = s + len;
@@ -391,11 +419,11 @@ public:
 				break;
 			if( !wch )
 				break;
-			if( font ) {
-				const ImFontGlyph* g = font->FindGlyph((ImWchar)wch);
-				w += (g->AdvanceX * font_scale);
+			if( imfont ) {
+				const ImFontGlyph* g = imfont->FindGlyph((ImWchar)wch);
+				w += (g->AdvanceX * (im_font_cast(font).size / imfont->FontSize));
 			} else {
-				w += (kDefaultFontSize * font_scale);
+				w += im_font_cast(font).size;
 			}
 			if( positions ) {
 				for(int i=0; i<glyph_len; ++i) {
@@ -415,20 +443,19 @@ public:
 	XYPOSITION WidthChar(Font &font_, char ch) override {
 		return DoMeasureWidths(font_, &ch, 1, NULL);
 	}
-	XYPOSITION Ascent(Font &font_) override {
-		ImFont* font = im_font_cast(font_);
-		return font ? (font->Ascent * font_scale): 1.0f;
+	XYPOSITION Ascent(Font &font) override {
+		ImFont* imfont = im_font_current();
+		return imfont ? (imfont->Ascent * (im_font_cast(font).size / imfont->FontSize)): 1.0f;
 	}
-	XYPOSITION Descent(Font &font_) override {
-		ImFont* font = im_font_cast(font_);
-		return font ? -(font->Descent * font_scale) : 1.0f;
+	XYPOSITION Descent(Font &font) override {
+		ImFont* imfont = im_font_current();
+		return imfont ? -(imfont->Descent * (im_font_cast(font).size / imfont->FontSize)): 1.0f;
 	}
 	XYPOSITION InternalLeading(Font &font_) override {
 		return 0.0f;
 	}
-	XYPOSITION Height(Font &font_) override {
-		ImFont* font = im_font_cast(font_);
-		return font ? (font->FontSize * font_scale) : 18.0f;
+	XYPOSITION Height(Font &font) override {
+		return im_font_cast(font).size;
 	}
 	XYPOSITION AverageCharWidth(Font &font_) override {
 		return WidthChar(font_, 'n');
@@ -1021,7 +1048,7 @@ public: 	// Public for scintilla_send_message
 			ImGui::EndPopup();
 		}
 	}
-	void Draw(ImGuiWindow* window) {
+	void Draw(ImGuiWindow* window, int draw) {
 		float totalHeight = (float)((pdoc->LinesTotal() + 1) * vs.lineHeight);
 		float totalWidth = (float)(scrollWidth * vs.aveCharWidth);
 		ImVec2 total_sz(window->ClipRect.GetSize());
@@ -1087,33 +1114,41 @@ public: 	// Public for scintilla_send_message
 		PaintPopup();
 
 		surfaceWindow->Release();
+
+		if( draw>1 && mainWindow.size.x > 256 ) {
+			WindowIM old = mainWindow;
+			mainWindow.pos.x += (mainWindow.size.x - 96.0f);
+			mainWindow.size.x = 96.0f;
+			std::vector<MarginStyle> ms;
+			vs.ms.swap(ms);
+			Sci_RangeToFormat rtf;
+			rtf.chrg.cpMin = 0;
+			rtf.chrg.cpMax = pdoc->Length();
+			rtf.rc.left = 0;
+			rtf.rc.right = mainWindow.size.x;
+			rtf.rc.top = 0;
+			rtf.rc.bottom = mainWindow.size.y;
+			rtf.rcPage = rtf.rc;
+			FormatRange(true, &rtf);
+			vs.ms.swap(ms);
+			mainWindow = old;
+		}
 	}
-	void DrawSnapshot(ImGuiWindow* window) {	// TODO : prepare used for draw snapshot scrollbar
-		Sci_RangeToFormat rtf;
-		rtf.chrg.cpMin = 0;
-		rtf.chrg.cpMax = pdoc->Length();
-		PRectangle rc = GetClientRectangle();
-		rtf.rc.left = 0;
-		rtf.rc.right = rc.right;
-		rtf.rc.top = 0;
-		rtf.rc.bottom = rc.bottom;
-		rtf.rcPage = rtf.rc;
-		FormatRange(true, &rtf);
-	}
-	void Update(bool draw, ScintillaIMCallback cb, void* ud) {
+	void Update(int draw, ScintillaIMCallback cb, void* ud) {
 		notifyCallback = cb;
 		notifyCallbackUD = ud;
 		if( draw ) {
-			ImGuiWindow* window = ImGui::GetCurrentContext() ? ImGui::GetCurrentWindow() : NULL;
+			ImGuiContext* context = ImGui::GetCurrentContext();
+			ImGuiWindow* window = context ? ImGui::GetCurrentWindow() : NULL;
 			if( window ) {
-				float scale = (ImGui::GetIO().FontGlobalScale * window->FontWindowScale * window->FontDpiScale);
+				float scale = (context->FontSize / context->Font->FontSize);
 				if( mainWindow.font_scale != scale ) {
 					mainWindow.font_scale = scale;
 					InvalidateStyleData();
 				}
 				mainWindow.win = window;
 				HandleInputEvents(window->ID, window->ClipRect);
-				Draw(window);
+				Draw(window, draw);
 				mainWindow.win = NULL;
 			}
 		} if( cb ) {
@@ -1457,7 +1492,7 @@ void scintilla_imgui_destroy(ScintillaIM* sci) {
 	delete sci;
 }
 
-void scintilla_imgui_update(ScintillaIM* sci, bool draw, ScintillaIMCallback cb, void* ud) {
+void scintilla_imgui_update(ScintillaIM* sci, int draw, ScintillaIMCallback cb, void* ud) {
 	if( sci ) { sci->Update(draw, cb, ud); }
 }
 

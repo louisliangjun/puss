@@ -305,6 +305,7 @@ local function do_reset_styles(sv, lang)
 	--sv:StyleSetFore(STYLE_DEFAULT, imgui.GetColorU32(ImGuiCol_Text))
 	sv:StyleSetBack(STYLE_DEFAULT, 0xFFF7FFFF)
 	sv:StyleSetFore(STYLE_DEFAULT, 0x00000000)
+	sv:StyleSetSize(STYLE_DEFAULT, math.floor(imgui.GetFontSize()))
 	sv:StyleClearAll()
 	if setting.styles then
 		for k,v in pairs(setting.styles) do
@@ -315,6 +316,11 @@ local function do_reset_styles(sv, lang)
 	sv:SetTabWidth(setting.tab_width)
 
 	sv:SetSelBack(true, setting.sel_back)
+
+	-- printer used as scrollbar
+	sv:SetPrintMagnification(-20)
+	-- sv:SetPrintColourMode(SC_PRINT_SCREENCOLOURS)	-- SC_PRINT_INVERTLIGHT
+	sv:SetPrintWrapMode(SC_WRAP_NONE)
 
 	if setting.caret_line then
 		sv:SetCaretLineVisible(true)

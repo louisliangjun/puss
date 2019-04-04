@@ -554,7 +554,7 @@ static void im_scintilla_update_callback(ScintillaIM* sci, const SCNotification*
 
 static int im_scintilla_update(lua_State* L) {
 	ScintillaIM** ud = (ScintillaIM**)luaL_checkudata(L, 1, LUA_IM_SCI_NAME);
-	scintilla_imgui_update(*ud, lua_isfunction(L,2) ? false : true, im_scintilla_update_callback, L);
+	scintilla_imgui_update(*ud, lua_isfunction(L,2) ? 0 : (int)luaL_optinteger(L,2,1), im_scintilla_update_callback, L);
 	return lua_gettop(L) - 1;
 }
 

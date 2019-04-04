@@ -298,12 +298,13 @@ function tabs_page_draw(page, active_page)
 		imgui.SetWindowFocus()
 	end
 
+	local DRAW_MODE = 1	-- 1: normal 2:draw snapshot
 	local scroll_to_line, search_text = page.scroll_to_line, page.scroll_to_search_text
 	if scroll_to_line then
 		page.scroll_to_line, page.scroll_to_search_text = nil, nil
 		sv:GotoLine(scroll_to_line)
 		sv:ScrollCaret()
-		sv()
+		sv(DRAW_MODE)
 		if search_text then
 			do_search(sv, search_text)
 		else
@@ -311,7 +312,7 @@ function tabs_page_draw(page, active_page)
 			sv:ScrollCaret()
 		end
 	else
-		sv()
+		sv(DRAW_MODE)
 	end
 	page.unsaved = sv:GetModify()
 	puss.trace_pcall(hook, 'docs_page_after_draw', page)
