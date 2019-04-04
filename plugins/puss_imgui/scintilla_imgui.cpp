@@ -134,11 +134,12 @@ inline ImFont* im_font_cast(Font& font) {
 
 class WindowIM {
 public:
-	WindowIM() : win(0), modified(false) {
+	WindowIM() : win(0), modified(false), font_scale(1.0f) {
 	}
 public:
 	ImGuiWindow*	win;
 	bool			modified;
+	float			font_scale;
 	ImVec2			pos;
 	ImVec2			size;
 };
@@ -150,6 +151,7 @@ class SurfaceImpl : public Surface {
 	ImU32 bg_color;
 	float line_thickness;
 	ImVec2 move_to;
+	float font_scale;
 private:
 	void DoClear() {
 		inited = false;
@@ -166,6 +168,7 @@ public:
 		, bg_color(IM_COL32_WHITE)
 		, line_thickness(1.0f)
 		, move_to(0.0f, 0.0f)
+		, font_scale(1.0f)
 	{
 	}
 	~SurfaceImpl() override {
@@ -176,6 +179,9 @@ public:
 		PLATFORM_ASSERT(w);
 		offset = w->pos;
 		inited = true;
+		if( w->win ) {
+			font_scale = w->font_scale;
+		}
 	}
 	void Init(SurfaceID sid, WindowID wid) override {
 		Init(wid);
@@ -350,7 +356,7 @@ public:
 		ImVec4 rect(pos.x, pos.y, offset.x + rc.right, offset.y + rc.bottom);
 		ImFont* font = im_font_cast(font_);
 		if( font ) {
-			canvas->AddText(font, font->FontSize, pos, SetPenColour(fore), s, s+len, 0.0f, &rect);
+			canvas->AddText(font, font->FontSize * font_scale, pos, SetPenColour(fore), s, s+len, 0.0f, &rect);
 		}
 #if 0
 		canvas->PathRect(ImVec2(rect.x, rect.y), ImVec2(rect.z, rect.w));
@@ -374,11 +380,10 @@ public:
 			}
 		}
 	}
-	static XYPOSITION DoMeasureWidths(Font &font_, const char *s, int len, XYPOSITION *positions) {
+	XYPOSITION DoMeasureWidths(Font &font_, const char *s, int len, XYPOSITION *positions) {
 		ImFont* font = im_font_cast(font_);
 		XYPOSITION w = 0.0f;
 		unsigned int wch = 0;
-		float scale = font ? font->Scale : 1.0f;
 		const char *e = s + len;
 		while( s < e ) {
 			int glyph_len = ImTextCharFromUtf8(&wch, s, e);
@@ -388,9 +393,9 @@ public:
 				break;
 			if( font ) {
 				const ImFontGlyph* g = font->FindGlyph((ImWchar)wch);
-				w += g->AdvanceX * scale;
+				w += (g->AdvanceX * font_scale);
 			} else {
-				w += kDefaultFontSize;
+				w += (kDefaultFontSize * font_scale);
 			}
 			if( positions ) {
 				for(int i=0; i<glyph_len; ++i) {
@@ -412,18 +417,18 @@ public:
 	}
 	XYPOSITION Ascent(Font &font_) override {
 		ImFont* font = im_font_cast(font_);
-		return font ? font->Ascent : 1.0f;
+		return font ? (font->Ascent * font_scale): 1.0f;
 	}
 	XYPOSITION Descent(Font &font_) override {
 		ImFont* font = im_font_cast(font_);
-		return font ? -(font->Descent) : 1.0f;
+		return font ? -(font->Descent * font_scale) : 1.0f;
 	}
 	XYPOSITION InternalLeading(Font &font_) override {
 		return 0.0f;
 	}
 	XYPOSITION Height(Font &font_) override {
 		ImFont* font = im_font_cast(font_);
-		return font ? font->FontSize : 18.0f;
+		return font ? (font->FontSize * font_scale) : 18.0f;
 	}
 	XYPOSITION AverageCharWidth(Font &font_) override {
 		return WidthChar(font_, 'n');
@@ -1083,12 +1088,29 @@ public: 	// Public for scintilla_send_message
 
 		surfaceWindow->Release();
 	}
+	void DrawSnapshot(ImGuiWindow* window) {	// TODO : prepare used for draw snapshot scrollbar
+		Sci_RangeToFormat rtf;
+		rtf.chrg.cpMin = 0;
+		rtf.chrg.cpMax = pdoc->Length();
+		PRectangle rc = GetClientRectangle();
+		rtf.rc.left = 0;
+		rtf.rc.right = rc.right;
+		rtf.rc.top = 0;
+		rtf.rc.bottom = rc.bottom;
+		rtf.rcPage = rtf.rc;
+		FormatRange(true, &rtf);
+	}
 	void Update(bool draw, ScintillaIMCallback cb, void* ud) {
 		notifyCallback = cb;
 		notifyCallbackUD = ud;
 		if( draw ) {
 			ImGuiWindow* window = ImGui::GetCurrentContext() ? ImGui::GetCurrentWindow() : NULL;
 			if( window ) {
+				float scale = (ImGui::GetIO().FontGlobalScale * window->FontWindowScale * window->FontDpiScale);
+				if( mainWindow.font_scale != scale ) {
+					mainWindow.font_scale = scale;
+					InvalidateStyleData();
+				}
 				mainWindow.win = window;
 				HandleInputEvents(window->ID, window->ClipRect);
 				Draw(window);
