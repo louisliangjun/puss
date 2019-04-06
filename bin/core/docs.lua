@@ -279,6 +279,9 @@ dialog_modes['docs/quick_find'] = function(page, active)
 	end)
 end
 
+local DOC_DRAW_MODE = 2	-- 1: normal 2:draw thumbnail
+local DOC_WIN_FLAGS = (DOC_DRAW_MODE==1) and ImGuiWindowFlags_AlwaysHorizontalScrollbar or (ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar)
+
 function tabs_page_draw(page, active_page)
 	if (not page.saving) and shotcuts.is_pressed('docs/save') then do_save_page(page) end
 	if shotcuts.is_pressed('docs/close') then page.open = false end
@@ -291,20 +294,19 @@ function tabs_page_draw(page, active_page)
 		imgui.SetNextWindowFocus()
 	end
 
-	imgui.BeginChild(DOC_LABEL, nil, nil, false, ImGuiWindowFlags_AlwaysHorizontalScrollbar)
+	imgui.BeginChild(DOC_LABEL, nil, nil, false, DOC_WIN_FLAGS)
 	local sv = page.sv
 	if view_set_focus then
 		view_set_focus = false
 		imgui.SetWindowFocus()
 	end
 
-	local DRAW_MODE = 1	-- 1: normal 2:draw snapshot
 	local scroll_to_line, search_text = page.scroll_to_line, page.scroll_to_search_text
 	if scroll_to_line then
 		page.scroll_to_line, page.scroll_to_search_text = nil, nil
 		sv:GotoLine(scroll_to_line)
 		sv:ScrollCaret()
-		sv(DRAW_MODE)
+		sv(DOC_DRAW_MODE)
 		if search_text then
 			do_search(sv, search_text)
 		else
@@ -312,7 +314,7 @@ function tabs_page_draw(page, active_page)
 			sv:ScrollCaret()
 		end
 	else
-		sv(DRAW_MODE)
+		sv(DOC_DRAW_MODE)
 	end
 	page.unsaved = sv:GetModify()
 	puss.trace_pcall(hook, 'docs_page_after_draw', page)

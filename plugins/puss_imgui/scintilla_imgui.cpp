@@ -106,15 +106,13 @@ static const int maxCoordinate = 32000;
 
 static const double kPi = 3.14159265358979323846;
 
-static const XYPOSITION kDefaultFontSize = 7.0f;
-
 static inline XYPOSITION XYPositionMin(XYPOSITION a, XYPOSITION b) {
 	return a < b ? a : b;
 }
 
 class FontIM {
 public:
-	FontIM() : size(kDefaultFontSize) {}
+	FontIM() : size(7.0f) {}
 public:
 	float	size;
 };
@@ -169,8 +167,11 @@ class SurfaceImpl : public Surface {
 	float line_thickness;
 	ImVec2 move_to;
 	float font_scale;
+	int clip_count;
 private:
 	void DoClear() {
+		for( ; clip_count > 0; --clip_count )
+			ImGui::PopClipRect();
 		inited = false;
 		offset = ImVec2(0.0f, 0.0f);
 		pen_color = IM_COL32_BLACK;
@@ -186,6 +187,7 @@ public:
 		, line_thickness(1.0f)
 		, move_to(0.0f, 0.0f)
 		, font_scale(1.0f)
+		, clip_count(0)
 	{
 	}
 	~SurfaceImpl() override {
@@ -373,11 +375,12 @@ public:
 		ImVec2 b(offset.x + rc.right, offset.y + rc.bottom);
 		;
 		float font_size = im_font_cast(font).size;
-		if( font_size < 4.0f ) {
-			canvas->PathLineTo(ImVec2(a.x+0.5f, a.y+0.5f));
-			canvas->PathLineTo(ImVec2(b.x-0.5f, a.y+0.5f));
-			canvas->PathLineTo(ImVec2(b.x-0.5f, b.y-0.5f));
-			canvas->PathLineTo(ImVec2(a.x+0.5f, b.y-0.5f));
+		if( font_size <= 5.0f ) {
+			float s = 0.5f;
+			canvas->PathLineTo(ImVec2(a.x+s, a.y+s));
+			canvas->PathLineTo(ImVec2(b.x-s, a.y+s));
+			canvas->PathLineTo(ImVec2(b.x-s, b.y-s));
+			canvas->PathLineTo(ImVec2(a.x+s, b.y-s));
 			canvas->PathFillConvex(SetPenColour(fore));
 		} else {
 			ImFont* imfont = im_font_current();
@@ -463,6 +466,9 @@ public:
 
 public:
 	void SetClip(PRectangle rc) override {
+		for( ; clip_count > 0; --clip_count )
+			ImGui::PopClipRect();
+		++clip_count;
 		ImVec2 vmin(offset.x + rc.left, offset.y + rc.top);
 		ImVec2 vmax(offset.x + rc.right, offset.y + rc.bottom);
 		ImGui::PushClipRect(vmin, vmax, true);
@@ -830,6 +836,7 @@ public:
 	ScintillaIM()
 		: captureMouse(false)
 		, scrollDirty(false)
+		, scrollActive(false)
 		, rectangularSelectionModifier(SCMOD_ALT)
 		, notifyCallback(NULL)
 		, notifyCallbackUD(0)
@@ -904,7 +911,7 @@ public: 	// Public for scintilla_send_message
 		}
 		return 0;
 	}
-	void HandleMouseEvents(ImGuiIO& io, ImGuiID id, bool hovered, const PRectangle& wRect, unsigned int now, int modifiers) {
+	void HandleMouseEvents(ImGuiIO& io, ImGuiID id, bool hovered, const PRectangle& wRect, unsigned int now, int modifiers, float thumbnailWidth) {
 		ImGuiWindow* window = mainWindow.win;
 		const bool focus_requested = ImGui::FocusableItemRegister(window, id);
 		// const bool focus_requested_by_code = focus_requested && (window->FocusIdxAllCounter == window->FocusIdxAllRequestCurrent);
@@ -920,26 +927,36 @@ public: 	// Public for scintilla_send_message
 			ImGui::ClearActiveID();
 		}
 
-		/* mouse click handler */
+		// mouse click handler
 		if( hovered ) {
-			ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
-			if( ImGui::IsMouseDown(0) ) {
+			if( io.MousePos.x < (wRect.right - thumbnailWidth) ) {
+				ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
 				if( ImGui::IsMouseClicked(0) ) {
 					Point click_pos(io.MousePos.x - wRect.left, io.MousePos.y - wRect.top);
 					ButtonDownWithModifiers(click_pos, now, modifiers);
 					// fprintf(stderr, "mouse down\n");
-				} else if((io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f)) {
-					// TODO : drag
+				}
+			} else {
+				if( ImGui::IsMouseClicked(0) ) {
+					scrollActive = true;
+					// TODO : ImGui::CaptureMouseFromApp(true);
 				}
 			}
+		}
+		if( scrollActive && ImGui::IsMouseDown(0) ) {
+			float y = (io.MousePos.y - window->Pos.y);
+			float h = window->Size.y;
+			float totalHeight = (float)((pdoc->LinesTotal() + 1) * vs.lineHeight);
+			ImGui::SetScrollY((totalHeight*y/h) - (h*0.5f));
 		}
 
 		if( ImGui::IsMouseReleased(0) ) {
 			// fprintf(stderr, "mouse up\n");
 			Point pt(io.MousePos.x - wRect.left, io.MousePos.y - wRect.top);
 			ButtonUpWithModifiers(pt, now, modifiers);
+			scrollActive = false;
 		}
-		if( hovered && ImGui::IsMouseClicked(1) ) {
+		if( hovered && ImGui::IsMouseClicked(1) && (io.MousePos.x < (wRect.right - thumbnailWidth)) ) {
 			Point pt(io.MousePos.x - wRect.left, io.MousePos.y - wRect.top);
 			if(!PointInSelection(pt))
 				SetEmptySelection(PositionFromLocation(pt));
@@ -1013,42 +1030,25 @@ public: 	// Public for scintilla_send_message
 		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_C)) || (is_ctrl_key_only  && IsKeyPressedMap(ImGuiKey_Insert)) ) { Copy(); }
 		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_V)) || (is_shift_key_only && IsKeyPressedMap(ImGuiKey_Insert)) ) { Paste(); }
     }
-	void HandleInputEvents(ImGuiID id, const ImRect& bb) {
+	void HandleInputEvents(ImGuiID id, const ImRect& bb, float thumbnailWidth) {
 		ImGuiIO& io = ImGui::GetIO();
 		unsigned int now = GetCurrentTime();
 		int modifiers = ModifierFlags(io.KeyShift, io.KeyCtrl, io.KeyAlt, io.KeySuper);
 		PRectangle wRect = wMain.GetPosition();
 		bool hovered = ImGui::ItemHoverable(bb, id);
 		if( hovered || HaveMouseCapture() ) {
-			HandleMouseEvents(io, id, hovered, wRect, now, modifiers);
+			HandleMouseEvents(io, id, hovered, wRect, now, modifiers, thumbnailWidth);
 		}
 		bool focused = ImGui::IsWindowFocused();
 		if( focused != hasFocus ) {
 			SetFocusState(focused);
+			scrollActive = false;
 		}
 		if( hasFocus ) {
 			HandleKeyboardEvents(io, now, modifiers);
 		}
 	}
-	void PaintPopup() {
-		MenuIM* m = (MenuIM*)popup.GetID();
-		if( !m ) return;
-		if( ImGui::BeginPopupContextItem(MENU_TITLE) ) {
-			for( int i=0; i<m->items.size(); ++i ) {
-				const char* name = m->items[i].name;
-				bool* selected = NULL;
-				bool enabled = m->items[i].enabled;
-				if( !name[0] ) {
-					ImGui::Separator();
-				}else if( ImGui::MenuItem(name, NULL, selected, enabled) ) {
-					ImGui::CloseCurrentPopup();
-					Command(m->items[i].cmd);
-				}
-			}
-			ImGui::EndPopup();
-		}
-	}
-	void Draw(ImGuiWindow* window, int draw) {
+	void UpdateWindow(ImGuiWindow* window) {
 		float totalHeight = (float)((pdoc->LinesTotal() + 1) * vs.lineHeight);
 		float totalWidth = (float)(scrollWidth * vs.aveCharWidth);
 		ImVec2 total_sz(window->ClipRect.GetSize());
@@ -1057,17 +1057,12 @@ public: 	// Public for scintilla_send_message
 		verticalScrollBarVisible = (totalHeight > total_sz.y);
 
 		// scrollbar
-		if( horizontalScrollBarVisible ) {
+		if( horizontalScrollBarVisible )
 			total_sz.x = totalWidth;
-			total_sz.y -= window->ScrollbarSizes.y;
-		}
-		if( verticalScrollBarVisible ) {
-			total_sz.x -= window->ScrollbarSizes.x;
+		if( verticalScrollBarVisible )
 			total_sz.y = totalHeight;
-		}
-		if( verticalScrollBarVisible || horizontalScrollBarVisible ) {
+		if( verticalScrollBarVisible || horizontalScrollBarVisible )
 			ImGui::Dummy(total_sz);
-		}
 
 		if( scrollDirty ) {
 			ImGui::SetScrollX(scroll.x);
@@ -1104,56 +1099,114 @@ public: 	// Public for scintilla_send_message
 
 		// idle
 		idler.state = idler.state && Idle();
+	}
+	void RenderThumbnail(Surface* surface, const PRectangle& rc) {
+		view.posCache.Clear();
+		ViewStyle style(vs);
+		style.technology = SC_TECHNOLOGY_DEFAULT;
+		style.ms.clear();
+		style.fixedColumnWidth = 0;
+		style.zoomLevel = -16;
+		style.viewIndentationGuides = ivNone;
+		style.selColours.back.isSet = false;
+		style.selColours.fore.isSet = false;
+		style.selAlpha = SC_ALPHA_NOALPHA;
+		style.selAdditionalAlpha = SC_ALPHA_NOALPHA;
+		style.whitespaceColours.back.isSet = false;
+		style.whitespaceColours.fore.isSet = false;
+		style.showCaretLineBackground = false;
+		style.alwaysShowCaretLineBackground = false;
+		style.braceHighlightIndicatorSet = false;
+		style.braceBadLightIndicatorSet = false;
 
-		// render
-		std::unique_ptr<Surface> surfaceWindow(Surface::Allocate(SC_TECHNOLOGY_DEFAULT));
-		surfaceWindow->Init(0, wMain.GetID());
+		// Set colours for printing according to users settings
+		surface->SetClip(rc);
+		surface->FillRectangle(rc, ColourDesired(0xe8, 0xe8, 0xe0));
+		//surface->RectangleDraw(rc, ColourDesired(0xff, 0x00, 0x00), ColourDesired(0xe8, 0xe8, 0xe0));
+		style.leftMarginWidth = 0;
+		style.rightMarginWidth = 0;
+		style.Refresh(*surface, pdoc->tabInChars);
 
-		PRectangle rc = GetClientRectangle();
-		Paint(surfaceWindow.get(), rc);
-		PaintPopup();
+		Sci::Position epos = pdoc->Length();
+		pdoc->EnsureStyledTo(epos);
 
-		surfaceWindow->Release();
+		int width = (int)rc.Width();
+		PRectangle rcLine = rc;
+		Sci::Line line = 0;
+		Sci::Line endl = pdoc->LineFromPosition(epos);
+		float lineHeight = rc.Height() / (endl-line+1);
+		for( ; line<=endl; ++line ) {
+			// Copy this line and its styles from the document into local arrays
+			// and determine the x position at which each character starts.
+			LineLayout ll(static_cast<int>(pdoc->LineStart(line + 1) - pdoc->LineStart(line) + 1));
+			view.LayoutLine(*this, line, surface, style, &ll, width);
+			ll.containsCaret = false;
+			rcLine.top = rc.top + lineHeight * line;
+			rcLine.bottom = rcLine.top + style.lineHeight;
+			view.DrawLine(surface, *this, style, &ll, line, line, rc.left, rcLine, 0, drawText);
+		}
+		view.posCache.Clear();
 
-		if( draw>1 && mainWindow.size.x > 256 ) {
-			WindowIM old = mainWindow;
-			mainWindow.pos.x += (mainWindow.size.x - 96.0f);
-			mainWindow.size.x = 96.0f;
-			std::vector<MarginStyle> ms;
-			vs.ms.swap(ms);
-			Sci_RangeToFormat rtf;
-			rtf.chrg.cpMin = 0;
-			rtf.chrg.cpMax = pdoc->Length();
-			rtf.rc.left = 0;
-			rtf.rc.right = mainWindow.size.x;
-			rtf.rc.top = 0;
-			rtf.rc.bottom = mainWindow.size.y;
-			rtf.rcPage = rtf.rc;
-			FormatRange(true, &rtf);
-			vs.ms.swap(ms);
-			mainWindow = old;
+		{
+			float top = (mainWindow.win->Scroll.y) / vs.lineHeight * lineHeight;
+			float bot = (mainWindow.win->Scroll.y + mainWindow.size.y) / vs.lineHeight * lineHeight;
+			surface->PenColour(ColourDesired(0, 0, 255));
+			surface->MoveTo(rc.left, top);
+			surface->LineTo(rc.right-0.5f, top);
+			surface->LineTo(rc.right-0.5f, bot);
+			surface->LineTo(rc.left, bot);
+			surface->LineTo(rc.left, top);
+		}
+	}
+	void RenderPopup() {
+		MenuIM* m = (MenuIM*)popup.GetID();
+		if( m && ImGui::BeginPopupContextItem(MENU_TITLE) ) {
+			for( int i=0; i<m->items.size(); ++i ) {
+				const char* name = m->items[i].name;
+				bool* selected = NULL;
+				bool enabled = m->items[i].enabled;
+				if( !name[0] ) {
+					ImGui::Separator();
+				}else if( ImGui::MenuItem(name, NULL, selected, enabled) ) {
+					ImGui::CloseCurrentPopup();
+					Command(m->items[i].cmd);
+				}
+			}
+			ImGui::EndPopup();
 		}
 	}
 	void Update(int draw, ScintillaIMCallback cb, void* ud) {
+		ImGuiContext* context = ImGui::GetCurrentContext();
+		ImGuiWindow* window = context ? ImGui::GetCurrentWindow() : NULL;
+		if( !window )
+			return;
 		notifyCallback = cb;
 		notifyCallbackUD = ud;
-		if( draw ) {
-			ImGuiContext* context = ImGui::GetCurrentContext();
-			ImGuiWindow* window = context ? ImGui::GetCurrentWindow() : NULL;
-			if( window ) {
-				float scale = (context->FontSize / context->Font->FontSize);
-				if( mainWindow.font_scale != scale ) {
-					mainWindow.font_scale = scale;
-					InvalidateStyleData();
-				}
-				mainWindow.win = window;
-				HandleInputEvents(window->ID, window->ClipRect);
-				Draw(window, draw);
-				mainWindow.win = NULL;
-			}
-		} if( cb ) {
-			cb(this, NULL, ud);
+		float scale = (context->FontSize / context->Font->FontSize);
+		bool thumbnail = (draw > 1) && (mainWindow.size.x > 256.0f);
+		if( mainWindow.font_scale != scale ) {
+			mainWindow.font_scale = scale;
+			InvalidateStyleData();
 		}
+		mainWindow.win = window;
+		HandleInputEvents(window->ID, window->ClipRect, thumbnail ? 72.0f : 0.0f);
+		UpdateWindow(window);
+		ImGuiStyle& style = ImGui::GetStyle();
+		AutoSurface surface(this);
+		PRectangle rc(0.0f, 0.0f, mainWindow.size.x, mainWindow.size.y);
+		if( window->ScrollbarY )	rc.right -= style.ScrollbarSize;
+		if( window->ScrollbarX )	rc.bottom -= style.ScrollbarSize;
+		if( thumbnail ) {
+			rc.right -= 72.0f;
+			Paint(surface, rc);
+			rc.left = rc.right;
+			rc.right += 72.0f;
+			RenderThumbnail(surface, rc);
+		} else {
+			Paint(surface, rc);
+		}
+		RenderPopup();
+		mainWindow.win = NULL;
 		notifyCallback = NULL;
 		notifyCallbackUD = NULL;
 	}
@@ -1185,8 +1238,7 @@ private:
 		return captureMouse;
 	}
 	PRectangle GetClientRectangle() const override {
-		Window win = wMain;
-		PRectangle rc = win.GetClientPosition();
+		PRectangle rc(0.0f, 0.0f, mainWindow.size.x, mainWindow.size.y);
 		if( ImGui::GetCurrentContext() ) {
 			ImGuiStyle& style = ImGui::GetStyle();
 			if (verticalScrollBarVisible)
@@ -1194,15 +1246,6 @@ private:
 			if (horizontalScrollBarVisible && !Wrapping())
 				rc.bottom -= style.ScrollbarSize;
 		}
-		// Move to origin
-		rc.right -= rc.left;
-		rc.bottom -= rc.top;
-		rc.left = 0;
-		rc.top = 0;
-		if (rc.bottom < 0)
-			rc.bottom = 0;
-		if (rc.right < 0)
-			rc.right = 0;
 		return rc;
 	}
 	void SetVerticalScrollPos() override {
@@ -1475,6 +1518,7 @@ private:
 private:
 	bool captureMouse;
 	bool scrollDirty;
+	bool scrollActive;
 	ImVec2 scroll;
 	int rectangularSelectionModifier;
 	WindowIM mainWindow;
@@ -1493,7 +1537,13 @@ void scintilla_imgui_destroy(ScintillaIM* sci) {
 }
 
 void scintilla_imgui_update(ScintillaIM* sci, int draw, ScintillaIMCallback cb, void* ud) {
-	if( sci ) { sci->Update(draw, cb, ud); }
+	if( sci ) {
+		if( draw ) {
+			sci->Update(draw, cb, ud);
+		} else if( cb ) {
+			cb(sci, NULL, ud);
+		}
+	}
 }
 
 sptr_t scintilla_imgui_send(ScintillaIM* sci, unsigned int iMessage, uptr_t wParam, sptr_t lParam) {

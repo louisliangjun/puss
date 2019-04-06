@@ -317,11 +317,6 @@ local function do_reset_styles(sv, lang)
 
 	sv:SetSelBack(true, setting.sel_back)
 
-	-- printer used as scrollbar
-	sv:SetPrintMagnification(-20)
-	-- sv:SetPrintColourMode(SC_PRINT_SCREENCOLOURS)	-- SC_PRINT_INVERTLIGHT
-	sv:SetPrintWrapMode(SC_WRAP_NONE)
-
 	if setting.caret_line then
 		sv:SetCaretLineVisible(true)
 		sv:SetCaretLineBack(setting.caret_line)
