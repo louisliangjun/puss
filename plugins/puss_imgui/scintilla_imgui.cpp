@@ -944,9 +944,11 @@ public: 	// Public for scintilla_send_message
 			}
 		}
 		if( scrollActive && ImGui::IsMouseDown(0) ) {
+			float totalHeight = (float)((pdoc->LinesTotal() + 1) * vs.lineHeight);
 			float y = (io.MousePos.y - window->Pos.y);
 			float h = window->Size.y;
-			float totalHeight = (float)((pdoc->LinesTotal() + 1) * vs.lineHeight);
+			if( window->ScrollbarX )
+				h -= ImGui::GetStyle().ScrollbarSize;
 			ImGui::SetScrollY((totalHeight*y/h) - (h*0.5f));
 		}
 
@@ -1135,14 +1137,18 @@ public: 	// Public for scintilla_send_message
 		Sci::Line line = 0;
 		Sci::Line endl = pdoc->LineFromPosition(epos);
 		float lineHeight = rc.Height() / (endl-line+1);
+		float lastDrawPos = -99999.0f;
 		for( ; line<=endl; ++line ) {
+			rcLine.top = rc.top + lineHeight * line;
+			if( (rcLine.top - lastDrawPos) < 2.0f )
+				continue;
+			lastDrawPos = rcLine.top;
+			rcLine.bottom = rcLine.top + style.lineHeight;
 			// Copy this line and its styles from the document into local arrays
 			// and determine the x position at which each character starts.
 			LineLayout ll(static_cast<int>(pdoc->LineStart(line + 1) - pdoc->LineStart(line) + 1));
 			view.LayoutLine(*this, line, surface, style, &ll, width);
 			ll.containsCaret = false;
-			rcLine.top = rc.top + lineHeight * line;
-			rcLine.bottom = rcLine.top + style.lineHeight;
 			view.DrawLine(surface, *this, style, &ll, line, line, rc.left, rcLine, 0, drawText);
 		}
 		view.posCache.Clear();
