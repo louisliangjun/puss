@@ -80,6 +80,7 @@ local function main_menu()
 		imgui.EndMenu()
 	end
 	if imgui.BeginMenu('Help') then
+		imgui.ShowStyleSelector('Style')
 		active, show_imgui_demos = imgui.MenuItem('ImGUI Demos', nil, show_imgui_demos)
 		active, show_imgui_metrics = imgui.MenuItem('ImGUI Metrics', nil, show_imgui_metrics)
 		active, show_samples_window = imgui.MenuItem('Samples', nil, show_samples_window)
