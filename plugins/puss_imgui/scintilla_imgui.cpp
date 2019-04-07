@@ -1126,15 +1126,17 @@ public: 	// Public for scintilla_send_message
 		Sci::Line line_num = pdoc->LineFromPosition(epos) + 1;
 		float lineHeight = rcArea.Height() / line_num;
 		PRectangle rc = rcArea;
-
-		// Set colours for printing according to users settings
 		surface->SetClip(rc);
 		surface->FillRectangle(rc, ColourDesired(0xe8, 0xe8, 0xe0));
-		//surface->RectangleDraw(rc, ColourDesired(0xff, 0x00, 0x00), ColourDesired(0xe8, 0xe8, 0xe0));
 
 		rc.top = (mainWindow.win->Scroll.y) / vs.lineHeight * lineHeight;
 		rc.bottom = (mainWindow.win->Scroll.y + mainWindow.size.y) / vs.lineHeight * lineHeight;
 		surface->RoundedRectangle(rc, ColourDesired(0, 0, 0), ColourDesired(0xff, 0xff, 0xff));
+
+		Sci::Line current_line = pdoc->LineFromPosition(CurrentPosition());
+		rc.top = lineHeight * current_line;
+		rc.bottom = rc.top + style.lineHeight + 1.0f;
+		surface->RoundedRectangle(rc, ColourDesired(0, 0, 0xff), ColourDesired(0xe8, 0xe8, 0xe0));
 
 		style.leftMarginWidth = 0;
 		style.rightMarginWidth = 0;
@@ -1146,17 +1148,30 @@ public: 	// Public for scintilla_send_message
 		int width = (int)rcArea.Width();
 		float lastDrawPos = -99999.0f;
 		for( Sci::Line line = 0; line<line_num; ++line ) {
+			const Sci::Position posLineStart = static_cast<Sci::Position>(pdoc->LineStart(line));
+			const Sci::Position posLineEnd = static_cast<Sci::Position>(pdoc->LineEnd(line));
 			rc.top = rcArea.top + lineHeight * line;
-			if( (rc.top - lastDrawPos) < 2.0f )
-				continue;
-			lastDrawPos = rc.top;
-			rc.bottom = rc.top + style.lineHeight;
-			// Copy this line and its styles from the document into local arrays
-			// and determine the x position at which each character starts.
-			LineLayout ll(static_cast<int>(pdoc->LineStart(line + 1) - pdoc->LineStart(line) + 1));
-			view.LayoutLine(*this, line, surface, style, &ll, width);
-			ll.containsCaret = false;
-			view.DrawLine(surface, *this, style, &ll, line, line, xoffset, rc, 0, drawText);
+			if( (rc.top - lastDrawPos) >= 2.0f ) {
+				lastDrawPos = rc.top;
+				rc.bottom = rc.top + style.lineHeight;
+				// Copy this line and its styles from the document into local arrays
+				// and determine the x position at which each character starts.
+				LineLayout ll(static_cast<int>(pdoc->LineStart(line + 1) - posLineStart + 1));
+				view.LayoutLine(*this, line, surface, style, &ll, width);
+				view.DrawLine(surface, *this, style, &ll, line, line, xoffset, rc, 0, drawText);
+			}
+
+			for (const Decoration *deco : pdoc->decorations.View()) {
+				Sci::Position startPos = posLineStart;
+				if (!deco->rs.ValueAt(startPos)) {
+					startPos = deco->rs.EndRun(startPos);
+				}
+				if ((startPos < posLineEnd) && (deco->rs.ValueAt(startPos))) {
+					const int value = deco->rs.ValueAt(startPos);
+					PRectangle rcMarker(rc.left+1.0f, rc.top-2.0f, rc.left+6.0f, rc.top+2.0f);
+					surface->FillRectangle(rcMarker, ColourDesired(0x00, 0x80, 0x00));
+				}
+			}
 		}
 		view.posCache.Clear();
 	}

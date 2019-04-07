@@ -130,6 +130,10 @@ local dialog_focused = false
 local dialog_show
 local view_set_focus
 
+local DOC_DRAW_MODE = 2	-- 1: normal 2:draw thumbnail
+local DOC_WIN_FLAGS = (DOC_DRAW_MODE==1) and ImGuiWindowFlags_AlwaysHorizontalScrollbar or (ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar)
+local DOC_SCROLLBAR_SIZE = (DOC_DRAW_MODE==1) and imgui.GetStyleVar(ImGuiStyleVar_ScrollbarSize) or 72
+
 local edit_menu_clicked = nil
 
 local function check_dialog_mode(page)
@@ -149,7 +153,7 @@ end
 local function show_dialog_begin(page, label)
 	local x, y = imgui.GetWindowPos()
 	local w = imgui.GetWindowWidth()
-	imgui.SetNextWindowPos(x + w - imgui.GetStyleVar(ImGuiStyleVar_ScrollbarSize), y, ImGuiCond_Always, 1, 0)
+	imgui.SetNextWindowPos(x + w - DOC_SCROLLBAR_SIZE, y, ImGuiCond_Always, 1, 0)
 	if not imgui.BeginPopup(DIALOG_LABEL) then
 		dialog_show = nil
 		return false
@@ -278,9 +282,6 @@ dialog_modes['docs/quick_find'] = function(page, active)
 		do_search(sv, text, search_prev)
 	end)
 end
-
-local DOC_DRAW_MODE = 2	-- 1: normal 2:draw thumbnail
-local DOC_WIN_FLAGS = (DOC_DRAW_MODE==1) and ImGuiWindowFlags_AlwaysHorizontalScrollbar or (ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar)
 
 function tabs_page_draw(page, active_page)
 	if (not page.saving) and shotcuts.is_pressed('docs/save') then do_save_page(page) end
