@@ -56,7 +56,7 @@ end
 shotcuts.register('app/reload', 'Reload scripts', 'F12', true, false, false, false)
 
 local function main_menu()
-	local active
+	local active, value
 	if not imgui.BeginMenuBar() then return end
 	if imgui.BeginMenu('File') then
 		if shotcuts.menu_item('docs/close') then pages.close() end
@@ -73,8 +73,10 @@ local function main_menu()
 	end
 	if imgui.BeginMenu('Setting') then
 		imgui.ShowStyleSelector('Style')
-		local ok, scale = imgui.DragFloat('UI Scale', imgui.GetIO('FontGlobalScale'), 0.005, 0.5, 2.0, "%.1f")
-		if ok then imgui.SetIO('FontGlobalScale', scale) end
+		active, value = imgui.DragFloat('UI Scale', imgui.GetIO('FontGlobalScale'), 0.005, 0.5, 2.0, "%.1f")
+		if active then imgui.SetIO('FontGlobalScale', value) end
+		active, value = imgui.Checkbox('Thumbnail Scrollbar', docs.get_thumbnail_scrollbar())
+		if active then docs.set_thumbnail_scrollbar(value) end
 		imgui.EndMenu()
 	end
 	if imgui.BeginMenu('Window') then

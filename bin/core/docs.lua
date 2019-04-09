@@ -130,11 +130,24 @@ local dialog_focused = false
 local dialog_show
 local view_set_focus
 
-local DOC_DRAW_MODE = 2	-- 1: normal 2:draw thumbnail
-local DOC_WIN_FLAGS = (DOC_DRAW_MODE==1) and ImGuiWindowFlags_AlwaysHorizontalScrollbar or (ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar)
-local DOC_SCROLLBAR_SIZE = (DOC_DRAW_MODE==1) and imgui.GetStyleVar(ImGuiStyleVar_ScrollbarSize) or 72
+local DOC_DRAW_MODE = _DOC_DRAW_MODE or 2
+local DOC_WIN_FLAGS
+local DOC_SCROLLBAR_SIZE
 
 local edit_menu_clicked = nil
+
+__exports.get_thumbnail_scrollbar = function()
+	return DOC_DRAW_MODE==2
+end
+
+__exports.set_thumbnail_scrollbar = function(use)
+	DOC_DRAW_MODE = use and 2 or 1
+	_DOC_DRAW_MODE = DOC_DRAW_MODE
+	DOC_WIN_FLAGS = (DOC_DRAW_MODE==1) and ImGuiWindowFlags_AlwaysHorizontalScrollbar or (ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar)
+	DOC_SCROLLBAR_SIZE = (DOC_DRAW_MODE==1) and imgui.GetStyleVar(ImGuiStyleVar_ScrollbarSize) or 72
+end
+
+set_thumbnail_scrollbar(get_thumbnail_scrollbar())
 
 local function check_dialog_mode(page)
 	local op = edit_menu_clicked

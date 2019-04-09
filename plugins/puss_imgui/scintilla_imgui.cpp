@@ -1149,6 +1149,7 @@ public: 	// Public for scintilla_send_message
 		float xoffset = rcArea.left + 8.0f;
 		int width = (int)rcArea.Width();
 		float lastDrawPos = -99999.0f;
+		ColourDesired background(0, 0, 0);
 		for( Sci::Line line = 0; line<line_num; ++line ) {
 			const Sci::Position posLineStart = static_cast<Sci::Position>(pdoc->LineStart(line));
 			const Sci::Position posLineEnd = static_cast<Sci::Position>(pdoc->LineEnd(line));
@@ -1156,11 +1157,9 @@ public: 	// Public for scintilla_send_message
 			if( (rc.top - lastDrawPos) >= 2.0f ) {
 				lastDrawPos = rc.top;
 				rc.bottom = rc.top + style.lineHeight;
-				// Copy this line and its styles from the document into local arrays
-				// and determine the x position at which each character starts.
 				LineLayout ll(static_cast<int>(pdoc->LineStart(line + 1) - posLineStart + 1));
 				view.LayoutLine(*this, line, surface, style, &ll, width);
-				view.DrawLine(surface, *this, style, &ll, line, line, xoffset, rc, 0, drawText);
+				view.DrawForeground(surface, *this, style, &ll, line, rc, ll.SubLineRange(0), posLineStart, xoffset, line, background);
 			}
 
 			for (const Decoration *deco : pdoc->decorations.View()) {
