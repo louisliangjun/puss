@@ -912,7 +912,7 @@ public: 	// Public for scintilla_send_message
 		}
 		return 0;
 	}
-	void HandleMouseEvents(ImGuiIO& io, ImGuiID id, bool hovered, const PRectangle& wRect, unsigned int now, int modifiers, float thumbnailWidth) {
+	void HandleMouseEvents(ImGuiIO& io, ImGuiID id, bool hovered, const PRectangle& wRect, unsigned int now, int modifiers) {
 		ImGuiWindow* window = mainWindow.win;
 		const bool focus_requested = ImGui::FocusableItemRegister(window, id);
 		// const bool focus_requested_by_code = focus_requested && (window->FocusIdxAllCounter == window->FocusIdxAllRequestCurrent);
@@ -930,7 +930,7 @@ public: 	// Public for scintilla_send_message
 
 		// mouse click handler
 		if( hovered ) {
-			if( io.MousePos.x < (wRect.right - thumbnailWidth) ) {
+			if( io.MousePos.x < (wRect.right - scrollThumbnailWidth) ) {
 				ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
 				if( ImGui::IsMouseClicked(0) ) {
 					Point click_pos(io.MousePos.x - wRect.left, io.MousePos.y - wRect.top);
@@ -948,7 +948,7 @@ public: 	// Public for scintilla_send_message
 			Point pt(io.MousePos.x - wRect.left, io.MousePos.y - wRect.top);
 			ButtonUpWithModifiers(pt, now, modifiers);
 		}
-		if( hovered && ImGui::IsMouseClicked(1) && (io.MousePos.x < (wRect.right - thumbnailWidth)) ) {
+		if( hovered && ImGui::IsMouseClicked(1) && (io.MousePos.x < (wRect.right - scrollThumbnailWidth)) ) {
 			Point pt(io.MousePos.x - wRect.left, io.MousePos.y - wRect.top);
 			if(!PointInSelection(pt))
 				SetEmptySelection(PositionFromLocation(pt));
@@ -1029,7 +1029,7 @@ public: 	// Public for scintilla_send_message
 		PRectangle wRect = wMain.GetPosition();
 		bool hovered = ImGui::ItemHoverable(window->ClipRect, window->ID);
 		if( hovered || HaveMouseCapture() ) {
-			HandleMouseEvents(io, window->ID, hovered, wRect, now, modifiers, scrollThumbnailWidth);
+			HandleMouseEvents(io, window->ID, hovered, wRect, now, modifiers);
 		}
 		bool focused = ImGui::IsWindowFocused();
 		if( focused != hasFocus ) {
