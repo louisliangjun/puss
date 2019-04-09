@@ -374,7 +374,7 @@ public:
 		ImVec2 a(offset.x + rc.left, offset.y + rc.top);
 		ImVec2 b(offset.x + rc.right, offset.y + rc.bottom);
 		;
-		float font_size = im_font_cast(font).size;
+		float font_size = im_font_cast(font).size * font_scale;
 		if( font_size <= 5.0f ) {
 			float s = 0.5f;
 			canvas->PathLineTo(ImVec2(a.x+s, a.y+s));
@@ -386,7 +386,7 @@ public:
 			ImFont* imfont = im_font_current();
 			if( imfont ) {
 				ImVec4 rect(a.x, a.y, b.x, b.y);
-				canvas->AddText(imfont, im_font_cast(font).size, a, SetPenColour(fore), s, s+len, 0.0f, &rect);
+				canvas->AddText(imfont, font_size, a, SetPenColour(fore), s, s+len, 0.0f, &rect);
 			}
 		}
 #if 0
@@ -424,9 +424,9 @@ public:
 				break;
 			if( imfont ) {
 				const ImFontGlyph* g = imfont->FindGlyph((ImWchar)wch);
-				w += (g->AdvanceX * (im_font_cast(font).size / imfont->FontSize));
+				w += (g->AdvanceX * (im_font_cast(font).size / imfont->FontSize * font_scale));
 			} else {
-				w += im_font_cast(font).size;
+				w += im_font_cast(font).size * font_scale;
 			}
 			if( positions ) {
 				for(int i=0; i<glyph_len; ++i) {
@@ -448,17 +448,17 @@ public:
 	}
 	XYPOSITION Ascent(Font &font) override {
 		ImFont* imfont = im_font_current();
-		return imfont ? (imfont->Ascent * (im_font_cast(font).size / imfont->FontSize)): 1.0f;
+		return imfont ? (imfont->Ascent * (im_font_cast(font).size / imfont->FontSize * font_scale)): 1.0f;
 	}
 	XYPOSITION Descent(Font &font) override {
 		ImFont* imfont = im_font_current();
-		return imfont ? -(imfont->Descent * (im_font_cast(font).size / imfont->FontSize)): 1.0f;
+		return imfont ? -(imfont->Descent * (im_font_cast(font).size / imfont->FontSize * font_scale)): 1.0f;
 	}
 	XYPOSITION InternalLeading(Font &font_) override {
 		return 0.0f;
 	}
 	XYPOSITION Height(Font &font) override {
-		return im_font_cast(font).size;
+		return im_font_cast(font).size * font_scale;
 	}
 	XYPOSITION AverageCharWidth(Font &font_) override {
 		return WidthChar(font_, 'n');
@@ -697,7 +697,7 @@ ColourDesired Platform::ChromeHighlight() {
 }
 
 const char *Platform::DefaultFont() {
-#ifdef G_OS_WIN32
+#ifdef _WIN32
 	return "Lucida Console";
 #else
 	return "!Sans";
@@ -705,7 +705,7 @@ const char *Platform::DefaultFont() {
 }
 
 int Platform::DefaultFontSize() {
-#ifdef G_OS_WIN32
+#ifdef _WIN32
 	return 10;
 #else
 	return 12;
@@ -837,6 +837,7 @@ public:
 		: captureMouse(false)
 		, scrollDirty(false)
 		, scrollActive(false)
+		, scrollThumbnailWidth(0.0f)
 		, rectangularSelectionModifier(SCMOD_ALT)
 		, notifyCallback(NULL)
 		, notifyCallbackUD(0)
@@ -1021,14 +1022,14 @@ public: 	// Public for scintilla_send_message
 		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_C)) || (is_ctrl_key_only  && IsKeyPressedMap(ImGuiKey_Insert)) ) { Copy(); }
 		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_V)) || (is_shift_key_only && IsKeyPressedMap(ImGuiKey_Insert)) ) { Paste(); }
     }
-	void HandleInputEvents(ImGuiWindow* window, float thumbnailWidth) {
+	void HandleInputEvents(ImGuiWindow* window) {
 		ImGuiIO& io = ImGui::GetIO();
 		unsigned int now = GetCurrentTime();
 		int modifiers = ModifierFlags(io.KeyShift, io.KeyCtrl, io.KeyAlt, io.KeySuper);
 		PRectangle wRect = wMain.GetPosition();
 		bool hovered = ImGui::ItemHoverable(window->ClipRect, window->ID);
 		if( hovered || HaveMouseCapture() ) {
-			HandleMouseEvents(io, window->ID, hovered, wRect, now, modifiers, thumbnailWidth);
+			HandleMouseEvents(io, window->ID, hovered, wRect, now, modifiers, scrollThumbnailWidth);
 		}
 		bool focused = ImGui::IsWindowFocused();
 		if( focused != hasFocus ) {
@@ -1055,6 +1056,7 @@ public: 	// Public for scintilla_send_message
 		float totalHeight = (float)((pdoc->LinesTotal() + 1) * vs.lineHeight);
 		float totalWidth = (float)(scrollWidth * vs.aveCharWidth);
 		ImVec2 total_sz(window->ClipRect.GetSize());
+		total_sz.x -= scrollThumbnailWidth;
 
 		horizontalScrollBarVisible = (totalWidth > total_sz.x);
 		verticalScrollBarVisible = (totalHeight > total_sz.y);
@@ -1206,7 +1208,8 @@ public: 	// Public for scintilla_send_message
 			InvalidateStyleData();
 		}
 		mainWindow.win = window;
-		HandleInputEvents(window, thumbnail ? 72.0f : 0.0f);
+		scrollThumbnailWidth = thumbnail ? 72.0f : 0.0f;
+		HandleInputEvents(window);
 		UpdateWindow(window);
 		ImGuiStyle& style = ImGui::GetStyle();
 		AutoSurface surface(this);
@@ -1214,10 +1217,10 @@ public: 	// Public for scintilla_send_message
 		if( window->ScrollbarY )	rc.right -= style.ScrollbarSize;
 		if( window->ScrollbarX )	rc.bottom -= style.ScrollbarSize;
 		if( thumbnail ) {
-			rc.right -= 72.0f;
+			rc.right -= scrollThumbnailWidth;
 			Paint(surface, rc);
 			rc.left = rc.right;
-			rc.right += 72.0f;
+			rc.right += scrollThumbnailWidth;
 			RenderThumbnail(surface, rc);
 		} else {
 			Paint(surface, rc);
@@ -1258,10 +1261,14 @@ private:
 		PRectangle rc(0.0f, 0.0f, mainWindow.size.x, mainWindow.size.y);
 		if( ImGui::GetCurrentContext() ) {
 			ImGuiStyle& style = ImGui::GetStyle();
-			if (verticalScrollBarVisible)
+			if( scrollThumbnailWidth > 0.1 ) {
+				rc.right -= scrollThumbnailWidth;
+			} else if (verticalScrollBarVisible) {
 				rc.right -= style.ScrollbarSize;
-			if (horizontalScrollBarVisible && !Wrapping())
+			}
+			if (horizontalScrollBarVisible && !Wrapping()) {
 				rc.bottom -= style.ScrollbarSize;
+			}
 		}
 		return rc;
 	}
@@ -1536,6 +1543,7 @@ private:
 	bool captureMouse;
 	bool scrollDirty;
 	bool scrollActive;
+	float scrollThumbnailWidth;
 	ImVec2 scroll;
 	int rectangularSelectionModifier;
 	WindowIM mainWindow;

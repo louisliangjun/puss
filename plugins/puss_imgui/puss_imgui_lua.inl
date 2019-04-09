@@ -169,9 +169,45 @@ static int imgui_get_style_var(lua_State* L) {
 	return 0;
 }
 
-static int imgui_getio_delta_time_lua(lua_State* L) {
+static int imgui_getio(lua_State* L) {
+	const char* field = luaL_checkstring(L, 1);
 	ImGuiContext* ctx = ImGui::GetCurrentContext();
-	lua_pushnumber(L, ctx ? ctx->IO.DeltaTime : 0.0f);
+	if( !ctx ) {
+		lua_pushnil(L);
+	} else if( strcmp(field, "DeltaTime")==0 ) {
+		lua_pushnumber(L, ctx->IO.DeltaTime);
+	} else if( strcmp(field, "FontGlobalScale")==0 ) {
+		lua_pushnumber(L, ctx->IO.FontGlobalScale);
+	} else if( strcmp(field, "FontAllowUserScaling")==0 ) {
+		lua_pushboolean(L, ctx->IO.FontAllowUserScaling ? 1 : 0);
+	} else if( strcmp(field, "ConfigDockingWithShift")==0 ) {
+		lua_pushboolean(L, ctx->IO.ConfigDockingWithShift ? 1 : 0);
+	} else if( strcmp(field, "ConfigResizeWindowsFromEdges")==0 ) {
+		lua_pushboolean(L, ctx->IO.ConfigResizeWindowsFromEdges ? 1 : 0);
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+static int imgui_setio(lua_State* L) {
+	const char* field = luaL_checkstring(L, 1);
+	ImGuiContext* ctx = ImGui::GetCurrentContext();
+	int ok = 1;
+	if( !ctx ) {
+		ok = 0;
+	} else if( strcmp(field, "FontGlobalScale")==0 ) {
+		ctx->IO.FontGlobalScale = (float)luaL_checknumber(L, 2);
+	} else if( strcmp(field, "FontAllowUserScaling")==0 ) {
+		ctx->IO.FontAllowUserScaling = lua_toboolean(L, 2) ? true : false;
+	} else if( strcmp(field, "ConfigDockingWithShift")==0 ) {
+		ctx->IO.ConfigDockingWithShift = lua_toboolean(L, 2) ? true : false;
+	} else if( strcmp(field, "ConfigResizeWindowsFromEdges")==0 ) {
+		ctx->IO.ConfigResizeWindowsFromEdges = lua_toboolean(L, 2) ? true : false;
+	} else {
+		ok = 0;
+	}
+	lua_pushboolean(L, ok);
 	return 1;
 }
 
@@ -614,7 +650,8 @@ static luaL_Reg imgui_lua_apis[] =
 	, {"GetScintillaLexers", im_scintilla_lexers}
 
 	, {"GetStyleVar", imgui_get_style_var}
-	, {"GetIODeltaTime", imgui_getio_delta_time_lua}
+	, {"GetIO", imgui_getio}
+	, {"SetIO", imgui_setio}
 	, {"IsShortcutPressed", imgui_is_shortcut_pressed_lua}
 	, {"FetchExtraKeys", imgui_fetch_extra_keys_lua}
 

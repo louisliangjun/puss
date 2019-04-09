@@ -71,6 +71,12 @@ local function main_menu()
 		if shotcuts.menu_item('docs/jump') then docs.edit_menu_click('docs/jump') end
 		imgui.EndMenu()
 	end
+	if imgui.BeginMenu('Setting') then
+		imgui.ShowStyleSelector('Style')
+		local ok, scale = imgui.DragFloat('UI Scale', imgui.GetIO('FontGlobalScale'), 0.005, 0.5, 2.0, "%.1f")
+		if ok then imgui.SetIO('FontGlobalScale', scale) end
+		imgui.EndMenu()
+	end
 	if imgui.BeginMenu('Window') then
 		if shotcuts.menu_item('miniline/open') then miniline.open() end
 		imgui.Separator()
@@ -80,7 +86,6 @@ local function main_menu()
 		imgui.EndMenu()
 	end
 	if imgui.BeginMenu('Help') then
-		imgui.ShowStyleSelector('Style')
 		active, show_imgui_demos = imgui.MenuItem('ImGUI Demos', nil, show_imgui_demos)
 		active, show_imgui_metrics = imgui.MenuItem('ImGUI Metrics', nil, show_imgui_metrics)
 		active, show_samples_window = imgui.MenuItem('Samples', nil, show_samples_window)
