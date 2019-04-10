@@ -13,15 +13,14 @@ local results = {}
 shotcuts.register('search/next', 'Next search result', 'F4', false, false, false, false)
 
 local function show_result(ps, pe)
+	local highlight = imgui.GetColorU32(ImGuiCol_PlotHistogramHovered)
 	for i=ps,pe do
 		local v = results[i]
 		if not v then break end
-		imgui.PushStyleColor(ImGuiCol_Text, 0.5, 0.5, 0, 1)
 		local sel = (current_sel==i)
 		local active = imgui.Selectable(v[1], sel)
-		imgui.PopStyleColor()
-		imgui.SameLine(nil, 0);	imgui.Text(v[2])
-		imgui.SameLine(nil, 0);	imgui.PushStyleColor(ImGuiCol_Text, 0.7, 0.5, 0, 1);	imgui.Text(v[3]);	imgui.PopStyleColor()
+		imgui.SameLine(nil, 10);	imgui.Text(v[2])
+		imgui.SameLine(nil, 0);	imgui.PushStyleColor(ImGuiCol_Text, highlight);	imgui.Text(v[3]);	imgui.PopStyleColor()
 		imgui.SameLine(nil, 0);	imgui.Text(v[4])
 		if active then
 			current_sel = i

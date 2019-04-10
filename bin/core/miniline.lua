@@ -71,9 +71,9 @@ local function show_miniline()
 		local r = results[i]
 		if not r then break end
 		if i==cursor then
-			imgui.PushStyleColor(ImGuiCol_Text,1,1,0,1)
+			imgui.PushStyleColor(ImGuiCol_Text, imgui.GetColorU32(ImGuiCol_Text))
 		else
-			imgui.PushStyleColor(ImGuiCol_Text,0.5,0.5,0.5,1)
+			imgui.PushStyleColor(ImGuiCol_Text, imgui.GetColorU32(ImGuiCol_TextDisabled))
 		end
 		if imgui.Selectable(r) then
 			sel = i

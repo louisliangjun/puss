@@ -3,15 +3,31 @@
 local language_settings = {}
 
 local INDICATOR_FINDTEXT = 8
+local STYLE_COLOR_MAP = {}
 
-local DEFAULT_STYLE_DEFAULT = 0x00000000
-local DEFAULT_STYLE_COMMENT = 0x00808080
-local DEFAULT_STYLE_NUMBER = 0x07008000
-local DEFAULT_STYLE_WORD = 0x00FF0000
-local DEFAULT_STYLE_STRING = 0x001515A3
-local DEFAULT_STYLE_PREPROCESSOR = 0x00808080
-local DEFAULT_STYLE_OPERATOR = 0x7F007F00
-local DEFAULT_STYLE_IDENTIFIER = 0x00000000
+local function RGB(col)
+	local r, g, b = col:match('^#(%x%x)(%x%x)(%x%x)$')
+	return tonumber(r,16) | (tonumber(g,16)<<8) | (tonumber(b,16)<<16)
+end
+
+STYLE_COLOR_MAP.light =
+	{ ['bg'] = RGB('#FFFFFC')
+	, ['sel'] = RGB('#84B6DB')
+	, ['caret_line'] = RGB('#A4D6FB')
+	, ['marker_fore'] = RGB('#008080')
+	, ['marker_back'] = RGB('#c00020')
+	, ['text'] = RGB('#000000')
+	, ['comment'] = RGB('#9F9F9F')
+	, ['identifier'] = RGB('#000000')
+	, ['number'] = RGB('#008000')
+	, ['word'] = RGB('#0000FF')
+	, ['string'] = RGB('#A31515')
+	, ['preprocessor'] = RGB('#800080')
+	, ['operator'] = RGB('#007F00')
+	, ['label'] = RGB('#00FF00')
+	}
+
+STYLE_COLOR_MAP.dark = STYLE_COLOR_MAP.light
 
 local function do_auto_indent_impl(sv, mode)
 	sv:set(SCN_UPDATEUI, nil)
@@ -35,10 +51,9 @@ local default_setting =
 	, keywords = nil
 	, styles = nil
 	, tab_width = 4
+	, caret_line = true
 	, margin_linenum = true
 	, margin_bp = true
-	, sel_back = 0xe8bb9f
-	, caret_line = 0xcfcfb0
 	, on_char_added = nil
 	}
 
@@ -56,27 +71,27 @@ language_builders.lua = function(setting)
 	]]
 
 	setting.styles =
-		{ [SCE_LUA_DEFAULT] = DEFAULT_STYLE_DEFAULT
-		, [SCE_LUA_COMMENT] = DEFAULT_STYLE_COMMENT
-		, [SCE_LUA_COMMENTLINE] = DEFAULT_STYLE_COMMENT
-		, [SCE_LUA_COMMENTDOC] = DEFAULT_STYLE_COMMENT
-		, [SCE_LUA_NUMBER] = DEFAULT_STYLE_NUMBER
-		, [SCE_LUA_WORD] = DEFAULT_STYLE_WORD
-		, [SCE_LUA_STRING] = DEFAULT_STYLE_STRING
-		, [SCE_LUA_CHARACTER] = DEFAULT_STYLE_STRING
-		, [SCE_LUA_LITERALSTRING] = DEFAULT_STYLE_STRING
-		, [SCE_LUA_PREPROCESSOR] = DEFAULT_STYLE_PREPROCESSOR
-		, [SCE_LUA_OPERATOR] = DEFAULT_STYLE_OPERATOR
-		, [SCE_LUA_IDENTIFIER] = DEFAULT_STYLE_IDENTIFIER
-		, [SCE_LUA_STRINGEOL] = DEFAULT_STYLE_STRING
-		, [SCE_LUA_WORD2] = DEFAULT_STYLE_DEFAULT
-		, [SCE_LUA_WORD3] = DEFAULT_STYLE_DEFAULT
-		, [SCE_LUA_WORD4] = DEFAULT_STYLE_DEFAULT
-		, [SCE_LUA_WORD5] = DEFAULT_STYLE_DEFAULT
-		, [SCE_LUA_WORD6] = DEFAULT_STYLE_DEFAULT
-		, [SCE_LUA_WORD7] = DEFAULT_STYLE_DEFAULT
-		, [SCE_LUA_WORD8] = DEFAULT_STYLE_DEFAULT
-		, [SCE_LUA_LABEL] = 0x0000FF00
+		{ [SCE_LUA_DEFAULT] = 'text'
+		, [SCE_LUA_COMMENT] = 'comment'
+		, [SCE_LUA_COMMENTLINE] = 'comment'
+		, [SCE_LUA_COMMENTDOC] = 'comment'
+		, [SCE_LUA_NUMBER] = 'number'
+		, [SCE_LUA_WORD] = 'word'
+		, [SCE_LUA_STRING] = 'string'
+		, [SCE_LUA_CHARACTER] = 'string'
+		, [SCE_LUA_LITERALSTRING] = 'string'
+		, [SCE_LUA_PREPROCESSOR] = 'preprocessor'
+		, [SCE_LUA_OPERATOR] = 'operator'
+		, [SCE_LUA_IDENTIFIER] = 'identifier'
+		, [SCE_LUA_STRINGEOL] = 'string'
+		, [SCE_LUA_WORD2] = 'word'
+		, [SCE_LUA_WORD3] = 'word'
+		, [SCE_LUA_WORD4] = 'word'
+		, [SCE_LUA_WORD5] = 'word'
+		, [SCE_LUA_WORD6] = 'word'
+		, [SCE_LUA_WORD7] = 'word'
+		, [SCE_LUA_WORD8] = 'word'
+		, [SCE_LUA_LABEL] = 'label'
 		}
 
 	local indent_map = { ['do']=1, ['else']=1, ['elseif']=1, ['then']=1, ['repeat']=1 }
@@ -125,34 +140,34 @@ language_builders.cpp = function(setting)
 	]]
 
 	setting.styles =
-		{ [SCE_C_DEFAULT] = DEFAULT_STYLE_DEFAULT
-		, [SCE_C_COMMENT] = DEFAULT_STYLE_COMMENT
-		, [SCE_C_COMMENTLINE] = DEFAULT_STYLE_COMMENT
-		, [SCE_C_COMMENTDOC] = DEFAULT_STYLE_COMMENT
-		, [SCE_C_NUMBER] = DEFAULT_STYLE_NUMBER
-		, [SCE_C_WORD] = DEFAULT_STYLE_WORD
-		, [SCE_C_STRING] = DEFAULT_STYLE_STRING
-		, [SCE_C_CHARACTER] = DEFAULT_STYLE_STRING
-		, [SCE_C_UUID] = DEFAULT_STYLE_IDENTIFIER
-		, [SCE_C_PREPROCESSOR] = DEFAULT_STYLE_PREPROCESSOR
-		, [SCE_C_OPERATOR] = DEFAULT_STYLE_OPERATOR
-		, [SCE_C_IDENTIFIER] = DEFAULT_STYLE_IDENTIFIER
-		, [SCE_C_STRINGEOL] = DEFAULT_STYLE_STRING
-		, [SCE_C_VERBATIM] = DEFAULT_STYLE_DEFAULT
-		, [SCE_C_REGEX] = DEFAULT_STYLE_DEFAULT
-		, [SCE_C_COMMENTLINEDOC] = DEFAULT_STYLE_COMMENT
-		, [SCE_C_WORD2] = DEFAULT_STYLE_DEFAULT
-		, [SCE_C_COMMENTDOCKEYWORD] = DEFAULT_STYLE_COMMENT
-		, [SCE_C_COMMENTDOCKEYWORDERROR] = DEFAULT_STYLE_COMMENT
-		, [SCE_C_GLOBALCLASS] = 0x00008000
-		, [SCE_C_STRINGRAW] = DEFAULT_STYLE_STRING
-		, [SCE_C_TRIPLEVERBATIM] = DEFAULT_STYLE_DEFAULT
-		, [SCE_C_HASHQUOTEDSTRING] = DEFAULT_STYLE_STRING
-		, [SCE_C_PREPROCESSORCOMMENT] = DEFAULT_STYLE_COMMENT
-		, [SCE_C_PREPROCESSORCOMMENTDOC] = DEFAULT_STYLE_COMMENT
-		, [SCE_C_USERLITERAL] = DEFAULT_STYLE_DEFAULT
-		, [SCE_C_TASKMARKER] = DEFAULT_STYLE_DEFAULT
-		, [SCE_C_ESCAPESEQUENCE] = DEFAULT_STYLE_DEFAULT
+		{ [SCE_C_DEFAULT] = 'text'
+		, [SCE_C_COMMENT] = 'comment'
+		, [SCE_C_COMMENTLINE] = 'comment'
+		, [SCE_C_COMMENTDOC] = 'comment'
+		, [SCE_C_NUMBER] = 'number'
+		, [SCE_C_WORD] = 'word'
+		, [SCE_C_STRING] = 'string'
+		, [SCE_C_CHARACTER] = 'string'
+		, [SCE_C_UUID] = 'identifier'
+		, [SCE_C_PREPROCESSOR] = 'preprocessor'
+		, [SCE_C_OPERATOR] = 'operator'
+		, [SCE_C_IDENTIFIER] = 'identifier'
+		, [SCE_C_STRINGEOL] = 'string'
+		, [SCE_C_VERBATIM] = 'text'
+		, [SCE_C_REGEX] = 'text'
+		, [SCE_C_COMMENTLINEDOC] = 'comment'
+		, [SCE_C_WORD2] = 'text'
+		, [SCE_C_COMMENTDOCKEYWORD] = 'comment'
+		, [SCE_C_COMMENTDOCKEYWORDERROR] = 'comment'
+		, [SCE_C_GLOBALCLASS] = 'label'
+		, [SCE_C_STRINGRAW] = 'string'
+		, [SCE_C_TRIPLEVERBATIM] = 'text'
+		, [SCE_C_HASHQUOTEDSTRING] = 'string'
+		, [SCE_C_PREPROCESSORCOMMENT] = 'comment'
+		, [SCE_C_PREPROCESSORCOMMENTDOC] = 'comment'
+		, [SCE_C_USERLITERAL] = 'text'
+		, [SCE_C_TASKMARKER] = 'text'
+		, [SCE_C_ESCAPESEQUENCE] = 'text'
 		}
 
 	local indent_map =
@@ -208,29 +223,29 @@ language_builders.sql = function(setting)
 	]]
 
 	setting.styles =
-		{ [SCE_SQL_DEFAULT] = DEFAULT_STYLE_DEFAULT
-		, [SCE_SQL_COMMENT] = DEFAULT_STYLE_COMMENT
-		, [SCE_SQL_COMMENTLINE] = DEFAULT_STYLE_COMMENT
-		, [SCE_SQL_COMMENTDOC] = DEFAULT_STYLE_COMMENT
-		, [SCE_SQL_NUMBER] = DEFAULT_STYLE_NUMBER
-		, [SCE_SQL_WORD] = DEFAULT_STYLE_WORD
-		, [SCE_SQL_STRING] = DEFAULT_STYLE_STRING
-		, [SCE_SQL_CHARACTER] = DEFAULT_STYLE_STRING
-		, [SCE_SQL_SQLPLUS] = DEFAULT_STYLE_IDENTIFIER
-		, [SCE_SQL_SQLPLUS_PROMPT] = DEFAULT_STYLE_IDENTIFIER
-		, [SCE_SQL_OPERATOR] = DEFAULT_STYLE_OPERATOR
-		, [SCE_SQL_IDENTIFIER] = DEFAULT_STYLE_IDENTIFIER
-		, [SCE_SQL_SQLPLUS_COMMENT] = DEFAULT_STYLE_COMMENT
-		, [SCE_SQL_COMMENTLINEDOC] = DEFAULT_STYLE_COMMENT
-		, [SCE_SQL_WORD2] = DEFAULT_STYLE_DEFAULT
-		, [SCE_SQL_COMMENTDOCKEYWORD] = DEFAULT_STYLE_COMMENT
-		, [SCE_SQL_COMMENTDOCKEYWORDERROR] = DEFAULT_STYLE_COMMENT
-		, [SCE_SQL_USER1] = DEFAULT_STYLE_DEFAULT
-		, [SCE_SQL_USER2] = DEFAULT_STYLE_DEFAULT
-		, [SCE_SQL_USER3] = DEFAULT_STYLE_DEFAULT
-		, [SCE_SQL_USER4] = DEFAULT_STYLE_DEFAULT
-		, [SCE_SQL_QUOTEDIDENTIFIER] = DEFAULT_STYLE_IDENTIFIER
-		, [SCE_SQL_QOPERATOR] = DEFAULT_STYLE_OPERATOR
+		{ [SCE_SQL_DEFAULT] = 'text'
+		, [SCE_SQL_COMMENT] = 'comment'
+		, [SCE_SQL_COMMENTLINE] = 'comment'
+		, [SCE_SQL_COMMENTDOC] = 'comment'
+		, [SCE_SQL_NUMBER] = 'number'
+		, [SCE_SQL_WORD] = 'word'
+		, [SCE_SQL_STRING] = 'string'
+		, [SCE_SQL_CHARACTER] = 'string'
+		, [SCE_SQL_SQLPLUS] = 'identifier'
+		, [SCE_SQL_SQLPLUS_PROMPT] = 'identifier'
+		, [SCE_SQL_OPERATOR] = 'operator'
+		, [SCE_SQL_IDENTIFIER] = 'identifier'
+		, [SCE_SQL_SQLPLUS_COMMENT] = 'comment'
+		, [SCE_SQL_COMMENTLINEDOC] = 'comment'
+		, [SCE_SQL_WORD2] = 'text'
+		, [SCE_SQL_COMMENTDOCKEYWORD] = 'comment'
+		, [SCE_SQL_COMMENTDOCKEYWORDERROR] = 'comment'
+		, [SCE_SQL_USER1] = 'text'
+		, [SCE_SQL_USER2] = 'text'
+		, [SCE_SQL_USER3] = 'text'
+		, [SCE_SQL_USER4] = 'text'
+		, [SCE_SQL_QUOTEDIDENTIFIER] = 'identifier'
+		, [SCE_SQL_QOPERATOR] = 'operator'
 		}
 end
 
@@ -295,31 +310,35 @@ end
 
 _STYLE_VER = (_STYLE_VER or 0) + 1
 
+local function fetch_sytel_col_map()
+	local r,g,b = imgui.GetStyleColorVec4(ImGuiCol_Text)
+	local dark = ((r+g+b)/3 > 0.5)
+	return dark and STYLE_COLOR_MAP.dark or STYLE_COLOR_MAP.light
+end
+
 local function do_reset_styles(sv, lang)
 	local setting = language_settings[lang] or default_setting
 	if setting.lexer then sv:SetLexer(setting.lexer) end
 	if setting.keywords then sv:SetKeyWords(0, setting.keywords) end
-
-	-- color need clear all with STYLE_DEFAULT
-	--sv:StyleSetBack(STYLE_DEFAULT, imgui.GetColorU32(ImGuiCol_FrameBg))
-	--sv:StyleSetFore(STYLE_DEFAULT, imgui.GetColorU32(ImGuiCol_Text))
-	sv:StyleSetBack(STYLE_DEFAULT, 0xFFF7FFFF)
-	sv:StyleSetFore(STYLE_DEFAULT, 0x00000000)
+	local colmap = fetch_sytel_col_map()
+	
+	sv:StyleSetBack(STYLE_DEFAULT, colmap['bg'])
+	sv:StyleSetFore(STYLE_DEFAULT, colmap['text'])
 	sv:StyleSetSize(STYLE_DEFAULT, math.floor(imgui.GetFontSize()))
 	sv:StyleClearAll()
 	if setting.styles then
 		for k,v in pairs(setting.styles) do
-			sv:StyleSetFore(k, v)
+			sv:StyleSetFore(k, colmap[v])
 		end
 	end
 
 	sv:SetTabWidth(setting.tab_width)
 
-	sv:SetSelBack(true, setting.sel_back)
+	sv:SetSelBack(true, colmap['sel'])
 
 	if setting.caret_line then
 		sv:SetCaretLineVisible(true)
-		sv:SetCaretLineBack(setting.caret_line)
+		sv:SetCaretLineBack(colmap['caret_line'])
 	else
 		sv:SetCaretLineVisible(false)
 	end
@@ -349,8 +368,8 @@ local function do_reset_styles(sv, lang)
 		sv:SetMarginMaskN(1, 0x01)
 		sv:SetMarginSensitiveN(1, true)
 
-		sv:MarkerSetFore(0, 0x808000)
-		sv:MarkerSetBack(0, 0x2000c0)
+		sv:MarkerSetFore(0, colmap['marker_fore'])
+		sv:MarkerSetBack(0, colmap['marker_back'])
 		sv:MarkerDefine(0, SC_MARK_ROUNDRECT)
 	end
 
