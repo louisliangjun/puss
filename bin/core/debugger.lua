@@ -550,7 +550,7 @@ function docs_page_after_draw(page)
 	local w,h = imgui.GetWindowSize()
 	local top = sv:GetFirstVisibleLine()
 	local th = sv:TextHeight(1)
-	imgui.WindowDrawListAddRectFilled(x,y+(line-top-1)*th,x+w,y+(line-top)*th,0x3FFF00FF)
+	imgui.DrawListAddRectFilled(0, x,y+(line-top-1)*th,x+w-72,y+(line-top)*th,0x3FFF00FF)
 end
 
 local function file_skey_fetch(filepath)
