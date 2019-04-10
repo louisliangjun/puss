@@ -182,8 +182,6 @@ static int imgui_getio(lua_State* L) {
 		lua_pushboolean(L, ctx->IO.FontAllowUserScaling ? 1 : 0);
 	} else if( strcmp(field, "ConfigDockingWithShift")==0 ) {
 		lua_pushboolean(L, ctx->IO.ConfigDockingWithShift ? 1 : 0);
-	} else if( strcmp(field, "ConfigResizeWindowsFromEdges")==0 ) {
-		lua_pushboolean(L, ctx->IO.ConfigResizeWindowsFromEdges ? 1 : 0);
 	} else {
 		lua_pushnil(L);
 	}
@@ -202,8 +200,6 @@ static int imgui_setio(lua_State* L) {
 		ctx->IO.FontAllowUserScaling = lua_toboolean(L, 2) ? true : false;
 	} else if( strcmp(field, "ConfigDockingWithShift")==0 ) {
 		ctx->IO.ConfigDockingWithShift = lua_toboolean(L, 2) ? true : false;
-	} else if( strcmp(field, "ConfigResizeWindowsFromEdges")==0 ) {
-		ctx->IO.ConfigResizeWindowsFromEdges = lua_toboolean(L, 2) ? true : false;
 	} else {
 		ok = 0;
 	}
@@ -645,7 +641,7 @@ static luaL_Reg imgui_lua_apis[] =
 
 	, {"CreateByteArray", byte_array_create}
 	, {"CreateFloatArray", float_array_create}
-	, {"CreateDockFamily", dock_family_create}
+	, {"CreateWindowClass", window_class_create}
 	, {"CreateScintilla", im_scintilla_create}
 	, {"GetScintillaLexers", im_scintilla_lexers}
 

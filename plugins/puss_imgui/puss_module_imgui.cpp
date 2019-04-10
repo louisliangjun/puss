@@ -40,7 +40,6 @@ static void do_create_context() {
 	//io.ConfigFlags |= ImGuiConfigFlags_ViewportsNoMerge;
 	io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleFonts;     // FIXME-DPI: THIS CURRENTLY DOESN'T WORK AS EXPECTED. DON'T USE IN USER APP!
 	io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleViewports; // FIXME-DPI
-	io.ConfigResizeWindowsFromEdges = true;
 
 	// Setup style
 	ImGui::GetStyle().WindowRounding = 0.0f;

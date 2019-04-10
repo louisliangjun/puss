@@ -214,10 +214,10 @@ static int float_array_create(lua_State* L) {
 	return 1;
 }
 
-#define TEXTEDIT_CALLBACK_DATA_NAME	"PussImguiTextEditCallbackData"
+#define INPUTTEXT_CALLBACK_DATA_NAME	"PussImGuiInputTextCallbackData"
 
-static int textedit_callback_data_index(lua_State* L) {
-	ImGuiTextEditCallbackData* data = *(ImGuiTextEditCallbackData**)luaL_checkudata(L, 1, TEXTEDIT_CALLBACK_DATA_NAME);
+static int inputtext_callback_data_index(lua_State* L) {
+	ImGuiInputTextCallbackData* data = *(ImGuiInputTextCallbackData**)luaL_checkudata(L, 1, INPUTTEXT_CALLBACK_DATA_NAME);
 	const char* field = luaL_checkstring(L, 2);
 	if( !data ) return luaL_argerror(L, 1, "already free");
 	if( strcmp(field, "EventFlag")==0 ) {
@@ -248,8 +248,8 @@ static int textedit_callback_data_index(lua_State* L) {
 	return 1;
 }
 
-static int textedit_callback_data_newindex(lua_State* L) {
-	ImGuiTextEditCallbackData* data = *(ImGuiTextEditCallbackData**)luaL_checkudata(L, 1, TEXTEDIT_CALLBACK_DATA_NAME);
+static int inputtext_callback_data_newindex(lua_State* L) {
+	ImGuiInputTextCallbackData* data = *(ImGuiInputTextCallbackData**)luaL_checkudata(L, 1, INPUTTEXT_CALLBACK_DATA_NAME);
 	const char* field = luaL_checkstring(L, 2);
 	if( !data ) return luaL_argerror(L, 1, "already free");
 	if( strcmp(field, "EventChar")==0 ) {
@@ -281,9 +281,9 @@ static int textedit_callback_data_newindex(lua_State* L) {
 	return 1;
 }
 
-static luaL_Reg textedit_callback_data_methods[] =
-	{ {"__index", textedit_callback_data_index}
-	, {"__newindex", textedit_callback_data_newindex}
+static luaL_Reg inputtext_callback_data_methods[] =
+	{ {"__index", inputtext_callback_data_index}
+	, {"__newindex", inputtext_callback_data_newindex}
 	, {NULL, NULL}
 	};
 
@@ -294,18 +294,18 @@ struct ImGuiCallback_LuaWrapUserData {
 	int			e;
 };
 
-static int ImGuiTextEditCallback_LuaWrap(ImGuiTextEditCallbackData* data) {
+static int ImGuiInputTextCallback_LuaWrap(ImGuiInputTextCallbackData* data) {
 	ImGuiCallback_LuaWrapUserData* ud = (ImGuiCallback_LuaWrapUserData*)(data->UserData);
 	lua_State* L = ud->L;
 	int res = 0;
 	int n = 0;
-	ImGuiTextEditCallbackData** pu;
+	ImGuiInputTextCallbackData** pu;
 	luaL_checkstack(L, 4 + ud->n, NULL);
 	lua_pushvalue(L, ud->f);
-	pu = (ImGuiTextEditCallbackData**)lua_newuserdata(L, sizeof(ImGuiTextEditCallbackData*));
+	pu = (ImGuiInputTextCallbackData**)lua_newuserdata(L, sizeof(ImGuiInputTextCallbackData*));
 	*pu = data;
-	if( luaL_newmetatable(L, TEXTEDIT_CALLBACK_DATA_NAME) ) {
-		luaL_setfuncs(L, textedit_callback_data_methods, 0);
+	if( luaL_newmetatable(L, INPUTTEXT_CALLBACK_DATA_NAME) ) {
+		luaL_setfuncs(L, inputtext_callback_data_methods, 0);
 	}
 	lua_setmetatable(L, -2);
 	for( n=1; n<=ud->n; ++n ) {
@@ -322,34 +322,43 @@ static int ImGuiTextEditCallback_LuaWrap(ImGuiTextEditCallbackData* data) {
 	return res;
 }
 
-#define DOCK_FAMILY_NAME	"PussImguiDockFamily"
+#define WINDOW_CLASS_NAME	"PussImGuiWindowClass"
 
-static int dock_family_tostring(lua_State* L) {
-	ImGuiDockFamily* ud = (ImGuiDockFamily*)luaL_checkudata(L, 1, DOCK_FAMILY_NAME);
-	lua_pushfstring(L, "ImGuiDockFamily[%u] %p", ud->ID);
+static int window_class_tostring(lua_State* L) {
+	ImGuiWindowClass* ud = (ImGuiWindowClass*)luaL_checkudata(L, 1, WINDOW_CLASS_NAME);
+	lua_pushfstring(L, "ImGuiWindowClass[%u] %p", ud->ClassId);
 	return 1;
 }
 
-static int dock_family_get_id(lua_State* L) {
-	ImGuiDockFamily* ud = (ImGuiDockFamily*)luaL_checkudata(L, 1, DOCK_FAMILY_NAME);
-	lua_pushinteger(L, ud->ID);
+static int window_class_get_id(lua_State* L) {
+	ImGuiWindowClass* ud = (ImGuiWindowClass*)luaL_checkudata(L, 1, WINDOW_CLASS_NAME);
+	lua_pushinteger(L, ud->ClassId);
 	return 1;
 }
 
-static luaL_Reg dock_family_methods[] =
-	{ {"__tostring", dock_family_tostring}
-	, {"GetID", dock_family_get_id}
+static luaL_Reg window_class_methods[] =
+	{ {"__tostring", window_class_tostring}
+	, {"GetID", window_class_get_id}
 	, {NULL, NULL}
 	};
 
-static int dock_family_create(lua_State* L) {
-	ImGuiID id = (ImGuiID)luaL_optinteger(L, 1, 0);
-	bool compatible_with_family_zero = (lua_gettop(L)<=1) || lua_toboolean(L, 2);
-	ImGuiDockFamily* ud = (ImGuiDockFamily*)lua_newuserdata(L, sizeof(ImGuiDockFamily));
-	ud->ID = id;
-	ud->CompatibleWithFamilyZero = compatible_with_family_zero;
-	if( luaL_newmetatable(L, DOCK_FAMILY_NAME) ) {
-		luaL_setfuncs(L, dock_family_methods, 0);
+static int window_class_create(lua_State* L) {
+	ImGuiWindowClass* ud;
+	ImGuiWindowClass klass;
+	klass.ClassId = (ImGuiID)luaL_optinteger(L, 1, klass.ClassId);
+	klass.ParentViewportId = (ImGuiID)luaL_optinteger(L, 2, klass.ParentViewportId);
+	klass.ViewportFlagsOverrideMask = (ImGuiViewportFlags)luaL_optinteger(L, 3, klass.ViewportFlagsOverrideMask);
+	klass.ViewportFlagsOverrideValue = (ImGuiViewportFlags)luaL_optinteger(L, 4, klass.ViewportFlagsOverrideValue);
+	if( !klass.DockingAllowUnclassed ) {
+		klass.DockingAllowUnclassed = lua_toboolean(L, 5);
+	} else if( !lua_isnoneornil(L, 5) ) {
+		klass.DockingAllowUnclassed = lua_toboolean(L, 5);
+	}
+
+	ud = (ImGuiWindowClass*)lua_newuserdata(L, sizeof(ImGuiWindowClass));
+	*ud = klass;
+	if( luaL_newmetatable(L, WINDOW_CLASS_NAME) ) {
+		luaL_setfuncs(L, window_class_methods, 0);
 		lua_pushvalue(L, -1);
 		lua_setfield(L, -2, "__index");
 	}
@@ -357,16 +366,18 @@ static int dock_family_create(lua_State* L) {
 	return 1;
 }
 
-static ImDrawList* check_window_drawlist(lua_State* L) {
+static ImDrawList* drawlist_check(lua_State* L, int arg) {
+	int layer = (int)luaL_optinteger(L, arg, 0);
 	ImGuiContext* context = ImGui::GetCurrentContext();
-	ImDrawList* draw_list = (context && ImGui::GetCurrentWindowRead()) ? ImGui::GetWindowDrawList() : NULL;
-	if( !draw_list ) luaL_error(L, "GetWindowDrawList failed!");
-	return draw_list;
-}
-
-static ImDrawList* check_overlay_drawlist(lua_State* L) {
-	ImGuiContext* context = ImGui::GetCurrentContext();
-	ImDrawList* draw_list = (context && ImGui::GetCurrentWindowRead()) ? ImGui::GetOverlayDrawList() : NULL;
+	ImGuiWindow* window = context ? ImGui::GetCurrentWindow() : NULL;
+	ImDrawList* draw_list = NULL;
+	if( context ) {
+		if( layer==0 ) {
+			draw_list = ImGui::GetWindowDrawList();
+		} else {
+			draw_list = (layer < 0) ? ImGui::GetBackgroundDrawList() : ImGui::GetForegroundDrawList();
+		}
+	}
 	if( !draw_list ) luaL_error(L, "GetWindowDrawList failed!");
 	return draw_list;
 }
@@ -388,13 +399,13 @@ implements.InputText = {'bool', 'InputText',
 	{ {name='label', atype='const char*'}
 	, {name='buf', atype='ByteArray'}
 	, {name='flags', atype='ImGuiInputTextFlags', def='0'}
-	, {name='callback', atype='function(ImGuiTextEditCallbackData)', def='NULL'}
-	}, [[	// bool InputText(const char* label, char* buf, size_t buf_size, ImGuiInputTextFlags flags = 0, ImGuiTextEditCallback callback = NULL, void* user_data = NULL);
+	, {name='callback', atype='function(ImGuiInputTextCallbackData)', def='NULL'}
+	}, [[	// bool InputText(const char* label, char* buf, size_t buf_size, ImGuiInputTextFlags flags = 0, ImGuiInputTextCallback callback = NULL, void* user_data = NULL);
 	int top = lua_gettop(L);
 	const char* label = luaL_checkstring(L, 1);
 	ByteArrayLua* arr = (ByteArrayLua*)luaL_checkudata(L, 2, BYTE_ARRAY_NAME);
 	ImGuiInputTextFlags flags = (ImGuiInputTextFlags)luaL_optinteger(L, 3, 0);
-	ImGuiTextEditCallback callback = lua_isfunction(L, 4) ? &ImGuiTextEditCallback_LuaWrap : NULL;
+	ImGuiInputTextCallback callback = lua_isfunction(L, 4) ? &ImGuiInputTextCallback_LuaWrap : NULL;
 	ImGuiCallback_LuaWrapUserData callback_ud = { L, 4, top<=4 ? 0 : top-4, 0 };
 	bool changed = ImGui::InputText(label, (char*)arr->buf, (size_t)arr->cap, flags, callback, &callback_ud);
 	if( callback_ud.e ) { lua_settop(L, 1); lua_error(L); }
@@ -406,14 +417,14 @@ implements.InputTextMultiline = {'bool', 'InputTextMultiline',
 	, {name='buf', atype='ByteArray'}
 	, {name='size', atype='const ImVec2&', def='ImVec2(0,0)'}
 	, {name='flags', atype='ImGuiInputTextFlags', def='0'}
-	, {name='callback', atype='function(ImGuiTextEditCallbackData)', def='NULL'}
-	}, [[	// bool InputTextMultiline(const char* label, char* buf, size_t buf_size, const ImVec2& size = ImVec2(0,0), ImGuiInputTextFlags flags = 0, ImGuiTextEditCallback callback = NULL, void* user_data = NULL);
+	, {name='callback', atype='function(ImGuiInputTextCallbackData)', def='NULL'}
+	}, [[	// bool InputTextMultiline(const char* label, char* buf, size_t buf_size, const ImVec2& size = ImVec2(0,0), ImGuiInputTextFlags flags = 0, ImGuiInputTextCallback callback = NULL, void* user_data = NULL);
 	int top = lua_gettop(L);
 	const char* label = luaL_checkstring(L, 1);
 	ByteArrayLua* arr = (ByteArrayLua*)luaL_checkudata(L, 2, BYTE_ARRAY_NAME);
 	ImVec2 size( (float)luaL_optnumber(L, 3, 0.0), (float)luaL_optnumber(L, 4, 0.0) ); 
 	ImGuiInputTextFlags flags = (ImGuiInputTextFlags)luaL_optinteger(L, 5, 0);
-	ImGuiTextEditCallback callback = lua_isfunction(L, 6) ? &ImGuiTextEditCallback_LuaWrap : NULL;
+	ImGuiInputTextCallback callback = lua_isfunction(L, 6) ? &ImGuiInputTextCallback_LuaWrap : NULL;
 	ImGuiCallback_LuaWrapUserData callback_ud = { L, 6, top<=6 ? 0 : top-6, 0 };
 	bool changed = ImGui::InputTextMultiline(label, (char*)arr->buf, (size_t)arr->cap, size, flags, callback, &callback_ud);
 	if( callback_ud.e ) { lua_settop(L, 1); lua_error(L); }
@@ -720,7 +731,7 @@ function main()
 		local RE_RIMVEC4 = '^ImVec4%s*%&$'			-- ImVec4&
 		local RE_CIMVEC4 = '^const%s+ImVec4%s*%&$'	-- const ImVec4&
 		local RE_VIEWPORT = '^ImGuiViewport%s*%*$'	-- ImGuiViewport*
-		local RE_CDOCKFAMILY = '^const%s+ImGuiDockFamily%s*%*$'	-- const ImGuiDockFamily*
+		local RE_CWindowClass = '^const%s+ImGuiWindowClass%s*%*$'	-- const ImGuiWindowClass*
 
 		local function parse_arg(arg, brackets)
 			-- try fmt: type name[arr]
@@ -822,8 +833,8 @@ function main()
 					dst:writeln('	', atype, ' ', aname, ';')
 				elseif atype:match(RE_RFLOAT) then
 					dst:writeln('	float ', aname, ' = 0.0f;')
-				elseif atype:match(RE_CDOCKFAMILY) then
-					dst:writeln('	const ImGuiDockFamily* ', aname, ';')
+				elseif atype:match(RE_CWindowClass) then
+					dst:writeln('	const ImGuiWindowClass* ', aname, ';')
 				else
 					local dt = atype:match(RE_PBOOL) or atype:match(RE_PINT) or atype:match(RE_PUINT) or atype:match(RE_PFLOAT) or atype:match(RE_PDOUBLE)
 					if dt then
@@ -919,12 +930,12 @@ function main()
 				elseif atype=='ImTextureID' then
 					iarg_use, fmt = true, fmt .. 'pv'
 					dst:writeln('	', aname, ' = ('..atype..')IMGUI_LUA_WRAP_CHECK_TEXTURE(L, ++__iarg__);')
-				elseif atype:match(RE_CDOCKFAMILY) then
+				elseif atype:match(RE_CWindowClass) then
 					iarg_use, fmt = true, fmt .. 'pv'
 					if a.def then
-						dst:writeln('	', aname, ' = ('..atype..')luaL_testudata(L, ++__iarg__, DOCK_FAMILY_NAME);')
+						dst:writeln('	', aname, ' = ('..atype..')luaL_testudata(L, ++__iarg__, WINDOW_CLASS_NAME);')
 					else
-						dst:writeln('	', aname, ' = ('..atype..')luaL_checkudata(L, ++__iarg__, DOCK_FAMILY_NAME);')
+						dst:writeln('	', aname, ' = ('..atype..')luaL_checkudata(L, ++__iarg__, WINDOW_CLASS_NAME);')
 					end
 				else
 					error(string.format('[NotSupport]	arg type(%s)', atype))
@@ -1131,13 +1142,13 @@ function main()
 			return fname
 		end
 
-		local function _drawlist_lua_wrap(ret, name, args, exist, rename, check)
+		local function gen_drawlist_lua_wrap(ret, name, args, exist, rename)
 			local fname = 'wrap_' .. rename
 			if exist then dst:writeln('// [Override]') end
 			local pos = dst:writeln(string.format('static int %s(lua_State* L) {', fname))
-			dst:writeln('	ImDrawList* __draw_list__ = '..check..'(L);')
 			local narg_pos = dst:writeln('	int __narg__ = lua_gettop(L);')
-			local iarg_pos = dst:writeln('	int __iarg__ = 0;')
+			local iarg_pos = dst:writeln('	int __iarg__ = 1;')
+			dst:writeln('	ImDrawList* __draw_list__ = drawlist_check(L, 1);')
 			gen_ret_decl(ret)
 			gen_args_decl(args)
 			local iarg_use, narg_use, suffix = gen_args_fetch(args)
@@ -1156,15 +1167,7 @@ function main()
 			return fname
 		end
 
-		local function gen_window_drawlist_lua_wrap(ret, name, args, exist, rename)
-			return _drawlist_lua_wrap(ret, name, args, exist, rename, 'check_window_drawlist')
-		end
-
-		local function gen_overlay_drawlist_lua_wrap(ret, name, args, exist, rename)
-			return _drawlist_lua_wrap(ret, name, args, exist, rename, 'check_overlay_drawlist')
-		end
-
-		local function gen_function(wrap, function_prefix, ret, name, args)
+		local function gen_function(wrap, prefix, ret, name, args)
 			dst:writeln()
 			dst:writeln(string.format('// [Declare]  %s %s%s;', ret, name, args))
 			args = parse_args(args)
@@ -1176,7 +1179,7 @@ function main()
 			elseif ignore_apis[name] then
 				dst:writeln(string.format('// [Ignore]') )
 			else
-				local fname = function_prefix and function_prefix..name or name
+				local fname = prefix and prefix..name or name
 				local exist = functions[fname]
 				local mark = #dst
 				local ok, res = pcall(wrap, ret, name, args, exist, fname)
@@ -1207,8 +1210,7 @@ function main()
 
 		for _, v in ipairs(apis) do gen_function(gen_lua_wrap, nil, table.unpack(v)) end
 
-		for _, v in ipairs(drawlist_apis) do gen_function(gen_window_drawlist_lua_wrap, 'WindowDrawList', table.unpack(v)) end
-		for _, v in ipairs(drawlist_apis) do gen_function(gen_overlay_drawlist_lua_wrap, 'OverlayDrawList', table.unpack(v)) end
+		for _, v in ipairs(drawlist_apis) do gen_function(gen_drawlist_lua_wrap, 'DrawList', table.unpack(v)) end
 
 		do
 			local t = {}

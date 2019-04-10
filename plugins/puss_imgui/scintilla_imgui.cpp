@@ -838,6 +838,9 @@ public:
 		, scrollDirty(false)
 		, scrollActive(false)
 		, scrollThumbnailWidth(0.0f)
+		, scrollOffsetY(0.0f)
+		, scrollPageTop(0.0f)
+		, scrollPageBottom(0.0f)
 		, rectangularSelectionModifier(SCMOD_ALT)
 		, notifyCallback(NULL)
 		, notifyCallbackUD(0)
@@ -940,6 +943,13 @@ public: 	// Public for scintilla_send_message
 			} else {
 				if( ImGui::IsMouseClicked(0) ) {
 					scrollActive = true;
+					float my = io.MousePos.y - wRect.top;
+					//fprintf(stderr, "%.0f %.0f %.0f\n", my, scrollPageTop, scrollPageBottom);
+					if( my>=scrollPageTop && my<=scrollPageBottom ) {
+						scrollOffsetY = (scrollPageTop + scrollPageBottom)/2 - my;
+					} else {
+						scrollOffsetY = 0.0f;
+					}
 				}
 			}
 		}
@@ -977,23 +987,19 @@ public: 	// Public for scintilla_send_message
 	}
 	void HandleKeyboardEvents(ImGuiIO& io, unsigned int now, int modifiers) {
 		/* text input */
-		if( io.InputCharacters[0] ) {
+		if( !io.InputQueueCharacters.empty() ) {
             // Process text input (before we check for Return because using some IME will effectively send a Return?)
             // We ignore CTRL inputs, but need to allow ALT+CTRL as some keyboards (e.g. German) use AltGR (which _is_ Alt+Ctrl) to input certain characters.
             if( !(io.KeyCtrl && !io.KeyAlt) && (!pdoc->IsReadOnly()) ) {
 				char utf8[6];
-				ImWchar* iter = io.InputCharacters;
-				ImWchar* end = iter + IM_ARRAYSIZE(io.InputCharacters);
 				ClearSelection();
-				for( ; iter<end; ++iter ) {
-					if( *iter==0 )
-						break;
-					int len = ImTextStrToUtf8(utf8, 6, iter, iter+1);
+				for( int i=0; i<io.InputQueueCharacters.size(); ++i ) {
+					const ImWchar* wstr = &io.InputQueueCharacters[i];
+					int len = ImTextStrToUtf8(utf8, 6, wstr, wstr+1);
 					AddCharUTF(utf8, len);
 				}
 			}
-            // Consume characters
-            memset(io.InputCharacters, 0, sizeof(io.InputCharacters));
+			io.ClearInputCharacters();
 		}
 
         // Handle key-presses
@@ -1044,7 +1050,7 @@ public: 	// Public for scintilla_send_message
 				scrollActive = false;
 			} else {
 				float totalHeight = (float)((pdoc->LinesTotal() + 1) * vs.lineHeight);
-				float y = (io.MousePos.y - window->Pos.y);
+				float y = (io.MousePos.y + scrollOffsetY - window->Pos.y);
 				float h = window->Size.y;
 				if( window->ScrollbarX )
 					h -= ImGui::GetStyle().ScrollbarSize;
@@ -1134,6 +1140,8 @@ public: 	// Public for scintilla_send_message
 		rc.top = (mainWindow.win->Scroll.y) / vs.lineHeight * lineHeight;
 		rc.bottom = (mainWindow.win->Scroll.y + mainWindow.size.y) / vs.lineHeight * lineHeight;
 		surface->RoundedRectangle(rc, ColourDesired(0, 0, 0), ColourDesired(0xff, 0xff, 0xff));
+		scrollPageTop = rc.top;
+		scrollPageBottom = rc.bottom;
 
 		Sci::Line current_line = pdoc->LineFromPosition(CurrentPosition());
 		rc.top = lineHeight * current_line;
@@ -1543,6 +1551,9 @@ private:
 	bool scrollDirty;
 	bool scrollActive;
 	float scrollThumbnailWidth;
+	float scrollOffsetY;
+	float scrollPageTop;
+	float scrollPageBottom;
 	ImVec2 scroll;
 	int rectangularSelectionModifier;
 	WindowIM mainWindow;

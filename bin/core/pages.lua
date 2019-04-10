@@ -37,8 +37,8 @@ __exports.update = function()
 	local active = next_active_page_label
 	if active then
 		next_active_page_label = nil
-		local page = index[active]
-		if page then imgui.SetTabItemSelected(active) end
+		-- local page = index[active]
+		-- if page then imgui.SetTabItemSelected(active) end
 	end
 
 	-- draw tabs
@@ -48,6 +48,7 @@ __exports.update = function()
 		page.was_open = page.open
 		local flags = ImGuiTabItemFlags_NoPushId
 		if page.unsaved then flags = flags | ImGuiTabItemFlags_UnsavedDocument end
+		if active and label==active then flags = flags | ImGuiTabItemFlags_SetSelected end
 		selected, page.open = imgui.BeginTabItem(label, page.open, flags)
 		if selected then
 			local last = selected_page_label
