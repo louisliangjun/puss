@@ -121,7 +121,7 @@ __exports.update = function(sock, dispatch)
 	end
 end
 
-__exports.create_udp_broadcast_sender = function(port)
+__exports.create_udp_broadcast_sender = function(port, broadcast_ip)
 	local udp = puss_socket_new()
 	udp:create('AF_INET', 'SOCK_DGRAM', 'IPPROTO_UDP')
 	udp:set_broadcast(port)
