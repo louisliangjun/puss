@@ -19,9 +19,20 @@ if puss._debug_proxy then
 		end
 	end
 
-	local DEBUG_TITLE, WAIT_TIMEOUT, BROADCAST_PORT, BROADCAST_IP = ...
-	print('* broadcast', BROADCAST_PORT or 7654, BROADCAST_IP)
-	local broadcast = net.create_udp_broadcast_sender(BROADCAST_PORT or 7654, BROADCAST_IP)
+	local DEBUG_TITLE, WAIT_TIMEOUT, REMOTE_ADDRESS = ...
+
+	local broadcast
+	do
+		local UDP_PORT_RANGE = {7780, 7790}
+		local addr = REMOTE_ADDRESS or '127.0.0.1'
+		local udp = net.create_udp()
+		print('* udp send to', addr, UDP_PORT_RANGE[1], UDP_PORT_RANGE[2])
+		broadcast = function(msg)
+			for port = UDP_PORT_RANGE[1], UDP_PORT_RANGE[2] do
+				udp:sendto(msg, addr, port)
+			end
+		end
+	end
 
 	local listen_socket, host_info
 	local socket, address

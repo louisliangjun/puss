@@ -155,7 +155,9 @@ static int lua_socket_create(lua_State* L) {
 		return luaL_error(L, "bad socket enums table!");
 	lua_replace(L, 1);
 	lua_pop(L, 1);
-	ud->fd = socket( _enum_get(L, 2, AF_INET), _enum_get(L, 3, SOCK_STREAM), _enum_get(L, 4, IPPROTO_TCP) );
+	if( !socket_check_valid(ud->fd) ) {
+		ud->fd = socket( _enum_get(L, 2, AF_INET), _enum_get(L, 3, SOCK_STREAM), _enum_get(L, 4, IPPROTO_TCP) );
+	}
 	lua_pushboolean(L, socket_check_valid(ud->fd));
 	return 1;
 }
@@ -347,7 +349,7 @@ static int lua_socket_sendto(lua_State* L) {
 	size_t len = 0;
 	const char* msg = luaL_checklstring(L, 2, &len);
 	const char* ip = luaL_optstring(L, 3, NULL);
-	unsigned port = (unsigned)luaL_optinteger(L, 3, 0);
+	unsigned port = (unsigned)luaL_optinteger(L, 4, 0);
 	struct sockaddr* peer = &(ud->peer);
 	int res;
 	if( ip ) { socket_addr_build(L, peer, ip, port); }
