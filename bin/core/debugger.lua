@@ -21,19 +21,8 @@ local run_sign = true
 local socket = _socket
 local GROUP_KEY = 'socket'	-- NOTICE : attach to socket if need multi-socket
 
-local UDP_PORT_RANGE = {7780, 7790}
-local udp_recver = __udp_recver
-
-local function udp_recver_ensure()
-	if udp_recver then return udp_recver end
-	for port=UDP_PORT_RANGE[1], UDP_PORT_RANGE[2] do
-		local udp = net.create_udp('0.0.0.0', port)
-		if udp then
-			udp_recver, __udp_recver = udp, udp
-			break
-		end
-	end
-end
+local BROADCAST_PORT = 7654
+local broadcast_recv = net.create_udp_broadcast_recver(BROADCAST_PORT)
 
 local dummy_vars = {}
 
@@ -204,9 +193,11 @@ local show_connect_dialog
 do
 	local hosts = {}
 
-	local function udp_recver_update()
-		local data, addr = udp_recver:recvfrom()
+	local function recver_update()
+		local data, addr = broadcast_recv()
 		if not data then return end
+		if not hosts then return end
+		--print(data, addr, hosts)
 
 		-- local machine, use addr
 		local ip, port, title = data:match('^%[PussDebug%]|(%d+%.%d+%.%d+%.%d+):(%d+)|?(.*)$')
@@ -223,20 +214,17 @@ do
 		return true
 	end
 
-	local function recver_update()
-		local udp_more = udp_recver_ensure()
-		for i=1,64 do
-			if not udp_more then break end
-			udp_more = udp_recver_update()
-		end
-	end
-
 	local last_update_time = puss.timestamp()
 	local targets = {}
 
 	local function update_hosts()
 		local now = puss.timestamp()
-		if (now - last_update_time) < 2000 then return recver_update() end
+		if (now - last_update_time) < 2000 then
+			for i=1,64 do
+				if not recver_update() then break end
+			end
+			return
+		end
 		last_update_time = now
 
 		targets, hosts = hosts, {}
