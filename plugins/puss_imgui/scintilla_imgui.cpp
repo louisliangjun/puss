@@ -1176,7 +1176,6 @@ public: 	// Public for scintilla_send_message
 					startPos = deco->rs.EndRun(startPos);
 				}
 				if ((startPos < posLineEnd) && (deco->rs.ValueAt(startPos))) {
-					const int value = deco->rs.ValueAt(startPos);
 					PRectangle rcMarker(rc.left+1.0f, rc.top-2.0f, rc.left+6.0f, rc.top+2.0f);
 					surface->FillRectangle(rcMarker, ColourDesired(0x00, 0x80, 0x00));
 				}

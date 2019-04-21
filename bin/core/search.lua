@@ -58,7 +58,7 @@ local function show_search_ui()
 		results_reset = false
 		imgui.SetScrollY(0)
 	end
-	local line_height = imgui.GetTextLineHeight()
+	local line_height = imgui.GetTextLineHeightWithSpacing()
 	local jump_next = shotcuts.is_pressed('search/next')
 	if jump_next and current_sel <= #results then
 		current_sel = current_sel + 1
@@ -67,19 +67,18 @@ local function show_search_ui()
 			local file, line = v[1]:match('^(.+):(%d+)$')
 			-- print('open', file, line)
 			docs.open(file, math.tointeger(line)-1, v[3])
-			
+
+			local h = imgui.GetWindowHeight()
 			local pos = (current_sel - 1) * line_height
 			local top = imgui.GetScrollY()
-			local h = imgui.GetWindowHeight() - imgui.GetStyleVar(ImGuiStyleVar_WindowPadding)
-			local bot = top+h-line_height
-			if pos <= top then
+			if (pos < top) or (line_height >= h) then
 				imgui.SetScrollY(pos)
-			elseif pos >= bot then
-				imgui.SetScrollY(bot)
+			elseif (pos + imgui.GetTextLineHeight()) > (top + h) then
+				imgui.SetScrollY(pos - h + math.max((h - line_height*2), (h/2)))
 			end
 		end
 	end
-	imgui.clipper_pcall(#results+1, line_height, show_result)
+	imgui.clipper_pcall(#results+1, imgui.GetTextLineHeightWithSpacing(), show_result)
 	imgui.EndChild()
 end
 
