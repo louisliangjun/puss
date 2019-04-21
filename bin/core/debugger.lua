@@ -12,7 +12,7 @@ local thread = puss.import('core.thread')
 docs.setup(function(event, ...)
 	local f = _ENV[event]
 	if f then return f(...) end
-end)
+end, true)
 
 local LEAF_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen
 local FOLD_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick
@@ -586,10 +586,8 @@ function docs_page_on_save(page_after_save, filepath, ctx, file_skey)
 	return page_after_save(true, file_skey_fetch(filepath))
 end
 
-function docs_page_on_margin_click(page, modifiers, pos, margin)
-	print(page, modifiers, pos, margin)
-	-- print(page.sv, sv:MarkerGet(line))
-	local line = page.sv:LineFromPosition(pos)
+function docs_page_on_margin_click(page, modifiers, pos, margin, line)
+	print(page, modifiers, pos, margin, line)
 	trigger_bp(page, line+1)
 end
 

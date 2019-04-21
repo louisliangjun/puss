@@ -54,6 +54,7 @@ local default_setting =
 	, caret_line = true
 	, margin_linenum = true
 	, margin_bp = true
+	, fold = false
 	, on_char_added = nil
 	}
 
@@ -352,27 +353,6 @@ local function do_reset_styles(sv, lang)
 	sv:SetTabIndents(true)
 	sv:SetIndentationGuides(SC_IV_LOOKBOTH)
 
-	if setting.margin_linenum then
-		sv:SetMarginTypeN(0, SC_MARGIN_NUMBER)
-		sv:SetMarginWidthN(0, sv:TextWidth(STYLE_LINENUMBER, "_99999"))
-		sv:SetMarginSensitiveN(0, true)
-	else
-		sv:SetMarginTypeN(0, SC_MARGIN_SYMBOL)
-		sv:SetMarginWidthN(0, 0)
-		sv:SetMarginSensitiveN(0, false)
-	end
-
-	if setting.margin_bp then
-		sv:SetMarginTypeN(1, SC_MARGIN_SYMBOL)
-		sv:SetMarginWidthN(1, 12)
-		sv:SetMarginMaskN(1, 0x01)
-		sv:SetMarginSensitiveN(1, true)
-
-		sv:MarkerSetFore(0, colmap['marker_fore'])
-		sv:MarkerSetBack(0, colmap['marker_back'])
-		sv:MarkerDefine(0, SC_MARK_ROUNDRECT)
-	end
-
 	sv:set(SCN_CHARADDED, setting.on_char_added)
 
 	sv:IndicSetStyle(INDICATOR_FINDTEXT, INDIC_FULLBOX)
@@ -399,6 +379,59 @@ __exports.find_text_fill_all_indicator = function(sv, text)
 		if pos < 0 then break end
 		sv:IndicatorFillRange(rs, re-rs)
 		pos = pos + 1
+	end
+end
+
+__exports.reset_show_linenum = function(sv, show)
+	if show then
+		sv:SetMarginTypeN(0, SC_MARGIN_NUMBER)
+		sv:SetMarginWidthN(0, sv:TextWidth(STYLE_LINENUMBER, "_99999"))
+		sv:SetMarginSensitiveN(0, true)
+	else
+		sv:SetMarginTypeN(0, SC_MARGIN_SYMBOL)
+		sv:SetMarginWidthN(0, 0)
+		sv:SetMarginSensitiveN(0, false)
+	end
+end
+
+__exports.reset_show_bp = function(sv, show)
+	if show then
+		sv:SetMarginTypeN(1, SC_MARGIN_SYMBOL)
+		sv:SetMarginMaskN(1, 0x01)
+		sv:SetMarginWidthN(1, 14)
+		sv:SetMarginSensitiveN(1, true)
+
+		sv:MarkerSetFore(0, colmap['marker_fore'])
+		sv:MarkerSetBack(0, colmap['marker_back'])
+		sv:MarkerDefine(0, SC_MARK_ROUNDRECT)
+	else
+		sv:SetMarginTypeN(1, SC_MARGIN_SYMBOL)
+		sv:SetMarginWidthN(1, 0)
+		sv:SetMarginSensitiveN(1, false)
+	end
+end
+
+__exports.reset_fold_mode = function(sv, fold)
+	if fold then
+		sv:SetProperty('fold', '1')
+		sv:SetMarginTypeN(2, SC_MARGIN_SYMBOL)
+		sv:SetMarginMaskN(2, SC_MASK_FOLDERS)
+		sv:SetMarginWidthN(2, 14)
+		sv:SetMarginSensitiveN(2, true)
+		sv:SetAutomaticFold(SC_AUTOMATICFOLD_CLICK)
+
+		sv:MarkerDefine(SC_MARKNUM_FOLDER, SC_MARK_CIRCLEPLUS) 
+		sv:MarkerDefine(SC_MARKNUM_FOLDEROPEN, SC_MARK_CIRCLEMINUS)
+		sv:MarkerDefine(SC_MARKNUM_FOLDEREND,  SC_MARK_CIRCLEPLUSCONNECTED)
+		sv:MarkerDefine(SC_MARKNUM_FOLDEROPENMID, SC_MARK_CIRCLEMINUSCONNECTED)
+		sv:MarkerDefine(SC_MARKNUM_FOLDERMIDTAIL, SC_MARK_TCORNERCURVE)
+		sv:MarkerDefine(SC_MARKNUM_FOLDERSUB, SC_MARK_VLINE)
+		sv:MarkerDefine(SC_MARKNUM_FOLDERTAIL, SC_MARK_LCORNERCURVE)
+		sv:SetFoldFlags(16|4, 0)
+	else
+		sv:SetMarginTypeN(2, SC_MARGIN_SYMBOL)
+		sv:SetMarginWidthN(2, 0)
+		sv:SetMarginSensitiveN(2, false)
 	end
 end
 

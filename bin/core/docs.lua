@@ -129,25 +129,16 @@ local dialog_active = false
 local dialog_focused = false
 local dialog_show
 local view_set_focus
+local view_reset_style = true
 
 local DOC_DRAW_MODE = _DOC_DRAW_MODE or 2
+local DOC_SHOW_LINENUM = _DOC_SHOW_LINENUM ~= false
+local DOC_SHOW_BP = _DOC_SHOW_BP ~= false
+local DOC_FOLD_MODE = _DOC_FOLD_MODE or false
 local DOC_WIN_FLAGS
 local DOC_SCROLLBAR_SIZE
 
 local edit_menu_clicked = nil
-
-__exports.get_thumbnail_scrollbar = function()
-	return DOC_DRAW_MODE==2
-end
-
-__exports.set_thumbnail_scrollbar = function(use)
-	DOC_DRAW_MODE = use and 2 or 1
-	_DOC_DRAW_MODE = DOC_DRAW_MODE
-	DOC_WIN_FLAGS = (DOC_DRAW_MODE==1) and ImGuiWindowFlags_AlwaysHorizontalScrollbar or (ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar)
-	DOC_SCROLLBAR_SIZE = (DOC_DRAW_MODE==1) and imgui.GetStyleVar(ImGuiStyleVar_ScrollbarSize) or 72
-end
-
-set_thumbnail_scrollbar(get_thumbnail_scrollbar())
 
 local function check_dialog_mode(page)
 	local op = edit_menu_clicked
@@ -315,6 +306,21 @@ function tabs_page_draw(page, active_page)
 		imgui.SetWindowFocus()
 	end
 
+	if view_reset_style then
+		view_reset_style = false
+		_DOC_DRAW_MODE = DOC_DRAW_MODE
+		_DOC_SHOW_LINENUM = DOC_SHOW_LINENUM
+		_DOC_SHOW_BP = DOC_SHOW_BP
+		_DOC_FOLD_MODE = DOC_FOLD_MODE
+
+		DOC_WIN_FLAGS = (DOC_DRAW_MODE==1) and ImGuiWindowFlags_AlwaysHorizontalScrollbar or (ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar)
+		DOC_SCROLLBAR_SIZE = (DOC_DRAW_MODE==1) and imgui.GetStyleVar(ImGuiStyleVar_ScrollbarSize) or 72
+
+		sci.reset_show_linenum(sv, DOC_SHOW_LINENUM)
+		sci.reset_show_bp(sv, DOC_SHOW_BP)
+		sci.reset_fold_mode(sv, DOC_FOLD_MODE)
+	end
+
 	local scroll_to_line, search_text = page.scroll_to_line, page.scroll_to_search_text
 	if scroll_to_line then
 		page.scroll_to_line, page.scroll_to_search_text = nil, nil
@@ -361,7 +367,9 @@ function tabs_page_destroy(page)
 end
 
 local function on_margin_click(sv, modifiers, pos, margin)
-	puss.trace_pcall(hook, 'docs_page_on_margin_click', sv:get('page'), modifiers, pos, margin)
+	local line = sv:LineFromPosition(pos)
+	print(sv, modifiers, pos, margin, line)
+	puss.trace_pcall(hook, 'docs_page_on_margin_click', sv:get('page'), modifiers, pos, margin, line)
 end
 
 local function new_doc(label, lang, filepath)
@@ -467,4 +475,23 @@ end
 
 __exports.edit_menu_click = function(name)
 	edit_menu_clicked = name
+end
+
+__exports.setting = function()
+	local active, value
+	active, value = imgui.Checkbox('Show LineNum)', DOC_SHOW_LINENUM)
+	if active then
+		DOC_SHOW_LINENUM = value
+		view_reset_style = true
+	end
+	active, value = imgui.Checkbox('Thumbnail Scrollbar(not support fold mode)', DOC_DRAW_MODE==2)
+	if active then
+		DOC_DRAW_MODE = value and 2 or 1
+		view_reset_style = true
+	end
+	active, value = imgui.Checkbox('Fold Source Code', DOC_FOLD_MODE)
+	if active then
+		DOC_FOLD_MODE = value
+		view_reset_style = true
+	end
 end

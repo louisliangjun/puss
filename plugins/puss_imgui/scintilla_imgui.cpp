@@ -267,41 +267,17 @@ public:
 		ImVec2 a(offset.x + rc.left, offset.y + rc.top);
 		ImVec2 b(offset.x + rc.right, offset.y + rc.bottom);
 		ImU32 alpha = 255;	// 32;	// for debug
+		bg_color = IM_COL32(back.GetRed(),  back.GetGreen(), back.GetBlue(), alpha);
 #if 1
-		canvas->AddRectFilled(a, b, IM_COL32(back.GetRed(),  back.GetGreen(), back.GetBlue(), alpha));
+		canvas->AddRectFilled(a, b, bg_color);
 #else
 		canvas->PathRect(a, b);
 		canvas->PathStroke(IM_COL32(255,  0, 0, 32), true, line_thickness);
 #endif
 	}
 	void FillRectangle(PRectangle rc, Surface &surfacePattern) override {
-		// SurfaceImpl &surfi = static_cast<SurfaceImpl &>(surfacePattern);
-		bool canDraw = false; // TODO : surfi.psurf != NULL;
-		if( canDraw ) {
-			ImDrawList* canvas = ImGui::GetWindowDrawList();
-			// Tile pattern over rectangle
-			// Currently assumes 8x8 pattern
-			int widthPat = 8;
-			int heightPat = 8;
-			int left = (int)rc.left;
-			int right = (int)rc.right;
-			int top = (int)rc.top;
-			int bottom = (int)rc.bottom;
-			for (int xTile = left; xTile < right; xTile += widthPat) {
-				int widthx = (xTile + widthPat > right) ? right - xTile : widthPat;
-				for (int yTile = top; yTile < bottom; yTile += heightPat) {
-					int heighty = (yTile + heightPat > bottom) ? bottom - yTile : heightPat;
-					// cairo_set_source_surface(context, surfi.psurf, xTile, yTile);
-					ImVec2 a(offset.x + xTile, offset.y + yTile);
-					ImVec2 b(offset.x + (float)widthx, offset.y + (float)heighty);
-					canvas->AddRectFilled(a, b, pen_color);
-				}
-			}
-		} else {
-			// Something is wrong so try to show anyway
-			// Shows up black because colour not allocated
-			FillRectangle(rc, 0);
-		}
+		SurfaceImpl &surfi = static_cast<SurfaceImpl &>(surfacePattern);
+		FillRectangle(rc, surfi.bg_color);
 	}
 	void RoundedRectangle(PRectangle rc, ColourDesired fore, ColourDesired back) override {
 		if (((rc.right - rc.left) > 4) && ((rc.bottom - rc.top) > 4)) {
@@ -348,7 +324,7 @@ public:
 		float cy = offset.y + (rc.top + rc.bottom) / 2;
 		float w = rc.Width();
 		float h = rc.Height();
-		float r = (w < h) ? w : h;
+		float r = ((w < h) ? w : h) * 0.5f;
 		canvas->PathArcTo(ImVec2(cx, cy), r, 0.0f, (float)(2*kPi));
 		canvas->PathFillConvex(SetPenColour(back));
 		canvas->PathArcTo(ImVec2(cx, cy), r, 0.0f, (float)(2*kPi));

@@ -75,8 +75,7 @@ local function main_menu()
 		imgui.ShowStyleSelector('Style')
 		active, value = imgui.DragFloat('UI Scale', imgui.GetIO('FontGlobalScale'), 0.005, 0.5, 2.0, "%.1f")
 		if active then imgui.SetIO('FontGlobalScale', value) end
-		active, value = imgui.Checkbox('Thumbnail Scrollbar', docs.get_thumbnail_scrollbar())
-		if active then docs.set_thumbnail_scrollbar(value) end
+		docs.setting()
 		imgui.EndMenu()
 	end
 	if imgui.BeginMenu('Window') then
