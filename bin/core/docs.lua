@@ -294,6 +294,7 @@ function tabs_page_draw(page, active_page)
 	if page.saving then draw_saving_bar(page) end
 
 	if active_page then
+		view_reset_style = true
 		sci.reset_styles(page.sv, page.lang)
 		page.sv:dirty_scroll()
 		imgui.SetNextWindowFocus()
@@ -306,6 +307,8 @@ function tabs_page_draw(page, active_page)
 		imgui.SetWindowFocus()
 	end
 
+	local draw_mode = DOC_FOLD_MODE and 1 or DOC_DRAW_MODE
+
 	if view_reset_style then
 		view_reset_style = false
 		_DOC_DRAW_MODE = DOC_DRAW_MODE
@@ -313,8 +316,8 @@ function tabs_page_draw(page, active_page)
 		_DOC_SHOW_BP = DOC_SHOW_BP
 		_DOC_FOLD_MODE = DOC_FOLD_MODE
 
-		DOC_WIN_FLAGS = (DOC_DRAW_MODE==1) and ImGuiWindowFlags_AlwaysHorizontalScrollbar or (ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar)
-		DOC_SCROLLBAR_SIZE = (DOC_DRAW_MODE==1) and imgui.GetStyleVar(ImGuiStyleVar_ScrollbarSize) or 72
+		DOC_WIN_FLAGS = (draw_mode==1) and ImGuiWindowFlags_AlwaysHorizontalScrollbar or (ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar)
+		DOC_SCROLLBAR_SIZE = (draw_mode==1) and imgui.GetStyleVar(ImGuiStyleVar_ScrollbarSize) or 72
 
 		sci.reset_show_linenum(sv, DOC_SHOW_LINENUM)
 		sci.reset_show_bp(sv, DOC_SHOW_BP)
@@ -326,7 +329,7 @@ function tabs_page_draw(page, active_page)
 		page.scroll_to_line, page.scroll_to_search_text = nil, nil
 		sv:GotoLine(scroll_to_line)
 		sv:ScrollCaret()
-		sv(DOC_DRAW_MODE)
+		sv(draw_mode)
 		if search_text then
 			do_search(sv, search_text)
 		else
@@ -334,7 +337,7 @@ function tabs_page_draw(page, active_page)
 			sv:ScrollCaret()
 		end
 	else
-		sv(DOC_DRAW_MODE)
+		sv(draw_mode)
 	end
 	page.unsaved = sv:GetModify()
 	puss.trace_pcall(hook, 'docs_page_after_draw', page)
@@ -479,12 +482,12 @@ end
 
 __exports.setting = function()
 	local active, value
-	active, value = imgui.Checkbox('Show LineNum)', DOC_SHOW_LINENUM)
+	active, value = imgui.Checkbox('LineNum', DOC_SHOW_LINENUM)
 	if active then
 		DOC_SHOW_LINENUM = value
 		view_reset_style = true
 	end
-	active, value = imgui.Checkbox('Thumbnail Scrollbar(not support fold mode)', DOC_DRAW_MODE==2)
+	active, value = imgui.Checkbox('Thumbnail Scrollbar', DOC_DRAW_MODE==2)
 	if active then
 		DOC_DRAW_MODE = value and 2 or 1
 		view_reset_style = true

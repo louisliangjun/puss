@@ -288,6 +288,7 @@ do
 		{ ['lua'] = { 'vmake' }
 		, ['makefile'] = { 'makefile' }
 		}
+
 	for lang, files in pairs(lang_filename_map) do
 		for _, name in ipairs(files) do
 			name = name:lower()
@@ -353,6 +354,38 @@ local function do_reset_styles(sv, lang)
 	sv:SetTabIndents(true)
 	sv:SetIndentationGuides(SC_IV_LOOKBOTH)
 
+	-- linenum
+	sv:SetMarginTypeN(0, SC_MARGIN_NUMBER)
+	sv:SetMarginWidthN(0, 0)
+	sv:SetMarginSensitiveN(0, true)
+
+	-- bp color
+	sv:SetMarginTypeN(1, SC_MARGIN_SYMBOL)
+	sv:SetMarginMaskN(1, 0x01)
+	sv:SetMarginWidthN(1, 0)
+	sv:SetMarginSensitiveN(1, true)
+
+	sv:MarkerSetFore(0, colmap['marker_fore'])
+	sv:MarkerSetBack(0, colmap['marker_back'])
+	sv:MarkerDefine(0, SC_MARK_ROUNDRECT)
+
+	-- fold
+	sv:SetProperty('fold', '1')
+	sv:SetMarginTypeN(2, SC_MARGIN_SYMBOL)
+	sv:SetMarginSensitiveN(2, true)
+	sv:SetMarginMaskN(2, SC_MASK_FOLDERS)
+	sv:SetMarginWidthN(2, 0)
+	sv:SetAutomaticFold(SC_AUTOMATICFOLD_CLICK)
+
+	sv:MarkerDefine(SC_MARKNUM_FOLDER, SC_MARK_CIRCLEPLUS) 
+	sv:MarkerDefine(SC_MARKNUM_FOLDEROPEN, SC_MARK_CIRCLEMINUS)
+	sv:MarkerDefine(SC_MARKNUM_FOLDEREND,  SC_MARK_CIRCLEPLUSCONNECTED)
+	sv:MarkerDefine(SC_MARKNUM_FOLDEROPENMID, SC_MARK_CIRCLEMINUSCONNECTED)
+	sv:MarkerDefine(SC_MARKNUM_FOLDERMIDTAIL, SC_MARK_TCORNERCURVE)
+	sv:MarkerDefine(SC_MARKNUM_FOLDERSUB, SC_MARK_VLINE)
+	sv:MarkerDefine(SC_MARKNUM_FOLDERTAIL, SC_MARK_LCORNERCURVE)
+	sv:SetFoldFlags(16|4, 0)
+
 	sv:set(SCN_CHARADDED, setting.on_char_added)
 
 	sv:IndicSetStyle(INDICATOR_FINDTEXT, INDIC_FULLBOX)
@@ -383,56 +416,15 @@ __exports.find_text_fill_all_indicator = function(sv, text)
 end
 
 __exports.reset_show_linenum = function(sv, show)
-	if show then
-		sv:SetMarginTypeN(0, SC_MARGIN_NUMBER)
-		sv:SetMarginWidthN(0, sv:TextWidth(STYLE_LINENUMBER, "_99999"))
-		sv:SetMarginSensitiveN(0, true)
-	else
-		sv:SetMarginTypeN(0, SC_MARGIN_SYMBOL)
-		sv:SetMarginWidthN(0, 0)
-		sv:SetMarginSensitiveN(0, false)
-	end
+	sv:SetMarginWidthN(0, show and sv:TextWidth(STYLE_LINENUMBER, "_99999") or 0)
 end
 
 __exports.reset_show_bp = function(sv, show)
-	if show then
-		sv:SetMarginTypeN(1, SC_MARGIN_SYMBOL)
-		sv:SetMarginMaskN(1, 0x01)
-		sv:SetMarginWidthN(1, 14)
-		sv:SetMarginSensitiveN(1, true)
-
-		sv:MarkerSetFore(0, colmap['marker_fore'])
-		sv:MarkerSetBack(0, colmap['marker_back'])
-		sv:MarkerDefine(0, SC_MARK_ROUNDRECT)
-	else
-		sv:SetMarginTypeN(1, SC_MARGIN_SYMBOL)
-		sv:SetMarginWidthN(1, 0)
-		sv:SetMarginSensitiveN(1, false)
-	end
+	sv:SetMarginWidthN(1, show and 14 or 0)
 end
 
 __exports.reset_fold_mode = function(sv, fold)
-	if fold then
-		sv:SetProperty('fold', '1')
-		sv:SetMarginTypeN(2, SC_MARGIN_SYMBOL)
-		sv:SetMarginMaskN(2, SC_MASK_FOLDERS)
-		sv:SetMarginWidthN(2, 14)
-		sv:SetMarginSensitiveN(2, true)
-		sv:SetAutomaticFold(SC_AUTOMATICFOLD_CLICK)
-
-		sv:MarkerDefine(SC_MARKNUM_FOLDER, SC_MARK_CIRCLEPLUS) 
-		sv:MarkerDefine(SC_MARKNUM_FOLDEROPEN, SC_MARK_CIRCLEMINUS)
-		sv:MarkerDefine(SC_MARKNUM_FOLDEREND,  SC_MARK_CIRCLEPLUSCONNECTED)
-		sv:MarkerDefine(SC_MARKNUM_FOLDEROPENMID, SC_MARK_CIRCLEMINUSCONNECTED)
-		sv:MarkerDefine(SC_MARKNUM_FOLDERMIDTAIL, SC_MARK_TCORNERCURVE)
-		sv:MarkerDefine(SC_MARKNUM_FOLDERSUB, SC_MARK_VLINE)
-		sv:MarkerDefine(SC_MARKNUM_FOLDERTAIL, SC_MARK_LCORNERCURVE)
-		sv:SetFoldFlags(16|4, 0)
-	else
-		sv:SetMarginTypeN(2, SC_MARGIN_SYMBOL)
-		sv:SetMarginWidthN(2, 0)
-		sv:SetMarginSensitiveN(2, false)
-	end
+	sv:SetMarginWidthN(2, fold and 14 or 0)
 end
 
 __exports.create = function(lang)
