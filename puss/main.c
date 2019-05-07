@@ -156,7 +156,7 @@ restart_label:
 #ifdef _WIN32
 	lua_pushstring(L, "\\libtcc.dll");
 #else
-	lua_pushstring(L, "\\libtcc.so");
+	lua_pushstring(L, "/libtcc.so");
 #endif
 	lua_concat(L, 2);
 	if( lua_pcall(L, 1, 1, 1)==LUA_OK ) {
