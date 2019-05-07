@@ -194,6 +194,8 @@ static int puss_tcc_add_symbol(lua_State* L) {
 		return NULL;
 	}
 
+	#define __reg_signals()
+
 	static int wrap_cfunction(lua_State* L) {
 		lua_CFunction f = lua_tocfunction(L, lua_upvalueindex(1));
 		const char* err = NULL;
@@ -207,11 +209,56 @@ static int puss_tcc_add_symbol(lua_State* L) {
 		return res;
 	}
 #else
+	#include <signal.h>
+
+	#if defined(__GNUC__)
+	#define l_noret		void __attribute__((noreturn))
+	#elif defined(_MSC_VER) && _MSC_VER >= 1200
+	#define l_noret		void __declspec(noreturn)
+	#else
+	#define l_noret		void
+	#endif
+
+	typedef void (*Pfunc) (lua_State *L, void *ud);
+	extern l_noret luaD_throw (lua_State *L, int errcode);
+	extern int luaD_rawrunprotected (lua_State *L, Pfunc f, void *ud);
+
+	static __thread lua_State* sigL;
+
+	static void __puss_tcc_sig_handle(int sig) {
+		if( sigL ) {
+			luaL_error(sigL, "sig error: %d", sig);
+		} else {
+			fprintf(stderr, "PussTcc sig error: %d\n", sig);
+			abort();
+		}
+	}
+
+	static void __reg_signals(void) {
+		signal(SIGFPE, __puss_tcc_sig_handle);
+		signal(SIGBUS, __puss_tcc_sig_handle);
+		signal(SIGSEGV, __puss_tcc_sig_handle);
+		signal(SIGILL, __puss_tcc_sig_handle);
+	}
+
+	struct WrapUD {
+		lua_CFunction	f;
+		int				res;
+		lua_State*		old;
+	};
+
+	static void wrap_pcall(lua_State* L, void* ud) {
+		struct WrapUD* r = (struct WrapUD*)ud;
+		sigL = L;
+		r->res = r->f(L);
+	}
+
 	static int wrap_cfunction(lua_State* L) {
-		lua_CFunction f = lua_tocfunction(L, lua_upvalueindex(1));
-		int res = 0;
-		res = f(L);
-		return res;
+		struct WrapUD ud = { lua_tocfunction(L, lua_upvalueindex(1)), 0, sigL };
+		int st = luaD_rawrunprotected(L, wrap_pcall, &ud);
+		sigL = ud.old;
+		if( st ) luaD_throw(L, st);
+		return ud.res;
 	}
 #endif
 
@@ -407,5 +454,6 @@ static int puss_push_libtcc_new(lua_State* L) {
 	LibTcc* lib = (LibTcc*)lua_newuserdata(L, sizeof(LibTcc));
 	_libtcc_load(L, lib, tcc_dll);
 	lua_pushcclosure(L, _puss_tcc_new, 1);
+	__reg_signals();
 	return 1;
 }

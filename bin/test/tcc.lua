@@ -1016,11 +1016,16 @@ function __main__()
 			lua_Number a = luaL_checknumber(L, 1);
 			lua_Number b = luaL_checknumber(L, 2);
 			lua_Integer c = luaL_optinteger(L, 3, 1);
+			int* p = NULL;
 			struct Test test = { a+b, {'a', 'b', '\0'} };
 			struct Test ddd;
 			ddd = test;
 			sprintf(buf, "%f %f %d", a, b, c);
 			memcpy(&ddd, &test, sizeof(test));
+			unsigned int aa = ~0, bb = ~0, cc = c;
+			cc = aa + bb;
+			// *p = cc;
+			// luaL_error(L, "test");
 			lua_pushinteger(L, ddd.len/c);
 			lua_pushstring(L, buf);
 			return 1;
@@ -1030,8 +1035,8 @@ function __main__()
 	print('foo', m:get_symbol('foo'))
 	local bar = m:get_symbol('bar')
 	print('bar', bar)
-	print(bar(33,44))
 	print(puss.trace_pcall(bar, 333, 444))
 	print(puss.trace_pcall(bar, 1, 2, 0))
+	print(bar, 1, 2, 0)
 	print('got it!')
 end
