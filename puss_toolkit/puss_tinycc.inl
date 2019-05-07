@@ -391,29 +391,40 @@ void puss_tcc_add_lua(LibTcc* libtcc, TCCState* s) {
 #undef _ADDSYM
 }
 
-static int puss_tcc_get_symbol(lua_State* L) {
+#define puss_upvalueindex(i)	lua_upvalueindex(1 + i)
+
+typedef void (*PussPushCClosure)(lua_State* L, lua_CFunction f, int nup);
+typedef int (*PussModuleInit)(lua_State* L, PussPushCClosure puss_pushcclosure);
+
+static void _puss_pushcclosure_tcc(lua_State* L, lua_CFunction f, int nup) {
+	luaL_checkudata(L, 1, PUSS_TCC_NAME);
+	lua_pushcfunction(L, f);
+	if( nup > 0 )	lua_insert(L, -(nup+1));
+	lua_pushvalue(L, 1);
+	lua_pushcclosure(L, wrap_cfunction, nup+2);
+}
+
+static int puss_tcc_relocate(lua_State* L) {
 	PussTccLua*	ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
-	const char* name = luaL_checkstring(L, 2);
-	lua_CFunction func = NULL;
-	if( !(ud->relocate) ) {
-		ud->relocate = 1;
-		puss_tcc_add_crt(ud->libtcc, ud->s);
-		puss_tcc_add_lua(ud->libtcc, ud->s);
-		if( ud->libtcc->tcc_relocate(ud->s, TCC_RELOCATE_AUTO) != 0 ) {
-			ud->libtcc->tcc_delete(ud->s);
-			ud->s = NULL;
-			puss_tcc_error(ud, "tcc_relocate failed!");
+	const char* init_function_name = luaL_checkstring(L, 2);
+	if( ud->relocate )
+		return 0;
+	ud->relocate = 1;
+	puss_tcc_add_crt(ud->libtcc, ud->s);
+	puss_tcc_add_lua(ud->libtcc, ud->s);
+	if( ud->libtcc->tcc_relocate(ud->s, TCC_RELOCATE_AUTO) != 0 ) {
+		ud->libtcc->tcc_delete(ud->s);
+		ud->s = NULL;
+		luaL_error(L, "relocate failed!");
+	}
+	if( init_function_name ) {
+		PussModuleInit init = (PussModuleInit)(ud->libtcc->tcc_get_symbol(ud->s, init_function_name));
+		if( init ) {
+			return init(L, _puss_pushcclosure_tcc);
 		}
+		luaL_error(L, "init function(%s) not found!", init_function_name);
 	}
-	func = (lua_CFunction)(ud->s ? ud->libtcc->tcc_get_symbol(ud->s, name) : NULL);
-	if( func ) {
-		lua_pushcfunction(L, func);
-		lua_pushvalue(L, 1);
-		lua_pushcclosure(L, wrap_cfunction, 2);
-	} else {
-		lua_pushnil(L);
-	}
-	return 1;
+	return 0;
 }
 
 static luaL_Reg puss_tcc_methods[] =
@@ -426,7 +437,7 @@ static luaL_Reg puss_tcc_methods[] =
 	, {"add_file", puss_tcc_add_file}
 	, {"compile_string", puss_tcc_compile_string}
 	, {"add_symbol", puss_tcc_add_symbol}
-	, {"get_symbol", puss_tcc_get_symbol}
+	, {"relocate", puss_tcc_relocate}
 	, {NULL, NULL}
 	};
 

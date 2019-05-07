@@ -367,6 +367,11 @@ void           luaL_setfuncs           (lua_State *L, const luaL_Reg *l, int nup
 int            luaL_getsubtable        (lua_State *L, int idx, const char *fname);
 void           luaL_traceback          (lua_State *L, lua_State *L1, const char *msg, int level);
 
+#define puss_upvalueindex(i)	lua_upvalueindex(1 + i)
+
+typedef void (*PussPushCClosure)(lua_State* L, lua_CFunction f, int nup);
+typedef int (*PussModuleInit)(lua_State* L, PussPushCClosure puss_pushcclosure);
+
 ]]
 
 local libtcc1_c = [[#line 1 "libtcc1.c"
@@ -1012,7 +1017,7 @@ function __main__()
 			char buf[128];
 		};
 
-		int bar(lua_State* L) {
+		int foo(lua_State* L) {
 			lua_Number a = luaL_checknumber(L, 1);
 			lua_Number b = luaL_checknumber(L, 2);
 			lua_Integer c = luaL_optinteger(L, 3, 1);
@@ -1030,13 +1035,30 @@ function __main__()
 			lua_pushstring(L, buf);
 			return 1;
 		}
+
+		int bar(lua_State* L) {
+			lua_pushvalue(L, puss_upvalueindex(1));
+			return 1;
+		}
+
+		int __module_init(lua_State* L, PussPushCClosure puss_pushcclosure) {
+			lua_newtable(L);
+			puss_pushcclosure(L, foo, 0);
+			lua_setfield(L, -2, "foo");
+
+			lua_pushstring(L, "hello, I'm bar!");
+			puss_pushcclosure(L, bar, 1);
+			lua_setfield(L, -2, "bar");
+			return 1;
+		}
 	]])
-	print(puss._path..'/libtcc1.a')
-	print('foo', m:get_symbol('foo'))
-	local bar = m:get_symbol('bar')
-	print('bar', bar)
-	print(puss.trace_pcall(bar, 333, 444))
-	print(puss.trace_pcall(bar, 1, 2, 0))
-	print(bar, 1, 2, 0)
+
+	local lib = m:relocate('__module_init')
+	for k,v in pairs(lib) do print(k,v) end
+
+	print(puss.trace_pcall(lib.foo, 333, 444))
+	print(puss.trace_pcall(lib.foo, 1, 2, 0))
+	print(puss.trace_pcall(lib.foo, 33, 2, 0))
+	print(puss.trace_pcall(lib.bar, 1, 2))
 	print('got it!')
 end
