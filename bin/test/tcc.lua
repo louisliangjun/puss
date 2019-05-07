@@ -144,7 +144,7 @@ unsigned long int strtoul(const char *nptr, char **endptr, int base);
 float strtof (const char * __restrict__, char ** __restrict__);
 double strtod(const char *_Str,char **_EndPtr);
 
-int sprintf(char *str, const char *format, ...);
+// int sprintf(char *str, const char *format, ...);
 ]]
 
 local lua_h = [[#line 1 "lua.h"
@@ -994,21 +994,14 @@ long long __fixxfdi (long double a1)
 #endif /* !ARM */
 ]]
 
-local tcc = puss.load_plugin('puss_tcc')
-
 function __main__()
-	local m = tcc.new()
-	m:set_options('-nostdinc -nostdlib')
+	local m = puss.tcc_new()
+	m:set_options('-Wall -Werror -nostdinc -nostdlib')
 	m:compile_string(libtcc1_c)
 
 	local function compile(ctx)
 		local files = { stddef_h, stdarg_h, stdlib_h, lua_h, ctx }
 		m:compile_string( table.concat(files, '\n') )
-		while true do
-			local e = m:pop_error()
-			if not e then break end
-			print('ERROR', e)
-		end
 	end
 
 	compile([[#line 1 "module.c"
@@ -1034,12 +1027,9 @@ function __main__()
 		}
 	]])
 	print(puss._path..'/libtcc1.a')
-	print(m:pop_error())
 	print('foo', m:get_symbol('foo'))
-	print(m:pop_error())
 	local bar = m:get_symbol('bar')
 	print('bar', bar)
-	print(m:pop_error())
 	print(bar(33,44))
 	print(puss.trace_pcall(bar, 333, 444))
 	print(puss.trace_pcall(bar, 1, 2, 0))
