@@ -235,10 +235,14 @@ static int puss_tcc_add_symbol(lua_State* L) {
 	}
 
 	static void __reg_signals(void) {
-		signal(SIGFPE, __puss_tcc_sig_handle);
-		signal(SIGBUS, __puss_tcc_sig_handle);
-		signal(SIGSEGV, __puss_tcc_sig_handle);
-		signal(SIGILL, __puss_tcc_sig_handle);
+		struct sigaction act;
+		memset(&act, 0, sizeof(act));
+		act.sa_handler = __puss_tcc_sig_handle;
+		act.sa_flags = SA_NODEFER | SA_NOMASK;
+		sigaction(SIGFPE, &act, NULL);
+		sigaction(SIGBUS, &act, NULL);
+		sigaction(SIGSEGV, &act, NULL);
+		sigaction(SIGILL, &act, NULL);
 	}
 
 	struct WrapUD {
@@ -320,7 +324,6 @@ void puss_tcc_add_lua(LibTcc* libtcc, TCCState* s) {
 	_ADDSYM(lua_pushstring)
 	_ADDSYM(lua_pushvfstring)
 	_ADDSYM(lua_pushfstring)
-	_ADDSYM(lua_pushcclosure)
 	_ADDSYM(lua_pushboolean)
 	_ADDSYM(lua_pushlightuserdata)
 	_ADDSYM(lua_pushthread)
@@ -410,7 +413,9 @@ static int puss_tcc_relocate(lua_State* L) {
 	if( ud->relocate )
 		return 0;
 	ud->relocate = 1;
+#ifdef _WIN32
 	puss_tcc_add_crt(ud->libtcc, ud->s);
+#endif
 	puss_tcc_add_lua(ud->libtcc, ud->s);
 	if( ud->libtcc->tcc_relocate(ud->s, TCC_RELOCATE_AUTO) != 0 ) {
 		ud->libtcc->tcc_delete(ud->s);

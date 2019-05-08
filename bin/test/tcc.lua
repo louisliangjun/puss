@@ -211,10 +211,6 @@ typedef int (*lua_KFunction) (lua_State *L, int status, lua_KContext ctx);
 #define lua_pop(L,n)		lua_settop(L, -(n)-1)
 #define lua_newtable(L)		lua_createtable(L, 0, 0)
 
-#define lua_register(L,n,f) (lua_pushcfunction(L, (f)), lua_setglobal(L, (n)))
-
-#define lua_pushcfunction(L,f)	lua_pushcclosure(L, (f), 0)
-
 #define lua_isfunction(L,n)	(lua_type(L, (n)) == LUA_TFUNCTION)
 #define lua_istable(L,n)	(lua_type(L, (n)) == LUA_TTABLE)
 #define lua_islightuserdata(L,n)	(lua_type(L, (n)) == LUA_TLIGHTUSERDATA)
@@ -298,7 +294,6 @@ const char*    lua_pushlstring         (lua_State *L, const char *s, size_t len)
 const char*    lua_pushstring          (lua_State *L, const char *s);
 const char*    lua_pushvfstring        (lua_State *L, const char *fmt, va_list argp);
 const char*    lua_pushfstring         (lua_State *L, const char *fmt, ...);
-void           lua_pushcclosure        (lua_State *L, lua_CFunction fn, int n);
 void           lua_pushboolean         (lua_State *L, int b);
 void           lua_pushlightuserdata   (lua_State *L, void *p);
 int            lua_pushthread          (lua_State *L);
