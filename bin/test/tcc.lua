@@ -144,7 +144,7 @@ unsigned long int strtoul(const char *nptr, char **endptr, int base);
 float strtof (const char * __restrict__, char ** __restrict__);
 double strtod(const char *_Str,char **_EndPtr);
 
-// int sprintf(char *str, const char *format, ...);
+int sprintf(char *str, const char *format, ...);
 ]]
 
 local lua_h = [[#line 1 "lua.h"
