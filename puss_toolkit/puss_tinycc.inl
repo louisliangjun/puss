@@ -7,6 +7,14 @@
 // libtcc header
 typedef struct TCCState TCCState;
 
+typedef struct TCCHook {
+    int  (*open)(const char* filename, int flag);
+    void (*close)(int fd);
+    long (*lseek)(int fd, long offset, int origin);
+	int  (*read)(int fd, void *buf, unsigned int len);
+} TCCHook;
+
+typedef void (*tcc_setup_hook_t)(const TCCHook *hook);
 typedef TCCState * (*tcc_new_t)(void);
 typedef void (*tcc_delete_t)(TCCState *s);
 typedef void (*tcc_set_lib_path_t)(TCCState *s, const char *path);
@@ -37,6 +45,7 @@ typedef int (*tcc_relocate_t)(TCCState *s1, void *ptr);
 typedef void * (*tcc_get_symbol_t)(TCCState *s, const char *name);
 
 #define TCC_SYMBOLS(TRAN) \
+	TRAN(tcc_setup_hook) \
 	TRAN(tcc_new) \
 	TRAN(tcc_delete) \
 	TRAN(tcc_set_lib_path) \
@@ -77,7 +86,7 @@ static lua_CFunction _libtcc_symbol(lua_State* L, const char* tcc_dll, const cha
 	return f;
 }
 
-static int _libtcc_load(lua_State* L, LibTcc* lib, const char* tcc_dll) {
+static int _libtcc_load(lua_State* L, LibTcc* lib, const char* tcc_dll, const TCCHook* tcc_hook) {
 	luaL_requiref(L, LUA_LOADLIBNAME, luaopen_package, 0);
 	assert( lua_type(L, -1)==LUA_TTABLE );
 	lua_getfield(L, -1, "loadlib");		// up[2]: package.loadlib
@@ -87,6 +96,10 @@ static int _libtcc_load(lua_State* L, LibTcc* lib, const char* tcc_dll) {
 	#define TCC_LOAD(sym)	lib->sym = (sym ## _t)_libtcc_symbol(L,tcc_dll, #sym);
 		TCC_SYMBOLS(TCC_LOAD)
 	#undef TCC_LOAD
+
+	if( tcc_hook && lib->tcc_setup_hook ) {
+		lib->tcc_setup_hook(tcc_hook);
+	}
 	lua_pop(L, 1);
 	return 0;
 }
@@ -482,8 +495,9 @@ static int _puss_tcc_new(lua_State* L) {
 
 static int puss_push_libtcc_new(lua_State* L) {
 	const char* tcc_dll = luaL_checkstring(L, 1);
+	const TCCHook* tcc_hook = (const TCCHook*)lua_touserdata(L, 2);
 	LibTcc* lib = (LibTcc*)lua_newuserdata(L, sizeof(LibTcc));
-	_libtcc_load(L, lib, tcc_dll);
+	_libtcc_load(L, lib, tcc_dll, tcc_hook);
 	lua_pushcclosure(L, _puss_tcc_new, 1);
 	__reg_signals();
 	return 1;
