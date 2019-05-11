@@ -45,7 +45,6 @@ typedef int (*tcc_relocate_t)(TCCState *s1, void *ptr);
 typedef void * (*tcc_get_symbol_t)(TCCState *s, const char *name);
 
 #define TCC_SYMBOLS(TRAN) \
-	TRAN(tcc_setup_hook) \
 	TRAN(tcc_new) \
 	TRAN(tcc_delete) \
 	TRAN(tcc_set_lib_path) \
@@ -68,6 +67,7 @@ typedef void * (*tcc_get_symbol_t)(TCCState *s, const char *name);
 
 
 typedef struct _LibTcc {
+	tcc_setup_hook_t	tcc_setup_hook;
 	#define TCC_DECL(sym)	sym ## _t	sym;
 		TCC_SYMBOLS(TCC_DECL)
 	#undef TCC_DECL
@@ -80,8 +80,7 @@ static lua_CFunction _libtcc_symbol(lua_State* L, const char* tcc_dll, const cha
 	lua_pushstring(L, tcc_dll);
 	lua_pushstring(L, sym);
 	lua_call(L, 2, 1);
-	if( (f = (lua_type(L, -1)==LUA_TFUNCTION ? lua_tocfunction(L, -1) : NULL))==NULL )
-		luaL_error(L, "load symbol(%s) failed!", sym);
+	f = lua_type(L, -1)==LUA_TFUNCTION ? lua_tocfunction(L, -1) : NULL;
 	lua_settop(L, top);
 	return f;
 }
@@ -93,7 +92,8 @@ static int _libtcc_load(lua_State* L, LibTcc* lib, const char* tcc_dll, const TC
 	assert( lua_type(L, -1)==LUA_TFUNCTION );
 	lua_remove(L, -2);
 
-	#define TCC_LOAD(sym)	lib->sym = (sym ## _t)_libtcc_symbol(L,tcc_dll, #sym);
+	lib->tcc_setup_hook = (tcc_setup_hook_t)_libtcc_symbol(L, tcc_dll, "tcc_setup_hook");
+	#define TCC_LOAD(sym)	if( (lib->sym = (sym ## _t)_libtcc_symbol(L, tcc_dll, #sym))==NULL ) luaL_error(L, "load symbol(" #sym ") failed!");
 		TCC_SYMBOLS(TCC_LOAD)
 	#undef TCC_LOAD
 
@@ -109,7 +109,6 @@ static int _libtcc_load(lua_State* L, LibTcc* lib, const char* tcc_dll, const TC
 typedef struct _PussTccLua {
 	LibTcc*		libtcc;
 	TCCState*	s;
-	int			relocate;
 } PussTccLua;
 
 static void puss_tcc_error(void *opaque, const char *msg) {
@@ -121,6 +120,15 @@ static int puss_tcc_destroy(lua_State* L) {
 	if( ud->s ) {
 		ud->libtcc->tcc_delete(ud->s);
 		ud->s = NULL;
+	}
+	return 0;
+}
+
+static int puss_tcc_set_lib_path(lua_State* L) {
+	PussTccLua*	ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
+	const char* path = luaL_checkstring(L, 2);
+	if( ud->s ) {
+		ud->libtcc->tcc_set_lib_path(ud->s, path);
 	}
 	return 0;
 }
@@ -197,12 +205,74 @@ static int puss_tcc_compile_string(lua_State* L) {
 	return 0;
 }
 
+static int puss_tcc_set_output_type(lua_State* L) {
+	PussTccLua*	ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
+	const char* tp = luaL_checkstring(L, 2);
+	int output_type = TCC_OUTPUT_MEMORY;
+	if( strcmp(tp, "exe") ) {
+		output_type = TCC_OUTPUT_EXE;
+	} else if( strcmp(tp, "dll") ) {
+		output_type = TCC_OUTPUT_DLL;
+	} else if( strcmp(tp, "obj") ) {
+		output_type = TCC_OUTPUT_OBJ;
+	} else if( strcmp(tp, "preprocess") ) {
+		output_type = TCC_OUTPUT_PREPROCESS;
+	}
+	if( ud->s ) {
+		ud->libtcc->tcc_set_output_type(ud->s, output_type);
+	}
+	return 0;
+}
+
+static int puss_tcc_add_library_path(lua_State* L) {
+	PussTccLua*	ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
+	const char* pathname = luaL_checkstring(L, 2);
+	if( ud->s ) {
+		ud->libtcc->tcc_add_library_path(ud->s, pathname);
+	}
+	return 0;
+}
+
+static int puss_tcc_add_library(lua_State* L) {
+	PussTccLua*	ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
+	const char* libraryname = luaL_checkstring(L, 2);
+	if( ud->s ) {
+		ud->libtcc->tcc_add_library(ud->s, libraryname);
+	}
+	return 0;
+}
+
 static int puss_tcc_add_symbol(lua_State* L) {
 	PussTccLua*	ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
 	const char* name = luaL_checkstring(L, 2);
 	const void* val = lua_topointer(L, 3);
 	if( ud->s ) {
 		ud->libtcc->tcc_add_symbol(ud->s, name, val);
+	}
+	return 0;
+}
+
+static int puss_tcc_output_file(lua_State* L) {
+	PussTccLua*	ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
+	const char* filename = luaL_checkstring(L, 2);
+	if( ud->s ) {
+		ud->libtcc->tcc_output_file(ud->s, filename);
+	}
+	return 0;
+}
+
+static int puss_tcc_run(lua_State* L) {
+	PussTccLua*	ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
+	int argc = lua_gettop(L) - 1;
+	#define ARGS_MAX	64
+	const char* argv[ARGS_MAX];
+	int i;
+	if( argc > ARGS_MAX )
+		argc = ARGS_MAX;
+	for( i=0; i<argc; ++i )
+		argv[i] = luaL_checkstring(L, i+2);
+	if( ud->s ) {
+		ud->libtcc->tcc_run(ud->s, argc, (char**)argv);
 	}
 	return 0;
 }
@@ -292,6 +362,7 @@ static int puss_tcc_add_symbol(lua_State* L) {
 	}
 #endif
 
+#ifdef _WIN32
 static void puss_tcc_add_crt(LibTcc* libtcc, TCCState* s) {
 #define _ADDSYM(sym)	libtcc->tcc_add_symbol(s, #sym, sym);
 	_ADDSYM(memcmp);
@@ -313,6 +384,7 @@ static void puss_tcc_add_crt(LibTcc* libtcc, TCCState* s) {
 	_ADDSYM(sprintf);
 #undef _ADDSYM
 }
+#endif
 
 void puss_tcc_add_lua(LibTcc* libtcc, TCCState* s) {
 #define _ADDSYM(sym)	libtcc->tcc_add_symbol(s, #sym, sym);
@@ -348,7 +420,6 @@ void puss_tcc_add_lua(LibTcc* libtcc, TCCState* s) {
 	_ADDSYM(lua_pushinteger)
 	_ADDSYM(lua_pushlstring)
 	_ADDSYM(lua_pushstring)
-	_ADDSYM(lua_pushvfstring)
 	_ADDSYM(lua_pushfstring)
 	_ADDSYM(lua_pushboolean)
 	_ADDSYM(lua_pushlightuserdata)
@@ -414,9 +485,7 @@ void puss_tcc_add_lua(LibTcc* libtcc, TCCState* s) {
 	_ADDSYM(luaL_loadstring)
 	_ADDSYM(luaL_len)
 	_ADDSYM(luaL_gsub)
-	_ADDSYM(luaL_setfuncs)
 	_ADDSYM(luaL_getsubtable)
-	_ADDSYM(luaL_traceback)
 #undef _ADDSYM
 }
 
@@ -438,13 +507,19 @@ static int puss_tcc_relocate(lua_State* L) {
 	const char* init_function_name = luaL_checkstring(L, 2);
 	if( !ud->s )
 		return 0;
-	if( ud->relocate )
-		return 0;
-	ud->relocate = 1;
 #ifdef _WIN32
 	puss_tcc_add_crt(ud->libtcc, ud->s);
 #endif
 	puss_tcc_add_lua(ud->libtcc, ud->s);
+	if( lua_istable(L, 3) ) {
+		lua_pushnil(L);
+		while( lua_next(L, 3) ) {
+			if( lua_isstring(L, -2) && lua_islightuserdata(L, -1) ) {
+				ud->libtcc->tcc_add_symbol(ud->s, lua_tostring(L, -2), lua_touserdata(L, -1));
+			}
+			lua_pop(L, 1);
+		}
+	}
 	if( ud->libtcc->tcc_relocate(ud->s, TCC_RELOCATE_AUTO) != 0 ) {
 		ud->libtcc->tcc_delete(ud->s);
 		ud->s = NULL;
@@ -460,8 +535,22 @@ static int puss_tcc_relocate(lua_State* L) {
 	return 0;
 }
 
+static int puss_tcc_get_symbol(lua_State* L) {
+	PussTccLua*	ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
+	const char* name = luaL_checkstring(L, 2);
+	if( ud->s ) {
+		void* sym = ud->libtcc->tcc_get_symbol(ud->s, name);
+		if( sym ) {
+			lua_pushlightuserdata(L, sym);
+			return 1;
+		}
+	}
+	return 0;
+}
+
 static luaL_Reg puss_tcc_methods[] =
 	{ {"__gc", puss_tcc_destroy}
+	, {"tcc_set_lib_path", puss_tcc_set_lib_path}
 	, {"set_options", puss_tcc_set_options}
 	, {"add_include_path", puss_tcc_add_include_path}
 	, {"add_sysinclude_path", puss_tcc_add_sysinclude_path}
@@ -470,7 +559,13 @@ static luaL_Reg puss_tcc_methods[] =
 	, {"add_file", puss_tcc_add_file}
 	, {"compile_string", puss_tcc_compile_string}
 	, {"add_symbol", puss_tcc_add_symbol}
+	, {"set_output_type", puss_tcc_set_output_type}
+	, {"add_library_path", puss_tcc_add_library_path}
+	, {"add_library", puss_tcc_add_library}
+	, {"output_file", puss_tcc_output_file}
+	, {"run", puss_tcc_run}
 	, {"relocate", puss_tcc_relocate}
+	, {"get_symbol", puss_tcc_get_symbol}
 	, {NULL, NULL}
 	};
 
@@ -479,7 +574,6 @@ static int _puss_tcc_new(lua_State* L) {
 	PussTccLua*	ud = (PussTccLua*)lua_newuserdata(L, sizeof(PussTccLua));
 	ud->libtcc = lib;
 	ud->s = NULL;
-	ud->relocate = 0;
 
 	if( luaL_newmetatable(L, PUSS_TCC_NAME) ) {
 		luaL_setfuncs(L, puss_tcc_methods, 0);
