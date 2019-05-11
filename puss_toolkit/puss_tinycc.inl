@@ -209,13 +209,13 @@ static int puss_tcc_set_output_type(lua_State* L) {
 	PussTccLua*	ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
 	const char* tp = luaL_checkstring(L, 2);
 	int output_type = TCC_OUTPUT_MEMORY;
-	if( strcmp(tp, "exe") ) {
+	if( strcmp(tp, "exe")==0 ) {
 		output_type = TCC_OUTPUT_EXE;
-	} else if( strcmp(tp, "dll") ) {
+	} else if( strcmp(tp, "dll")==0 ) {
 		output_type = TCC_OUTPUT_DLL;
-	} else if( strcmp(tp, "obj") ) {
+	} else if( strcmp(tp, "obj")==0 ) {
 		output_type = TCC_OUTPUT_OBJ;
-	} else if( strcmp(tp, "preprocess") ) {
+	} else if( strcmp(tp, "preprocess")==0 ) {
 		output_type = TCC_OUTPUT_PREPROCESS;
 	}
 	if( ud->s ) {
