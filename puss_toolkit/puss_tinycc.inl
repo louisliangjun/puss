@@ -362,14 +362,14 @@ static int puss_tcc_run(lua_State* L) {
 
 	static void wrap_pcall(lua_State* L, void* ud) {
 		struct WrapUD* r = (struct WrapUD*)ud;
-		sigL = L;
+		sigUD = r;
 		r->res = r->f(L);
 	}
 
 	static int wrap_cfunction(lua_State* L) {
-		struct WrapUD ud = { lua_tocfunction(L, lua_upvalueindex(1)), (PussTccLua*)lua_touserdata(L, lua_upvalueindex(2)), 0, sigL };
+		struct WrapUD ud = { L, lua_tocfunction(L, lua_upvalueindex(1)), (PussTccLua*)lua_touserdata(L, lua_upvalueindex(2)), 0, sigUD };
 		int st = luaD_rawrunprotected(L, wrap_pcall, &ud);
-		sigL = ud.old;
+		sigUD = ud.old;
 		if( st ) luaD_throw(L, st);
 		return ud.res;
 	}
