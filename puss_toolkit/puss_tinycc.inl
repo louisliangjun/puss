@@ -2,6 +2,20 @@
 
 #ifndef PUSS_TCC_TRACE_ERROR
 	#define PUSS_TCC_TRACE_ERROR(err)	fprintf(stderr, "PussTcc: %s\n", err)
+	#define PUSS_TCC_TRACE_ERROR(err)	fprintf(stderr, "PussTcc: %s\n", err)
+#endif
+
+#ifndef PUSS_TCC_RT_TRACE_BEGIN
+	#define PUSS_TCC_RT_TRACE_BEGIN()
+#endif
+
+#ifndef PUSS_TCC_RT_TRACE
+	static void _puss_rt_trace(const char* msg) { fprintf(stderr, "%s", msg); }
+	#define PUSS_TCC_RT_TRACE			_puss_rt_trace
+#endif
+
+#ifndef PUSS_TCC_RT_TRACE_END
+	#define PUSS_TCC_RT_TRACE_END()
 #endif
 
 // libtcc header
@@ -15,7 +29,7 @@ typedef struct TCCHook {
 } TCCHook;
 
 typedef void (*tcc_setup_hook_t)(const TCCHook *hook);
-typedef void (*tcc_debug_rt_error_t)(TCCState *s, void *rt_main, int max_level, void* uc);
+typedef void (*tcc_debug_rt_error_t)(TCCState *s, void *rt_main, int max_level, void* uc, void (*trace)(const char* msg));
 typedef TCCState * (*tcc_new_t)(void);
 typedef void (*tcc_delete_t)(TCCState *s);
 typedef void (*tcc_set_lib_path_t)(TCCState *s, const char *path);
@@ -75,39 +89,6 @@ typedef struct _LibTcc {
 	#undef TCC_DECL
 } LibTcc;
 
-#ifdef _PUSS_TCC_USE_STATIC_LIB
-extern void tcc_setup_hook(const TCCHook *hook);
-extern void tcc_debug_rt_error(TCCState *s, void *rt_main, int max_level, void* uc);
-extern TCCState * tcc_new(void);
-extern void tcc_delete(TCCState *s);
-extern void tcc_set_lib_path(TCCState *s, const char *path);
-extern void tcc_set_error_func(TCCState *s, void *error_opaque, void (*error_func)(void *opaque, const char *msg));
-extern void tcc_set_options(TCCState *s, const char *str);
-extern int tcc_add_include_path(TCCState *s, const char *pathname);
-extern int tcc_add_sysinclude_path(TCCState *s, const char *pathname);
-extern void tcc_define_symbol(TCCState *s, const char *sym, const char *value);
-extern void tcc_undefine_symbol(TCCState *s, const char *sym);
-extern int tcc_add_file(TCCState *s, const char *filename);
-extern int tcc_compile_string(TCCState *s, const char *buf);
-extern int tcc_set_output_type(TCCState *s, int output_type);
-extern int tcc_add_library_path(TCCState *s, const char *pathname);
-extern int tcc_add_library(TCCState *s, const char *libraryname);
-extern int tcc_add_symbol(TCCState *s, const char *name, const void *val);
-extern int tcc_output_file(TCCState *s, const char *filename);
-extern int tcc_run(TCCState *s, int argc, char **argv);
-extern int tcc_relocate(TCCState *s1, void *ptr);
-extern void * tcc_get_symbol(TCCState *s1, const char *name);
-
-static int _libtcc_load(lua_State* L, LibTcc* lib, const char* tcc_dll, const TCCHook* tcc_hook) {
-	#define TCC_LOAD(sym)   lib->sym = sym;
-		TCC_SYMBOLS(TCC_LOAD)
-	#undef TCC_LOAD
-	if( tcc_hook ) {
-		tcc_setup_hook(tcc_hook);
-	}
-	return 0;
-}
-#else
 static lua_CFunction _libtcc_symbol(lua_State* L, const char* tcc_dll, const char* sym) {
 	int top = lua_gettop(L);
 	lua_CFunction f;
@@ -137,7 +118,6 @@ static int _libtcc_load(lua_State* L, LibTcc* lib, const char* tcc_dll, const TC
 	lua_pop(L, 1);
 	return 0;
 }
-#endif
 
 #define PUSS_TCC_NAME		"[PussTcc]"
 
@@ -320,8 +300,17 @@ static int puss_tcc_run(lua_State* L) {
 		case EXCEPTION_INT_DIVIDE_BY_ZERO:	err = "EXCEPTION_INT_DIVIDE_BY_ZERO";	break;
 		case EXCEPTION_STACK_OVERFLOW:		err = "EXCEPTION_STACK_OVERFLOW";		break;
 		}
-		fprintf(stderr, "[PussTCC] error(%x): %s\n", ex_info->ExceptionRecord->ExceptionCode, err ? err : "exception");
-		ud->libtcc->tcc_debug_rt_error(ud->s, f, 16, ex_info->ContextRecord);
+		PUSS_TCC_RT_TRACE_BEGIN();
+		PUSS_TCC_RT_TRACE("Except");
+		{
+			char emsg[64];
+			sprintf(emsg, "(0x%x):", ex_info->ExceptionRecord->ExceptionCode);
+			PUSS_TCC_RT_TRACE(emsg);
+		}
+		PUSS_TCC_RT_TRACE(err ? err : "exception");
+		PUSS_TCC_RT_TRACE("\n");
+		ud->libtcc->tcc_debug_rt_error(ud->s, f, 16, ex_info->ContextRecord, PUSS_TCC_RT_TRACE);
+		PUSS_TCC_RT_TRACE_END();
 		return err;
 	}
 
@@ -371,7 +360,7 @@ static int puss_tcc_run(lua_State* L) {
 	static void __puss_tcc_sig_handle(int sig, siginfo_t *info, void *uc) {
 		fprintf(stderr, "[PussTCC] error(%d)\n", sig);
 		if( sigUD ) {
-			sigUD->t->libtcc->tcc_debug_rt_error(sigUD->t->s, sigUD->f, 16, uc);
+			sigUD->t->libtcc->tcc_debug_rt_error(sigUD->t->s, sigUD->f, 16, uc, PUSS_TCC_RT_TRACE);
 			luaL_error(sigUD->L, "sig error: %d", sig);
 		} else {
 			char msg[64];
