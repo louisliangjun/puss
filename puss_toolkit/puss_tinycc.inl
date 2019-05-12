@@ -15,6 +15,9 @@ typedef struct TCCHook {
 } TCCHook;
 
 typedef void (*tcc_setup_hook_t)(const TCCHook *hook);
+
+typedef void (*tcc_debug_rt_error_t)(TCCState *s, void *rt_main, int max_level, void* uc);
+
 typedef TCCState * (*tcc_new_t)(void);
 typedef void (*tcc_delete_t)(TCCState *s);
 typedef void (*tcc_set_lib_path_t)(TCCState *s, const char *path);
@@ -45,6 +48,8 @@ typedef int (*tcc_relocate_t)(TCCState *s1, void *ptr);
 typedef void * (*tcc_get_symbol_t)(TCCState *s, const char *name);
 
 #define TCC_SYMBOLS(TRAN) \
+	TRAN(tcc_setup_hook) \
+	TRAN(tcc_debug_rt_error) \
 	TRAN(tcc_new) \
 	TRAN(tcc_delete) \
 	TRAN(tcc_set_lib_path) \
@@ -67,7 +72,6 @@ typedef void * (*tcc_get_symbol_t)(TCCState *s, const char *name);
 
 
 typedef struct _LibTcc {
-	tcc_setup_hook_t	tcc_setup_hook;
 	#define TCC_DECL(sym)	sym ## _t	sym;
 		TCC_SYMBOLS(TCC_DECL)
 	#undef TCC_DECL
@@ -92,12 +96,11 @@ static int _libtcc_load(lua_State* L, LibTcc* lib, const char* tcc_dll, const TC
 	assert( lua_type(L, -1)==LUA_TFUNCTION );
 	lua_remove(L, -2);
 
-	lib->tcc_setup_hook = (tcc_setup_hook_t)_libtcc_symbol(L, tcc_dll, "tcc_setup_hook");
 	#define TCC_LOAD(sym)	if( (lib->sym = (sym ## _t)_libtcc_symbol(L, tcc_dll, #sym))==NULL ) luaL_error(L, "load symbol(" #sym ") failed!");
 		TCC_SYMBOLS(TCC_LOAD)
 	#undef TCC_LOAD
 
-	if( tcc_hook && lib->tcc_setup_hook ) {
+	if( tcc_hook ) {
 		lib->tcc_setup_hook(tcc_hook);
 	}
 	lua_pop(L, 1);
@@ -278,26 +281,30 @@ static int puss_tcc_run(lua_State* L) {
 }
 
 #ifdef _WIN32
-	static const char* except_filter(unsigned long e) {
-		switch( e ) {
-		case EXCEPTION_ACCESS_VIOLATION:	return "EXCEPTION_ACCESS_VIOLATION";
-		case EXCEPTION_INT_DIVIDE_BY_ZERO:	return "EXCEPTION_INT_DIVIDE_BY_ZERO";
-		case EXCEPTION_STACK_OVERFLOW:		return "EXCEPTION_STACK_OVERFLOW";
-		default:	break;
+	static const char* WINAPI except_filter(EXCEPTION_POINTERS *ex_info, PussTccLua *ud, void* f) {
+		const char* err = NULL;
+		switch (ex_info->ExceptionRecord->ExceptionCode) {
+		case EXCEPTION_ACCESS_VIOLATION:	err = "EXCEPTION_ACCESS_VIOLATION";		break;
+		case EXCEPTION_INT_DIVIDE_BY_ZERO:	err = "EXCEPTION_INT_DIVIDE_BY_ZERO";	break;
+		case EXCEPTION_STACK_OVERFLOW:		err = "EXCEPTION_STACK_OVERFLOW";		break;
 		}
-		return NULL;
+		fprintf(stderr, "[PussTCC] error(%x): %s\n", ex_info->ExceptionRecord->ExceptionCode, err ? err : "exception");
+		ud->libtcc->tcc_debug_rt_error(ud->s, f, 16, ex_info->ContextRecord);
+		return err;
 	}
 
 	#define __reg_signals()
 
 	static int wrap_cfunction(lua_State* L) {
 		lua_CFunction f = lua_tocfunction(L, lua_upvalueindex(1));
+		PussTccLua* ud = (PussTccLua*)lua_touserdata(L, lua_upvalueindex(2));
 		const char* err = NULL;
 		int res;
+
 		__try {
 			res = f(L);
 		}
-		__except( ((err = except_filter(GetExceptionCode()))==NULL) ? EXCEPTION_CONTINUE_SEARCH : EXCEPTION_EXECUTE_HANDLER) {
+		__except( ((err = except_filter(GetExceptionInformation(), ud, (void*)f))==NULL) ? EXCEPTION_CONTINUE_SEARCH : EXCEPTION_EXECUTE_HANDLER) {
 			luaL_error(L, err);
 		}
 		return res;
@@ -343,6 +350,7 @@ static int puss_tcc_run(lua_State* L) {
 
 	struct WrapUD {
 		lua_CFunction	f;
+		PussTccLua*		t;
 		int				res;
 		lua_State*		old;
 	};
@@ -354,7 +362,7 @@ static int puss_tcc_run(lua_State* L) {
 	}
 
 	static int wrap_cfunction(lua_State* L) {
-		struct WrapUD ud = { lua_tocfunction(L, lua_upvalueindex(1)), 0, sigL };
+		struct WrapUD ud = { lua_tocfunction(L, lua_upvalueindex(1)), (PussTccLua*)lua_touserdata(L, lua_upvalueindex(2)), 0, sigL };
 		int st = luaD_rawrunprotected(L, wrap_pcall, &ud);
 		sigL = ud.old;
 		if( st ) luaD_throw(L, st);
@@ -489,7 +497,7 @@ void puss_tcc_add_lua(LibTcc* libtcc, TCCState* s) {
 #undef _ADDSYM
 }
 
-#define puss_upvalueindex(i)	lua_upvalueindex(1 + i)
+#define puss_upvalueindex(i)	lua_upvalueindex(2 + i)
 
 typedef void (*PussPushCClosure)(lua_State* L, lua_CFunction f, int nup);
 typedef int (*PussModuleInit)(lua_State* L, PussPushCClosure puss_pushcclosure);
@@ -497,8 +505,9 @@ typedef int (*PussModuleInit)(lua_State* L, PussPushCClosure puss_pushcclosure);
 static void _puss_pushcclosure_tcc(lua_State* L, lua_CFunction f, int nup) {
 	luaL_checkudata(L, 1, PUSS_TCC_NAME);
 	lua_pushcfunction(L, f);
-	if( nup > 0 )	lua_insert(L, -(nup+1));
 	lua_pushvalue(L, 1);
+	if( nup > 0 )
+		lua_rotate(L, -(nup+2), 2);
 	lua_pushcclosure(L, wrap_cfunction, nup+2);
 }
 
@@ -583,7 +592,6 @@ static int _puss_tcc_new(lua_State* L) {
 	lua_setmetatable(L, -2);
 	ud->s = ud->libtcc->tcc_new();
 	ud->libtcc->tcc_set_error_func(ud->s, ud, puss_tcc_error);
-	ud->libtcc->tcc_set_output_type(ud->s, TCC_OUTPUT_MEMORY);
 	return 1;
 }
 

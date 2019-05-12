@@ -996,7 +996,8 @@ long long __fixxfdi (long double a1)
 
 function __main__()
 	local m = puss.tcc_new()
-	m:set_options('-Wall -Werror -nostdinc -nostdlib')
+	m:set_options('-Wall -Werror -g -nostdinc -nostdlib')
+	m:set_output_type('memory')
 	m:compile_string(libtcc1_c)
 
 	local function compile(ctx)
@@ -1012,10 +1013,7 @@ function __main__()
 			char buf[128];
 		};
 
-		int foo(lua_State* L) {
-			lua_Number a = luaL_checknumber(L, 1);
-			lua_Number b = luaL_checknumber(L, 2);
-			lua_Integer c = luaL_optinteger(L, 3, 1);
+		static int foo2(lua_State* L, lua_Number a, lua_Number b, lua_Integer c) {
 			int* p = NULL;
 			struct Test test = { a+b, {'a', 'b', '\0'} };
 			struct Test ddd;
@@ -1028,10 +1026,17 @@ function __main__()
 			// luaL_error(L, "test");
 			lua_pushinteger(L, ddd.len/c);
 			lua_pushstring(L, buf);
-			return 1;
+			return 2;
 		}
 
-		int bar(lua_State* L) {
+		static int foo(lua_State* L) {
+			lua_Number a = luaL_checknumber(L, 1);
+			lua_Number b = luaL_checknumber(L, 2);
+			lua_Integer c = luaL_optinteger(L, 3, 1);
+			return foo2(L, a, b, c);
+		}
+
+		static int bar(lua_State* L) {
 			lua_pushvalue(L, puss_upvalueindex(1));
 			return 1;
 		}
