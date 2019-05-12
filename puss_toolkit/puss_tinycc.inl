@@ -324,11 +324,23 @@ static int puss_tcc_run(lua_State* L) {
 	extern l_noret luaD_throw (lua_State *L, int errcode);
 	extern int luaD_rawrunprotected (lua_State *L, Pfunc f, void *ud);
 
-	static __thread lua_State* sigL;
+	typedef struct WrapUD	WrapUD;
 
-	static void __puss_tcc_sig_handle(int sig) {
-		if( sigL ) {
-			luaL_error(sigL, "sig error: %d", sig);
+	struct WrapUD {
+		lua_State*		L;
+		lua_CFunction	f;
+		PussTccLua*		t;
+		int				res;
+		WrapUD*			old;
+	};
+
+	static __thread WrapUD* sigUD;
+
+	static void __puss_tcc_sig_handle(int sig, siginfo_t *info, void *uc) {
+		fprintf(stderr, "[PussTCC] error(%d)\n", sig);
+		if( sigUD ) {
+			sigUD->t->libtcc->tcc_debug_rt_error(sigUD->t->s, sigUD->f, 16, uc);
+			luaL_error(sigUD->L, "sig error: %d", sig);
 		} else {
 			char msg[64];
 			sprintf(msg, "sig error: %d\n", sig);
@@ -341,19 +353,12 @@ static int puss_tcc_run(lua_State* L) {
 		struct sigaction act;
 		memset(&act, 0, sizeof(act));
 		act.sa_handler = __puss_tcc_sig_handle;
-		act.sa_flags = SA_NODEFER | SA_NOMASK;
+		act.sa_flags = SA_NODEFER | SA_NOMASK | SA_SIGINFO;
 		sigaction(SIGFPE, &act, NULL);
 		sigaction(SIGBUS, &act, NULL);
 		sigaction(SIGSEGV, &act, NULL);
 		sigaction(SIGILL, &act, NULL);
 	}
-
-	struct WrapUD {
-		lua_CFunction	f;
-		PussTccLua*		t;
-		int				res;
-		lua_State*		old;
-	};
 
 	static void wrap_pcall(lua_State* L, void* ud) {
 		struct WrapUD* r = (struct WrapUD*)ud;
