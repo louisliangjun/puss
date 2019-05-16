@@ -415,7 +415,7 @@ static void script_hook(lua_State* L, lua_Debug* ar) {
 
 static int lua_debug_reset(lua_State* L) {
 	DebugEnv* env = *(DebugEnv**)luaL_checkudata(L, 1, PUSS_DEBUG_NAME);
-	int hook_usage = lua_toboolean(L, 2);
+	int hook_usage = lua_toboolean(L, 3);
 	int hook_count = (int)luaL_optinteger(L, 4, 0);
 	debug_handle_unref(env);
 	if( lua_isfunction(L, 2) ) {

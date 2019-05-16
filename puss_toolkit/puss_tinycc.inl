@@ -301,6 +301,19 @@ static int puss_tcc_add_symbol(lua_State* L) {
 	return 0;
 }
 
+static int puss_tcc_add_symbols(lua_State* L) {
+	PussTccLua*	ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
+	luaL_checktype(L, 2, LUA_TTABLE);
+	lua_pushnil(L);
+	while( lua_next(L, 3) ) {
+		if( lua_isstring(L, -2) && lua_islightuserdata(L, -1) ) {
+			ud->libtcc->tcc_add_symbol(ud->s, lua_tostring(L, -2), lua_touserdata(L, -1));
+		}
+		lua_pop(L, 1);
+	}
+	return 0;
+}
+
 static int puss_tcc_output_file(lua_State* L) {
 	PussTccLua*	ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
 	const char* filename = luaL_checkstring(L, 2);
@@ -580,15 +593,6 @@ static int puss_tcc_relocate(lua_State* L) {
 	puss_tcc_add_crt(ud->libtcc, ud->s);
 #endif
 	puss_tcc_add_lua(ud->libtcc, ud->s);
-	if( lua_istable(L, 3) ) {
-		lua_pushnil(L);
-		while( lua_next(L, 3) ) {
-			if( lua_isstring(L, -2) && lua_islightuserdata(L, -1) ) {
-				ud->libtcc->tcc_add_symbol(ud->s, lua_tostring(L, -2), lua_touserdata(L, -1));
-			}
-			lua_pop(L, 1);
-		}
-	}
 	if( ud->libtcc->tcc_relocate(ud->s, TCC_RELOCATE_AUTO) != 0 ) {
 		ud->libtcc->tcc_delete(ud->s);
 		ud->s = NULL;
@@ -628,6 +632,7 @@ static luaL_Reg puss_tcc_methods[] =
 	, {"add_file", puss_tcc_add_file}
 	, {"compile_string", puss_tcc_compile_string}
 	, {"add_symbol", puss_tcc_add_symbol}
+	, {"add_symbols", puss_tcc_add_symbols}
 	, {"set_output_type", puss_tcc_set_output_type}
 	, {"add_library_path", puss_tcc_add_library_path}
 	, {"add_library", puss_tcc_add_library}
