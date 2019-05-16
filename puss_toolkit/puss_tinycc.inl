@@ -413,7 +413,7 @@ static int puss_tcc_run(lua_State* L) {
 			char msg[64];
 			sprintf(msg, "sig error: %d\n", sig);
 			PUSS_TCC_TRACE_ERROR(msg);
-			abort();
+			signal(sig, SIG_DFL);
 		}
 	}
 
