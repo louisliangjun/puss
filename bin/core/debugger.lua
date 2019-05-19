@@ -1,5 +1,7 @@
 -- core.debugger
 
+-- local puss_system = puss.load_plugin('puss_system')
+-- local tinycc = puss.import('core.tinycc')
 local shotcuts = puss.import('core.shotcuts')
 local pages = puss.import('core.pages')
 local docs = puss.import('core.docs')
@@ -132,13 +134,21 @@ do
 	end
 end
 
-debugger_events.attached = function(bps)
-	print('bps:', bps)
+debugger_events.attached = function(pid, bps)
+	print('attached', pid, bps)
 	for k,v in pairs(bps) do
 		local fname, line = k:match('^(.+):(%d+)$')
 		print(fname, line, v)
 	end
-	print('bps!')
+--[[
+	if puss_system.debug_active_process then
+		local active, reason = puss_system.debug_active_process(pid)
+		print('active', active, reason)
+		if active then
+			debug_pid = pid
+		end
+	end
+--]]
 end
 
 debugger_events.continued = function()
@@ -671,6 +681,12 @@ local function do_update()
 	end
 
 	thread.update()
+
+	--[[
+	if debug_pid then
+		print('wait', puss_system.wait_for_debug_event(100, print, puss.logerr_handle(), 'aa', 'bb'))
+	end
+	--]]
 
 	imgui.protect_pcall(show_main_window)
 

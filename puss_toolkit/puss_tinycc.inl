@@ -462,6 +462,7 @@ static void puss_tcc_add_crt(LibTcc* libtcc, TCCState* s) {
 	_ADDSYM(strtof);
 	_ADDSYM(strtod);
 
+	_ADDSYM(printf);
 	_ADDSYM(sprintf);
 #undef _ADDSYM
 }

@@ -11,6 +11,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="puss_debugapi.c" />
     <ClCompile Include="puss_module_system.c" />
     <ClCompile Include="puss_socket.c" />
   </ItemGroup>

@@ -1046,12 +1046,24 @@ static int lua_debug_capture_error(lua_State* L) {
 		luaL_pushresult(&(PENV.B));
 		return 1;
 	}
+
+	static int lua_debug_getpid(lua_State* L) {
+		lua_pushinteger(L, GetCurrentProcessId());
+		return 1;
+	}
 #else
 	static int lua_debug_fetch_disasm(lua_State* L) {
 		return 0;
 	}
+
 	static int _fetch_disasm(lua_State* L) {
 		return 0;
+	}
+
+	static int lua_debug_getpid(lua_State* L) {
+		// TODO : lua_pushinteger(L, getpid());
+		lua_pushinteger(L, 0);
+		return 1;
 	}
 #endif
 
@@ -1069,6 +1081,7 @@ static luaL_Reg puss_debug_methods[] =
 	, {"jmp_to", lua_debug_jmp_to}
 	, {"capture_error", lua_debug_capture_error}
 	, {"fetch_disasm", lua_debug_fetch_disasm}
+	, {"getpid", lua_debug_getpid}
 	, {NULL, NULL}
 	};
 

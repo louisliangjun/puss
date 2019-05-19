@@ -75,7 +75,7 @@ if puss._debug_proxy then
 		print('* host attach', socket, address)
 		listen_socket:close()
 		listen_socket, host_info = nil, nil
-		net.send(socket, nil, 'attached', puss_debug:get_bps())
+		net.send(socket, nil, 'attached', puss_debug:getpid(), puss_debug:get_bps())
 		return true
 	end
 
