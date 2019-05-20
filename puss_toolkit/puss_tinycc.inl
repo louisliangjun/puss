@@ -340,7 +340,7 @@ static int puss_tcc_run(lua_State* L) {
 }
 
 #ifdef _WIN32
-	static const char* WINAPI except_filter(EXCEPTION_POINTERS *ex_info, PussTccLua *ud, void* f) {
+	static DWORD WINAPI except_filter(EXCEPTION_POINTERS *ex_info, PussTccLua *ud, void* f) {
 		const char* err = NULL;
 		switch (ex_info->ExceptionRecord->ExceptionCode) {
 		case EXCEPTION_ACCESS_VIOLATION:	err = "EXCEPTION_ACCESS_VIOLATION";		break;
@@ -358,22 +358,22 @@ static int puss_tcc_run(lua_State* L) {
 		PUSS_TCC_RT_TRACE("\n");
 		ud->libtcc->tcc_debug_rt_error(ud->s, f, 16, ex_info->ContextRecord, PUSS_TCC_RT_TRACE);
 		PUSS_TCC_RT_TRACE_END();
-		return err;
+		return err ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH;
 	}
 
-	#define __reg_signals()
+	static void __reg_signals(void) {
+	}
 
 	static int wrap_cfunction(lua_State* L) {
 		lua_CFunction f = lua_tocfunction(L, lua_upvalueindex(1));
 		PussTccLua* ud = (PussTccLua*)lua_touserdata(L, lua_upvalueindex(2));
-		const char* err = NULL;
 		int res;
 
 		__try {
 			res = f(L);
 		}
-		__except( ((err = except_filter(GetExceptionInformation(), ud, (void*)f))==NULL) ? EXCEPTION_CONTINUE_SEARCH : EXCEPTION_EXECUTE_HANDLER) {
-			luaL_error(L, err);
+		__except( except_filter(GetExceptionInformation(), ud, (void*)f) ) {
+			luaL_error(L, "C-exception");
 		}
 		return res;
 	}

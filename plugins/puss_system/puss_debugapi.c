@@ -9,23 +9,23 @@
 #include "puss_plugin.h"
 
 #ifdef _WIN32
-static int lua_is_debuger_present(lua_State* L) {
+static int lua_IsDebuggerPresent(lua_State* L) {
 	lua_pushboolean(L, IsDebuggerPresent());
 	return 1;
 }
 
-static int lua_debug_break(lua_State* L) {
+static int lua_DebugBreak(lua_State* L) {
 	DebugBreak();
 	return 0;
 }
 
-static int lua_output_debug_string(lua_State* L) {
+static int lua_OutputDebugStringA(lua_State* L) {
 	const char* str = luaL_checkstring(L, 1);
 	OutputDebugStringA(str);
 	return 0;
 }
 
-static int lua_wait_for_debug_event(lua_State* L) {
+static int lua_WaitForDebugEvent(lua_State* L) {
 	DWORD dwMilliseconds = (DWORD)luaL_optinteger(L, 1, INFINITE);
 	DWORD dwContinueStatus = DBG_CONTINUE;
 	DEBUG_EVENT DebugEv;
@@ -45,6 +45,10 @@ static int lua_wait_for_debug_event(lua_State* L) {
 		case EXCEPTION_ACCESS_VIOLATION:
 			// First chance: Pass this on to the system. 
 			// Last chance: Display an appropriate error. 
+			if( DebugEv.u.Exception.dwFirstChance ) {
+			} else {
+			}
+			dwContinueStatus = DBG_EXCEPTION_NOT_HANDLED;
 			break;
 
 		case EXCEPTION_BREAKPOINT:
@@ -55,6 +59,7 @@ static int lua_wait_for_debug_event(lua_State* L) {
 		case EXCEPTION_DATATYPE_MISALIGNMENT:
 			// First chance: Pass this on to the system. 
 			// Last chance: Display an appropriate error. 
+			dwContinueStatus = DBG_EXCEPTION_NOT_HANDLED;
 			break;
 
 		case EXCEPTION_SINGLE_STEP:
@@ -69,6 +74,7 @@ static int lua_wait_for_debug_event(lua_State* L) {
 
 		default:
 			// Handle other exceptions. 
+			dwContinueStatus = DBG_EXCEPTION_NOT_HANDLED;
 			break;
 		}
 		break;
@@ -136,11 +142,11 @@ static int lua_wait_for_debug_event(lua_State* L) {
 	lua_pushinteger(L, DebugEv.dwDebugEventCode);
 	lua_replace(L, 3);
 	lua_pushboolean(L, (lua_pcall(L, lua_gettop(L)-2, LUA_MULTRET, 1)==LUA_OK));
-	ContinueDebugEvent(DebugEv.dwProcessId, DebugEv.dwThreadId, DBG_CONTINUE);
+	ContinueDebugEvent(DebugEv.dwProcessId, DebugEv.dwThreadId, dwContinueStatus);
 	return 0;
 }
 
-static int lua_debug_active_process(lua_State* L) {
+static int lua_DebugActiveProcess(lua_State* L) {
 	DWORD dwProcessId = (DWORD)luaL_checkinteger(L, 1);
 	BOOL bActive = DebugActiveProcess(dwProcessId);
 	lua_pushboolean(L, bActive);
@@ -148,19 +154,26 @@ static int lua_debug_active_process(lua_State* L) {
 	return 2;
 }
 
-static int lua_debug_active_process_stop(lua_State* L) {
+static int lua_DebugActiveProcessStop(lua_State* L) {
 	DWORD dwProcessId = (DWORD)luaL_checkinteger(L, 1);
 	lua_pushboolean(L, DebugActiveProcessStop(dwProcessId));
 	return 1;
 }
 
+static int lua_DebugSetProcessKillOnExit(lua_State* L) {
+	BOOL KillOnExit = lua_toboolean(L, 1);
+	lua_pushboolean(L, DebugSetProcessKillOnExit(KillOnExit));
+	return 1;
+}
+
 static const luaL_Reg debug_lib_methods[] =
-	{ {"is_debuger_present", lua_is_debuger_present}
-	, {"debug_break", lua_debug_break}
-	, {"output_debug_string", lua_output_debug_string}
-	, {"wait_for_debug_event", lua_wait_for_debug_event}
-	, {"debug_active_process", lua_debug_active_process}
-	, {"debug_active_process_stop", lua_debug_active_process_stop}
+	{ {"IsDebuggerPresent", lua_IsDebuggerPresent}
+	, {"DebugBreak", lua_DebugBreak}
+	, {"OutputDebugString", lua_OutputDebugStringA}
+	, {"WaitForDebugEvent", lua_WaitForDebugEvent}
+	, {"DebugActiveProcess", lua_DebugActiveProcess}
+	, {"DebugActiveProcessStop", lua_DebugActiveProcessStop}
+	, {"DebugSetProcessKillOnExit", lua_DebugSetProcessKillOnExit}
 	, {NULL, NULL}
 	};
 

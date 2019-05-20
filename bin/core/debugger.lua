@@ -1,7 +1,5 @@
 -- core.debugger
 
--- local puss_system = puss.load_plugin('puss_system')
--- local tinycc = puss.import('core.tinycc')
 local shotcuts = puss.import('core.shotcuts')
 local pages = puss.import('core.pages')
 local docs = puss.import('core.docs')
@@ -140,15 +138,6 @@ debugger_events.attached = function(pid, bps)
 		local fname, line = k:match('^(.+):(%d+)$')
 		print(fname, line, v)
 	end
---[[
-	if puss_system.debug_active_process then
-		local active, reason = puss_system.debug_active_process(pid)
-		print('active', active, reason)
-		if active then
-			debug_pid = pid
-		end
-	end
---]]
 end
 
 debugger_events.continued = function()
@@ -199,6 +188,17 @@ local function tool_button(label, hint, icon)
 	return clicked
 end
 
+local function disconnect()
+	if socket then
+		socket:close()
+		puss.async_service_group_cancel(GROUP_KEY)
+		socket, _socket = nil, nil
+	end
+
+	stack_list_clear()
+	use_capture_error = nil
+end
+
 local show_connect_dialog
 do
 	local hosts = {}
@@ -244,11 +244,8 @@ do
 	end
 
 	local function connect_target(ip, port)
+		disconnect()
 		_socket = net.connect(ip, port)
-		if socket then
-			socket:close()
-			puss.async_service_group_cancel(GROUP_KEY)
-		end
 		socket = _socket
 	end
 
@@ -295,12 +292,10 @@ local debug_input_val = nil
 
 local function debug_toolbar()
 	if socket then
-		if socket:valid() then
-			if tool_button('Disconnect', 'Disconnect', 11) then socket:close() end
-		else
-			stack_list_clear()
-			socket = nil
-			use_capture_error = nil
+		if not socket:valid() then
+			disconnect()
+		elseif tool_button('Disconnect', 'Disconnect', 11) then
+			disconnect()
 		end
 	else
 		if tool_button('Connect', 'Connect ...', 10) then
@@ -681,12 +676,6 @@ local function do_update()
 	end
 
 	thread.update()
-
-	--[[
-	if debug_pid then
-		print('wait', puss_system.wait_for_debug_event(100, print, puss.logerr_handle(), 'aa', 'bb'))
-	end
-	--]]
 
 	imgui.protect_pcall(show_main_window)
 
