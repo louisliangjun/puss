@@ -272,10 +272,8 @@ void           luaL_setfuncs           (lua_State *L, const luaL_Reg *l, int nup
 int            luaL_getsubtable        (lua_State *L, int idx, const char *fname);
 void           luaL_traceback          (lua_State *L, lua_State *L1, const char *msg, int level);
 
-#define puss_upvalueindex(i)	lua_upvalueindex(1 + i)
-
-typedef void (*PussPushCClosure)(lua_State* L, lua_CFunction f, int nup);
-typedef int (*PussModuleInit)(lua_State* L, PussPushCClosure puss_pushcclosure);
+#define	puss_upvalueindex(i)	lua_upvalueindex(2+i)
+void	puss_pushcclosure(lua_State* L, lua_CFunction f, int nup);
 
 ]]
 

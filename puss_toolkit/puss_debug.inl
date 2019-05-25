@@ -1048,7 +1048,11 @@ static int lua_debug_capture_error(lua_State* L) {
 	}
 
 	static int lua_debug_getpid(lua_State* L) {
+	#ifdef _WIN32
 		lua_pushinteger(L, GetCurrentProcessId());
+	#else
+		lua_pushinteger(L, getpid());
+	#endif
 		return 1;
 	}
 #else

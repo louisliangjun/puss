@@ -60,31 +60,31 @@ typedef int (*tcc_relocate_t)(TCCState *s1, void *ptr);
 typedef void * (*tcc_get_symbol_t)(TCCState *s, const char *name);
 
 #define TCC_SYMBOLS(TRAN) \
-	TRAN(tcc_setup_hook) \
-	TRAN(tcc_debug_rt_error) \
-	TRAN(tcc_new) \
-	TRAN(tcc_delete) \
-	TRAN(tcc_set_lib_path) \
-	TRAN(tcc_set_error_func) \
-	TRAN(tcc_set_options) \
-	TRAN(tcc_add_include_path) \
-	TRAN(tcc_add_sysinclude_path) \
-	TRAN(tcc_define_symbol) \
-	TRAN(tcc_undefine_symbol) \
-	TRAN(tcc_add_file) \
-	TRAN(tcc_compile_string) \
-	TRAN(tcc_set_output_type) \
-	TRAN(tcc_add_library_path) \
-	TRAN(tcc_add_library) \
-	TRAN(tcc_add_symbol) \
-	TRAN(tcc_output_file) \
-	TRAN(tcc_run) \
-	TRAN(tcc_relocate) \
-	TRAN(tcc_get_symbol)
+	TRAN(setup_hook) \
+	TRAN(debug_rt_error) \
+	TRAN(new) \
+	TRAN(delete) \
+	TRAN(set_lib_path) \
+	TRAN(set_error_func) \
+	TRAN(set_options) \
+	TRAN(add_include_path) \
+	TRAN(add_sysinclude_path) \
+	TRAN(define_symbol) \
+	TRAN(undefine_symbol) \
+	TRAN(add_file) \
+	TRAN(compile_string) \
+	TRAN(set_output_type) \
+	TRAN(add_library_path) \
+	TRAN(add_library) \
+	TRAN(add_symbol) \
+	TRAN(output_file) \
+	TRAN(run) \
+	TRAN(relocate) \
+	TRAN(get_symbol)
 
 
 typedef struct _LibTcc {
-	#define TCC_DECL(sym)	sym ## _t	sym;
+	#define TCC_DECL(sym)	tcc_ ## sym ## _t	sym;
 		TCC_SYMBOLS(TCC_DECL)
 	#undef TCC_DECL
 } LibTcc;
@@ -113,7 +113,7 @@ extern int tcc_relocate(TCCState *s1, void *ptr);
 extern void * tcc_get_symbol(TCCState *s1, const char *name);
 
 static int _libtcc_load(lua_State* L, LibTcc* lib, const char* tcc_dll, const TCCHook* tcc_hook) {
-	#define TCC_LOAD(sym)   lib->sym = sym;
+	#define TCC_LOAD(sym)   lib->sym = tcc_ ## sym;
 		TCC_SYMBOLS(TCC_LOAD)
 	#undef TCC_LOAD
 	if( tcc_hook ) {
@@ -141,16 +141,39 @@ static int _libtcc_load(lua_State* L, LibTcc* lib, const char* tcc_dll, const TC
 	assert( lua_type(L, -1)==LUA_TFUNCTION );
 	lua_remove(L, -2);
 
-	#define TCC_LOAD(sym)	if( (lib->sym = (sym ## _t)_libtcc_symbol(L, tcc_dll, #sym))==NULL ) luaL_error(L, "load symbol(" #sym ") failed!");
+	#define TCC_LOAD(sym)	if( (lib->sym = (tcc_ ## sym ## _t)_libtcc_symbol(L, tcc_dll, "tcc_" #sym))==NULL ) luaL_error(L, "load symbol(tcc_" #sym ") failed!");
 		TCC_SYMBOLS(TCC_LOAD)
 	#undef TCC_LOAD
 
 	if( tcc_hook ) {
-		lib->tcc_setup_hook(tcc_hook);
+		lib->setup_hook(tcc_hook);
 	}
 	lua_pop(L, 1);
 	return 0;
 }
+
+#define tcc_setup_hook			ud->libtcc->setup_hook
+#define tcc_debug_rt_error      ud->libtcc->debug_rt_error
+#define tcc_new                 ud->libtcc->new
+#define tcc_delete              ud->libtcc->delete
+#define tcc_set_lib_path        ud->libtcc->set_lib_path
+#define tcc_set_error_func      ud->libtcc->set_error_func
+#define tcc_set_options         ud->libtcc->set_options
+#define tcc_add_include_path    ud->libtcc->add_include_path
+#define tcc_add_sysinclude_path ud->libtcc->add_sysinclude_path
+#define tcc_define_symbol       ud->libtcc->define_symbol
+#define tcc_undefine_symbol     ud->libtcc->undefine_symbol
+#define tcc_add_file            ud->libtcc->add_file
+#define tcc_compile_string      ud->libtcc->compile_string
+#define tcc_set_output_type     ud->libtcc->set_output_type
+#define tcc_add_library_path    ud->libtcc->add_library_path
+#define tcc_add_library         ud->libtcc->add_library
+#define tcc_add_symbol          ud->libtcc->add_symbol
+#define tcc_output_file         ud->libtcc->output_file
+#define tcc_run                 ud->libtcc->run
+#define tcc_relocate            ud->libtcc->relocate
+#define tcc_get_symbol          ud->libtcc->get_symbol
+
 #endif
 
 #define PUSS_TCC_NAME		"[PussTcc]"
@@ -167,7 +190,7 @@ static void puss_tcc_error(void *opaque, const char *msg) {
 static int puss_tcc_destroy(lua_State* L) {
 	PussTccLua* ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
 	if( ud->s ) {
-		ud->libtcc->tcc_delete(ud->s);
+		tcc_delete(ud->s);
 		ud->s = NULL;
 	}
 	return 0;
@@ -177,7 +200,7 @@ static int puss_tcc_set_lib_path(lua_State* L) {
 	PussTccLua* ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
 	const char* path = luaL_checkstring(L, 2);
 	if( ud->s ) {
-		ud->libtcc->tcc_set_lib_path(ud->s, path);
+		tcc_set_lib_path(ud->s, path);
 	}
 	return 0;
 }
@@ -186,7 +209,7 @@ static int puss_tcc_set_options(lua_State* L) {
 	PussTccLua* ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
 	const char* options = luaL_checkstring(L, 2);
 	if( ud->s ) {
-		ud->libtcc->tcc_set_options(ud->s, options);
+		tcc_set_options(ud->s, options);
 	}
 	return 0;
 }
@@ -195,7 +218,7 @@ static int puss_tcc_add_include_path(lua_State* L) {
 	PussTccLua* ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
 	const char* pathname = luaL_checkstring(L, 2);
 	if( ud->s ) {
-		ud->libtcc->tcc_add_include_path(ud->s, pathname);
+		tcc_add_include_path(ud->s, pathname);
 	}
 	return 0;
 }
@@ -204,7 +227,7 @@ static int puss_tcc_add_sysinclude_path(lua_State* L) {
 	PussTccLua* ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
 	const char* pathname = luaL_checkstring(L, 2);
 	if( ud->s ) {
-		ud->libtcc->tcc_add_sysinclude_path(ud->s, pathname);
+		tcc_add_sysinclude_path(ud->s, pathname);
 	}
 	return 0;
 }
@@ -214,7 +237,7 @@ static int puss_tcc_define_symbol(lua_State* L) {
 	const char* sym = luaL_checkstring(L, 2);
 	const char* value = luaL_optstring(L, 3, NULL);
 	if( ud->s ) {
-		ud->libtcc->tcc_define_symbol(ud->s, sym, value);
+		tcc_define_symbol(ud->s, sym, value);
 	}
 	return 0;
 }
@@ -223,7 +246,7 @@ static int puss_tcc_undefine_symbol(lua_State* L) {
 	PussTccLua* ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
 	const char* sym = luaL_checkstring(L, 2);
 	if( ud->s ) {
-		ud->libtcc->tcc_undefine_symbol(ud->s, sym);
+		tcc_undefine_symbol(ud->s, sym);
 	}
 	return 0;
 }
@@ -232,8 +255,8 @@ static int puss_tcc_add_file(lua_State* L) {
 	PussTccLua* ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
 	const char* filename = luaL_checkstring(L, 2);
 	if( ud->s ) {
-		if( ud->libtcc->tcc_add_file(ud->s, filename) ) {
-			ud->libtcc->tcc_delete(ud->s);
+		if( tcc_add_file(ud->s, filename) ) {
+			tcc_delete(ud->s);
 			ud->s = NULL;
 			luaL_error(L, "add file failed!");
 		}
@@ -245,8 +268,8 @@ static int puss_tcc_compile_string(lua_State* L) {
 	PussTccLua* ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
 	const char* str = luaL_checkstring(L, 2);
 	if( ud->s ) {
-		if( ud->libtcc->tcc_compile_string(ud->s, str) ) {
-			ud->libtcc->tcc_delete(ud->s);
+		if( tcc_compile_string(ud->s, str) ) {
+			tcc_delete(ud->s);
 			ud->s = NULL;
 			luaL_error(L, "compile failed!");
 		}
@@ -268,7 +291,7 @@ static int puss_tcc_set_output_type(lua_State* L) {
 		output_type = TCC_OUTPUT_PREPROCESS;
 	}
 	if( ud->s ) {
-		ud->libtcc->tcc_set_output_type(ud->s, output_type);
+		tcc_set_output_type(ud->s, output_type);
 	}
 	return 0;
 }
@@ -277,7 +300,7 @@ static int puss_tcc_add_library_path(lua_State* L) {
 	PussTccLua* ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
 	const char* pathname = luaL_checkstring(L, 2);
 	if( ud->s ) {
-		ud->libtcc->tcc_add_library_path(ud->s, pathname);
+		tcc_add_library_path(ud->s, pathname);
 	}
 	return 0;
 }
@@ -286,7 +309,7 @@ static int puss_tcc_add_library(lua_State* L) {
 	PussTccLua* ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
 	const char* libraryname = luaL_checkstring(L, 2);
 	if( ud->s ) {
-		ud->libtcc->tcc_add_library(ud->s, libraryname);
+		tcc_add_library(ud->s, libraryname);
 	}
 	return 0;
 }
@@ -296,7 +319,7 @@ static int puss_tcc_add_symbol(lua_State* L) {
 	const char* name = luaL_checkstring(L, 2);
 	const void* val = lua_topointer(L, 3);
 	if( ud->s ) {
-		ud->libtcc->tcc_add_symbol(ud->s, name, val);
+		tcc_add_symbol(ud->s, name, val);
 	}
 	return 0;
 }
@@ -307,7 +330,7 @@ static int puss_tcc_add_symbols(lua_State* L) {
 	lua_pushnil(L);
 	while( lua_next(L, 2) ) {
 		if( lua_isstring(L, -2) && lua_islightuserdata(L, -1) ) {
-			ud->libtcc->tcc_add_symbol(ud->s, lua_tostring(L, -2), lua_touserdata(L, -1));
+			tcc_add_symbol(ud->s, lua_tostring(L, -2), lua_touserdata(L, -1));
 		}
 		lua_pop(L, 1);
 	}
@@ -318,7 +341,7 @@ static int puss_tcc_output_file(lua_State* L) {
 	PussTccLua* ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
 	const char* filename = luaL_checkstring(L, 2);
 	if( ud->s ) {
-		ud->libtcc->tcc_output_file(ud->s, filename);
+		tcc_output_file(ud->s, filename);
 	}
 	return 0;
 }
@@ -334,7 +357,7 @@ static int puss_tcc_run(lua_State* L) {
 	for( i=0; i<argc; ++i )
 		argv[i] = luaL_checkstring(L, i+2);
 	if( ud->s ) {
-		ud->libtcc->tcc_run(ud->s, argc, (char**)argv);
+		tcc_run(ud->s, argc, (char**)argv);
 	}
 	return 0;
 }
@@ -356,7 +379,7 @@ static int puss_tcc_run(lua_State* L) {
 		}
 		PUSS_TCC_RT_TRACE(err ? err : "exception");
 		PUSS_TCC_RT_TRACE("\n");
-		ud->libtcc->tcc_debug_rt_error(ud->s, f, 16, ex_info->ContextRecord, PUSS_TCC_RT_TRACE);
+		tcc_debug_rt_error(ud->s, f, 16, ex_info->ContextRecord, PUSS_TCC_RT_TRACE);
 		PUSS_TCC_RT_TRACE_END();
 		return err ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH;
 	}
@@ -406,8 +429,13 @@ static int puss_tcc_run(lua_State* L) {
 
 	static void __puss_tcc_sig_handle(int sig, siginfo_t *info, void *uc) {
 		fprintf(stderr, "[PussTCC] error(%d)\n", sig);
+		char msg[64];
+		sprintf(msg, "sig error: %d\n", sig);
 		if( sigUD ) {
 			sigUD->t->libtcc->tcc_debug_rt_error(sigUD->t->s, sigUD->f, 16, uc, PUSS_TCC_RT_TRACE);
+			PUSS_TCC_RT_TRACE_BEGIN();
+			PUSS_TCC_RT_TRACE(msg);
+			PUSS_TCC_RT_TRACE_END();
 			luaL_error(sigUD->L, "sig error: %d", sig);
 		} else {
 			char msg[64];
@@ -420,7 +448,7 @@ static int puss_tcc_run(lua_State* L) {
 	static void __reg_signals(void) {
 		struct sigaction act;
 		memset(&act, 0, sizeof(act));
-		act.sa_handler = __puss_tcc_sig_handle;
+		act.sa_sigaction = __puss_tcc_sig_handle;
 		act.sa_flags = SA_NODEFER | SA_NOMASK | SA_SIGINFO;
 		sigaction(SIGFPE, &act, NULL);
 		sigaction(SIGBUS, &act, NULL);
@@ -444,8 +472,8 @@ static int puss_tcc_run(lua_State* L) {
 #endif
 
 #ifdef _WIN32
-static void puss_tcc_add_crt(LibTcc* libtcc, TCCState* s) {
-#define _ADDSYM(sym)	libtcc->tcc_add_symbol(s, #sym, sym);
+static void puss_tcc_add_crt(PussTccLua* ud) {
+#define _ADDSYM(sym)	tcc_add_symbol(ud->s, #sym, sym);
 	_ADDSYM(memcmp);
 	_ADDSYM(memmove);
 	_ADDSYM(memcpy);
@@ -468,8 +496,8 @@ static void puss_tcc_add_crt(LibTcc* libtcc, TCCState* s) {
 }
 #endif
 
-void puss_tcc_add_lua(LibTcc* libtcc, TCCState* s) {
-#define _ADDSYM(sym)	libtcc->tcc_add_symbol(s, #sym, sym);
+void puss_tcc_add_lua(PussTccLua* ud) {
+#define _ADDSYM(sym)	tcc_add_symbol(ud->s, #sym, sym);
 	_ADDSYM(lua_absindex)
 	_ADDSYM(lua_gettop)
 	_ADDSYM(lua_settop)
@@ -571,18 +599,15 @@ void puss_tcc_add_lua(LibTcc* libtcc, TCCState* s) {
 #undef _ADDSYM
 }
 
-#define puss_upvalueindex(i)	lua_upvalueindex(2 + i)
+#define puss_upvalueindex(i)	lua_upvalueindex(2+i)
 
-typedef void (*PussPushCClosure)(lua_State* L, lua_CFunction f, int nup);
-typedef int (*PussModuleInit)(lua_State* L, PussPushCClosure puss_pushcclosure);
-
-static void _puss_pushcclosure_tcc(lua_State* L, lua_CFunction f, int nup) {
+static void puss_pushcclosure(lua_State* L, lua_CFunction f, int nup) {
 	luaL_checkudata(L, 1, PUSS_TCC_NAME);
 	lua_pushcfunction(L, f);
 	lua_pushvalue(L, 1);
 	if( nup > 0 )
-		lua_rotate(L, -(nup+2), 2);
-	lua_pushcclosure(L, wrap_cfunction, nup+2);
+		lua_rotate(L, -(2+nup), 2);
+	lua_pushcclosure(L, wrap_cfunction, 2+nup);
 }
 
 static int puss_tcc_relocate(lua_State* L) {
@@ -591,18 +616,18 @@ static int puss_tcc_relocate(lua_State* L) {
 	if( !ud->s )
 		return 0;
 #ifdef _WIN32
-	puss_tcc_add_crt(ud->libtcc, ud->s);
+	puss_tcc_add_crt(ud);
 #endif
-	puss_tcc_add_lua(ud->libtcc, ud->s);
-	if( ud->libtcc->tcc_relocate(ud->s, TCC_RELOCATE_AUTO) != 0 ) {
-		ud->libtcc->tcc_delete(ud->s);
+	puss_tcc_add_lua(ud);
+	if( tcc_relocate(ud->s, TCC_RELOCATE_AUTO) != 0 ) {
+		tcc_delete(ud->s);
 		ud->s = NULL;
 		luaL_error(L, "relocate failed!");
 	}
 	if( init_function_name ) {
-		PussModuleInit init = (PussModuleInit)(ud->libtcc->tcc_get_symbol(ud->s, init_function_name));
+		lua_CFunction init = (lua_CFunction)tcc_get_symbol(ud->s, init_function_name);
 		if( init ) {
-			return init(L, _puss_pushcclosure_tcc);
+			return init(L);
 		}
 		luaL_error(L, "init function(%s) not found!", init_function_name);
 	}
@@ -613,7 +638,7 @@ static int puss_tcc_get_symbol(lua_State* L) {
 	PussTccLua* ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
 	const char* name = luaL_checkstring(L, 2);
 	if( ud->s ) {
-		void* sym = ud->libtcc->tcc_get_symbol(ud->s, name);
+		void* sym = tcc_get_symbol(ud->s, name);
 		if( sym ) {
 			lua_pushlightuserdata(L, sym);
 			return 1;
@@ -622,9 +647,23 @@ static int puss_tcc_get_symbol(lua_State* L) {
 	return 0;
 }
 
+static int puss_tcc_call(lua_State* L) {
+	PussTccLua* ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
+	const char* name = luaL_checkstring(L, 2);
+	lua_CFunction f;
+	if( !ud->s )
+		luaL_error(L, "tcc module not exist!");
+	if( (f = (lua_CFunction)tcc_get_symbol(ud->s, name))==NULL )
+		luaL_error(L, "tcc function not exist!");
+
+	puss_pushcclosure(L, f, 0);
+	lua_replace(L, 2);
+	lua_call(L, lua_gettop(L)-2, LUA_MULTRET);
+	return lua_gettop(L) - 1;
+}
 static luaL_Reg puss_tcc_methods[] =
 	{ {"__gc", puss_tcc_destroy}
-	, {"tcc_set_lib_path", puss_tcc_set_lib_path}
+	, {"set_lib_path", puss_tcc_set_lib_path}
 	, {"set_options", puss_tcc_set_options}
 	, {"add_include_path", puss_tcc_add_include_path}
 	, {"add_sysinclude_path", puss_tcc_add_sysinclude_path}
@@ -656,8 +695,8 @@ static int _puss_tcc_new(lua_State* L) {
 		lua_setfield(L, -2, "__index");
 	}
 	lua_setmetatable(L, -2);
-	ud->s = ud->libtcc->tcc_new();
-	ud->libtcc->tcc_set_error_func(ud->s, ud, puss_tcc_error);
+	ud->s = tcc_new();
+	tcc_set_error_func(ud->s, ud, puss_tcc_error);
 	return 1;
 }
 
