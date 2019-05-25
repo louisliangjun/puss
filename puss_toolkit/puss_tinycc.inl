@@ -84,7 +84,7 @@ typedef void * (*tcc_get_symbol_t)(TCCState *s, const char *name);
 
 
 typedef struct _LibTcc {
-	#define TCC_DECL(sym)	tcc_ ## sym ## _t	sym;
+	#define TCC_DECL(sym)	tcc_ ## sym ## _t	_ ## sym;
 		TCC_SYMBOLS(TCC_DECL)
 	#undef TCC_DECL
 } LibTcc;
@@ -141,38 +141,38 @@ static int _libtcc_load(lua_State* L, LibTcc* lib, const char* tcc_dll, const TC
 	assert( lua_type(L, -1)==LUA_TFUNCTION );
 	lua_remove(L, -2);
 
-	#define TCC_LOAD(sym)	if( (lib->sym = (tcc_ ## sym ## _t)_libtcc_symbol(L, tcc_dll, "tcc_" #sym))==NULL ) luaL_error(L, "load symbol(tcc_" #sym ") failed!");
+	#define TCC_LOAD(sym)	if( (lib->_ ## sym = (tcc_ ## sym ## _t)_libtcc_symbol(L, tcc_dll, "tcc_" #sym))==NULL ) luaL_error(L, "load symbol(tcc_" #sym ") failed!");
 		TCC_SYMBOLS(TCC_LOAD)
 	#undef TCC_LOAD
 
 	if( tcc_hook ) {
-		lib->setup_hook(tcc_hook);
+		lib->_setup_hook(tcc_hook);
 	}
 	lua_pop(L, 1);
 	return 0;
 }
 
-#define tcc_setup_hook			ud->libtcc->setup_hook
-#define tcc_debug_rt_error      ud->libtcc->debug_rt_error
-#define tcc_new                 ud->libtcc->new
-#define tcc_delete              ud->libtcc->delete
-#define tcc_set_lib_path        ud->libtcc->set_lib_path
-#define tcc_set_error_func      ud->libtcc->set_error_func
-#define tcc_set_options         ud->libtcc->set_options
-#define tcc_add_include_path    ud->libtcc->add_include_path
-#define tcc_add_sysinclude_path ud->libtcc->add_sysinclude_path
-#define tcc_define_symbol       ud->libtcc->define_symbol
-#define tcc_undefine_symbol     ud->libtcc->undefine_symbol
-#define tcc_add_file            ud->libtcc->add_file
-#define tcc_compile_string      ud->libtcc->compile_string
-#define tcc_set_output_type     ud->libtcc->set_output_type
-#define tcc_add_library_path    ud->libtcc->add_library_path
-#define tcc_add_library         ud->libtcc->add_library
-#define tcc_add_symbol          ud->libtcc->add_symbol
-#define tcc_output_file         ud->libtcc->output_file
-#define tcc_run                 ud->libtcc->run
-#define tcc_relocate            ud->libtcc->relocate
-#define tcc_get_symbol          ud->libtcc->get_symbol
+#define tcc_setup_hook			ud->libtcc->_setup_hook
+#define tcc_debug_rt_error      ud->libtcc->_debug_rt_error
+#define tcc_new                 ud->libtcc->_new
+#define tcc_delete              ud->libtcc->_delete
+#define tcc_set_lib_path        ud->libtcc->_set_lib_path
+#define tcc_set_error_func      ud->libtcc->_set_error_func
+#define tcc_set_options         ud->libtcc->_set_options
+#define tcc_add_include_path    ud->libtcc->_add_include_path
+#define tcc_add_sysinclude_path ud->libtcc->_add_sysinclude_path
+#define tcc_define_symbol       ud->libtcc->_define_symbol
+#define tcc_undefine_symbol     ud->libtcc->_undefine_symbol
+#define tcc_add_file            ud->libtcc->_add_file
+#define tcc_compile_string      ud->libtcc->_compile_string
+#define tcc_set_output_type     ud->libtcc->_set_output_type
+#define tcc_add_library_path    ud->libtcc->_add_library_path
+#define tcc_add_library         ud->libtcc->_add_library
+#define tcc_add_symbol          ud->libtcc->_add_symbol
+#define tcc_output_file         ud->libtcc->_output_file
+#define tcc_run                 ud->libtcc->_run
+#define tcc_relocate            ud->libtcc->_relocate
+#define tcc_get_symbol          ud->libtcc->_get_symbol
 
 #endif
 
@@ -619,6 +619,7 @@ static int puss_tcc_relocate(lua_State* L) {
 	puss_tcc_add_crt(ud);
 #endif
 	puss_tcc_add_lua(ud);
+	tcc_add_symbol(ud->s, "puss_pushcclosure", puss_pushcclosure);
 	if( tcc_relocate(ud->s, TCC_RELOCATE_AUTO) != 0 ) {
 		tcc_delete(ud->s);
 		ud->s = NULL;
@@ -680,6 +681,7 @@ static luaL_Reg puss_tcc_methods[] =
 	, {"run", puss_tcc_run}
 	, {"relocate", puss_tcc_relocate}
 	, {"get_symbol", puss_tcc_get_symbol}
+	, {"call", puss_tcc_call}
 	, {NULL, NULL}
 	};
 
