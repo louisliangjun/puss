@@ -432,9 +432,10 @@ static int puss_tcc_run(lua_State* L) {
 		char msg[64];
 		sprintf(msg, "sig error: %d\n", sig);
 		if( sigUD ) {
-			sigUD->t->libtcc->tcc_debug_rt_error(sigUD->t->s, sigUD->f, 16, uc, PUSS_TCC_RT_TRACE);
+			PussTccLua* ud = sigUD->t;
 			PUSS_TCC_RT_TRACE_BEGIN();
 			PUSS_TCC_RT_TRACE(msg);
+			tcc_debug_rt_error(sigUD->t->s, sigUD->f, 16, uc, PUSS_TCC_RT_TRACE);
 			PUSS_TCC_RT_TRACE_END();
 			luaL_error(sigUD->L, "sig error: %d", sig);
 		} else {

@@ -14,7 +14,6 @@
 #include <string.h>
 
 #include "puss_plugin.inl"
-#include "puss_tinycc.inl"
 #include "puss_debug.inl"
 
 #define PUSS_DEFAULT_SCRIPT_FILE "default.lua"
@@ -150,22 +149,6 @@ restart_label:
 	L = puss_lua_newstate();
 	lua_settop(L, 0);
 
-	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
-	lua_pushcfunction(L, puss_push_libtcc_new);
-	lua_pushstring(L, __puss_config__.app_path);
-#ifdef _WIN32
-	lua_pushstring(L, "\\libtcc.dll");
-#else
-	lua_pushstring(L, "/libtcc.so");
-#endif
-	lua_concat(L, 2);
-	if( lua_pcall(L, 1, 1, 1)==LUA_OK ) {
-		puss_lua_get(L, PUSS_KEY_PUSS);
-		lua_pushvalue(L, -2);
-		lua_setfield(L, -2, "tcc_new");
-	}
-
-	lua_settop(L, 0);
 	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
 #ifdef _WIN32
 	if( !console_mode ) {
