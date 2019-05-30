@@ -72,10 +72,10 @@ local function main_menu()
 		imgui.EndMenu()
 	end
 	if imgui.BeginMenu('Setting') then
-		imgui.ShowStyleSelector('Style')
+		local style_changed = imgui.ShowStyleSelector('Style')
 		active, value = imgui.DragFloat('UI Scale', imgui.GetIO('FontGlobalScale'), 0.005, 0.5, 2.0, "%.1f")
 		if active then imgui.SetIO('FontGlobalScale', value) end
-		docs.setting()
+		docs.setting(style_changed)
 		imgui.EndMenu()
 	end
 	if imgui.BeginMenu('Window') then

@@ -310,8 +310,6 @@ do
 	end
 end
 
-_STYLE_VER = (_STYLE_VER or 0) + 1
-
 local function fetch_sytel_col_map()
 	local r,g,b = imgui.GetStyleColorVec4(ImGuiCol_Text)
 	local dark = ((r+g+b)/3 > 0.5)
@@ -358,6 +356,7 @@ local function do_reset_styles(sv, lang)
 	sv:SetMarginTypeN(0, SC_MARGIN_NUMBER)
 	sv:SetMarginWidthN(0, 0)
 	sv:SetMarginSensitiveN(0, true)
+	sv:StyleSetFore(STYLE_LINENUMBER, imgui.GetColorU32(ImGuiCol_Text))
 
 	-- bp color
 	sv:SetMarginTypeN(1, SC_MARGIN_SYMBOL)
@@ -390,15 +389,11 @@ local function do_reset_styles(sv, lang)
 
 	sv:IndicSetStyle(INDICATOR_FINDTEXT, INDIC_FULLBOX)
 
-	sv:set('sci.style', _STYLE_VER)
 	sv:set('sci.lang', lang)
 end
 
 __exports.reset_styles = function(sv, lang)
-	-- print('check reset_styles', sv:get('sci.style'), _STYLE_VER, sv:get('sci.lang'), lang)
-	if sv:get('sci.style')==_STYLE_VER and sv:get('sci.lang')==lang then return end
-	-- print('reset_styles', _STYLE_VER, lang)
-	sv(do_reset_styles, lang)
+	sv(do_reset_styles, lang or sv:get('sci.lang'))
 end
 
 __exports.find_text_fill_all_indicator = function(sv, text)

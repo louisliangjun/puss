@@ -54,7 +54,7 @@ __exports.update = function()
 			local last = selected_page_label
 			selected_page_label = label
 			local draw = page.module.tabs_page_draw
-			if draw then imgui.protect_pcall(draw, page, last~=label) end
+			if draw then imgui.protect_pcall(draw, page, (last~=label) or active) end
 			imgui.EndTabItem()
 		end
 	end

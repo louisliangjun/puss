@@ -665,11 +665,13 @@ void Menu::Show(Point pt, Window &w) {
 }
 
 ColourDesired Platform::Chrome() {
-	return ColourDesired(0xe0, 0xe0, 0xe0);
+	const ImVec4& col = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
+	return ColourDesired(IM_F32_TO_INT8_SAT(col.x), IM_F32_TO_INT8_SAT(col.y), IM_F32_TO_INT8_SAT(col.z));
 }
 
 ColourDesired Platform::ChromeHighlight() {
-	return ColourDesired(0xff, 0xff, 0xff);
+	const ImVec4& col = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+	return ColourDesired(IM_F32_TO_INT8_SAT(col.x), IM_F32_TO_INT8_SAT(col.y), IM_F32_TO_INT8_SAT(col.z));
 }
 
 const char *Platform::DefaultFont() {
