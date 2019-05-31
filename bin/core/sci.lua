@@ -356,6 +356,7 @@ local function do_reset_styles(sv, lang)
 	sv:SetMarginTypeN(0, SC_MARGIN_NUMBER)
 	sv:SetMarginWidthN(0, 0)
 	sv:SetMarginSensitiveN(0, true)
+	sv:StyleSetBack(STYLE_LINENUMBER, imgui.GetColorU32(ImGuiCol_WindowBg))
 	sv:StyleSetFore(STYLE_LINENUMBER, imgui.GetColorU32(ImGuiCol_Text))
 
 	-- bp color
