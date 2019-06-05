@@ -8,7 +8,7 @@
 //  [X] Platform: Gamepad support. Enabled with 'io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad'.
 //  [X] Platform: Multi-viewport support (multiple windows). Enable with 'io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable'.
 
-#ifdef _WIN32
+#if defined(PUSS_IMGUI_USE_DX11)
 
 #include "imgui.h"
 #include "imgui_impl_win32.h"
@@ -22,6 +22,7 @@
 // CHANGELOG
 // (minor and older changes stripped away, please see git history for details)
 //  2018-XX-XX: Platform: Added support for multiple windows via the ImGuiPlatformIO interface.
+//  2019-05-11: Inputs: Don't filter value from WM_CHAR before calling AddInputCharacter().
 //  2019-01-17: Misc: Using GetForegroundWindow()+IsChild() instead of GetActiveWindow() to be compatible with windows created in a different thread or parent.
 //  2019-01-17: Inputs: Added support for mouse buttons 4 and 5 via WM_XBUTTON* messages.
 //  2019-01-15: Inputs: Added support for XInput gamepads (if ImGuiConfigFlags_NavEnableGamepad is set by user application).
@@ -288,7 +289,7 @@ void    ImGui_ImplWin32_NewFrame()
         ImGui_ImplWin32_UpdateMouseCursor();
     }
 
-    // Update game controllers (if available)
+    // Update game controllers (if enabled and available)
     ImGui_ImplWin32_UpdateGamepads();
 }
 
@@ -371,8 +372,7 @@ IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARA
 		if( wParam==VK_ESCAPE || wParam==VK_BACK || wParam==VK_TAB || wParam==VK_RETURN )
 			break;
         // You can also use ToAscii()+GetKeyboardState() to retrieve characters.
-        if (wParam > 0 && wParam < 0x10000)
-            io.AddInputCharacter((unsigned short)wParam);
+        io.AddInputCharacter((unsigned short)wParam);
         return 0;
     case WM_SETCURSOR:
         if (LOWORD(lParam) == HTCLIENT && ImGui_ImplWin32_UpdateMouseCursor())

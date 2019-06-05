@@ -126,7 +126,7 @@ local function show_folder(dir, root, depth)
 			local matched = (current_expand_file and depth and v.name==current_expand_file[depth])
 			if matched and current_expand_need then
 				-- print('   expand', v.name)
-				imgui.SetNextTreeNodeOpen(true)
+				imgui.SetNextItemOpen(true)
 			end
 			if imgui.TreeNodeEx(v.name, DIR_FLAGS, v.name) then
 				show_folder(v, root, matched and (depth+1))
@@ -247,7 +247,7 @@ __exports.update = function(async_list_dir)
 	local remove_id
 	for i,v in ipairs(root_folders) do
 		local matched = (current_expand_file and v.path==current_expand_file[1])
-		if matched and current_expand_need then imgui.SetNextTreeNodeOpen(true) end
+		if matched and current_expand_need then imgui.SetNextItemOpen(true) end
 		local show, open = imgui.CollapsingHeader(v._label, true)
 		if not open then remove_id = i end
 		if show then
