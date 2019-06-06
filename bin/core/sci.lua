@@ -14,14 +14,14 @@ STYLE_COLOR_MAP.light =
 	{ ['bg'] = RGB('#FFFFFC')
 	, ['sel'] = RGB('#84B6DB')
 	, ['caret_line'] = RGB('#A4D6FB')
-	, ['thumnail_marker'] = RGB('#ff8000')
-	, ['thumnail_bar'] = RGB('#e8e8e8')
+	, ['thumnail_marker'] = RGB('#FF8000')
+	, ['thumnail_bar'] = RGB('#E8E8E8')
 	, ['thumnail_view_border'] = RGB('#000000')
-	, ['thumnail_view'] = RGB('#ffffff')
-	, ['thumnail_sel_fore'] = RGB('#0000ff')
-	, ['thumnail_sel_back'] = RGB('#e8e8e0')
+	, ['thumnail_view'] = RGB('#FFFFFF')
+	, ['thumnail_sel_fore'] = RGB('#0000FF')
+	, ['thumnail_sel_back'] = RGB('#E8E8E0')
 	, ['marker_fore'] = RGB('#008080')
-	, ['marker_back'] = RGB('#c00020')
+	, ['marker_back'] = RGB('#C00020')
 	, ['text'] = RGB('#000000')
 	, ['comment'] = RGB('#9F9F9F')
 	, ['identifier'] = RGB('#000000')
@@ -33,7 +33,29 @@ STYLE_COLOR_MAP.light =
 	, ['label'] = RGB('#00FF00')
 	}
 
-STYLE_COLOR_MAP.dark = STYLE_COLOR_MAP.light
+STYLE_COLOR_MAP.dark =
+	{ ['bg'] = RGB('#202020')
+	, ['sel'] = RGB('#84B68B')
+	, ['caret_line'] = RGB('#404060')
+	, ['thumnail_marker'] = RGB('#ff8000')
+	, ['thumnail_bar'] = RGB('#303030')
+	, ['thumnail_view_border'] = RGB('#000000')
+	, ['thumnail_view'] = RGB('#606060')
+	, ['thumnail_sel_fore'] = RGB('#0090FF')
+	, ['thumnail_sel_back'] = RGB('#303030')
+	, ['marker_fore'] = RGB('#008080')
+	, ['marker_back'] = RGB('#c00020')
+	, ['text'] = RGB('#E0E0E0')
+	, ['comment'] = RGB('#9F9F9F')
+	, ['identifier'] = RGB('#E0E0E0')
+	, ['number'] = RGB('#F080F0')
+	, ['word'] = RGB('#FFFF00')
+	, ['string'] = RGB('#63A515')
+	, ['preprocessor'] = RGB('#800080')
+	, ['operator'] = RGB('#FF7FFF')
+	, ['label'] = RGB('#00FFFF')
+	}
+
 
 local function do_auto_indent_impl(sv, mode)
 	sv:set(SCN_UPDATEUI, nil)
@@ -340,6 +362,7 @@ local function do_reset_styles(sv, lang)
 
 	sv:SetTabWidth(setting.tab_width)
 
+	sv:SetCaretFore(colmap['text'])
 	sv:SetSelBack(true, colmap['sel'])
 
 	if setting.caret_line then
@@ -391,6 +414,8 @@ local function do_reset_styles(sv, lang)
 	sv:MarkerDefine(SC_MARKNUM_FOLDERSUB, SC_MARK_VLINE)
 	sv:MarkerDefine(SC_MARKNUM_FOLDERTAIL, SC_MARK_LCORNERCURVE)
 	sv:SetFoldFlags(16|4, 0)
+
+	sv:SetFoldMarginColour(true, imgui.GetColorU32(ImGuiCol_WindowBg))
 
 	sv:set(SCN_CHARADDED, setting.on_char_added)
 
