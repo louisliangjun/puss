@@ -14,6 +14,12 @@ STYLE_COLOR_MAP.light =
 	{ ['bg'] = RGB('#FFFFFC')
 	, ['sel'] = RGB('#84B6DB')
 	, ['caret_line'] = RGB('#A4D6FB')
+	, ['thumnail_marker'] = RGB('#ff8000')
+	, ['thumnail_bar'] = RGB('#e8e8e8')
+	, ['thumnail_view_border'] = RGB('#000000')
+	, ['thumnail_view'] = RGB('#ffffff')
+	, ['thumnail_sel_fore'] = RGB('#0000ff')
+	, ['thumnail_sel_back'] = RGB('#e8e8e0')
 	, ['marker_fore'] = RGB('#008080')
 	, ['marker_back'] = RGB('#c00020')
 	, ['text'] = RGB('#000000')
@@ -389,6 +395,14 @@ local function do_reset_styles(sv, lang)
 	sv:set(SCN_CHARADDED, setting.on_char_added)
 
 	sv:IndicSetStyle(INDICATOR_FINDTEXT, INDIC_FULLBOX)
+
+	-- thumbnail
+	sv:StyleSetFore(STYLE_EXT_THUMBNAIL_BAR, colmap['thumnail_marker'])
+	sv:StyleSetBack(STYLE_EXT_THUMBNAIL_BAR, colmap['thumnail_bar'])
+	sv:StyleSetFore(STYLE_EXT_THUMBNAIL_VIEW, colmap['thumnail_view_border'])
+	sv:StyleSetBack(STYLE_EXT_THUMBNAIL_VIEW, colmap['thumnail_view'])
+	sv:StyleSetFore(STYLE_EXT_THUMBNAIL_SEL, colmap['thumnail_sel_fore'])
+	sv:StyleSetBack(STYLE_EXT_THUMBNAIL_SEL, colmap['thumnail_sel_back'])
 
 	sv:set('sci.lang', lang)
 end

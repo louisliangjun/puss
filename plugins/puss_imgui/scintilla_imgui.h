@@ -16,6 +16,13 @@ void			scintilla_imgui_update(ScintillaIM* sci, int draw, ScintillaIMCallback cb
 sptr_t			scintilla_imgui_send(ScintillaIM* sci, unsigned int iMessage, uptr_t wParam, sptr_t lParam);
 void			scintilla_imgui_dirty_scroll(ScintillaIM* sci);
 
+struct ScintillaIMEnum {
+	const char*	key;
+	int			val;
+};
+
+ScintillaIMEnum*	scintilla_imgui_extern_enums();
+
 // need implements for platform
 // 
 void*			__scintilla_imgui_os_window(void);

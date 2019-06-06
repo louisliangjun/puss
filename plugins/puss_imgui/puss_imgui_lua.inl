@@ -668,13 +668,18 @@ static void lua_register_imgui_consts(lua_State* L) {
 	#include "imgui_enums.inl"
 #undef __REG_ENUM
 
-	// sci enums
+	// sci enums & extern enums
 	{
 		for( IFaceVal* p=sci_values; p->name; ++p ) {
 			lua_pushinteger(L, p->val);
 			lua_setfield(L, -2, p->name);
 		}
+		for( ScintillaIMEnum* e=scintilla_imgui_extern_enums(); e->key; ++e ) {
+			lua_pushinteger(L, e->val);
+			lua_setfield(L, -2, e->key);
+		}
 	}
+
 }
 
 static void lua_register_scintilla(lua_State* L) {

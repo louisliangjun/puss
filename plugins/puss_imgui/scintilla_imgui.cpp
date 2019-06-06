@@ -665,13 +665,11 @@ void Menu::Show(Point pt, Window &w) {
 }
 
 ColourDesired Platform::Chrome() {
-	const ImVec4& col = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
-	return ColourDesired(IM_F32_TO_INT8_SAT(col.x), IM_F32_TO_INT8_SAT(col.y), IM_F32_TO_INT8_SAT(col.z));
+	return ColourDesired(0, 0, 0);
 }
 
 ColourDesired Platform::ChromeHighlight() {
-	const ImVec4& col = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-	return ColourDesired(IM_F32_TO_INT8_SAT(col.x), IM_F32_TO_INT8_SAT(col.y), IM_F32_TO_INT8_SAT(col.z));
+	return ColourDesired(0xff, 0xff, 0xff);
 }
 
 const char *Platform::DefaultFont() {
@@ -807,6 +805,23 @@ void Platform::Assert(const char *c, const char *file, int line) {
 	abort();
 }
 
+#define STYLE_EXT_MAX	8
+
+enum StyleExt
+	{ STYLE_EXT_THUMBNAIL_BAR = STYLE_MAX + 1
+	, STYLE_EXT_THUMBNAIL_VIEW
+	, STYLE_EXT_THUMBNAIL_SEL
+	};
+
+static ScintillaIMEnum sci_ext_enums[] =
+	{ {"STYLE_EXT_THUMBNAIL_BAR", STYLE_EXT_THUMBNAIL_BAR}
+	, {"STYLE_EXT_THUMBNAIL_VIEW", STYLE_EXT_THUMBNAIL_VIEW}
+	, {"STYLE_EXT_THUMBNAIL_SEL", STYLE_EXT_THUMBNAIL_SEL}
+	, {NULL, NULL}
+	};
+
+static ViewStyle _temp_thumbnail_style;
+
 class ScintillaIM : public ScintillaBase {
 	ScintillaIM(const ScintillaIM &) = delete;
 	ScintillaIM &operator=(const ScintillaIM &) = delete;
@@ -831,6 +846,7 @@ public:
 			timerIntervals[i] = 0;
 			timers[i] = 0.0f;
 		}
+		vs.AllocateExtendedStyles(STYLE_EXT_MAX);
 	}
 	virtual ~ScintillaIM() {
 	}
@@ -882,6 +898,18 @@ public: 	// Public for scintilla_send_message
 
 			case SCI_GETRECTANGULARSELECTIONMODIFIER:
 				return rectangularSelectionModifier;
+
+			case SCI_STYLECLEARALL:
+				vs.ClearStyles();
+				InvalidateStyleRedraw();
+				vs.styles[STYLE_EXT_THUMBNAIL_BAR].weight = 72;
+				vs.styles[STYLE_EXT_THUMBNAIL_BAR].back = ColourDesired(0xe8, 0xe8, 0xe0);
+				vs.styles[STYLE_EXT_THUMBNAIL_BAR].fore = ColourDesired(0x00, 0x80, 0x00);	// now used for marker
+				vs.styles[STYLE_EXT_THUMBNAIL_VIEW].fore = ColourDesired(0, 0, 0);
+				vs.styles[STYLE_EXT_THUMBNAIL_VIEW].back = ColourDesired(0xff, 0xff, 0xff);
+				vs.styles[STYLE_EXT_THUMBNAIL_SEL].fore = ColourDesired(0, 0, 0xff);
+				vs.styles[STYLE_EXT_THUMBNAIL_SEL].back = ColourDesired(0xe8, 0xe8, 0xe0);
+				break;
 
 			default:
 				return ScintillaBase::WndProc(iMessage, wParam, lParam);
@@ -1102,44 +1130,45 @@ public: 	// Public for scintilla_send_message
 	}
 	void RenderThumbnail(Surface* surface, const PRectangle& rcArea) {
 		view.posCache.Clear();
-		ViewStyle style(vs);
-		style.technology = SC_TECHNOLOGY_DEFAULT;
-		style.ms.clear();
-		style.fixedColumnWidth = 0;
-		style.zoomLevel = -15;
-		style.viewIndentationGuides = ivNone;
-		style.selColours.back.isSet = false;
-		style.selColours.fore.isSet = false;
-		style.selAlpha = SC_ALPHA_NOALPHA;
-		style.selAdditionalAlpha = SC_ALPHA_NOALPHA;
-		style.whitespaceColours.back.isSet = false;
-		style.whitespaceColours.fore.isSet = false;
-		style.showCaretLineBackground = false;
-		style.alwaysShowCaretLineBackground = false;
-		style.braceHighlightIndicatorSet = false;
-		style.braceBadLightIndicatorSet = false;
+#define _VS_BAK_SET(field, val)	_temp_thumbnail_style. field = vs. field; vs. field = val
+		_temp_thumbnail_style.ms.swap(vs.ms);
+		vs.ms.clear();
+		_VS_BAK_SET(technology, SC_TECHNOLOGY_DEFAULT);
+		_VS_BAK_SET(fixedColumnWidth, 0);
+		_VS_BAK_SET(zoomLevel, -15);
+		_VS_BAK_SET(viewIndentationGuides, ivNone);
+		_VS_BAK_SET(selColours.back.isSet, false);
+		_VS_BAK_SET(selColours.fore.isSet, false);
+		_VS_BAK_SET(selAlpha, SC_ALPHA_NOALPHA);
+		_VS_BAK_SET(selAdditionalAlpha, SC_ALPHA_NOALPHA);
+		_VS_BAK_SET(whitespaceColours.back.isSet, false);
+		_VS_BAK_SET(whitespaceColours.fore.isSet, false);
+		_VS_BAK_SET(showCaretLineBackground, false);
+		_VS_BAK_SET(alwaysShowCaretLineBackground, false);
+		_VS_BAK_SET(braceHighlightIndicatorSet, false);
+		_VS_BAK_SET(braceBadLightIndicatorSet, false);
 
 		Sci::Position epos = pdoc->Length();
 		Sci::Line line_num = pdoc->LineFromPosition(epos) + 1;
 		float lineHeight = rcArea.Height() / line_num;
 		PRectangle rc = rcArea;
 		surface->SetClip(rc);
-		surface->FillRectangle(rc, ColourDesired(0xe8, 0xe8, 0xe0));
+		surface->FillRectangle(rc, vs.styles[STYLE_EXT_THUMBNAIL_BAR].back);
 
 		rc.top = (mainWindow.win->Scroll.y) / vs.lineHeight * lineHeight;
 		rc.bottom = (mainWindow.win->Scroll.y + mainWindow.size.y) / vs.lineHeight * lineHeight;
-		surface->RoundedRectangle(rc, ColourDesired(0, 0, 0), ColourDesired(0xff, 0xff, 0xff));
+		surface->RoundedRectangle(rc, vs.styles[STYLE_EXT_THUMBNAIL_VIEW].fore, vs.styles[STYLE_EXT_THUMBNAIL_VIEW].back);
 		scrollPageTop = rc.top;
 		scrollPageBottom = rc.bottom;
 
 		Sci::Line current_line = pdoc->LineFromPosition(CurrentPosition());
 		rc.top = lineHeight * current_line;
-		rc.bottom = rc.top + style.lineHeight + 1.0f;
-		surface->RoundedRectangle(rc, ColourDesired(0, 0, 0xff), ColourDesired(0xe8, 0xe8, 0xe0));
+		rc.bottom = rc.top + ((vs.lineHeight < lineHeight) ? vs.lineHeight : lineHeight + 1.0f);
+		surface->RoundedRectangle(rc, vs.styles[STYLE_EXT_THUMBNAIL_SEL].fore, vs.styles[STYLE_EXT_THUMBNAIL_SEL].back);
 
-		style.leftMarginWidth = 0;
-		style.rightMarginWidth = 0;
-		style.Refresh(*surface, pdoc->tabInChars);
+		_VS_BAK_SET(leftMarginWidth, 0);
+		_VS_BAK_SET(rightMarginWidth, 0);
+		vs.Refresh(*surface, pdoc->tabInChars);
 
 		pdoc->EnsureStyledTo(epos);
 
@@ -1153,10 +1182,10 @@ public: 	// Public for scintilla_send_message
 			rc.top = rcArea.top + lineHeight * line;
 			if( (rc.top - lastDrawPos) >= 2.0f ) {
 				lastDrawPos = rc.top;
-				rc.bottom = rc.top + style.lineHeight;
+				rc.bottom = rc.top + vs.lineHeight;
 				LineLayout ll(static_cast<int>(pdoc->LineStart(line + 1) - posLineStart + 1));
-				view.LayoutLine(*this, line, surface, style, &ll, width);
-				view.DrawForeground(surface, *this, style, &ll, line, rc, ll.SubLineRange(0), posLineStart, xoffset, line, background);
+				view.LayoutLine(*this, line, surface, vs, &ll, width);
+				view.DrawForeground(surface, *this, vs, &ll, line, rc, ll.SubLineRange(0), posLineStart, xoffset, line, background);
 			}
 
 			for (const Decoration *deco : pdoc->decorations.View()) {
@@ -1166,10 +1195,30 @@ public: 	// Public for scintilla_send_message
 				}
 				if ((startPos < posLineEnd) && (deco->rs.ValueAt(startPos))) {
 					PRectangle rcMarker(rc.left+1.0f, rc.top-2.0f, rc.left+6.0f, rc.top+2.0f);
-					surface->FillRectangle(rcMarker, ColourDesired(0x00, 0x80, 0x00));
+					surface->FillRectangle(rcMarker, vs.styles[STYLE_EXT_THUMBNAIL_BAR].fore);
 				}
 			}
 		}
+#define _VS_RESTORE(field)	vs. field = _temp_thumbnail_style. field
+		vs.ms.swap(_temp_thumbnail_style.ms);
+		_VS_RESTORE(technology);
+		_VS_RESTORE(fixedColumnWidth);
+		_VS_RESTORE(zoomLevel);
+		_VS_RESTORE(viewIndentationGuides);
+		_VS_RESTORE(selColours.back.isSet);
+		_VS_RESTORE(selColours.fore.isSet);
+		_VS_RESTORE(selAlpha);
+		_VS_RESTORE(selAdditionalAlpha);
+		_VS_RESTORE(whitespaceColours.back.isSet);
+		_VS_RESTORE(whitespaceColours.fore.isSet);
+		_VS_RESTORE(showCaretLineBackground);
+		_VS_RESTORE(alwaysShowCaretLineBackground);
+		_VS_RESTORE(braceHighlightIndicatorSet);
+		_VS_RESTORE(braceBadLightIndicatorSet);
+		_VS_RESTORE(leftMarginWidth);
+		_VS_RESTORE(rightMarginWidth);
+#undef _VS_RESTORE
+		vs.Refresh(*surface, pdoc->tabInChars);
 		view.posCache.Clear();
 	}
 	void RenderPopup() {
@@ -1203,7 +1252,7 @@ public: 	// Public for scintilla_send_message
 			InvalidateStyleData();
 		}
 		mainWindow.win = window;
-		scrollThumbnailWidth = thumbnail ? 72.0f : 0.0f;
+		scrollThumbnailWidth = thumbnail ? vs.styles[STYLE_EXT_THUMBNAIL_BAR].weight : 0.0f;
 		HandleInputEvents(window);
 		UpdateWindow(window);
 		ImGuiStyle& style = ImGui::GetStyle();
@@ -1576,3 +1625,8 @@ sptr_t scintilla_imgui_send(ScintillaIM* sci, unsigned int iMessage, uptr_t wPar
 void scintilla_imgui_dirty_scroll(ScintillaIM* sci) {
 	if( sci ) { sci->DirtyScroll(); }
 }
+
+ScintillaIMEnum* scintilla_imgui_extern_enums() {
+	return sci_ext_enums;
+}
+
