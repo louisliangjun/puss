@@ -964,7 +964,18 @@ public: 	// Public for scintilla_send_message
 		}
 	}
 	void HandleKeyboardEvents(ImGuiIO& io, unsigned int now, int modifiers) {
-		/* text input */
+		// filter input char
+		if( !io.InputQueueCharacters.empty() ) {
+			for(int i = 0; i < io.InputQueueCharacters.size(); ++i ) {
+				ImWchar* wstr = &io.InputQueueCharacters[i];
+				if( *wstr < 0x20 ) {
+					io.InputQueueCharacters.erase(wstr);
+					--i;
+				}
+			}
+		}
+
+		// text input
 		if( !io.InputQueueCharacters.empty() ) {
             // Process text input (before we check for Return because using some IME will effectively send a Return?)
             // We ignore CTRL inputs, but need to allow ALT+CTRL as some keyboards (e.g. German) use AltGR (which _is_ Alt+Ctrl) to input certain characters.

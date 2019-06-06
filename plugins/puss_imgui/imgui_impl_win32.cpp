@@ -369,10 +369,8 @@ IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARA
 		}
 		return 0;
     case WM_CHAR:
-		if( wParam==VK_ESCAPE || wParam==VK_BACK || wParam==VK_TAB || wParam==VK_RETURN )
-			break;
         // You can also use ToAscii()+GetKeyboardState() to retrieve characters.
-        io.AddInputCharacter((unsigned short)wParam);
+        io.AddInputCharacter((unsigned int)wParam);
         return 0;
     case WM_SETCURSOR:
         if (LOWORD(lParam) == HTCLIENT && ImGui_ImplWin32_UpdateMouseCursor())
