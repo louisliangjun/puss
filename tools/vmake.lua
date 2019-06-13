@@ -344,6 +344,7 @@ function make_copy(filename, target_path, source_path)
 	local target = path_concat(target_path, filename)
 	local source = path_concat(source_path, filename)
 	if not check_deps(target, source) then
+		os.remove(target)
 		vlua.file_copy(source, target)
 	end
 	return target
