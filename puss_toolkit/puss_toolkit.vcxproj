@@ -75,7 +75,6 @@
   <ItemGroup>
     <None Include="puss_debug.inl" />
     <None Include="puss_plugin.inl" />
-    <None Include="puss_tinycc.inl" />
     <None Include="thread_utils.h" />
   </ItemGroup>
   <ItemGroup>

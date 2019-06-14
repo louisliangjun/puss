@@ -11,15 +11,39 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="puss_module_system.c" />
-    <ClCompile Include="puss_socket.c" />
+    <ClCompile Include="puss_module_tinycc.c" />
+    <ClCompile Include="tinycc\libtcc.c" />
+    <ClCompile Include="tinycc\tccelf.c" />
+    <ClCompile Include="tinycc\tccgen.c" />
+    <ClCompile Include="tinycc\tccpe.c" />
+    <ClCompile Include="tinycc\tccpp.c" />
+    <ClCompile Include="tinycc\tccrun.c" />
+    <ClCompile Include="tinycc\tcctools.c" />
+    <ClCompile Include="tinycc\x86_64-gen.c" />
+    <ClCompile Include="tinycc\x86_64-link.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="tinycc\coff.h" />
+    <ClInclude Include="tinycc\config.h" />
+    <ClInclude Include="tinycc\elf.h" />
+    <ClInclude Include="tinycc\i386-tok.h" />
+    <ClInclude Include="tinycc\libtcc.h" />
+    <ClInclude Include="tinycc\stab.h" />
+    <ClInclude Include="tinycc\tcc.h" />
+    <ClInclude Include="tinycc\tcctok.h" />
+    <ClInclude Include="tinycc\x86_64-asm.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="puss_tinycc.inl" />
+    <None Include="tinycc\stab.def" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
-    <ProjectGuid>{CF27D656-24A4-4A0D-B36E-E82F33257FD3}</ProjectGuid>
+    <ProjectGuid>{32611548-34D1-4228-9C2A-09EDDC60A8D9}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>pusssocket</RootNamespace>
     <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
+    <ProjectName>puss_tinycc</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -59,28 +83,28 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>LIBTCC_AS_STATIC;ONE_SOURCE=0;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>$(PussRoot)3rd\lua-5.3.5\src\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>wsock32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>LIBTCC_AS_STATIC;ONE_SOURCE=0;_CRT_SECURE_NO_WARNINGS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>$(PussRoot)3rd\lua-5.3.5\src\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>wsock32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
