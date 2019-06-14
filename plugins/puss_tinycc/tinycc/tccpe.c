@@ -20,6 +20,8 @@
 
 #include "tcc.h"
 
+#ifdef TCC_TARGET_PE
+
 #define PE_MERGE_DATA
 /* #define PE_PRINT_SECTIONS */
 
@@ -1996,5 +1998,7 @@ ST_FUNC int pe_output_file(TCCState *s1, const char *filename)
 #endif
     return ret;
 }
+
+#endif//TCC_TARGET_PE
 
 /* ------------------------------------------------------------- */

@@ -864,10 +864,13 @@ static addr_t rt_trace(TCCState *s, addr_t wanted_pc, const char *msg, void (*tr
     last_pc = (addr_t)-1;
     last_line_num = 1;
 
+#ifdef _WIN32
+	addr_t raw_wanted_pc = wanted_pc;
+	wanted_pc = (addr_t)((unsigned int)wanted_pc);
+#endif
+
     if (!stab_sym)
         goto no_stabs;
-
-	unsigned int wanted_pc_uint =  (unsigned int)wanted_pc;
 
     stab_sym_end = (Stab_Sym*)((char*)stab_sym + stab_len);
     for (sym = stab_sym + 1; sym < stab_sym_end; ++sym) {
@@ -877,7 +880,7 @@ static addr_t rt_trace(TCCState *s, addr_t wanted_pc, const char *msg, void (*tr
             if (sym->n_strx == 0) {
                 /* we test if between last line and end of function */
                 pc = sym->n_value + func_addr;
-                if (wanted_pc_uint >= last_pc && wanted_pc_uint < pc)
+                if (wanted_pc >= last_pc && wanted_pc < pc)
                     goto found;
                 func_name[0] = '\0';
                 func_addr = 0;
@@ -899,7 +902,7 @@ static addr_t rt_trace(TCCState *s, addr_t wanted_pc, const char *msg, void (*tr
             /* line number info */
         case N_SLINE:
             pc = sym->n_value + func_addr;
-            if (wanted_pc_uint >= last_pc && wanted_pc_uint < pc)
+            if (wanted_pc >= last_pc && wanted_pc < pc)
                 goto found;
             last_pc = pc;
             last_line_num = sym->n_desc;
@@ -933,6 +936,11 @@ static addr_t rt_trace(TCCState *s, addr_t wanted_pc, const char *msg, void (*tr
     }
 
 no_stabs:
+
+#ifdef _WIN32
+	wanted_pc = raw_wanted_pc;
+#endif
+
     /* second pass: we try symtab symbols (no line number info) */
     incl_index = 0;
     if (s->symtab)
@@ -990,6 +998,8 @@ void tcc_debug_rt_error(TCCState *s, void *rt_main, int max_level, void* uc, voi
     int i;
     for( i=0; i<max_level; ++i ) {
         if (rt_get_caller_pc(&pc, (ucontext_t*)uc, i) < 0)
+            break;
+        if (pc == (addr_t)rt_main)
             break;
         pc = rt_trace(s, pc, i ? "by" : "at", trace);
         if (pc == (addr_t)rt_main && pc)
