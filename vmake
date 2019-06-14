@@ -144,11 +144,9 @@ end)
 
 vmake_target_add('puss_tinycc', function(target)
 	local incs = array_pack(INCLUDES, LUA_SRC_PATH)
-	local cflags = array_pack(CFLAGS, '-DCONFIG_TCC_STATIC -DTCC_PROFILE')
-	local objs = make_c2objs(path_concat('plugins', target), nil, incs, '-fPIC', '-fvisibility=hidden')
+	local objs = make_c2objs(path_concat('plugins', target), nil, incs, '-fPIC', '-fvisibility=hidden', '-DTCC_PROFILE')
 	local output = path_concat('bin', 'plugins', target..PUSS_CONFIG_SUFFIX..DLL_SUFFIX)
-	local libs = ''
-	return make_target(output, objs, CC, cflags,  '-shared', '-o', output, objs, libs)
+	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs)
 end)
 
 -----------------------------
