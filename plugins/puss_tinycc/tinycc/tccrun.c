@@ -999,10 +999,19 @@ void tcc_debug_rt_error(TCCState *s, void *rt_main, int max_level, void* uc, voi
     for( i=0; i<max_level; ++i ) {
         if (rt_get_caller_pc(&pc, (ucontext_t*)uc, i) < 0)
             break;
-        if (pc == (addr_t)rt_main)
-            break;
         pc = rt_trace(s, pc, i ? "by" : "at", trace);
         if (pc == (addr_t)rt_main && pc)
             break;
     }
 }
+
+void tcc_fetch_stab(TCCState *s, TCCStabTbl *tbl) {
+	memset(tbl, 0, sizeof(TCCStabTbl));
+    if ((s->stab_section) && (sizeof(Stab_Sym) == sizeof(TCCStabSym)) ) {
+		tbl->addr = (const unsigned char*)(s->stab_section->sh_addr);
+		tbl->syms_len = (unsigned long)(s->stab_section->data_offset / sizeof(Stab_Sym));
+		tbl->syms = (const TCCStabSym*)(s->stab_section->data);
+		tbl->strs = (const char*)(s->stabstr_section->data);
+	}
+}
+

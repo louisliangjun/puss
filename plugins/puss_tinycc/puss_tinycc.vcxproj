@@ -23,7 +23,6 @@
     <ClCompile Include="tinycc\x86_64-link.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="tinycc\coff.h" />
     <ClInclude Include="tinycc\config.h" />
     <ClInclude Include="tinycc\elf.h" />
     <ClInclude Include="tinycc\i386-tok.h" />
@@ -34,6 +33,7 @@
     <ClInclude Include="tinycc\x86_64-asm.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="puss_tccdbg.inl" />
     <None Include="puss_tinycc.inl" />
     <None Include="tinycc\stab.def" />
   </ItemGroup>

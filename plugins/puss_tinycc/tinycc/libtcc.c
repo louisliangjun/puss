@@ -743,6 +743,7 @@ LIBTCCAPI TCCState *tcc_new(void)
     ++nb_states;
 
     s->nocommon = 1;
+    s->dollars_in_identifiers = 1; /*on by default like in gcc/clang*/
     s->cversion = 199901; /* default unless -std=c11 is supplied */
     s->warn_implicit_function_declaration = 1;
     s->ms_extensions = 1;
@@ -1808,7 +1809,7 @@ reparse:
                     /*
                      * The integer constant 1, intended to indicate
                      * that the implementation does not support atomic
-                     * types (including the _Atomic type quali?er) and
+                     * types (including the _Atomic type qualifier) and
                      * the <stdatomic.h> header.
                      */
                     tcc_define_symbol(s, "__STDC_NO_ATOMICS__", "1");
@@ -1828,33 +1829,39 @@ reparse:
                      * __STDC_NO_VLA__, tcc supports VLA.
                      * The integer constant 1, intended to indicate
                      * that the implementation does not support
-                     * variable length arrays or variably modi?ed
+                     * variable length arrays or variably modified
                      * types.
                      */
 #if !defined(TCC_TARGET_PE)
                     /*
                      * An integer constant of the form yyyymmL (for
-                     * example, 199712L). If this symbol is de?ned,
+                     * example, 199712L). If this symbol is defined,
                      * then every character in the Unicode required
                      * set, when stored in an object of type
                      * wchar_t, has the same value as the short
-                     * identi?er of that character.
+                     * identifier of that character.
+                     */
+                    #if 0
+                    /* on Linux, this conflicts with a define introduced by
+                     * /usr/include/stdc-predef.h included by glibc libs;
+                     * clang doesn't define it at all so it's probably not necessary
                      */
                     tcc_define_symbol(s, "__STDC_ISO_10646__", "201605L");
+                    #endif
                     /*
                      * The integer constant 1, intended to indicate
-                     * that values of type char16_t are UTF?16
+                     * that values of type char16_t are UTF-16
                      * encoded. If some other encoding is used, the
-                     * macro shall not be de?ned and the actual
-                     * encoding used is implementation de?ned.
+                     * macro shall not be defined and the actual
+                     * encoding used is implementation defined.
                      */
                     tcc_define_symbol(s, "__STDC_UTF_16__", "1");
                     /*
                      * The integer constant 1, intended to indicate
-                     * that values of type char32_t are UTF?32
+                     * that values of type char32_t are UTF-32
                      * encoded. If some other encoding is used, the
-                     * macro shall not be de?ned and the actual
-                     * encoding used is implementationde?ned.
+                     * macro shall not be defined and the actual
+                     * encoding used is implementationdefined.
                      */
                     tcc_define_symbol(s, "__STDC_UTF_32__", "1");
 #endif /* !TCC_TARGET_PE */

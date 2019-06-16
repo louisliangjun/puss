@@ -558,18 +558,3 @@ static luaL_Reg puss_tcc_methods[] =
 	, {NULL, NULL}
 	};
 
-static int puss_tcc_new(lua_State* L) {
-	PussTccLua* ud = (PussTccLua*)lua_newuserdata(L, sizeof(PussTccLua));
-	ud->s = NULL;
-
-	if( luaL_newmetatable(L, PUSS_TCC_NAME) ) {
-		luaL_setfuncs(L, puss_tcc_methods, 0);
-		lua_pushvalue(L, -1);
-		lua_setfield(L, -2, "__index");
-	}
-	lua_setmetatable(L, -2);
-	ud->s = tcc_new();
-	tcc_set_error_func(ud->s, ud, puss_tcc_error);
-	return 1;
-}
-

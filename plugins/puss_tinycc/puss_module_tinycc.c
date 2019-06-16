@@ -19,6 +19,7 @@
 
 #include "lstate.h"
 #include "puss_tinycc.inl"
+#include "puss_tccdbg.inl"
 
 #define PUSS_TCCLIB_NAME	"[PussTinyccLib]"
 
@@ -159,13 +160,24 @@ static int _tcc_file_read(int fd, void *buf, unsigned int len) {
 static TCCHook _tcc_file_hook = { _tcc_file_open, _tcc_file_close, _tcc_file_lseek, _tcc_file_read };
 
 static int _tcc_load_module(lua_State* L) {
+	PussTccLua* ud;
 	int top, err;
 	luaL_checktype(L, 1, LUA_TFUNCTION);
-	lua_pushcfunction(L, puss_tcc_new);
-	lua_call(L, 0, 1);
+
+	ud = (PussTccLua*)lua_newuserdata(L, sizeof(PussTccLua));
+	ud->s = NULL;
+	if( luaL_newmetatable(L, PUSS_TCC_NAME) ) {
+		luaL_setfuncs(L, puss_tcc_methods, 0);
+		lua_pushvalue(L, -1);
+		lua_setfield(L, -2, "__index");
+	}
+	lua_setmetatable(L, -2);
+	ud->s = tcc_new();
+	tcc_set_error_func(ud->s, ud, puss_tcc_error);
 	top = lua_gettop(L);
 	if( top > 2 )
 		lua_insert(L, 2);
+
 	_tcc_current_L = L;
 	err = lua_pcall(L, top-1, LUA_MULTRET, 0);
 	_tcc_current_L = NULL;
@@ -201,6 +213,9 @@ static int _tcc_load_file_default(lua_State* L) {
 static const luaL_Reg tinycc_lib_methods[] =
 	{ {"tcc_load_module", _tcc_load_module}
 	, {"tcc_load_file", _tcc_load_file_default}
+#ifdef _WIN32
+	, {"debug_attach", _tcc_debug_attach}
+#endif
 	, {NULL, NULL}
 	};
 

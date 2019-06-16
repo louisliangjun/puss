@@ -24,6 +24,23 @@ LIBTCCAPI void tcc_setup_hook(const TCCHook *hook);
 
 LIBTCCAPI void tcc_debug_rt_error(TCCState *s, void *rt_main, int max_level, void* uc, void (*trace)(const char* msg));
 
+typedef struct TCCStabSym {
+    unsigned int n_strx;         /* index into string table of name */
+    unsigned char n_type;         /* type of symbol */
+    unsigned char n_other;        /* misc info (usually empty) */
+    unsigned short n_desc;        /* description field */
+    unsigned int n_value;        /* value of symbol */
+} TCCStabSym;
+
+typedef struct TCCStabTbl {
+	const unsigned char* addr;
+	unsigned long syms_len;
+	const TCCStabSym* syms;
+	const char* strs;
+} TCCStabTbl;
+
+LIBTCCAPI void tcc_fetch_stab(TCCState *s, TCCStabTbl *tbl);
+
 /* create a new TCC compilation context */
 LIBTCCAPI TCCState *tcc_new(void);
 
