@@ -35,6 +35,7 @@ typedef struct TCCStabSym {
 typedef struct TCCStabTbl {
 	const unsigned char* addr;
 	unsigned long syms_len;
+	unsigned long strs_len;
 	const TCCStabSym* syms;
 	const char* strs;
 } TCCStabTbl;

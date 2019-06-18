@@ -6,6 +6,7 @@ local docs = puss.import('core.docs')
 local filebrowser = puss.import('core.filebrowser')
 local console = puss.import('core.console')
 local samples = puss.import('core.samples')
+local tcc_samples = puss.import('core.c.samples')
 local diskfs = puss.import('core.diskfs')
 local miniline = puss.import('core.miniline')
 local thread = puss.import('core.thread')
@@ -17,6 +18,7 @@ show_imgui_demos = show_imgui_demos or false
 show_imgui_metrics = show_imgui_metrics or false
 
 show_samples_window = show_samples_window or false
+show_tcc_samples_window = show_tcc_samples_window or false
 show_console_window = show_console_window or false
 show_shutcut_window = show_shutcut_window or false
 show_search_window = show_search_window or true
@@ -90,6 +92,7 @@ local function main_menu()
 		active, show_imgui_demos = imgui.MenuItem('ImGUI Demos', nil, show_imgui_demos)
 		active, show_imgui_metrics = imgui.MenuItem('ImGUI Metrics', nil, show_imgui_metrics)
 		active, show_samples_window = imgui.MenuItem('Samples', nil, show_samples_window)
+		active, show_tcc_samples_window = imgui.MenuItem('TccSamples', nil, show_tcc_samples_window)
 		imgui.Separator()
 		if imgui.MenuItem('Reload', 'Ctrl+F12') then puss.reload() end
 		imgui.Separator()
@@ -188,6 +191,7 @@ local function show_main_window()
 	show_imgui_demos = show_imgui_demos and imgui.ShowDemoWindow(true)
 	show_imgui_metrics = show_imgui_metrics and imgui.ShowMetricsWindow(true)
 	show_samples_window = show_samples_window and samples.update(true)
+	show_tcc_samples_window = show_tcc_samples_window and tcc_samples.update(true)
 	show_console_window = show_console_window and console.update(true)
 	show_shutcut_window = show_shutcut_window and shotcuts.update(true)
 	show_search_window = show_search_window and search.update(true)

@@ -5,9 +5,9 @@
 #ifdef _WIN32
 
 typedef struct TccDbg {
-	DEBUG_EVENT	ev;
-	HANDLE		hProcess;
 	DWORD		dwProcessId;
+	HANDLE		hProcess;
+	DEBUG_EVENT	ev;
 } TccDbg;
 
 static void tccdbg_continue(TccDbg* dbg, DWORD dwContinueStatus) {
@@ -156,8 +156,10 @@ static int _tcc_debug_wait(lua_State* L) {
 	if( !dbg->dwProcessId )
 		return 0;
 
-	if( !WaitForDebugEvent(&(dbg->ev), dwMilliseconds) )
-		return 0;
+	if( !WaitForDebugEvent(&(dbg->ev), dwMilliseconds) ) {
+		lua_pushboolean(L, 0);
+		return 1;
+	}
 
 	switch( dbg->ev.dwDebugEventCode ) {
 	case EXCEPTION_DEBUG_EVENT:
@@ -188,7 +190,107 @@ static int _tcc_debug_wait(lua_State* L) {
 		_tccdbg_on_rip(L, dbg, &(dbg->ev.u.RipInfo));
 		break;
 	}
-	return 0;
+	lua_pushboolean(L, 1);
+	return 1;
+}
+
+static int _stab_code_inited = 0;
+static char* _stab_code[256];
+
+static void _stab_code_init(void) {
+	if( _stab_code_inited )	return;
+	_stab_code_inited = 1;
+	memset(_stab_code, 0, sizeof(char*) * 256);
+#define __define_stab(NAME, CODE, STRING) _stab_code[CODE] = STRING;
+	#include "tinycc/stab.def"
+#undef __define_stab
+}
+
+static int _tcc_debug_parse_stab(lua_State* L) {
+	TccDbg* dbg = (TccDbg*)luaL_checkudata(L, 1, PUSS_TCCDBG_NAME);
+	size_t stab_str_len = 0;
+	const char* stab_str_mem = luaL_checklstring(L, 2, &stab_str_len);
+	TCCStabTbl stab;
+	unsigned long i;
+	SIZE_T sz;
+	SIZE_T bytes;
+	TCCStabSym* syms;
+	char* strs;
+	if( stab_str_len!=sizeof(TCCStabTbl) )
+		luaL_error(L, "TCCStabTbl size error");
+	if( !dbg->hProcess )
+		luaL_error(L, "process not attached!");
+	memcpy(&stab, stab_str_mem, stab_str_len);
+	sz = sizeof(TCCStabSym) * stab.syms_len;
+	syms = (TCCStabSym*)malloc(sz + stab.strs_len + 16);
+	strs = (char*)(syms + stab.syms_len);
+	if( !syms )
+		luaL_error(L, "no memory");
+	if( !ReadProcessMemory(dbg->hProcess, stab.syms, syms, sz, &bytes) )
+		luaL_error(L, "read syms error");
+	if( !ReadProcessMemory(dbg->hProcess, stab.strs, strs, stab.strs_len, &bytes) )
+		luaL_error(L, "read strs error");
+	_stab_code_init();
+	lua_createtable(L, stab.syms_len, 0);
+	for( i=1; i<stab.syms_len; ++i ) {
+		const TCCStabSym* sym = syms + i;
+		const char* code = _stab_code[sym->n_type];
+
+		lua_createtable(L, 4, 0);
+		if( code )
+			lua_pushstring(L, code);
+		else
+			lua_pushinteger(L, sym->n_type);
+		lua_rawseti(L, -2, 1);
+
+		if( sym->n_strx )
+			lua_pushstring(L, strs + sym->n_strx);
+		else
+			lua_pushnil(L);
+		lua_rawseti(L, -2, 2);
+
+		lua_pushinteger(L, sym->n_value);
+		lua_rawseti(L, -2, 3);
+
+		lua_pushinteger(L, sym->n_desc);
+		lua_rawseti(L, -2, 4);
+
+		lua_rawseti(L, -2, i);
+	}
+	return 1;
+}
+
+static int _tcc_debug_set_data(lua_State* L) {
+	luaL_checkudata(L, 1, PUSS_TCCDBG_NAME);
+	luaL_checkany(L, 2);
+	luaL_checkany(L, 3);
+	if( lua_getuservalue(L, 1)!=LUA_TTABLE ) {
+		lua_pop(L, 1);
+		lua_newtable(L);
+		lua_pushvalue(L, -1);
+		lua_setuservalue(L, 1);
+	}
+	lua_replace(L, 1);
+	lua_pushvalue(L, 2);
+	lua_pushvalue(L, 3);
+	lua_settable(L, 1);
+	lua_pushvalue(L, 3);
+	return 1;
+}
+
+static int _tcc_debug_get_data(lua_State* L) {
+	luaL_checkudata(L, 1, PUSS_TCCDBG_NAME);
+	luaL_checkany(L, 2);
+	if( lua_getuservalue(L, 1)!=LUA_TTABLE ) {
+		lua_pop(L, 1);
+		lua_newtable(L);
+		lua_pushvalue(L, -1);
+		lua_setuservalue(L, 1);
+	}
+	lua_replace(L, 1);
+	lua_pushvalue(L, 2);
+	lua_gettable(L, 1);
+	return 1;
 }
 
 static luaL_Reg puss_tccdbg_methods[] =
@@ -197,6 +299,9 @@ static luaL_Reg puss_tccdbg_methods[] =
 	, {"read", _tcc_debug_read}
 	, {"write", _tcc_debug_write}
 	, {"wait", _tcc_debug_wait}
+	, {"parse_stab", _tcc_debug_parse_stab}
+	, {"set_data", _tcc_debug_set_data}
+	, {"get_data", _tcc_debug_get_data}
 	, {NULL, NULL}
 	};
 
@@ -218,6 +323,10 @@ static int _tcc_debug_attach(lua_State* L) {
 }
 
 #else
+
+static int _tcc_debug_attach(lua_State* L) {
+	return 0;
+}
 
 #endif
 

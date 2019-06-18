@@ -1010,6 +1010,7 @@ void tcc_fetch_stab(TCCState *s, TCCStabTbl *tbl) {
     if ((s->stab_section) && (sizeof(Stab_Sym) == sizeof(TCCStabSym)) ) {
 		tbl->addr = (const unsigned char*)(s->stab_section->sh_addr);
 		tbl->syms_len = (unsigned long)(s->stab_section->data_offset / sizeof(Stab_Sym));
+		tbl->strs_len = (unsigned long)(s->stabstr_section->data_offset);
 		tbl->syms = (const TCCStabSym*)(s->stab_section->data);
 		tbl->strs = (const char*)(s->stabstr_section->data);
 	}

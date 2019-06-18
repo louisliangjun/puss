@@ -1046,15 +1046,6 @@ static int lua_debug_capture_error(lua_State* L) {
 		luaL_pushresult(&(PENV.B));
 		return 1;
 	}
-
-	static int lua_debug_getpid(lua_State* L) {
-	#ifdef _WIN32
-		lua_pushinteger(L, GetCurrentProcessId());
-	#else
-		lua_pushinteger(L, getpid());
-	#endif
-		return 1;
-	}
 #else
 	static int lua_debug_fetch_disasm(lua_State* L) {
 		return 0;
@@ -1063,13 +1054,17 @@ static int lua_debug_capture_error(lua_State* L) {
 	static int _fetch_disasm(lua_State* L) {
 		return 0;
 	}
-
-	static int lua_debug_getpid(lua_State* L) {
-		// TODO : lua_pushinteger(L, getpid());
-		lua_pushinteger(L, 0);
-		return 1;
-	}
 #endif
+
+
+static int lua_debug_getpid(lua_State* L) {
+#ifdef _WIN32
+	lua_pushinteger(L, GetCurrentProcessId());
+#else
+	lua_pushinteger(L, getpid());
+#endif
+	return 1;
+}
 
 static luaL_Reg puss_debug_methods[] =
 	{ {"__index", NULL}

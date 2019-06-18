@@ -8,6 +8,7 @@ local console = puss.import('core.console')
 local miniline = puss.import('core.miniline')
 local net = puss.import('core.net')
 local thread = puss.import('core.thread')
+local tinycc = puss.import('core.tinycc')
 
 docs.setup(function(event, ...)
 	local f = _ENV[event]
@@ -25,7 +26,6 @@ local BROADCAST_PORT = 7654
 local broadcast_recv = net.create_udp_broadcast_recver(BROADCAST_PORT)
 
 local dummy_vars = {}
-
 stack_list = stack_list or {}
 stack_vars = stack_vars or {}
 stack_current = stack_current or 1
@@ -93,6 +93,19 @@ local function locate_to_file(fname, line)
 	if docs.open(fname, line) then return end
 end
 
+local tccdbg_events = {}
+
+local function tccdbg_events_dispatch(dbg, ev, ...)
+	print(ev, ...)
+	puss.trace_pcall(tccdbg_events[ev], ...)
+end
+
+tccdbg_events.exception = function(first_chance, emsg, code, addr)
+end
+
+tccdbg_events.debug_string = function(msg)
+end
+
 local debugger_events = {}
 
 local function debugger_events_dispatch(co, sk, ...)
@@ -134,10 +147,13 @@ end
 
 debugger_events.attached = function(pid, bps)
 	print('attached', pid, bps)
+
 	for k,v in pairs(bps) do
 		local fname, line = k:match('^(.+):(%d+)$')
 		print(fname, line, v)
 	end
+
+	tinycc.debug_attach(pid, debugger_rpc)
 end
 
 debugger_events.continued = function()
@@ -189,9 +205,11 @@ local function tool_button(label, hint, icon)
 end
 
 local function disconnect()
+	tinycc.debug_detach()
+
 	if socket then
-		socket:close()
 		puss.async_service_group_cancel(GROUP_KEY)
+		socket:close()
 		socket, _socket = nil, nil
 	end
 
@@ -677,6 +695,8 @@ local function do_update()
 
 	thread.update()
 
+	tinycc.debug_update(tccdbg_events_dispatch)
+
 	imgui.protect_pcall(show_main_window)
 
 	if run_sign and imgui.should_close() then
@@ -703,6 +723,7 @@ __exports.init = function()
 end
 
 __exports.uninit = function()
+	disconnect()
 	imgui.destroy()
 end
 

@@ -213,9 +213,7 @@ static int _tcc_load_file_default(lua_State* L) {
 static const luaL_Reg tinycc_lib_methods[] =
 	{ {"tcc_load_module", _tcc_load_module}
 	, {"tcc_load_file", _tcc_load_file_default}
-#ifdef _WIN32
 	, {"debug_attach", _tcc_debug_attach}
-#endif
 	, {NULL, NULL}
 	};
 

@@ -20,7 +20,7 @@
 
 #ifndef PUSS_TCC_SIGNAL_DEFAULT
   #ifdef _WIN32
-	#define PUSS_TCC_SIGNAL_DEFAULT(sig)	EXCEPTION_EXECUTE_HANDLER
+	#define PUSS_TCC_SIGNAL_DEFAULT(sig)	EXCEPTION_CONTINUE_SEARCH
   #else
 	#define PUSS_TCC_SIGNAL_DEFAULT(sig)	signal((sig), SIG_DFL)
   #endif
@@ -244,18 +244,15 @@ struct TccLJ {
 	jmp_buf			b;
 };
 
-#ifdef _WIN32
-	static _declspec(thread) TccLJ* sigLJ;
-#else
-	static __thread TccLJ* sigLJ;
-#endif
+static TccLJ* sigLJ = NULL;
 
 #ifdef _WIN32
-	static LPTOP_LEVEL_EXCEPTION_FILTER _base_except_filter = NULL;
+	static DWORD except_handle_tid = 0;
 
-	static LONG WINAPI except_filter(EXCEPTION_POINTERS *ex_info) {
-		// MessageBoxA(NULL, "XX", "XXX", MB_OK);	// used for debug
-		if( sigLJ ) {
+	static LONG NTAPI except_handle(EXCEPTION_POINTERS *ex_info) {
+		DWORD tid = GetCurrentThreadId();
+		if( except_handle_tid==tid && sigLJ ) {
+			// MessageBoxA(NULL, "XX", except_handle_tid==tid ? "XXX" : "YYY", MB_OK);	// used for debug
 			if( sigLJ->e==NULL ) {
 				switch (ex_info->ExceptionRecord->ExceptionCode) {
 				case EXCEPTION_ACCESS_VIOLATION:	sigLJ->e = "EXCEPTION_ACCESS_VIOLATION";	break;
@@ -274,7 +271,7 @@ struct TccLJ {
 			}
 			longjmp(sigLJ->b, 1);
 		}
-		return _base_except_filter ? _base_except_filter(ex_info) : PUSS_TCC_SIGNAL_DEFAULT(ex_info);
+		return PUSS_TCC_SIGNAL_DEFAULT(ex_info);
 	}
 
 #else
@@ -299,9 +296,10 @@ struct TccLJ {
 
 static void puss_tcc_reg_signals(void) {
   #ifdef _WIN32
-	if( _base_except_filter )
-		abort();
-	_base_except_filter = SetUnhandledExceptionFilter(except_filter);
+	if( except_handle_tid==0 ) {
+		except_handle_tid = GetCurrentThreadId();
+		AddVectoredExceptionHandler(TRUE, except_handle);
+	}
   #else
 	struct sigaction act;
 	memset(&act, 0, sizeof(act));
@@ -535,6 +533,16 @@ static int puss_tcc_call(lua_State* L) {
 	return lua_gettop(L) - 1;
 }
 
+static int puss_tcc_fetch_stab(lua_State* L) {
+	PussTccLua* ud = (PussTccLua*)luaL_checkudata(L, 1, PUSS_TCC_NAME);
+	TCCStabTbl stab;
+	if( !ud->s )
+		luaL_error(L, "tcc module not exist!");
+	tcc_fetch_stab(ud->s, &stab);
+	lua_pushlstring(L, (const char*)&stab, sizeof(TCCStabTbl));
+	return 1;
+}
+
 static luaL_Reg puss_tcc_methods[] =
 	{ {"__gc", puss_tcc_destroy}
 	, {"set_lib_path", puss_tcc_set_lib_path}
@@ -555,6 +563,7 @@ static luaL_Reg puss_tcc_methods[] =
 	, {"relocate", puss_tcc_relocate}
 	, {"get_symbol", puss_tcc_get_symbol}
 	, {"call", puss_tcc_call}
+	, {"fetch_stab", puss_tcc_fetch_stab}
 	, {NULL, NULL}
 	};
 
