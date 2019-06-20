@@ -18,14 +18,6 @@
 	#define PUSS_TCC_RT_TRACE_END()
 #endif
 
-#ifndef PUSS_TCC_SIGNAL_DEFAULT
-  #ifdef _WIN32
-	#define PUSS_TCC_SIGNAL_DEFAULT(sig)	EXCEPTION_CONTINUE_SEARCH
-  #else
-	#define PUSS_TCC_SIGNAL_DEFAULT(sig)	signal((sig), SIG_DFL)
-  #endif
-#endif
-
 #ifndef PUSS_TCC_LUA_PCALL_BEGIN
   #define PUSS_TCC_LUA_PCALL_BEGIN(L) \
 	unsigned short oldnCcalls = (L)->nCcalls; \
@@ -271,11 +263,9 @@ static TccLJ* sigLJ = NULL;
 			}
 			longjmp(sigLJ->b, 1);
 		}
-		return PUSS_TCC_SIGNAL_DEFAULT(ex_info);
+		return EXCEPTION_CONTINUE_SEARCH;
 	}
-
 #else
-
 	static void __puss_tcc_sig_handle(int sig, siginfo_t *info, void *uc) {
 		if( sigLJ ) {
 			if( sigLJ->e==0 ) {
@@ -288,9 +278,8 @@ static TccLJ* sigLJ = NULL;
 				PUSS_TCC_RT_TRACE_END();
 			}
 			longjmp(sigLJ->b, 1);
-		} else {
-			PUSS_TCC_SIGNAL_DEFAULT(sig);
 		}
+		signal(sig, SIG_DFL);
 	}
 #endif
 

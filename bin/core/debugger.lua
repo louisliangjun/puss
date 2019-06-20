@@ -8,7 +8,11 @@ local console = puss.import('core.console')
 local miniline = puss.import('core.miniline')
 local net = puss.import('core.net')
 local thread = puss.import('core.thread')
-local tinycc = puss.import('core.tinycc')
+
+-- default not open tinycc debug
+-- 
+local _dummy_tinycc = {debug_attach=print, debug_detach=print, debug_update=function() end}
+local tinycc = _dummy_tinycc or puss.import('core.tinycc')
 
 docs.setup(function(event, ...)
 	local f = _ENV[event]
@@ -93,19 +97,6 @@ local function locate_to_file(fname, line)
 	if docs.open(fname, line) then return end
 end
 
-local tccdbg_events = {}
-
-local function tccdbg_events_dispatch(dbg, ev, ...)
-	print(ev, ...)
-	puss.trace_pcall(tccdbg_events[ev], ...)
-end
-
-tccdbg_events.exception = function(first_chance, emsg, code, addr)
-end
-
-tccdbg_events.debug_string = function(msg)
-end
-
 local debugger_events = {}
 
 local function debugger_events_dispatch(co, sk, ...)
@@ -145,7 +136,7 @@ do
 	end
 end
 
-debugger_events.attached = function(pid, bps)
+debugger_events.attached = function(bps, pid)
 	print('attached', pid, bps)
 
 	for k,v in pairs(bps) do
@@ -695,7 +686,7 @@ local function do_update()
 
 	thread.update()
 
-	tinycc.debug_update(tccdbg_events_dispatch)
+	tinycc.debug_update()
 
 	imgui.protect_pcall(show_main_window)
 

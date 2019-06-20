@@ -7,6 +7,7 @@
 typedef struct TccDbg {
 	DWORD		dwProcessId;
 	HANDLE		hProcess;
+	BOOL		bInterrupted;
 	DEBUG_EVENT	ev;
 } TccDbg;
 
@@ -55,8 +56,39 @@ static int _tcc_debug_write(lua_State* L) {
 	return 0;
 }
 
+static int _tcc_debug_interrupted(lua_State* L) {
+	TccDbg* dbg = (TccDbg*)luaL_checkudata(L, 1, PUSS_TCCDBG_NAME);
+	if( !dbg->hProcess )
+		return 0;
+	lua_pushboolean(L, dbg->bInterrupted);
+	return 1;
+}
+
 static void _tccdbg_on_exception(lua_State* L, TccDbg* dbg, const EXCEPTION_DEBUG_INFO* info) {
 	const char* emsg = "exception";
+	DWORD code = info->ExceptionRecord.ExceptionCode;
+	dbg->bInterrupted = TRUE;
+
+	if( code==EXCEPTION_BREAKPOINT ) {
+		// First chance: Display the current 
+		// instruction and register values. 
+		lua_pushstring(L, "breakpoint");
+		lua_pushboolean(L, info->dwFirstChance);
+		lua_pushlightuserdata(L, info->ExceptionRecord.ExceptionAddress);
+		lua_call(L, lua_gettop(L)-1, 0);
+		return;
+	}
+
+	if( code==EXCEPTION_SINGLE_STEP ) {
+		// First chance: Update the display of the 
+		// current instruction and register values. 
+		lua_pushstring(L, "single_step");
+		lua_pushboolean(L, info->dwFirstChance);
+		lua_pushlightuserdata(L, info->ExceptionRecord.ExceptionAddress);
+		lua_call(L, lua_gettop(L)-1, 0);
+		return;
+	}
+
 	#define exception_case(e)	case e:	emsg = #e;	break;
 	switch (info->ExceptionRecord.ExceptionCode) {
 	exception_case(EXCEPTION_ACCESS_VIOLATION)
@@ -81,27 +113,12 @@ static void _tccdbg_on_exception(lua_State* L, TccDbg* dbg, const EXCEPTION_DEBU
 	}
 	#undef exception_case
 
-	switch (info->ExceptionRecord.ExceptionCode) {
-	case EXCEPTION_BREAKPOINT:
-		// First chance: Display the current 
-		// instruction and register values. 
-		tccdbg_continue(dbg, info->dwFirstChance ? DBG_EXCEPTION_NOT_HANDLED : DBG_CONTINUE);
-		break;
-	case EXCEPTION_SINGLE_STEP:
-		// First chance: Update the display of the 
-		// current instruction and register values. 
-		tccdbg_continue(dbg, info->dwFirstChance ? DBG_EXCEPTION_NOT_HANDLED : DBG_CONTINUE);
-		break;
-	default:
-		lua_pushstring(L, "exception");
-		lua_pushboolean(L, info->dwFirstChance);
-		lua_pushstring(L, emsg);
-		lua_pushinteger(L, info->ExceptionRecord.ExceptionCode);
-		lua_pushlightuserdata(L, info->ExceptionRecord.ExceptionAddress);
-		lua_call(L, lua_gettop(L)-1, LUA_MULTRET);
-		tccdbg_continue(dbg, info->dwFirstChance ? DBG_EXCEPTION_NOT_HANDLED : DBG_CONTINUE);
-		break;
-	}
+	lua_pushstring(L, "exception");
+	lua_pushboolean(L, info->dwFirstChance);
+	lua_pushstring(L, emsg);
+	lua_pushinteger(L, info->ExceptionRecord.ExceptionCode);
+	lua_pushlightuserdata(L, info->ExceptionRecord.ExceptionAddress);
+	lua_call(L, lua_gettop(L)-1, 0);
 }
 
 static void _tccdbg_on_create_thread(lua_State* L, TccDbg* dbg, const CREATE_THREAD_DEBUG_INFO* info) {
@@ -110,6 +127,8 @@ static void _tccdbg_on_create_thread(lua_State* L, TccDbg* dbg, const CREATE_THR
 
 static void _tccdbg_on_create_process(lua_State* L, TccDbg* dbg, const CREATE_PROCESS_DEBUG_INFO* info) {
 	dbg->hProcess = info->hProcess;
+	lua_pushstring(L, "create_process");
+	lua_call(L, lua_gettop(L)-1, 0);
 	tccdbg_continue(dbg, DBG_CONTINUE);
 }
 
@@ -118,6 +137,8 @@ static void _tccdbg_on_thread_exit(lua_State* L, TccDbg* dbg, const EXIT_THREAD_
 }
 
 static void _tccdbg_on_process_exit(lua_State* L, TccDbg* dbg, const EXIT_PROCESS_DEBUG_INFO* info) {
+	lua_pushstring(L, "process_exit");
+	lua_call(L, lua_gettop(L)-1, 0);
 	tccdbg_continue(dbg, DBG_CONTINUE);
 	dbg->hProcess = NULL;
 	dbg->dwProcessId = 0;
@@ -138,7 +159,7 @@ static void _tccdbg_on_debug_string(lua_State* L, TccDbg* dbg, const OUTPUT_DEBU
 	luaL_buffinitsize(L, &B, info->nDebugStringLength);
 	ReadProcessMemory(dbg->hProcess, info->lpDebugStringData, B.b, info->nDebugStringLength, &bytesRead);
 	luaL_pushresultsize(&B, bytesRead);
-	lua_call(L, lua_gettop(L)-1, LUA_MULTRET);
+	lua_call(L, lua_gettop(L)-1, 0);
 	tccdbg_continue(dbg, DBG_CONTINUE);
 }
 
@@ -155,6 +176,11 @@ static int _tcc_debug_wait(lua_State* L) {
 
 	if( !dbg->dwProcessId )
 		return 0;
+
+	if( dbg->bInterrupted ) {
+		lua_pushboolean(L, 0);
+		return 1;
+	}
 
 	if( !WaitForDebugEvent(&(dbg->ev), dwMilliseconds) ) {
 		lua_pushboolean(L, 0);
@@ -194,6 +220,21 @@ static int _tcc_debug_wait(lua_State* L) {
 	return 1;
 }
 
+static int _tcc_debug_cont(lua_State* L) {
+	TccDbg* dbg = (TccDbg*)luaL_checkudata(L, 1, PUSS_TCCDBG_NAME);
+	int not_handled = lua_toboolean(L, 2);
+	if( !dbg->hProcess )
+		return 0;
+	if( dbg->bInterrupted ) {
+		dbg->bInterrupted = FALSE;
+		tccdbg_continue(dbg, not_handled ? DBG_EXCEPTION_NOT_HANDLED : DBG_CONTINUE);
+		lua_pushboolean(L, 1);
+	} else {
+		lua_pushboolean(L, 0);
+	}
+	return 1;
+}
+
 static int _stab_code_inited = 0;
 static char* _stab_code[256];
 
@@ -226,12 +267,23 @@ static int _tcc_debug_parse_stab(lua_State* L) {
 	strs = (char*)(syms + stab.syms_len);
 	if( !syms )
 		luaL_error(L, "no memory");
-	if( !ReadProcessMemory(dbg->hProcess, stab.syms, syms, sz, &bytes) )
+	if( !ReadProcessMemory(dbg->hProcess, stab.syms, syms, sz, &bytes) ) {
+		free(syms);
 		luaL_error(L, "read syms error");
-	if( !ReadProcessMemory(dbg->hProcess, stab.strs, strs, stab.strs_len, &bytes) )
+	}
+	if( !ReadProcessMemory(dbg->hProcess, stab.strs, strs, stab.strs_len, &bytes) ) {
+		free(syms);
 		luaL_error(L, "read strs error");
+	}
 	_stab_code_init();
-	lua_createtable(L, stab.syms_len, 0);
+
+	lua_createtable(L, stab.syms_len, 16);
+
+	lua_pushinteger(L, (lua_Integer)(stab.ptr));
+	lua_setfield(L, -2, "ptr");
+	lua_pushinteger(L, (lua_Integer)(stab.ptx));
+	lua_setfield(L, -2, "ptx");
+
 	for( i=1; i<stab.syms_len; ++i ) {
 		const TCCStabSym* sym = syms + i;
 		const char* code = _stab_code[sym->n_type];
@@ -257,6 +309,7 @@ static int _tcc_debug_parse_stab(lua_State* L) {
 
 		lua_rawseti(L, -2, i);
 	}
+	free(syms);
 	return 1;
 }
 
@@ -293,15 +346,39 @@ static int _tcc_debug_get_data(lua_State* L) {
 	return 1;
 }
 
+static int _tcc_debug_setbp(lua_State* L) {
+	TccDbg* dbg = (TccDbg*)luaL_checkudata(L, 1, PUSS_TCCDBG_NAME);
+	LPVOID* ptr = lua_islightuserdata(L, 2) ? (LPVOID*)lua_touserdata(L, 2) : (LPVOID*)luaL_checkinteger(L, 2);
+	BYTE write_byte = lua_isinteger(L, 3) ? (BYTE)lua_tointeger(L, 3) : 0xCC;
+	BYTE byte = 0xCC;
+	SIZE_T sz = 0;
+	if( !dbg->hProcess )
+		luaL_error(L, "process not attached!");
+
+	if( write_byte==0xCC ) {
+		if( !ReadProcessMemory(dbg->hProcess, ptr, &byte, 1, &sz) )
+			luaL_error(L, "process read addr failed!");
+	}
+	if( write_byte!=byte ) {
+		if( !WriteProcessMemory(dbg->hProcess, ptr, &byte, 1, &sz) )
+			luaL_error(L, "process write addr failed!");
+	}
+	lua_pushinteger(L, byte);
+	return 1;
+}
+
 static luaL_Reg puss_tccdbg_methods[] =
 	{ {"__gc", _tcc_debug_gc}
 	, {"detach", _tcc_debug_gc}
-	, {"read", _tcc_debug_read}
-	, {"write", _tcc_debug_write}
+	, {"interrupted", _tcc_debug_interrupted}
 	, {"wait", _tcc_debug_wait}
-	, {"parse_stab", _tcc_debug_parse_stab}
+	, {"cont", _tcc_debug_cont}
 	, {"set_data", _tcc_debug_set_data}
 	, {"get_data", _tcc_debug_get_data}
+	, {"parse_stab", _tcc_debug_parse_stab}
+	, {"read", _tcc_debug_read}
+	, {"write", _tcc_debug_write}
+	, {"setbp", _tcc_debug_setbp}
 	, {NULL, NULL}
 	};
 

@@ -26,14 +26,15 @@ LIBTCCAPI void tcc_debug_rt_error(TCCState *s, void *rt_main, int max_level, voi
 
 typedef struct TCCStabSym {
     unsigned int n_strx;         /* index into string table of name */
-    unsigned char n_type;         /* type of symbol */
-    unsigned char n_other;        /* misc info (usually empty) */
-    unsigned short n_desc;        /* description field */
+    unsigned char n_type;        /* type of symbol */
+    unsigned char n_other;       /* misc info (usually empty) */
+    unsigned short n_desc;       /* description field */
     unsigned int n_value;        /* value of symbol */
 } TCCStabSym;
 
 typedef struct TCCStabTbl {
-	const unsigned char* addr;
+	const unsigned char* ptr;	 /* runtime writable address */
+	const unsigned char* ptx;    /* runtime execute address */
 	unsigned long syms_len;
 	unsigned long strs_len;
 	const TCCStabSym* syms;

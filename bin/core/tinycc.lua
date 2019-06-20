@@ -61,6 +61,46 @@ end
 -- debugger & debuggee
 
 local tccdbg = _tccdbg
+local tccdbg_events = {}
+
+local function debug_trace(...)
+	print('[TCCDBG]', ...)
+end
+
+local function trace_stab(stab, trace)
+	local ptr, ptx = stab.ptr, stab.ptx
+	local offset = (ptx & 0xFFFFFFFF00000000)
+	local faddr = 0	-- function addr
+	local stack = 0
+	for i, sym in ipairs(stab) do
+		local t, s, v, d = table.unpack(sym)
+		if t=='SLINE' then
+			trace(string.format('%d	SLINE	0x%016x	%d', stack, faddr + v, d))
+		elseif t=='FUN' then
+			if not s then	-- end of fun
+				faddr = 0
+			else			-- begin of fun
+				faddr = offset + v
+				trace(string.format('%d	FUNCTION	0x%016x', stack, faddr + v))
+			end
+		elseif t=='SO' then
+			if not s then	-- end of source
+				stack = 0
+			elseif #s>0 and s:sub(-1)~='/' then
+				stack = stack + 1
+				trace(string.format('%d	SOURCE	%s', stack, puss.filename_format(s)))
+			else
+				trace(string.format('%d	SO	%s', stack, s))
+			end
+		elseif t=='BINCL' then	-- begin include
+			stack = stack + 1
+			trace(string.format('%d	INCLUDE	%s', stack, puss.filename_format(s)))
+		elseif t=='EINCL' then	-- end include
+			stack = stack - 1
+		end
+	end
+	return stab
+end
 
 local function debug_on_fetch_tcc_stabs(ok, descs)
 	print(tccdbg, ok, descs)
@@ -68,20 +108,54 @@ local function debug_on_fetch_tcc_stabs(ok, descs)
 	if not tccdbg then return end
 	local stabs = tccdbg:set_data('stabs', {})
 	for name, desc in pairs(descs) do
-		-- print('  ', name, stab)
+		-- debug_trace('  ', name, stab)
 		stabs[name] = tccdbg:parse_stab(desc)
+		trace_stab(stabs[name], debug_trace)
 	end
-	for name, stab in pairs(stabs) do
-		print('stab:', name)
-		for i, sym in ipairs(stab) do
-			print(i, table.unpack(sym))
-		end
+end
+
+tccdbg_events.create_process = function()
+end
+
+tccdbg_events.process_exit = function()
+end
+
+tccdbg_events.breakpoint = function(first_chance)
+	debug_trace('breaked')
+	tccdbg:cont()
+	debug_trace('continue')
+end
+
+tccdbg_events.single_step = function(first_chance)
+	debug_trace('breaked - single-step')
+	tccdbg:cont()
+	debug_trace('continue - single-step')
+end
+
+tccdbg_events.exception = function(first_chance, emsg, code, addr)
+	debug_trace('exception', first_chance)
+	if first_chance then
+		tccdbg:cont(true)
+		debug_trace('continue - not handled')
+	else
+		tccdbg:cont()
+		debug_trace('continue')
 	end
+end
+
+tccdbg_events.debug_string = function(msg)
+	debug_trace('debug_string', msg)
+end
+
+local function tccdbg_events_dispatch(dbg, ev, ...)
+	debug_trace(ev, ...)
+	puss.trace_pcall(tccdbg_events[ev], ...)
 end
 
 __exports.debug_attach = function(pid, rpc)
 	tccdbg = puss_tinycc.debug_attach(pid)
 	_tccdbg = tccdbg
+	print('tcc debug attach to', pid, tccdbg)
 	if not tccdbg then return end
 	rpc(debug_on_fetch_tcc_stabs, 'fetch_tcc_stabs')
 end
@@ -92,9 +166,9 @@ __exports.debug_detach = function()
 	tccdbg, _tccdbg = nil, nil
 end
 
-__exports.debug_update = function(dispatch)
+__exports.debug_update = function()
 	while tccdbg do
-		if not tccdbg:wait(dispatch, 1) then break end
+		if not tccdbg:wait(tccdbg_events_dispatch, 1) then break end
 	end
 end
 

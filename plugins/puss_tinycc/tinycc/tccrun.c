@@ -864,82 +864,79 @@ static addr_t rt_trace(TCCState *s, addr_t wanted_pc, const char *msg, void (*tr
     last_pc = (addr_t)-1;
     last_line_num = 1;
 
-#ifdef _WIN32
-	addr_t raw_wanted_pc = wanted_pc;
-	wanted_pc = (addr_t)((unsigned int)wanted_pc);
-#endif
-
-    if (!stab_sym)
-        goto no_stabs;
-
-    stab_sym_end = (Stab_Sym*)((char*)stab_sym + stab_len);
-    for (sym = stab_sym + 1; sym < stab_sym_end; ++sym) {
-        switch(sym->n_type) {
-            /* function start or end */
-        case N_FUN:
-            if (sym->n_strx == 0) {
-                /* we test if between last line and end of function */
-                pc = sym->n_value + func_addr;
-                if (wanted_pc >= last_pc && wanted_pc < pc)
-                    goto found;
-                func_name[0] = '\0';
-                func_addr = 0;
-            } else {
-                str = stab_str + sym->n_strx;
-                p = strchr(str, ':');
-                if (!p) {
-                    pstrcpy(func_name, sizeof(func_name), str);
-                } else {
-                    len = p - str;
-                    if (len > sizeof(func_name) - 1)
-                        len = sizeof(func_name) - 1;
-                    memcpy(func_name, str, len);
-                    func_name[len] = '\0';
-                }
-                func_addr = sym->n_value;
-            }
-            break;
-            /* line number info */
-        case N_SLINE:
-            pc = sym->n_value + func_addr;
-            if (wanted_pc >= last_pc && wanted_pc < pc)
-                goto found;
-            last_pc = pc;
-            last_line_num = sym->n_desc;
-            /* XXX: slow! */
-            strcpy(last_func_name, func_name);
-            break;
-            /* include files */
-        case N_BINCL:
-            str = stab_str + sym->n_strx;
-        add_incl:
-            if (incl_index < INCLUDE_STACK_SIZE) {
-                incl_files[incl_index++] = str;
-            }
-            break;
-        case N_EINCL:
-            if (incl_index > 1)
-                incl_index--;
-            break;
-        case N_SO:
-            if (sym->n_strx == 0) {
-                incl_index = 0; /* end of translation unit */
-            } else {
-                str = stab_str + sym->n_strx;
-                /* do not add path */
-                len = strlen(str);
-                if (len > 0 && str[len - 1] != '/')
-                    goto add_incl;
-            }
-            break;
-        }
-    }
-
-no_stabs:
-
-#ifdef _WIN32
-	wanted_pc = raw_wanted_pc;
-#endif
+    if (stab_sym) {
+	#ifdef _WIN32
+		addr_t wanted_pc_addr = (addr_t)((unsigned int)wanted_pc);
+		#define wanted_pc	wanted_pc_addr
+	#else
+		#define wanted_pc_addr	wanted_pc
+	#endif
+		stab_sym_end = (Stab_Sym*)((char*)stab_sym + stab_len);
+		for (sym = stab_sym + 1; sym < stab_sym_end; ++sym) {
+			switch(sym->n_type) {
+				/* function start or end */
+			case N_FUN:
+				if (sym->n_strx == 0) {
+					/* we test if between last line and end of function */
+					pc = sym->n_value + func_addr;
+					if (wanted_pc >= last_pc && wanted_pc < pc)
+						goto found;
+					func_name[0] = '\0';
+					func_addr = 0;
+				} else {
+					str = stab_str + sym->n_strx;
+					p = strchr(str, ':');
+					if (!p) {
+						pstrcpy(func_name, sizeof(func_name), str);
+					} else {
+						len = p - str;
+						if (len > sizeof(func_name) - 1)
+							len = sizeof(func_name) - 1;
+						memcpy(func_name, str, len);
+						func_name[len] = '\0';
+					}
+					func_addr = sym->n_value;
+				}
+				break;
+				/* line number info */
+			case N_SLINE:
+				pc = sym->n_value + func_addr;
+				if (wanted_pc >= last_pc && wanted_pc < pc)
+					goto found;
+				last_pc = pc;
+				last_line_num = sym->n_desc;
+				/* XXX: slow! */
+				strcpy(last_func_name, func_name);
+				break;
+				/* include files */
+			case N_BINCL:
+				str = stab_str + sym->n_strx;
+			add_incl:
+				if (incl_index < INCLUDE_STACK_SIZE) {
+					incl_files[incl_index++] = str;
+				}
+				break;
+			case N_EINCL:
+				if (incl_index > 1)
+					incl_index--;
+				break;
+			case N_SO:
+				if (sym->n_strx == 0) {
+					incl_index = 0; /* end of translation unit */
+				} else {
+					str = stab_str + sym->n_strx;
+					/* do not add path */
+					len = strlen(str);
+					if (len > 0 && str[len - 1] != '/')
+						goto add_incl;
+				}
+				break;
+			}
+		}
+	#ifdef _WIN32
+		#undef wanted_pc
+	#endif
+	}
 
     /* second pass: we try symtab symbols (no line number info) */
     incl_index = 0;
@@ -1008,7 +1005,8 @@ void tcc_debug_rt_error(TCCState *s, void *rt_main, int max_level, void* uc, voi
 void tcc_fetch_stab(TCCState *s, TCCStabTbl *tbl) {
 	memset(tbl, 0, sizeof(TCCStabTbl));
     if ((s->stab_section) && (sizeof(Stab_Sym) == sizeof(TCCStabSym)) ) {
-		tbl->addr = (const unsigned char*)(s->stab_section->sh_addr);
+		tbl->ptr = (s->nb_runtime_mem > 0) ? (const unsigned char*)(s->runtime_mem[0]) : 0;
+		tbl->ptx = (s->nb_runtime_mem > 1) ? (const unsigned char*)(s->runtime_mem[1]) : tbl->ptr;
 		tbl->syms_len = (unsigned long)(s->stab_section->data_offset / sizeof(Stab_Sym));
 		tbl->strs_len = (unsigned long)(s->stabstr_section->data_offset);
 		tbl->syms = (const TCCStabSym*)(s->stab_section->data);
