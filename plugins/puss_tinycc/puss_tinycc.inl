@@ -224,48 +224,68 @@ static int puss_tcc_run(lua_State* L) {
 
 typedef struct TccLJ	TccLJ;
 
-struct TccLJ {
-	lua_State*		L;
 #ifdef _WIN32
-	const char*		e;
+	static _declspec(thread) TccLJ* sigLJ;
 #else
-	int				e;
+	static __thread TccLJ* sigLJ;
 #endif
-	lua_CFunction	f;
-	TCCState*		s;
-	jmp_buf			b;
-};
-
-static TccLJ* sigLJ = NULL;
 
 #ifdef _WIN32
-	static DWORD except_handle_tid = 0;
+	struct TccLJ {
+		const char*		e;
+		lua_CFunction	f;
+		TCCState*		s;
+	};
 
-	static LONG NTAPI except_handle(EXCEPTION_POINTERS *ex_info) {
-		DWORD tid = GetCurrentThreadId();
-		if( except_handle_tid==tid && sigLJ ) {
+	static DWORD WINAPI except_filter(EXCEPTION_POINTERS *ex_info) {
+		if( sigLJ ) {
 			// MessageBoxA(NULL, "XX", except_handle_tid==tid ? "XXX" : "YYY", MB_OK);	// used for debug
-			if( sigLJ->e==NULL ) {
+			if( sigLJ->e==0 ) {
+				char msg[64];
 				switch (ex_info->ExceptionRecord->ExceptionCode) {
 				case EXCEPTION_ACCESS_VIOLATION:	sigLJ->e = "EXCEPTION_ACCESS_VIOLATION";	break;
 				case EXCEPTION_INT_DIVIDE_BY_ZERO:	sigLJ->e = "EXCEPTION_INT_DIVIDE_BY_ZERO";	break;
 				case EXCEPTION_STACK_OVERFLOW:		sigLJ->e = "EXCEPTION_STACK_OVERFLOW";		break;
+				default:							sigLJ->e = "Exception";						break;
 				}
+				sprintf(msg, "%s(%x)\n", sigLJ->e, ex_info->ExceptionRecord->ExceptionCode);
 				PUSS_TCC_RT_TRACE_BEGIN();
-				PUSS_TCC_RT_TRACE("Except");
-				{
-					char emsg[64];
-					sprintf(emsg, "(0x%x):", ex_info->ExceptionRecord->ExceptionCode);
-					PUSS_TCC_RT_TRACE(emsg);
-				}
+				PUSS_TCC_RT_TRACE(msg);
 				tcc_debug_rt_error(sigLJ->s, sigLJ->f, 16, ex_info->ContextRecord, PUSS_TCC_RT_TRACE);
 				PUSS_TCC_RT_TRACE_END();
 			}
-			longjmp(sigLJ->b, 1);
+			return EXCEPTION_EXECUTE_HANDLER;
 		}
 		return EXCEPTION_CONTINUE_SEARCH;
 	}
+
+	static int wrap_cfunction(lua_State* L) {
+		// see luaD_rawrunprotected
+		TccLJ* oldsigLJ = sigLJ;
+		TccLJ lj = {0, lua_tocfunction(L,lua_upvalueindex(1)), ((PussTccLua*)lua_touserdata(L,lua_upvalueindex(2)))->s};
+		int ret = 0;
+		PUSS_TCC_LUA_PCALL_BEGIN(L);
+		sigLJ = &lj;
+		__try {
+			ret = (*(lj.f))(L);
+		}
+		__except( except_filter(GetExceptionInformation()) ) {
+			// handled
+		}
+		sigLJ = oldsigLJ;
+		if( lj.e==0 )
+			return ret;
+		PUSS_TCC_LUA_PCALL_END(L);
+		return luaL_error(L, lj.e);
+	}
 #else
+	struct TccLJ {
+		int				e;
+		lua_CFunction	f;
+		TCCState*		s;
+		jmp_buf			b;
+	};
+
 	static void __puss_tcc_sig_handle(int sig, siginfo_t *info, void *uc) {
 		if( sigLJ ) {
 			if( sigLJ->e==0 ) {
@@ -281,15 +301,26 @@ static TccLJ* sigLJ = NULL;
 		}
 		signal(sig, SIG_DFL);
 	}
+
+	static int wrap_cfunction(lua_State* L) {
+		// see luaD_rawrunprotected
+		TccLJ* oldsigLJ = sigLJ;
+		TccLJ lj = {0, lua_tocfunction(L,lua_upvalueindex(1)), ((PussTccLua*)lua_touserdata(L,lua_upvalueindex(2)))->s};
+		int ret = 0;
+		PUSS_TCC_LUA_PCALL_BEGIN(L);
+		sigLJ = &lj;
+		if( setjmp(lj.b)==0 )
+			ret = (*(lj.f))(L);
+		sigLJ = oldsigLJ;
+		if( lj.e==0 )
+			return ret;
+		PUSS_TCC_LUA_PCALL_END(L);
+		return luaL_error(L, "sig error: %d", lj.e);
+	}
 #endif
 
 static void puss_tcc_reg_signals(void) {
-  #ifdef _WIN32
-	if( except_handle_tid==0 ) {
-		except_handle_tid = GetCurrentThreadId();
-		AddVectoredExceptionHandler(TRUE, except_handle);
-	}
-  #else
+  #ifndef _WIN32
 	struct sigaction act;
 	memset(&act, 0, sizeof(act));
 	act.sa_sigaction = __puss_tcc_sig_handle;
@@ -299,26 +330,6 @@ static void puss_tcc_reg_signals(void) {
 	sigaction(SIGSEGV, &act, NULL);
 	sigaction(SIGILL, &act, NULL);
   #endif
-}
-
-static int wrap_cfunction(lua_State* L) {
-	// see luaD_rawrunprotected
-	TccLJ* oldsigLJ = sigLJ;
-	TccLJ lj = { L, 0, lua_tocfunction(L,lua_upvalueindex(1)), ((PussTccLua*)lua_touserdata(L,lua_upvalueindex(2)))->s };
-	int ret = 0;
-	PUSS_TCC_LUA_PCALL_BEGIN(L);
-	sigLJ = &lj;
-	if( setjmp(lj.b)==0 )
-		ret = (*(lj.f))(L);
-	sigLJ = oldsigLJ;
-	if( lj.e==0 )
-		return ret;
-	PUSS_TCC_LUA_PCALL_END(L);
-#ifdef _WIN32
-	return luaL_error(L, lj.e);
-#else
-	return luaL_error(L, "sig error: %d", lj.e);
-#endif
 }
 
 static void puss_lua_call(lua_State *L, int nargs, int nresults) {
