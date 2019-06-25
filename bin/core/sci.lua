@@ -420,6 +420,8 @@ local function do_reset_styles(sv, lang)
 	sv:set(SCN_CHARADDED, setting.on_char_added)
 
 	sv:IndicSetStyle(INDICATOR_FINDTEXT, INDIC_FULLBOX)
+	sv:IndicSetFore(INDICATOR_FINDTEXT, colmap['thumnail_marker'])
+	sv:IndicSetHoverFore(INDICATOR_FINDTEXT, colmap['text'])
 
 	-- thumbnail
 	sv:StyleSetFore(STYLE_EXT_THUMBNAIL_BAR, colmap['thumnail_marker'])
