@@ -829,11 +829,9 @@ public:
 	ScintillaIM()
 		: captureMouse(false)
 		, scrollDirty(false)
-		, scrollActive(false)
+		, scrollThumbnailActive(false)
 		, scrollThumbnailWidth(0.0f)
-		, scrollOffsetY(0.0f)
-		, scrollPageTop(0.0f)
-		, scrollPageBottom(0.0f)
+		, scrollThumbnailOffset(0)
 		, rectangularSelectionModifier(SCMOD_ALT)
 		, notifyCallback(NULL)
 		, notifyCallbackUD(0)
@@ -946,17 +944,6 @@ public: 	// Public for scintilla_send_message
 					ButtonDownWithModifiers(click_pos, now, modifiers);
 					// fprintf(stderr, "mouse down\n");
 				}
-			} else {
-				if( ImGui::IsMouseClicked(0) ) {
-					scrollActive = true;
-					float my = io.MousePos.y - wRect.top;
-					//fprintf(stderr, "%.0f %.0f %.0f\n", my, scrollPageTop, scrollPageBottom);
-					if( my>=scrollPageTop && my<=scrollPageBottom ) {
-						scrollOffsetY = (scrollPageTop + scrollPageBottom)/2 - my;
-					} else {
-						scrollOffsetY = 0.0f;
-					}
-				}
 			}
 		}
 		if( ImGui::IsMouseReleased(0) ) {
@@ -1057,29 +1044,44 @@ public: 	// Public for scintilla_send_message
 		bool focused = ImGui::IsWindowFocused();
 		if( focused != hasFocus ) {
 			SetFocusState(focused);
-			scrollActive = false;
+			scrollThumbnailActive = false;
 		}
 		if( hasFocus ) {
 			HandleKeyboardEvents(io, now, modifiers);
 		}
-		if( scrollActive ) {
-			if( ImGui::IsMouseReleased(0) ) {
-				scrollActive = false;
-			} else {
-				float totalHeight = (float)((pdoc->LinesTotal() + 1) * vs.lineHeight);
-				float y = (io.MousePos.y + scrollOffsetY - window->Pos.y);
-				float h = window->Size.y;
-				if( window->ScrollbarX )
-					h -= ImGui::GetStyle().ScrollbarSize;
-				ImGui::SetScrollY((totalHeight*y/h) - (h*0.5f));
-			}
-		}
 	}
-	void UpdateWindow(ImGuiWindow* window) {
-		float totalHeight = (float)((pdoc->LinesTotal() + 1) * vs.lineHeight);
+	void UpdateWindow(ImGuiWindow* window, ImGuiStyle& style) {
+		ImGuiIO& io = ImGui::GetIO();
+		mainWindow.pos = window->Pos;
+		mainWindow.size = window->Size;
+
+		Sci::Line view_lines = (mainWindow.size.y / vs.lineHeight);
+		Sci::Line line_num = pdoc->LinesTotal();
+		Sci::Line view_num = view_lines;
+		Sci::Line view_start = cs.DocFromDisplay(topLine);
+		Sci::Line view_limit = view_num;
+		Sci::Line view_count = 0;
+
+		for( Sci::Line line = 0; line<line_num; ++line ) {
+			bool lineVisible = cs.GetVisible(line);
+			if( lineVisible )
+				++view_num;
+			if( line < view_start )
+				continue;
+			if( view_limit <= 0 )
+				continue;
+			if( lineVisible )
+				--view_limit;
+			++view_count;
+		}
+		scrollThumbnailViewStart = view_start;
+		scrollThumbnailViewEnd = view_start + view_count + view_limit;
+
+		float totalHeight = (float)(view_num * vs.lineHeight);
 		float totalWidth = (float)(scrollWidth * vs.aveCharWidth);
 		ImVec2 total_sz(window->ClipRect.GetSize());
 		total_sz.x -= scrollThumbnailWidth;
+		mainWindow.size.x -= scrollThumbnailWidth;
 
 		horizontalScrollBarVisible = (totalWidth > total_sz.x);
 		verticalScrollBarVisible = (totalHeight > total_sz.y);
@@ -1087,8 +1089,10 @@ public: 	// Public for scintilla_send_message
 		// scrollbar
 		if( horizontalScrollBarVisible )
 			total_sz.x = totalWidth;
-		if( verticalScrollBarVisible )
+		if( verticalScrollBarVisible ) {
 			total_sz.y = totalHeight;
+			mainWindow.size.y -= style.ScrollbarSize;
+		}
 		if( verticalScrollBarVisible || horizontalScrollBarVisible )
 			ImGui::Dummy(total_sz);
 
@@ -1101,8 +1105,35 @@ public: 	// Public for scintilla_send_message
 		SetXYScroll(XYScrollPosition(scroll.x / vs.aveCharWidth, scroll.y / vs.lineHeight));
 		scrollDirty = false;
 		// fprintf(stderr, "scroll pos: %d, %d\n", xOffset, topLine);
-		mainWindow.pos = window->Pos;
-		mainWindow.size = window->Size;
+
+		float my = io.MousePos.y - window->Pos.y;
+		if( scrollThumbnailActive ) {
+			if( ImGui::IsMouseReleased(0) ) {
+				scrollThumbnailActive = false;
+			} else {
+				Sci::Line mpos = (my / mainWindow.size.y) * (line_num + view_lines);
+				if( true ) {
+					mpos += scrollThumbnailOffset;
+				}
+				Sci::Line spos = mpos - (view_count / 2);
+				if( spos < 0 )
+					spos = 0;
+				if( spos >= (line_num - 1))
+					spos = (line_num - 1);
+				ImGui::SetScrollY(spos * vs.lineHeight);
+			}
+		} else if( ImGui::IsAnyItemHovered() && ImGui::IsMouseClicked(0) ) {
+			float mx = io.MousePos.x - window->Pos.x;
+			if( mx > mainWindow.size.x ) {
+				scrollThumbnailActive = true;
+				Sci::Line mpos = (my / mainWindow.size.y) * (line_num + view_lines);
+				if( mpos>=scrollThumbnailViewStart && mpos<=scrollThumbnailViewEnd ) {
+					scrollThumbnailOffset = (scrollThumbnailViewStart + scrollThumbnailViewEnd) / 2 - mpos;
+				} else {
+					scrollThumbnailOffset = 0;
+				}
+			}
+		}
 
 		// ime
 		if( hasFocus ) {
@@ -1114,7 +1145,6 @@ public: 	// Public for scintilla_send_message
 		}
 
 		// timers
-		ImGuiIO& io = ImGui::GetIO();
 		for( int i=0; i<tickPlatform; ++i ) {
 			if( timerIntervals[i] ) {
 				timers[i] -= io.DeltaTime;
@@ -1128,7 +1158,7 @@ public: 	// Public for scintilla_send_message
 		// idle
 		idler.state = idler.state && Idle();
 	}
-	void RenderThumbnail(Surface* surface, const PRectangle& rcArea) {
+	void PaintThumbnail(ImGuiWindow* window, Surface* surface, ImGuiStyle& style) {
 		view.posCache.Clear();
 #define _VS_BAK_SET(field, val)	_temp_thumbnail_style. field = vs. field; vs. field = val
 		_temp_thumbnail_style.ms.swap(vs.ms);
@@ -1149,17 +1179,16 @@ public: 	// Public for scintilla_send_message
 		_VS_BAK_SET(braceBadLightIndicatorSet, false);
 
 		Sci::Position epos = pdoc->Length();
-		Sci::Line line_num = pdoc->LineFromPosition(epos) + 1;
-		float lineHeight = rcArea.Height() / line_num;
-		PRectangle rc = rcArea;
+		Sci::Line line_num = pdoc->LineFromPosition(epos);
+		Sci::Line view_lines = (mainWindow.size.y / vs.lineHeight);
+		float lineHeight = mainWindow.size.y / (line_num + view_lines);
+		PRectangle rc(mainWindow.size.x, 0.0f, mainWindow.size.x + scrollThumbnailWidth, mainWindow.size.y);
 		surface->SetClip(rc);
 		surface->FillRectangle(rc, vs.styles[STYLE_EXT_THUMBNAIL_BAR].back);
 
-		rc.top = (mainWindow.win->Scroll.y) / vs.lineHeight * lineHeight;
-		rc.bottom = (mainWindow.win->Scroll.y + mainWindow.size.y) / vs.lineHeight * lineHeight;
+		rc.top = scrollThumbnailViewStart * lineHeight;
+		rc.bottom = scrollThumbnailViewEnd * lineHeight;
 		surface->RoundedRectangle(rc, vs.styles[STYLE_EXT_THUMBNAIL_VIEW].fore, vs.styles[STYLE_EXT_THUMBNAIL_VIEW].back);
-		scrollPageTop = rc.top;
-		scrollPageBottom = rc.bottom;
 
 		Sci::Line current_line = pdoc->LineFromPosition(CurrentPosition());
 		rc.top = lineHeight * current_line;
@@ -1172,14 +1201,16 @@ public: 	// Public for scintilla_send_message
 
 		pdoc->EnsureStyledTo(epos);
 
-		float xoffset = rcArea.left + 8.0f;
-		int width = (int)rcArea.Width();
+		float xoffset = rc.left + 8.0f;
+		int width = (int)scrollThumbnailWidth;
 		float lastDrawPos = -99999.0f;
 		ColourDesired background(0, 0, 0);
 		for( Sci::Line line = 0; line<line_num; ++line ) {
 			const Sci::Position posLineStart = static_cast<Sci::Position>(pdoc->LineStart(line));
 			const Sci::Position posLineEnd = static_cast<Sci::Position>(pdoc->LineEnd(line));
-			rc.top = rcArea.top + lineHeight * line;
+			rc.top = lineHeight * line;
+			// TODO : bool lineVisible = cs.GetVisible(line);
+
 			if( (rc.top - lastDrawPos) >= 2.0f ) {
 				lastDrawPos = rc.top;
 				rc.bottom = rc.top + vs.lineHeight;
@@ -1199,6 +1230,7 @@ public: 	// Public for scintilla_send_message
 				}
 			}
 		}
+
 #define _VS_RESTORE(field)	vs. field = _temp_thumbnail_style. field
 		vs.ms.swap(_temp_thumbnail_style.ms);
 		_VS_RESTORE(technology);
@@ -1254,21 +1286,14 @@ public: 	// Public for scintilla_send_message
 		mainWindow.win = window;
 		scrollThumbnailWidth = thumbnail ? vs.styles[STYLE_EXT_THUMBNAIL_BAR].weight : 0.0f;
 		HandleInputEvents(window);
-		UpdateWindow(window);
 		ImGuiStyle& style = ImGui::GetStyle();
+		UpdateWindow(window, style);
 		AutoSurface surface(this);
-		PRectangle rc(0.0f, 0.0f, mainWindow.size.x, mainWindow.size.y);
-		if( window->ScrollbarY )	rc.right -= style.ScrollbarSize;
-		if( window->ScrollbarX )	rc.bottom -= style.ScrollbarSize;
 		if( thumbnail ) {
-			rc.right -= scrollThumbnailWidth;
-			Paint(surface, rc);
-			rc.left = rc.right;
-			rc.right += scrollThumbnailWidth;
-			RenderThumbnail(surface, rc);
-		} else {
-			Paint(surface, rc);
+			PaintThumbnail(window, surface, style);
 		}
+		PRectangle rc(0.0f, 0.0f, mainWindow.size.x, mainWindow.size.y);
+		Paint(surface, rc);
 		RenderPopup();
 		mainWindow.win = NULL;
 		notifyCallback = NULL;
@@ -1303,17 +1328,6 @@ private:
 	}
 	PRectangle GetClientRectangle() const override {
 		PRectangle rc(0.0f, 0.0f, mainWindow.size.x, mainWindow.size.y);
-		if( ImGui::GetCurrentContext() ) {
-			ImGuiStyle& style = ImGui::GetStyle();
-			if( scrollThumbnailWidth > 0.1 ) {
-				rc.right -= scrollThumbnailWidth;
-			} else if (verticalScrollBarVisible) {
-				rc.right -= style.ScrollbarSize;
-			}
-			if (horizontalScrollBarVisible && !Wrapping()) {
-				rc.bottom -= style.ScrollbarSize;
-			}
-		}
 		return rc;
 	}
 	void SetVerticalScrollPos() override {
@@ -1586,11 +1600,11 @@ private:
 private:
 	bool captureMouse;
 	bool scrollDirty;
-	bool scrollActive;
+	bool scrollThumbnailActive;
 	float scrollThumbnailWidth;
-	float scrollOffsetY;
-	float scrollPageTop;
-	float scrollPageBottom;
+	Sci::Line scrollThumbnailOffset;
+	Sci::Line scrollThumbnailViewStart;
+	Sci::Line scrollThumbnailViewEnd;
 	ImVec2 scroll;
 	int rectangularSelectionModifier;
 	WindowIM mainWindow;
