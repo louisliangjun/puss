@@ -2563,7 +2563,7 @@ static void parse_number(const char *p)
         break;
 
 /* return next token without macro substitution */
-static inline void next_nomacro1(void)
+static void next_nomacro1(void)
 {
     int t, c, is_long, len;
     TokenSym *ts;
