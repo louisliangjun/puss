@@ -1055,7 +1055,7 @@ public: 	// Public for scintilla_send_message
 		mainWindow.pos = window->Pos;
 		mainWindow.size = window->Size;
 
-		Sci::Line view_lines = (mainWindow.size.y / vs.lineHeight);
+		Sci::Line view_lines = (mainWindow.size.y / vs.lineHeight) - 1;
 		Sci::Line line_num = pdoc->LinesTotal();
 		Sci::Line view_num = view_lines;
 		Sci::Line view_start = cs.DocFromDisplay(topLine);
