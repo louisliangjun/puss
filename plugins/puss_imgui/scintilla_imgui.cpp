@@ -919,53 +919,52 @@ public: 	// Public for scintilla_send_message
 		}
 		return 0;
 	}
-	void HandleMouseEvents(ImGuiIO& io, ImGuiID id, bool hovered, const PRectangle& wRect, unsigned int now, int modifiers) {
-		ImGuiWindow* window = mainWindow.win;
-		const bool focus_requested = ImGui::FocusableItemRegister(window, id);
+	void HandleMouseEvents(ImGuiIO& io, ImGuiWindow* window, bool hovered, unsigned int now, int modifiers) {
+		const bool focus_requested = ImGui::FocusableItemRegister(window, window->ID);
 		// const bool focus_requested_by_code = focus_requested && (window->FocusIdxAllCounter == window->FocusIdxAllRequestCurrent);
 		// const bool focus_requested_by_tab = focus_requested && !focus_requested_by_code;
 		const bool user_clicked = hovered && io.MouseClicked[0];
 		const bool user_scrolled = hovered && (io.MouseWheel != 0.0f || io.MouseWheelH != 0.0f);
 	    if( focus_requested || user_clicked || user_scrolled ) {
 			// fprintf(stderr, "grab focus!\n");
-			ImGui::SetActiveID(id, window);
-			ImGui::SetFocusID(id, window);
+			ImGui::SetActiveID(window->ID, window);
+			ImGui::SetFocusID(window->ID, window);
 			ImGui::FocusWindow(window);
-		} else if( ImGui::GetActiveID()==id ) {
+		} else if( ImGui::GetActiveID()==window->ID ) {
 			ImGui::ClearActiveID();
 		}
 
+		float mx = io.MousePos.x - window->Pos.x;
+		float my = io.MousePos.y - window->Pos.y;
+		Point mpos(mx, my);
+
 		// mouse click handler
-		if( hovered ) {
-			if( io.MousePos.x < (wRect.right - scrollThumbnailWidth) ) {
-				ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
-				if( ImGui::IsMouseClicked(0) ) {
-					Point click_pos(io.MousePos.x - wRect.left, io.MousePos.y - wRect.top);
-					ButtonDownWithModifiers(click_pos, now, modifiers);
-					// fprintf(stderr, "mouse down\n");
+		if( hovered && (mx < (window->Size.x - scrollThumbnailWidth)) ) {
+			ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
+			if( ImGui::IsMouseClicked(0) ) {
+				ButtonDownWithModifiers(mpos, now, modifiers);
+				// fprintf(stderr, "mouse down\n");
+			}
+
+			if( ImGui::IsMouseClicked(1) ) {
+				if(!PointInSelection(mpos))
+					SetEmptySelection(PositionFromLocation(mpos));
+				if(ShouldDisplayPopup(mpos)) {
+					ContextMenu(mpos);
+				} else {
+					RightButtonDownWithModifiers(mpos, now, modifiers);
 				}
 			}
 		}
+
 		if( ImGui::IsMouseReleased(0) ) {
 			// fprintf(stderr, "mouse up\n");
-			Point pt(io.MousePos.x - wRect.left, io.MousePos.y - wRect.top);
-			ButtonUpWithModifiers(pt, now, modifiers);
-		}
-		if( hovered && ImGui::IsMouseClicked(1) && (io.MousePos.x < (wRect.right - scrollThumbnailWidth)) ) {
-			Point pt(io.MousePos.x - wRect.left, io.MousePos.y - wRect.top);
-			if(!PointInSelection(pt))
-				SetEmptySelection(PositionFromLocation(pt));
-			if(ShouldDisplayPopup(pt)) {
-				ContextMenu(Point(pt.x, pt.y));
-			} else {
-				RightButtonDownWithModifiers(pt, now, modifiers);
-			}
+			ButtonUpWithModifiers(mpos, now, modifiers);
 		}
 
 		// move
 		if((io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f)) {
-			Point pt(io.MousePos.x - wRect.left, io.MousePos.y - wRect.top);
-			ButtonMoveWithModifiers(pt, now, modifiers);
+			ButtonMoveWithModifiers(mpos, now, modifiers);
 		}
 	}
 	static bool IsKeyPressedMap(ImGuiKey key, bool repeat = true) {
@@ -1032,14 +1031,14 @@ public: 	// Public for scintilla_send_message
 		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_C)) || (is_ctrl_key_only  && IsKeyPressedMap(ImGuiKey_Insert)) ) { Copy(); }
 		if( (is_shortcut_key_only && IsKeyPressedMap(ImGuiKey_V)) || (is_shift_key_only && IsKeyPressedMap(ImGuiKey_Insert)) ) { Paste(); }
     }
-	void HandleInputEvents(ImGuiWindow* window) {
+	void UpdateWindow(ImGuiWindow* window, ImGuiStyle& style, PRectangle& rc) {
 		ImGuiIO& io = ImGui::GetIO();
-		unsigned int now = GetCurrentTime();
+
 		int modifiers = ModifierFlags(io.KeyShift, io.KeyCtrl, io.KeyAlt, io.KeySuper);
-		PRectangle wRect = wMain.GetPosition();
 		bool hovered = ImGui::ItemHoverable(window->ClipRect, window->ID);
+		unsigned int now = GetCurrentTime();
 		if( hovered || HaveMouseCapture() ) {
-			HandleMouseEvents(io, window->ID, hovered, wRect, now, modifiers);
+			HandleMouseEvents(io, window, hovered, now, modifiers);
 		}
 		bool focused = ImGui::IsWindowFocused();
 		if( focused != hasFocus ) {
@@ -1049,9 +1048,7 @@ public: 	// Public for scintilla_send_message
 		if( hasFocus ) {
 			HandleKeyboardEvents(io, now, modifiers);
 		}
-	}
-	void UpdateWindow(ImGuiWindow* window, ImGuiStyle& style) {
-		ImGuiIO& io = ImGui::GetIO();
+
 		mainWindow.pos = window->Pos;
 		mainWindow.size = window->Size;
 
@@ -1122,7 +1119,7 @@ public: 	// Public for scintilla_send_message
 					spos = (line_num - 1);
 				ImGui::SetScrollY(spos * vs.lineHeight);
 			}
-		} else if( ImGui::IsAnyItemHovered() && ImGui::IsMouseClicked(0) ) {
+		} else if( hovered && ImGui::IsMouseClicked(0) ) {
 			float mx = io.MousePos.x - window->Pos.x;
 			if( mx > mainWindow.size.x ) {
 				scrollThumbnailActive = true;
@@ -1285,14 +1282,14 @@ public: 	// Public for scintilla_send_message
 		}
 		mainWindow.win = window;
 		scrollThumbnailWidth = thumbnail ? vs.styles[STYLE_EXT_THUMBNAIL_BAR].weight : 0.0f;
-		HandleInputEvents(window);
+
 		ImGuiStyle& style = ImGui::GetStyle();
-		UpdateWindow(window, style);
+		PRectangle rc(0.0f, 0.0f, mainWindow.size.x, mainWindow.size.y);
+		UpdateWindow(window, style, rc);
 		AutoSurface surface(this);
 		if( thumbnail ) {
 			PaintThumbnail(window, surface, style);
 		}
-		PRectangle rc(0.0f, 0.0f, mainWindow.size.x, mainWindow.size.y);
 		Paint(surface, rc);
 		RenderPopup();
 		mainWindow.win = NULL;
