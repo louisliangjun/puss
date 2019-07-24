@@ -710,9 +710,11 @@ LIBTCCAPI void tcc_undefine_symbol(TCCState *s1, const char *sym)
     Sym *s;
     ts = tok_alloc(sym, strlen(sym));
     s = define_find(ts->tok);
-    /* undefine symbol by putting an invalid name */
-    if (s)
+    if (s) {
         define_undef(s);
+        tok_str_free_str(s->d);
+        s->d = NULL;
+    }
 }
 
 /* cleanup all static data used during compilation */
@@ -1128,6 +1130,7 @@ ST_FUNC int tcc_add_dll(TCCState *s, const char *filename, int flags)
         s->library_paths, s->nb_library_paths);
 }
 
+#ifndef TCC_TARGET_PE
 ST_FUNC int tcc_add_crt(TCCState *s, const char *filename)
 {
     if (-1 == tcc_add_library_internal(s, "%s/%s",
@@ -1135,6 +1138,7 @@ ST_FUNC int tcc_add_crt(TCCState *s, const char *filename)
         tcc_error_noabort("file '%s' not found", filename);
     return 0;
 }
+#endif
 
 /* the library name is the same as the argument of the '-l' option */
 LIBTCCAPI int tcc_add_library(TCCState *s, const char *libraryname)
@@ -1809,7 +1813,7 @@ reparse:
                     /*
                      * The integer constant 1, intended to indicate
                      * that the implementation does not support atomic
-                     * types (including the _Atomic type qualifier) and
+                     * types (including the _Atomic type qualiﬁer) and
                      * the <stdatomic.h> header.
                      */
                     tcc_define_symbol(s, "__STDC_NO_ATOMICS__", "1");
@@ -1829,17 +1833,17 @@ reparse:
                      * __STDC_NO_VLA__, tcc supports VLA.
                      * The integer constant 1, intended to indicate
                      * that the implementation does not support
-                     * variable length arrays or variably modified
+                     * variable length arrays or variably modiﬁed
                      * types.
                      */
 #if !defined(TCC_TARGET_PE)
                     /*
                      * An integer constant of the form yyyymmL (for
-                     * example, 199712L). If this symbol is defined,
+                     * example, 199712L). If this symbol is deﬁned,
                      * then every character in the Unicode required
                      * set, when stored in an object of type
                      * wchar_t, has the same value as the short
-                     * identifier of that character.
+                     * identiﬁer of that character.
                      */
                     #if 0
                     /* on Linux, this conflicts with a define introduced by
@@ -1850,18 +1854,18 @@ reparse:
                     #endif
                     /*
                      * The integer constant 1, intended to indicate
-                     * that values of type char16_t are UTF-16
+                     * that values of type char16_t are UTF−16
                      * encoded. If some other encoding is used, the
-                     * macro shall not be defined and the actual
-                     * encoding used is implementation defined.
+                     * macro shall not be deﬁned and the actual
+                     * encoding used is implementation deﬁned.
                      */
                     tcc_define_symbol(s, "__STDC_UTF_16__", "1");
                     /*
                      * The integer constant 1, intended to indicate
-                     * that values of type char32_t are UTF-32
+                     * that values of type char32_t are UTF−32
                      * encoded. If some other encoding is used, the
-                     * macro shall not be defined and the actual
-                     * encoding used is implementationdefined.
+                     * macro shall not be deﬁned and the actual
+                     * encoding used is implementationdeﬁned.
                      */
                     tcc_define_symbol(s, "__STDC_UTF_32__", "1");
 #endif /* !TCC_TARGET_PE */

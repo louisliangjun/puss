@@ -173,7 +173,7 @@ ST_FUNC void tccelf_end_file(TCCState *s1)
             && ELFW(ST_BIND)(sym->st_info) == STB_LOCAL)
             sym->st_info = ELFW(ST_INFO)(STB_GLOBAL, ELFW(ST_TYPE)(sym->st_info));
         tr[i] = set_elf_sym(s, sym->st_value, sym->st_size, sym->st_info,
-            sym->st_other, sym->st_shndx, s->link->data + sym->st_name);
+            sym->st_other, sym->st_shndx, (char*)s->link->data + sym->st_name);
     }
     /* now update relocations */
     for (i = 1; i < s1->nb_sections; i++) {
@@ -867,17 +867,13 @@ static void relocate_rel(TCCState *s1, Section *sr)
    their space */
 static int prepare_dynamic_rel(TCCState *s1, Section *sr)
 {
+    int count = 0;
+#if defined(TCC_TARGET_I386) || defined(TCC_TARGET_X86_64)
     ElfW_Rel *rel;
-    int type, count;
-
-    count = 0;
     for_each_elem(sr, 0, rel, ElfW_Rel) {
-#if defined(TCC_TARGET_I386) || defined(TCC_TARGET_X86_64)
         int sym_index = ELFW(R_SYM)(rel->r_info);
-#endif
-        type = ELFW(R_TYPE)(rel->r_info);
+        int type = ELFW(R_TYPE)(rel->r_info);
         switch(type) {
-#if defined(TCC_TARGET_I386) || defined(TCC_TARGET_X86_64)
 #if defined(TCC_TARGET_I386)
         case R_386_32:
             if (!get_sym_attr(s1, sym_index, 0)->dyn_index
@@ -901,7 +897,6 @@ static int prepare_dynamic_rel(TCCState *s1, Section *sr)
             if (get_sym_attr(s1, sym_index, 0)->dyn_index)
                 count++;
             break;
-#endif
         default:
             break;
         }
@@ -911,6 +906,7 @@ static int prepare_dynamic_rel(TCCState *s1, Section *sr)
         sr->sh_flags |= SHF_ALLOC;
         sr->sh_size = count * sizeof(ElfW_Rel);
     }
+#endif
     return count;
 }
 
@@ -930,8 +926,7 @@ static void build_got(TCCState *s1)
    relocation, use 'size' and 'info' for the corresponding symbol metadata.
    Returns the offset of the GOT or (if any) PLT entry. */
 static struct sym_attr * put_got_entry(TCCState *s1, int dyn_reloc_type,
-                                       unsigned long size,
-                                       int info, int sym_index)
+                                       int sym_index)
 {
     int need_plt_entry;
     const char *name;
@@ -985,8 +980,9 @@ static struct sym_attr * put_got_entry(TCCState *s1, int dyn_reloc_type,
 			  sym_index);
 	} else {
 	    if (0 == attr->dyn_index)
-                attr->dyn_index = set_elf_sym(s1->dynsym, sym->st_value, size,
-					      info, 0, sym->st_shndx, name);
+                attr->dyn_index = set_elf_sym(s1->dynsym, sym->st_value,
+                                              sym->st_size, sym->st_info, 0,
+                                              sym->st_shndx, name);
 	    put_elf_reloc(s1->dynsym, s1->got, got_offset, dyn_reloc_type,
 			  attr->dyn_index);
 	}
@@ -1106,8 +1102,7 @@ ST_FUNC void build_got_entries(TCCState *s1)
             if (gotplt_entry == BUILD_GOT_ONLY)
                 continue;
 
-            attr = put_got_entry(s1, reloc_type, sym->st_size, sym->st_info,
-                                 sym_index);
+            attr = put_got_entry(s1, reloc_type, sym_index);
 
             if (reloc_type == R_JMP_SLOT)
                 rel->r_info = ELFW(R_INFO)(attr->plt_sym, type);
@@ -2276,7 +2271,6 @@ static void *load_data(int fd, unsigned long file_offset, unsigned long size)
 typedef struct SectionMergeInfo {
     Section *s;            /* corresponding existing section */
     unsigned long offset;  /* offset of the new section in the existing section */
-    unsigned long oldlen;  /* size of existing section before adding this one */
     uint8_t new_section;       /* true if section 's' was added */
     uint8_t link_once;         /* true if link once section */
 } SectionMergeInfo;
@@ -2308,7 +2302,7 @@ ST_FUNC int tcc_load_object_file(TCCState *s1,
     ElfW(Ehdr) ehdr;
     ElfW(Shdr) *shdr, *sh;
     int size, i, j, offset, offseti, nb_syms, sym_index, ret, seencompressed;
-    unsigned char *strsec, *strtab;
+    char *strsec, *strtab;
     int *old_to_new_syms;
     char *sh_name, *name;
     SectionMergeInfo *sm_table, *sm;
@@ -2374,10 +2368,10 @@ ST_FUNC int tcc_load_object_file(TCCState *s1,
         if (i == ehdr.e_shstrndx)
             continue;
         sh = &shdr[i];
-        sh_name = (char *) strsec + sh->sh_name;
-        /* ignore sections types we do not handle */
+	if (sh->sh_type == SHT_RELX)
+	  sh = &shdr[sh->sh_info];
+        /* ignore sections types we do not handle (plus relocs to those) */
         if (sh->sh_type != SHT_PROGBITS &&
-            sh->sh_type != SHT_RELX &&
 #ifdef TCC_ARM_EABI
             sh->sh_type != SHT_ARM_EXIDX &&
 #endif
@@ -2385,15 +2379,15 @@ ST_FUNC int tcc_load_object_file(TCCState *s1,
             sh->sh_type != SHT_PREINIT_ARRAY &&
             sh->sh_type != SHT_INIT_ARRAY &&
             sh->sh_type != SHT_FINI_ARRAY &&
-            strcmp(sh_name, ".stabstr")
+            strcmp(strsec + sh->sh_name, ".stabstr")
             )
             continue;
 	if (seencompressed
-	    && (!strncmp(sh_name, ".debug_", sizeof(".debug_")-1)
-		|| (sh->sh_type == SHT_RELX
-		    && !strncmp((char*)strsec + shdr[sh->sh_info].sh_name,
-			        ".debug_", sizeof(".debug_")-1))))
+	    && !strncmp(strsec + sh->sh_name, ".debug_", sizeof(".debug_")-1))
 	  continue;
+
+	sh = &shdr[i];
+        sh_name = strsec + sh->sh_name;
         if (sh->sh_addralign < 1)
             sh->sh_addralign = 1;
         /* find corresponding section, if any */
@@ -2427,7 +2421,6 @@ ST_FUNC int tcc_load_object_file(TCCState *s1,
         }
 
         /* align start of section */
-	sm_table[i].oldlen = s->data_offset;
         offset = s->data_offset;
 
         if (0 == strcmp(sh_name, ".stab")) {
@@ -2485,15 +2478,9 @@ ST_FUNC int tcc_load_object_file(TCCState *s1,
         if (sh->sh_link > 0)
             s->link = sm_table[sh->sh_link].s;
         if (sh->sh_type == SHT_RELX) {
-	    if (sm_table[sh->sh_info].s) {
-		s->sh_info = sm_table[sh->sh_info].s->sh_num;
-		/* update backward link */
-		s1->sections[s->sh_info]->reloc = s;
-	    } else {
-		/* we haven't read the target of relocs, so cancel them */
-		s->data_offset = sm_table[i].oldlen;
-		sm_table[i].s = NULL;
-	    }
+            s->sh_info = sm_table[sh->sh_info].s->sh_num;
+            /* update backward link */
+            s1->sections[s->sh_info]->reloc = s;
         }
     }
     sm = sm_table;
@@ -2511,7 +2498,7 @@ ST_FUNC int tcc_load_object_file(TCCState *s1,
                    already defined symbol. It is very important to get
                    correct relocations */
                 if (ELFW(ST_BIND)(sym->st_info) != STB_LOCAL) {
-                    name = (char *) strtab + sym->st_name;
+                    name = strtab + sym->st_name;
                     sym_index = find_elf_sym(symtab_section, name);
                     if (sym_index)
                         old_to_new_syms[i] = sym_index;
@@ -2527,7 +2514,7 @@ ST_FUNC int tcc_load_object_file(TCCState *s1,
             sym->st_value += sm->offset;
         }
         /* add symbol */
-        name = (char *) strtab + sym->st_name;
+        name = strtab + sym->st_name;
         sym_index = set_elf_sym(symtab_section, sym->st_value, sym->st_size,
                                 sym->st_info, sym->st_other,
                                 sym->st_shndx, name);

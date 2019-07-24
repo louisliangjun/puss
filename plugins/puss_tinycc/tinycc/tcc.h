@@ -73,6 +73,12 @@ extern long double strtold (const char *__nptr, char **__endptr);
 #  pragma warning (disable : 4018)  // signed/unsigned mismatch
 #  pragma warning (disable : 4146)  // unary minus operator applied to unsigned type, result still unsigned
 #  define ssize_t intptr_t
+#  ifdef _X86_
+#   define __i386__ 1
+#  endif
+#  ifdef _AMD64_
+#   define __x86_64__ 1
+#  endif
 # endif
 # undef CONFIG_TCC_STATIC
 #endif
@@ -95,6 +101,11 @@ extern long double strtold (const char *__nptr, char **__endptr);
 #else
 # define NORETURN __attribute__((noreturn))
 # define ALIGNED(x) __attribute__((aligned(x)))
+#endif
+
+/* gnu headers use to #define __attribute__ to empty for non-gcc compilers */
+#ifdef __TINYC__
+# undef __attribute__
 #endif
 
 #ifdef _WIN32
@@ -133,7 +144,7 @@ extern long double strtold (const char *__nptr, char **__endptr);
 #if !defined(TCC_TARGET_I386) && !defined(TCC_TARGET_ARM) && \
     !defined(TCC_TARGET_ARM64) && !defined(TCC_TARGET_C67) && \
     !defined(TCC_TARGET_X86_64)
-# if defined __x86_64__ || defined _AMD64_
+# if defined __x86_64__
 #  define TCC_TARGET_X86_64
 # elif defined __arm__
 #  define TCC_TARGET_ARM
@@ -151,9 +162,9 @@ extern long double strtold (const char *__nptr, char **__endptr);
 
 /* only native compiler supports -run */
 #if defined _WIN32 == defined TCC_TARGET_PE
-# if (defined __i386__ || defined _X86_) && defined TCC_TARGET_I386
+# if defined __i386__ && defined TCC_TARGET_I386
 #  define TCC_IS_NATIVE
-# elif (defined __x86_64__ || defined _AMD64_) && defined TCC_TARGET_X86_64
+# elif defined __x86_64__ && defined TCC_TARGET_X86_64
 #  define TCC_IS_NATIVE
 # elif defined __arm__ && defined TCC_TARGET_ARM
 #  define TCC_IS_NATIVE
@@ -432,9 +443,15 @@ typedef struct SValue {
     unsigned short r;      /* register + flags */
     unsigned short r2;     /* second register, used for 'long long'
                               type. If not used, set to VT_CONST */
-    CValue c;              /* constant, if VT_CONST */
-    struct Sym *sym;       /* symbol, if (VT_SYM | VT_CONST), or if
-    			      result of unary() for an identifier. */
+    union {
+      struct { int jtrue, jfalse; }; /* forward jmps */
+      CValue c;         /* constant, if VT_CONST */
+    };
+    union {
+      struct { unsigned short cmp_op, cmp_r; }; /* VT_CMP operation */
+      struct Sym *sym;  /* symbol, if (VT_SYM | VT_CONST), or if */
+    };                  /* result of unary() for an identifier. */
+
 } SValue;
 
 /* symbol attributes */
@@ -455,6 +472,8 @@ struct FuncAttr {
     unsigned
     func_call   : 3, /* calling convention (0..5), see below */
     func_type   : 2, /* FUNC_OLD/NEW/ELLIPSIS */
+    func_noreturn : 1, /* attribute((noreturn)) */
+    xxxx        : 2,
     func_args   : 8; /* PE __stdcall args */
 };
 
@@ -890,12 +909,10 @@ struct filespec {
 #define VT_STATIC  0x00002000  /* static variable */
 #define VT_TYPEDEF 0x00004000  /* typedef definition */
 #define VT_INLINE  0x00008000  /* inline definition */
-#define VT_INSTINL 0x00010000  /* the inline should be visibly instantiated */
-#define VT_FAKESTC 0x00020000  /* is marked static because it's inline */
-/* currently unused: 0x000[48]0000  */
+/* currently unused: 0x000[1248]0000  */
 
 #define VT_STRUCT_SHIFT 20     /* shift for bitfield shift values (32 - 2*6) */
-#define VT_STRUCT_MASK (((1 << (6+6)) - 1) << VT_STRUCT_SHIFT | VT_BITFIELD)
+#define VT_STRUCT_MASK (((1U << (6+6)) - 1) << VT_STRUCT_SHIFT | VT_BITFIELD)
 #define BIT_POS(t) (((t) >> VT_STRUCT_SHIFT) & 0x3f)
 #define BIT_SIZE(t) (((t) >> (VT_STRUCT_SHIFT + 6)) & 0x3f)
 
@@ -908,7 +925,7 @@ struct filespec {
 #define IS_UNION(t) ((t & (VT_STRUCT_MASK|VT_BTYPE)) == VT_UNION)
 
 /* type mask (except storage) */
-#define VT_STORAGE (VT_EXTERN | VT_STATIC | VT_TYPEDEF | VT_INLINE | VT_INSTINL | VT_FAKESTC )
+#define VT_STORAGE (VT_EXTERN | VT_STATIC | VT_TYPEDEF | VT_INLINE)
 #define VT_TYPE (~(VT_STORAGE|VT_STRUCT_MASK))
 
 /* symbol was created by tccasm.c first */
@@ -1177,7 +1194,9 @@ ST_FUNC int tcc_add_file_internal(TCCState *s1, const char *filename, int flags)
 #define AFF_BINTYPE_C67 4
 
 
+#ifndef TCC_TARGET_PE
 ST_FUNC int tcc_add_crt(TCCState *s, const char *filename);
+#endif
 ST_FUNC int tcc_add_dll(TCCState *s, const char *filename, int flags);
 ST_FUNC void tcc_add_pragma_libs(TCCState *s1);
 PUB_FUNC int tcc_add_library_err(TCCState *s, const char *f);
@@ -1326,6 +1345,7 @@ ST_FUNC ElfSym *elfsym(Sym *);
 ST_FUNC void update_storage(Sym *sym);
 ST_FUNC Sym *external_global_sym(int v, CType *type);
 ST_FUNC void vset(CType *type, int r, int v);
+ST_FUNC void vset_VT_CMP(int op);
 ST_FUNC void vswap(void);
 ST_FUNC void vpush_global_sym(CType *type, int v);
 ST_FUNC void vrote(SValue *e, int n);
@@ -1494,12 +1514,8 @@ ST_FUNC void gfunc_epilog(void);
 ST_FUNC void gen_fill_nops(int);
 ST_FUNC int gjmp(int t);
 ST_FUNC void gjmp_addr(int a);
-ST_FUNC int gtst(int inv, int t);
-#if defined TCC_TARGET_I386 || defined TCC_TARGET_X86_64
-ST_FUNC void gtst_addr(int inv, int a);
-#else
-#define gtst_addr(inv, a) gsym_addr(gtst(inv, 0), a)
-#endif
+ST_FUNC int gjmp_cond(int op, int t);
+ST_FUNC int gjmp_append(int n, int t);
 ST_FUNC void gen_opi(int op);
 ST_FUNC void gen_opf(int op);
 ST_FUNC void gen_cvt_ftoi(int t);

@@ -206,16 +206,10 @@ ST_FUNC void gsym_addr(int t, int a)
     while (t) {
         unsigned char *ptr = cur_text_section->data + t;
         uint32_t n = read32le(ptr); /* next value */
-        write32le(ptr, a - t - 4);
+        write32le(ptr, a < 0 ? -a : a - t - 4);
         t = n;
     }
 }
-
-void gsym(int t)
-{
-    gsym_addr(t, ind);
-}
-
 
 static int is64_type(int t)
 {
@@ -477,22 +471,22 @@ void load(int r, SValue *sv)
             orex(1,0,r,0x8d); /* lea xxx(%ebp), r */
             gen_modrm(r, VT_LOCAL, sv->sym, fc);
         } else if (v == VT_CMP) {
-            orex(0,r,0,0);
-	    if ((fc & ~0x100) != TOK_NE)
-              oad(0xb8 + REG_VALUE(r), 0); /* mov $0, r */
-	    else
-              oad(0xb8 + REG_VALUE(r), 1); /* mov $1, r */
 	    if (fc & 0x100)
 	      {
+                v = vtop->cmp_r;
+                fc &= ~0x100;
 	        /* This was a float compare.  If the parity bit is
 		   set the result was unordered, meaning false for everything
 		   except TOK_NE, and true for TOK_NE.  */
-		fc &= ~0x100;
-		o(0x037a + (REX_BASE(r) << 8));
-	      }
+                orex(0, r, 0, 0xb0 + REG_VALUE(r)); /* mov $0/1,%al */
+                g(v ^ fc ^ (v == TOK_NE));
+                o(0x037a + (REX_BASE(r) << 8));
+              }
             orex(0,r,0, 0x0f); /* setxx %br */
             o(fc);
             o(0xc0 + REG_VALUE(r));
+            orex(0,r,0, 0x0f);
+            o(0xc0b6 + REG_VALUE(r) * 0x900); /* movzbl %al, %eax */
         } else if (v == VT_JMP || v == VT_JMPI) {
             t = v & 1;
             orex(0,r,0,0);
@@ -915,7 +909,7 @@ void gfunc_call(int nb_args)
 
     if ((vtop->r & VT_SYM) && vtop->sym->v == TOK_alloca) {
         /* need to add the "func_scratch" area after alloca */
-        o(0x0548), gen_le32(func_alloca), func_alloca = ind - 4;
+        o(0x48); func_alloca = oad(0x05, func_alloca); /* sub $NN, %rax */
     }
 
     /* other compilers don't clear the upper bits when returning char/short */
@@ -1043,11 +1037,7 @@ void gfunc_epilog(void)
     }
 
     /* add the "func_scratch" area after each alloca seen */
-    while (func_alloca) {
-        unsigned char *ptr = cur_text_section->data + func_alloca;
-        func_alloca = read32le(ptr);
-        write32le(ptr, func_scratch);
-    }
+    gsym_addr(func_alloca, -func_scratch);
 
     cur_text_section->data_offset = saved_ind;
     pe_add_unwind_data(ind, saved_ind, v);
@@ -1234,7 +1224,7 @@ void gfunc_call(int nb_args)
     int nb_reg_args = 0;
     int nb_sse_args = 0;
     int sse_reg, gen_reg;
-    char _onstack[nb_args], *onstack = _onstack;
+    char _onstack[nb_args ? nb_args : 1], *onstack = _onstack;
 
     /* calculate the number of integer/float register arguments, remember
        arguments to be passed via stack (in onstack[]), and also remember
@@ -1672,42 +1662,23 @@ void gjmp_addr(int a)
     }
 }
 
-ST_FUNC void gtst_addr(int inv, int a)
+ST_FUNC int gjmp_append(int n, int t)
 {
-    int v = vtop->r & VT_VALMASK;
-    if (v == VT_CMP) {
-	inv ^= (vtop--)->c.i;
-	a -= ind + 2;
-	if (a == (char)a) {
-	    g(inv - 32);
-	    g(a);
-	} else {
-	    g(0x0f);
-	    oad(inv - 16, a - 4);
-	}
-    } else if ((v & ~1) == VT_JMP) {
-	if ((v & 1) != inv) {
-	    gjmp_addr(a);
-	    gsym(vtop->c.i);
-	} else {
-	    gsym(vtop->c.i);
-	    o(0x05eb);
-	    gjmp_addr(a);
-	}
-	vtop--;
+    void *p;
+    /* insert vtop->c jump list in t */
+    if (n) {
+        uint32_t n1 = n, n2;
+        while ((n2 = read32le(p = cur_text_section->data + n1)))
+            n1 = n2;
+        write32le(p, t);
+        t = n;
     }
+    return t;
 }
 
-/* generate a test. set 'inv' to invert test. Stack entry is popped */
-ST_FUNC int gtst(int inv, int t)
+ST_FUNC int gjmp_cond(int op, int t)
 {
-    int v = vtop->r & VT_VALMASK;
-
-    if (nocode_wanted) {
-        ;
-    } else if (v == VT_CMP) {
-        /* fast case : can jump directly since flags are set */
-	if (vtop->c.i & 0x100)
+        if (op & 0x100)
 	  {
 	    /* This was a float compare.  If the parity flag is set
 	       the result was unordered.  For anything except != this
@@ -1716,9 +1687,10 @@ ST_FUNC int gtst(int inv, int t)
 	       Take care about inverting the test.  We need to jump
 	       to our target if the result was unordered and test wasn't NE,
 	       otherwise if unordered we don't want to jump.  */
-	    vtop->c.i &= ~0x100;
-            if (inv == (vtop->c.i == TOK_NE))
-	      o(0x067a);  /* jp +6 */
+            int v = vtop->cmp_r;
+            op &= ~0x100;
+            if (op ^ v ^ (v != TOK_NE))
+              o(0x067a);  /* jp +6 */
 	    else
 	      {
 	        g(0x0f);
@@ -1726,25 +1698,8 @@ ST_FUNC int gtst(int inv, int t)
 	      }
 	  }
         g(0x0f);
-        t = gjmp2((vtop->c.i - 16) ^ inv, t);
-    } else if (v == VT_JMP || v == VT_JMPI) {
-        /* && or || optimization */
-        if ((v & 1) == inv) {
-            /* insert vtop->c jump list in t */
-            uint32_t n1, n = vtop->c.i;
-            if (n) {
-                while ((n1 = read32le(cur_text_section->data + n)))
-                    n = n1;
-                write32le(cur_text_section->data + n, t);
-                t = vtop->c.i;
-            }
-        } else {
-            t = gjmp(t);
-            gsym(vtop->c.i);
-        }
-    }
-    vtop--;
-    return t;
+        t = gjmp2(op - 16, t);
+        return t;
 }
 
 /* generate an integer binary operation */
@@ -1785,10 +1740,8 @@ void gen_opi(int op)
             o(0xc0 + REG_VALUE(r) + REG_VALUE(fr) * 8);
         }
         vtop--;
-        if (op >= TOK_ULT && op <= TOK_GT) {
-            vtop->r = VT_CMP;
-            vtop->c.i = op;
-        }
+        if (op >= TOK_ULT && op <= TOK_GT)
+            vset_VT_CMP(op);
         break;
     case '-':
     case TOK_SUBC1: /* sub with carry generation */
@@ -1943,8 +1896,7 @@ void gen_opf(int op)
                 op = TOK_EQ;
             }
             vtop--;
-            vtop->r = VT_CMP;
-            vtop->c.i = op;
+            vset_VT_CMP(op);
         } else {
             /* no memory reference possible for long double operations */
             load(TREG_ST0, vtop);
@@ -2022,8 +1974,8 @@ void gen_opf(int op)
             }
 
             vtop--;
-            vtop->r = VT_CMP;
-            vtop->c.i = op | 0x100;
+            vset_VT_CMP(op | 0x100);
+            vtop->cmp_r = op;
         } else {
             assert((vtop->type.t & VT_BTYPE) != VT_LDOUBLE);
             switch(op) {

@@ -39,16 +39,11 @@ ST_DATA Sym *define_stack;
 ST_DATA Sym *global_label_stack;
 ST_DATA Sym *local_label_stack;
 
-static Sym *all_cleanups, *current_cleanups, *pending_gotos;
-static int ncleanups;
-
+static Sym *all_cleanups, *pending_gotos;
 static int local_scope;
 static int in_sizeof;
+static int in_generic;
 static int section_sym;
-
-ST_DATA int vlas_in_scope; /* number of VLAs that are currently in scope */
-ST_DATA int vla_sp_root_loc; /* vla_sp_loc for SP before any VLAs were pushed */
-ST_DATA int vla_sp_loc; /* Pointer to variable holding location to store stack pointer on the stack when modifying stack pointer */
 
 ST_DATA SValue __vstack[1+VSTACK_SIZE], *vtop, *pvtop;
 
@@ -56,6 +51,24 @@ ST_DATA int const_wanted; /* true if constant wanted */
 ST_DATA int nocode_wanted; /* no code generation wanted */
 #define NODATA_WANTED (nocode_wanted > 0) /* no static data output wanted either */
 #define STATIC_DATA_WANTED (nocode_wanted & 0xC0000000) /* only static data output */
+
+/* Automagical code suppression ----> */
+#define CODE_OFF() (nocode_wanted |= 0x20000000)
+#define CODE_ON() (nocode_wanted &= ~0x20000000)
+
+/* Clear 'nocode_wanted' at label if it was used */
+ST_FUNC void gsym(int t) { if (t) { gsym_addr(t, ind); CODE_ON(); }}
+static int gind(void) { CODE_ON(); return ind; }
+
+/* Set 'nocode_wanted' after unconditional jumps */
+static void gjmp_addr_acs(int t) { gjmp_addr(t); CODE_OFF(); }
+static int gjmp_acs(int t) { t = gjmp(t); CODE_OFF(); return t; }
+
+/* These are #undef'd at the end of this file */
+#define gjmp_addr gjmp_addr_acs
+#define gjmp gjmp_acs
+/* <---- */
+
 ST_DATA int global_expr;  /* true if compound literals must be allocated globally (used during initializers parsing */
 ST_DATA CType func_vt; /* current function return type (used by return instruction) */
 ST_DATA int func_var; /* true if current function is variadic (used by return instruction) */
@@ -72,6 +85,8 @@ ST_DATA struct switch_t {
 	int sym;
     } **p; int n; /* list of case ranges */
     int def_sym; /* default symbol */
+    int *bsym;
+    struct scope *scope;
 } *cur_switch; /* current switch */
 
 #define MAX_TEMP_LOCAL_VARIABLE_NUMBER 0x4
@@ -82,6 +97,14 @@ ST_DATA struct temp_local_variable {
 	short align;
 } arr_temp_local_vars[MAX_TEMP_LOCAL_VARIABLE_NUMBER];
 short nb_temp_local_vars;
+
+static struct scope {
+    struct scope *prev;
+    struct { int loc, num; } vla;
+    struct { Sym *s; int n; } cl;
+    int *bsym, *csym;
+    Sym *lstk, *llstk;
+} *cur_scope, *loop_scope, *root_scope;
 
 /* ------------------------------------------------------------------------- */
 
@@ -94,14 +117,12 @@ static CType *type_decl(CType *type, AttributeDef *ad, int *v, int td);
 static void parse_expr_type(CType *type);
 static void init_putv(CType *type, Section *sec, unsigned long c);
 static void decl_initializer(CType *type, Section *sec, unsigned long c, int flags);
-static void block(int *bsym, Sym *bcl, int *csym, Sym *ccl, int is_expr);
+static void block(int is_expr);
 static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r, int has_init, int v, int scope);
 static void decl(int l);
 static int decl0(int l, int is_for_loop_init, Sym *);
 static void expr_eq(void);
 static void vla_runtime_type_size(CType *type, int *a);
-static void vla_sp_restore(void);
-static void vla_sp_restore_root(void);
 static int is_compatible_unqualified_types(CType *type1, CType *type2);
 static inline int64_t expr_const64(void);
 static void vpush64(int ty, unsigned long long v);
@@ -112,15 +133,6 @@ static void skip_or_save_block(TokenString **str);
 static void gv_dup(void);
 static int get_temp_local_var(int size,int align);
 static void clear_temp_local_var_list();
-
-
-static void reset_local_scope(void)
-{
-    if (current_cleanups)
-      tcc_error("ICE current_cleanups");
-    sym_pop(&all_cleanups, NULL, 0);
-    local_scope = 0;
-}
 
 ST_INLN int is_float(int t)
 {
@@ -263,6 +275,7 @@ ST_FUNC int tccgen_compile(TCCState *s1)
     section_sym = 0;
     const_wanted = 0;
     nocode_wanted = 0x80000000;
+    local_scope = 0;
 
     /* define some often used types */
     int_type.t = VT_INT;
@@ -325,7 +338,7 @@ ST_FUNC void update_storage(Sym *sym)
         esym->st_other = (esym->st_other & ~ELFW(ST_VISIBILITY)(-1))
             | sym->a.visibility;
 
-    if (sym->type.t & VT_STATIC)
+    if (sym->type.t & (VT_STATIC | VT_INLINE))
         sym_bind = STB_LOCAL;
     else if (sym->a.weak)
         sym_bind = STB_WEAK;
@@ -407,7 +420,7 @@ ST_FUNC void put_extern_sym2(Sym *sym, int sh_num,
         } else {
             sym_type = STT_OBJECT;
         }
-        if (t & VT_STATIC)
+        if (t & (VT_STATIC | VT_INLINE))
             sym_bind = STB_LOCAL;
         else
             sym_bind = STB_GLOBAL;
@@ -661,13 +674,8 @@ ST_FUNC void sym_pop(Sym **ptop, Sym *b, int keep)
 }
 
 /* ------------------------------------------------------------------------- */
-
-static void vsetc(CType *type, int r, CValue *vc)
+static void vcheck_cmp(void)
 {
-    int v;
-
-    if (vtop >= vstack + (VSTACK_SIZE - 1))
-        tcc_error("memory full (vstack)");
     /* cannot let cpu flags if other instruction are generated. Also
        avoid leaving VT_JMP anywhere except on the top of the stack
        because it would complicate the code generator.
@@ -678,15 +686,17 @@ static void vsetc(CType *type, int r, CValue *vc)
        as their value might still be used for real.  All values
        we push under nocode_wanted will eventually be popped
        again, so that the VT_CMP/VT_JMP value will be in vtop
-       when code is unsuppressed again.
+       when code is unsuppressed again. */
 
-       Same logic below in vswap(); */
-    if (vtop >= vstack && !nocode_wanted) {
-        v = vtop->r & VT_VALMASK;
-        if (v == VT_CMP || (v & ~1) == VT_JMP)
-            gv(RC_INT);
-    }
+    if (vtop->r == VT_CMP && !nocode_wanted)
+        gv(RC_INT);
+}
 
+static void vsetc(CType *type, int r, CValue *vc)
+{
+    if (vtop >= vstack + (VSTACK_SIZE - 1))
+        tcc_error("memory full (vstack)");
+    vcheck_cmp();
     vtop++;
     vtop->type = *type;
     vtop->r = r;
@@ -698,12 +708,8 @@ static void vsetc(CType *type, int r, CValue *vc)
 ST_FUNC void vswap(void)
 {
     SValue tmp;
-    /* cannot vswap cpu flags. See comment at vsetc() above */
-    if (vtop >= vstack && !nocode_wanted) {
-        int v = vtop->r & VT_VALMASK;
-        if (v == VT_CMP || (v & ~1) == VT_JMP)
-            gv(RC_INT);
-    }
+
+    vcheck_cmp();
     tmp = vtop[0];
     vtop[0] = vtop[-1];
     vtop[-1] = tmp;
@@ -720,9 +726,10 @@ ST_FUNC void vpop(void)
         o(0xd8dd); /* fstp %st(0) */
     } else
 #endif
-    if (v == VT_JMP || v == VT_JMPI) {
+    if (v == VT_CMP) {
         /* need to put correct jump if && or || without test */
-        gsym(vtop->c.i);
+        gsym(vtop->jtrue);
+        gsym(vtop->jfalse);
     }
     vtop--;
 }
@@ -803,6 +810,7 @@ ST_FUNC void vrotb(int n)
     int i;
     SValue tmp;
 
+    vcheck_cmp();
     tmp = vtop[-n + 1];
     for(i=-n+1;i!=0;i++)
         vtop[i] = vtop[i+1];
@@ -817,6 +825,7 @@ ST_FUNC void vrote(SValue *e, int n)
     int i;
     SValue tmp;
 
+    vcheck_cmp();
     tmp = *e;
     for(i = 0;i < n - 1; i++)
         e[-i] = e[-i - 1];
@@ -831,6 +840,75 @@ ST_FUNC void vrott(int n)
     vrote(vtop, n);
 }
 
+/* ------------------------------------------------------------------------- */
+/* vtop->r = VT_CMP means CPU-flags have been set from comparison or test. */
+
+/* called from generators to set the result from relational ops  */
+ST_FUNC void vset_VT_CMP(int op)
+{
+    vtop->r = VT_CMP;
+    vtop->cmp_op = op;
+    vtop->jfalse = 0;
+    vtop->jtrue = 0;
+}
+
+/* called once before asking generators to load VT_CMP to a register */
+static void vset_VT_JMP(void)
+{
+    int op = vtop->cmp_op;
+    if (vtop->jtrue || vtop->jfalse) {
+        /* we need to jump to 'mov $0,%R' or 'mov $1,%R' */
+        int inv = op & (op < 2); /* small optimization */
+        vseti(VT_JMP+inv, gvtst(inv, 0));
+    } else {
+        /* otherwise convert flags (rsp. 0/1) to register */
+        vtop->c.i = op;
+        if (op < 2) /* doesn't seem to happen */
+            vtop->r = VT_CONST;
+    }
+}
+
+/* Set CPU Flags, doesn't yet jump */
+static void gvtst_set(int inv, int t)
+{
+    int *p;
+    if (vtop->r != VT_CMP) {
+        vpushi(0);
+        gen_op(TOK_NE);
+        if (vtop->r != VT_CMP) /* must be VT_CONST then */
+            vset_VT_CMP(vtop->c.i != 0);
+    }
+    p = inv ? &vtop->jfalse : &vtop->jtrue;
+    *p = gjmp_append(*p, t);
+}
+
+/* Generate value test
+ *
+ * Generate a test for any value (jump, comparison and integers) */
+static int gvtst(int inv, int t)
+{
+    int op, u, x;
+
+    gvtst_set(inv, t);
+
+    t = vtop->jtrue, u = vtop->jfalse;
+    if (inv)
+        x = u, u = t, t = x;
+    op = vtop->cmp_op;
+
+    /* jump to the wanted target */
+    if (op > 1)
+        t = gjmp_cond(op ^ inv, t);
+    else if (op != inv)
+        t = gjmp(t);
+    /* resolve complementary jumps to here */
+    gsym(u);
+
+    vtop--;
+    return t;
+}
+
+/* ------------------------------------------------------------------------- */
 /* push a symbol value of TYPE */
 static inline void vpushsym(CType *type, Sym *sym)
 {
@@ -945,32 +1023,44 @@ static void patch_type(Sym *sym, CType *type)
     } else if ((sym->type.t & VT_BTYPE) == VT_FUNC) {
         int static_proto = sym->type.t & VT_STATIC;
         /* warn if static follows non-static function declaration */
-        if ((type->t & VT_STATIC) && !static_proto && !((type->t|sym->type.t) & VT_INLINE))
+        if ((type->t & VT_STATIC) && !static_proto
+            /* XXX this test for inline shouldn't be here.  Until we
+               implement gnu-inline mode again it silences a warning for
+               mingw caused by our workarounds.  */
+            && !((type->t | sym->type.t) & VT_INLINE))
             tcc_warning("static storage ignored for redefinition of '%s'",
                 get_tok_str(sym->v, NULL));
 
+        /* set 'inline' if both agree or if one has static */
+        if ((type->t | sym->type.t) & VT_INLINE) {
+            if (!((type->t ^ sym->type.t) & VT_INLINE)
+             || ((type->t | sym->type.t) & VT_STATIC))
+                static_proto |= VT_INLINE;
+        }
+
         if (0 == (type->t & VT_EXTERN)) {
             /* put complete type, use static from prototype */
-            sym->type.t = (type->t & ~VT_STATIC) | static_proto;
-            if (type->t & VT_INLINE)
-                sym->type.t = type->t;
+            sym->type.t = (type->t & ~(VT_STATIC|VT_INLINE)) | static_proto;
+            sym->type.ref = type->ref;
+        } else {
+            sym->type.t &= ~VT_INLINE | static_proto;
+        }
+
+        if (sym->type.ref->f.func_type == FUNC_OLD
+             && type->ref->f.func_type != FUNC_OLD) {
             sym->type.ref = type->ref;
         }
 
     } else {
         if ((sym->type.t & VT_ARRAY) && type->ref->c >= 0) {
             /* set array size if it was omitted in extern declaration */
-            if (sym->type.ref->c < 0)
-                sym->type.ref->c = type->ref->c;
-            else if (sym->type.ref->c != type->ref->c)
-                tcc_error("conflicting type for '%s'", get_tok_str(sym->v, NULL));
+            sym->type.ref->c = type->ref->c;
         }
         if ((type->t ^ sym->type.t) & VT_STATIC)
             tcc_warning("storage mismatch for redefinition of '%s'",
                 get_tok_str(sym->v, NULL));
     }
 }
-
 
 /* Merge some storage attributes.  */
 static void patch_storage(Sym *sym, AttributeDef *ad, CType *type)
@@ -989,28 +1079,55 @@ static void patch_storage(Sym *sym, AttributeDef *ad, CType *type)
     update_storage(sym);
 }
 
+/* copy sym to other stack */
+static Sym *sym_copy(Sym *s0, Sym **ps)
+{
+    Sym *s;
+    s = sym_malloc(), *s = *s0;
+    s->prev = *ps, *ps = s;
+    if (s->v < SYM_FIRST_ANOM) {
+        ps = &table_ident[s->v - TOK_IDENT]->sym_identifier;
+        s->prev_tok = *ps, *ps = s;
+    }
+    return s;
+}
+
+/* copy a list of syms */
+static void sym_copy_ref(Sym *s0, Sym **ps)
+{
+    Sym *s, **sp = &s0->type.ref;
+    for (s = *sp, *sp = NULL; s; s = s->next)
+        sp = &(*sp = sym_copy(s, ps))->next;
+}
+
 /* define a new external reference to a symbol 'v' */
 static Sym *external_sym(int v, CType *type, int r, AttributeDef *ad)
 {
-    Sym *s;
+    Sym *s; int bt;
+
+    /* look for global symbol */
     s = sym_find(v);
-    if (!s || (!IS_ASM_SYM(s) && !(s->type.t & VT_EXTERN)
-               && (s->type.t & VT_BTYPE) != VT_FUNC)) {
-        if (s && !is_compatible_types(&s->type, type))
-            tcc_error("conflicting types for '%s'", get_tok_str(s->v, NULL));
+    while (s && s->sym_scope)
+        s = s->prev_tok;
+
+    if (!s) {
         /* push forward reference */
-        s = sym_push(v, type, r | VT_CONST | VT_SYM, 0);
+        s = global_identifier_push(v, type->t, 0);
+        s->r |= r;
         s->a = ad->a;
         s->asm_label = ad->asm_label;
-        s->sym_scope = 0;
+        s->type.ref = type->ref;
+        bt = s->type.t & (VT_BTYPE|VT_ARRAY);
+        /* copy type to the global stack also */
+        if (local_scope && (bt == VT_FUNC || (bt & VT_ARRAY)))
+            sym_copy_ref(s, &global_stack);
     } else {
-        if (s->type.ref == func_old_type.ref) {
-            s->type.ref = type->ref;
-            s->r = r | VT_CONST | VT_SYM;
-            s->type.t |= VT_EXTERN;
-        }
         patch_storage(s, ad, type);
+        bt = s->type.t & VT_BTYPE;
     }
+    /* push variables to local scope if any */
+    if (local_stack && bt != VT_FUNC)
+        s = sym_copy(s, &local_stack);
     return s;
 }
 
@@ -1532,6 +1649,8 @@ ST_FUNC int gv(int rc)
                 /* restore wanted type */
                 vtop->type.t = t1;
             } else {
+                if (vtop->r == VT_CMP)
+                    vset_VT_JMP();
                 /* one register type load */
                 load(r, vtop);
             }
@@ -1549,13 +1668,10 @@ ST_FUNC int gv(int rc)
 /* generate vtop[-1] and vtop[0] in resp. classes rc1 and rc2 */
 ST_FUNC void gv2(int rc1, int rc2)
 {
-    int v;
-
     /* generate more generic register first. But VT_JMP or VT_CMP
        values must be generated first in all cases to avoid possible
        reload errors */
-    v = vtop[0].r & VT_VALMASK;
-    if (v != VT_CMP && (v & ~1) != VT_JMP && rc1 <= rc2) {
+    if (vtop->r != VT_CMP && rc1 <= rc2) {
         vswap();
         gv(rc1);
         vswap();
@@ -1688,26 +1804,6 @@ static void gv_dup(void)
         if (r != r1)
             vtop->r = r1;
     }
-}
-
-/* Generate value test
- *
- * Generate a test for any value (jump, comparison and integers) */
-ST_FUNC int gvtst(int inv, int t)
-{
-    int v = vtop->r & VT_VALMASK;
-    if (v != VT_CMP && v != VT_JMP && v != VT_JMPI) {
-        vpushi(0);
-        gen_op(TOK_NE);
-    }
-    if ((vtop->r & (VT_VALMASK | VT_LVAL | VT_SYM)) == VT_CONST) {
-        /* constant jmp optimization */
-        if ((vtop->c.i != 0) != inv)
-            t = gjmp(t);
-        vtop--;
-        return t;
-    }
-    return gtst(inv, t);
 }
 
 #if PTR_SIZE == 4
@@ -1894,6 +1990,7 @@ static void gen_opl(int op)
         vtop[-1] = vtop[-2];
         vtop[-2] = tmp;
         /* stack: L1 L2 H1 H2 */
+        save_regs(4);
         /* compare high */
         op1 = op;
         /* when values are equal, we need to compare low words. since
@@ -1915,8 +2012,8 @@ static void gen_opl(int op)
             a = gvtst(1, 0);
             if (op != TOK_EQ) {
                 /* generate non equal test */
-                vpushi(TOK_NE);
-                vtop->r = VT_CMP;
+                vpushi(0);
+                vset_VT_CMP(TOK_NE);
                 b = gvtst(0, 0);
             }
         }
@@ -1931,9 +2028,12 @@ static void gen_opl(int op)
         else if (op1 == TOK_GE)
             op1 = TOK_UGE;
         gen_op(op1);
-        a = gvtst(1, a);
-        gsym(b);
-        vseti(VT_JMPI, a);
+#if 0//def TCC_TARGET_I386
+        if (op == TOK_NE) { gsym(b); break; }
+        if (op == TOK_EQ) { gsym(a); break; }
+#endif
+        gvtst_set(1, a);
+        gvtst_set(0, b);
         break;
     }
 }
@@ -2106,7 +2206,7 @@ static void gen_opif(int op)
 {
     int c1, c2;
     SValue *v1, *v2;
-#if defined _MSC_VER && defined _AMD64_
+#if defined _MSC_VER && defined __x86_64__
     /* avoid bad optimization with f1 -= f2 for f1:-0.0, f2:0.0 */
     volatile
 #endif
@@ -2831,18 +2931,6 @@ ST_FUNC void vla_runtime_type_size(CType *type, int *a)
     }
 }
 
-static void vla_sp_restore(void) {
-    if (vlas_in_scope) {
-        gen_vla_sp_restore(vla_sp_loc);
-    }
-}
-
-static void vla_sp_restore_root(void) {
-    if (vlas_in_scope) {
-        gen_vla_sp_restore(vla_sp_root_loc);
-    }
-}
-
 /* return the pointed type of t */
 static inline CType *pointed_type(CType *type)
 {
@@ -2865,27 +2953,29 @@ static int is_compatible_func(CType *type1, CType *type2)
 
     s1 = type1->ref;
     s2 = type2->ref;
-    if (!is_compatible_types(&s1->type, &s2->type))
-        return 0;
-    /* check func_call */
     if (s1->f.func_call != s2->f.func_call)
         return 0;
-    /* XXX: not complete */
-    if (s1->f.func_type == FUNC_OLD || s2->f.func_type == FUNC_OLD)
-        return 1;
-    if (s1->f.func_type != s2->f.func_type)
+    if (s1->f.func_type != s2->f.func_type
+        && s1->f.func_type != FUNC_OLD
+        && s2->f.func_type != FUNC_OLD)
         return 0;
-    while (s1 != NULL) {
-        if (s2 == NULL)
-            return 0;
+    /* we should check the function return type for FUNC_OLD too
+       but that causes problems with the internally used support
+       functions such as TOK_memmove */
+    if (s1->f.func_type == FUNC_OLD && !s1->next)
+        return 1;
+    if (s2->f.func_type == FUNC_OLD && !s2->next)
+        return 1;
+    for (;;) {
         if (!is_compatible_unqualified_types(&s1->type, &s2->type))
             return 0;
         s1 = s1->next;
         s2 = s2->next;
+        if (!s1)
+            return !s2;
+        if (!s2)
+            return 0;
     }
-    if (s2)
-        return 0;
-    return 1;
 }
 
 /* return true if type1 and type2 are the same.  If unqualified is
@@ -2911,15 +3001,19 @@ static int compare_types(CType *type1, CType *type2, int unqualified)
     /* XXX: bitfields ? */
     if (t1 != t2)
         return 0;
+
+    if ((t1 & VT_ARRAY)
+        && !(type1->ref->c < 0
+          || type2->ref->c < 0
+          || type1->ref->c == type2->ref->c))
+            return 0;
+
     /* test more complicated cases */
-    bt1 = t1 & (VT_BTYPE | VT_ARRAY);
+    bt1 = t1 & VT_BTYPE;
     if (bt1 == VT_PTR) {
         type1 = pointed_type(type1);
         type2 = pointed_type(type2);
         return is_compatible_types(type1, type2);
-    } else if (bt1 & VT_ARRAY) {
-        return type1->ref->c < 0 || type2->ref->c < 0
-            || type1->ref->c == type2->ref->c;
     } else if (bt1 == VT_STRUCT) {
         return (type1->ref == type2->ref);
     } else if (bt1 == VT_FUNC) {
@@ -3498,8 +3592,7 @@ redo:
             break;
         case TOK_NORETURN1:
         case TOK_NORETURN2:
-            /* currently, no need to handle it because tcc does not
-               track unused objects */
+            ad->f.func_noreturn = 1;
             break;
         case TOK_CDECL1:
         case TOK_CDECL2:
@@ -4083,7 +4176,7 @@ static void parse_btype_qualify(CType *type, int qualifiers)
  */
 static int parse_btype(CType *type, AttributeDef *ad)
 {
-    int t, u, bt, st, type_found, typespec_found, g;
+    int t, u, bt, st, type_found, typespec_found, g, n;
     Sym *s;
     CType type1;
 
@@ -4290,6 +4383,14 @@ static int parse_btype(CType *type, AttributeDef *ad)
             s = sym_find(tok);
             if (!s || !(s->type.t & VT_TYPEDEF))
                 goto the_end;
+
+            n = tok, next();
+            if (tok == ':' && !in_generic) {
+                /* ignore if it's a label */
+                unget_tok(n);
+                goto the_end;
+            }
+
             t &= ~(VT_BTYPE|VT_LONG);
             u = t & ~(VT_CONSTANT | VT_VOLATILE), t ^= u;
             type->t = (s->type.t & ~VT_TYPEDEF) | u;
@@ -4299,7 +4400,6 @@ static int parse_btype(CType *type, AttributeDef *ad)
             t = type->t;
             /* get attributes from typedef */
             sym_to_attr(ad, s);
-            next();
             typespec_found = 1;
             st = bt = -2;
             break;
@@ -4362,7 +4462,7 @@ static int asm_label_instr(void)
 
 static int post_type(CType *type, AttributeDef *ad, int storage, int td)
 {
-    int n, l, t1, arg_size, align;
+    int n, l, t1, arg_size, align, unused_align;
     Sym **plast, *s, *first;
     AttributeDef ad1;
     CType pt;
@@ -4398,6 +4498,7 @@ static int post_type(CType *type, AttributeDef *ad, int storage, int td)
                     if (n < TOK_UIDENT)
                         expect("identifier");
                     pt.t = VT_VOID; /* invalid type */
+                    pt.ref = NULL;
                     next();
                 }
                 convert_parameter_type(&pt);
@@ -4488,10 +4589,15 @@ static int post_type(CType *type, AttributeDef *ad, int storage, int td)
         skip(']');
         /* parse next post type */
         post_type(type, ad, storage, 0);
-        if (type->t == VT_FUNC)
+
+        if ((type->t & VT_BTYPE) == VT_FUNC)
             tcc_error("declaration of an array of functions");
+        if ((type->t & VT_BTYPE) == VT_VOID
+            || type_size(type, &unused_align) < 0)
+            tcc_error("declaration of an array of incomplete type elements");
+
         t1 |= type->t & VT_VLA;
-        
+
         if (t1 & VT_VLA) {
             if (n < 0)
               tcc_error("need explicit inner array size in VLAs");
@@ -4720,43 +4826,6 @@ static void parse_builtin_params(int nc, const char *args)
         nocode_wanted--;
 }
 
-static void try_call_scope_cleanup(Sym *stop)
-{
-    Sym *cls = current_cleanups;
-
-    for (; cls != stop; cls = cls->ncl) {
-	Sym *fs = cls->next;
-	Sym *vs = cls->prev_tok;
-
-	vpushsym(&fs->type, fs);
-	vset(&vs->type, vs->r, vs->c);
-	vtop->sym = vs;
-        mk_pointer(&vtop->type);
-	gaddrof();
-	gfunc_call(1);
-    }
-}
-
-static void try_call_cleanup_goto(Sym *cleanupstate)
-{
-    Sym *oc, *cc;
-    int ocd, ccd;
-
-    if (!current_cleanups)
-	return;
-
-    /* search NCA of both cleanup chains given parents and initial depth */
-    ocd = cleanupstate ? cleanupstate->v & ~SYM_FIELD : 0;
-    for (ccd = ncleanups, oc = cleanupstate; ocd > ccd; --ocd, oc = oc->ncl)
-      ;
-    for (cc = current_cleanups; ccd > ocd; --ccd, cc = cc->ncl)
-      ;
-    for (; cc != oc; cc = cc->ncl, oc = oc->ncl, --ccd)
-      ;
-
-    try_call_scope_cleanup(cc);
-}
-
 ST_FUNC void unary(void)
 {
     int n, t, align, size, r, sizeof_caller;
@@ -4892,7 +4961,7 @@ ST_FUNC void unary(void)
 	       as statement expressions can't ever be entered from the
 	       outside, so any reactivation of code emission (from labels
 	       or loop heads) can be disabled again after the end of it. */
-            block(NULL, NULL, NULL, NULL, 1);
+            block(1);
 	    nocode_wanted = saved_nocode_wanted;
             skip(')');
         } else {
@@ -4925,11 +4994,12 @@ ST_FUNC void unary(void)
         if ((vtop->r & (VT_VALMASK | VT_LVAL | VT_SYM)) == VT_CONST) {
             gen_cast_s(VT_BOOL);
             vtop->c.i = !vtop->c.i;
-        } else if ((vtop->r & VT_VALMASK) == VT_CMP)
-            vtop->c.i ^= 1;
-        else {
-            save_regs(1);
-            vseti(VT_JMP, gvtst(1, 0));
+        } else if (vtop->r == VT_CMP) {
+            vtop->cmp_op ^= 1;
+            n = vtop->jfalse, vtop->jfalse = vtop->jtrue, vtop->jtrue = n;
+        } else {
+            vpushi(0);
+            gen_op(TOK_EQ);
         }
         break;
     case '~':
@@ -4959,7 +5029,9 @@ ST_FUNC void unary(void)
         next();
         in_sizeof++;
         expr_type(&type, unary); /* Perform a in_sizeof = 0; */
-        s = vtop[1].sym; /* hack: accessing previous vtop */
+        s = NULL;
+        if (vtop[1].r & VT_SYM)
+            s = vtop[1].sym; /* hack: accessing previous vtop */
         size = type_size(&type, &align);
         if (s && s->a.aligned)
             align = 1 << (s->a.aligned - 1);
@@ -5186,7 +5258,11 @@ ST_FUNC void unary(void)
 	        AttributeDef ad_tmp;
 		int itmp;
 	        CType cur_type;
+
+                in_generic++;
 		parse_btype(&cur_type, &ad_tmp);
+                in_generic--;
+
 		type_decl(&cur_type, &ad_tmp, &itmp, TYPE_ABSTRACT);
 		if (compare_types(&controlling_type, &cur_type, 0)) {
 		    if (has_match) {
@@ -5450,6 +5526,8 @@ special_math_val:
                 }
                 vset(&s->type, VT_LOCAL | VT_LVAL, addr);
             }
+            if (s->f.func_noreturn)
+                CODE_OFF();
         } else {
             break;
         }
@@ -5552,86 +5630,50 @@ static void expr_or(void)
     }
 }
 
+static int condition_3way(void);
+
+static void expr_landor(void(*e_fn)(void), int e_op, int i)
+{
+    int t = 0, cc = 1, f = 0, c;
+    for(;;) {
+        c = f ? i : condition_3way();
+        if (c < 0) {
+	    save_regs(1), cc = 0;
+        } else if (c != i) {
+            nocode_wanted++, f = 1;
+        }
+        if (tok != e_op) {
+            if (cc || f) {
+                vpop();
+                vpushi(i ^ f);
+                gsym(t);
+                nocode_wanted -= f;
+            } else {
+                gvtst_set(i, t);
+            }
+	    break;
+        }
+        if (c < 0)
+            t = gvtst(i, t);
+        else
+            vpop();
+        next();
+        e_fn();
+    }
+}
+
 static void expr_land(void)
 {
     expr_or();
-    if (tok == TOK_LAND) {
-	int t = 0;
-	for(;;) {
-	    if ((vtop->r & (VT_VALMASK | VT_LVAL | VT_SYM)) == VT_CONST) {
-                gen_cast_s(VT_BOOL);
-		if (vtop->c.i) {
-		    vpop();
-		} else {
-		    nocode_wanted++;
-		    while (tok == TOK_LAND) {
-			next();
-			expr_or();
-			vpop();
-		    }
-		    nocode_wanted--;
-		    if (t)
-		      gsym(t);
-		    gen_cast_s(VT_INT);
-		    break;
-		}
-	    } else {
-		if (!t)
-		  save_regs(1);
-		t = gvtst(1, t);
-	    }
-	    if (tok != TOK_LAND) {
-		if (t)
-		  vseti(VT_JMPI, t);
-		else
-		  vpushi(1);
-		break;
-	    }
-	    next();
-	    expr_or();
-	}
-    }
+    if (tok == TOK_LAND)
+        expr_landor(expr_or, TOK_LAND, 1);
 }
 
 static void expr_lor(void)
 {
     expr_land();
-    if (tok == TOK_LOR) {
-	int t = 0;
-	for(;;) {
-	    if ((vtop->r & (VT_VALMASK | VT_LVAL | VT_SYM)) == VT_CONST) {
-                gen_cast_s(VT_BOOL);
-		if (!vtop->c.i) {
-		    vpop();
-		} else {
-		    nocode_wanted++;
-		    while (tok == TOK_LOR) {
-			next();
-			expr_land();
-			vpop();
-		    }
-		    nocode_wanted--;
-		    if (t)
-		      gsym(t);
-		    gen_cast_s(VT_INT);
-		    break;
-		}
-	    } else {
-		if (!t)
-		  save_regs(1);
-		t = gvtst(0, t);
-	    }
-	    if (tok != TOK_LOR) {
-		if (t)
-		  vseti(VT_JMP, t);
-		else
-		  vpushi(0);
-		break;
-	    }
-	    next();
-	    expr_land();
-	}
-    }
+    if (tok == TOK_LOR)
+        expr_landor(expr_land, TOK_LOR, 0);
 }
 
 /* Assuming vtop is a value used in a conditional context
@@ -5650,20 +5692,40 @@ static int condition_3way(void)
     return c;
 }
 
+static int is_cond_bool(SValue *sv)
+{
+    if ((sv->r & (VT_VALMASK | VT_LVAL | VT_SYM)) == VT_CONST
+        && (sv->type.t & VT_BTYPE) == VT_INT)
+        return (unsigned)sv->c.i < 2;
+    if (sv->r == VT_CMP)
+        return 1;
+    return 0;
+}
+
 static void expr_cond(void)
 {
     int tt, u, r1, r2, rc, t1, t2, bt1, bt2, islv, c, g;
     SValue sv;
     CType type, type1, type2;
+    int ncw_prev;
 
     expr_lor();
     if (tok == '?') {
         next();
 	c = condition_3way();
         g = (tok == ':' && gnu_ext);
-        if (c < 0) {
+        tt = 0;
+        if (!g) {
+            if (c < 0) {
+                save_regs(1);
+                tt = gvtst(1, 0);
+            } else {
+                vpop();
+            }
+        } else if (c < 0) {
             /* needed to avoid having different registers saved in
                each branch */
+            rc = RC_INT;
             if (is_float(vtop->type.t)) {
                 rc = RC_FLOAT;
 #ifdef TCC_TARGET_X86_64
@@ -5671,45 +5733,62 @@ static void expr_cond(void)
                     rc = RC_ST0;
                 }
 #endif
-            } else
-                rc = RC_INT;
+            }
             gv(rc);
             save_regs(1);
-            if (g)
-                gv_dup();
-            tt = gvtst(1, 0);
-
-        } else {
-            if (!g)
-                vpop();
-            tt = 0;
+            gv_dup();
+            tt = gvtst(0, 0);
         }
 
+        ncw_prev = nocode_wanted;
         if (1) {
             if (c == 0)
                 nocode_wanted++;
             if (!g)
                 gexpr();
 
+            if (c < 0 && vtop->r == VT_CMP) {
+                t1 = gvtst(0, 0);
+                vpushi(0);
+                gvtst_set(0, t1);
+            }
+
             if ((vtop->type.t & VT_BTYPE) == VT_FUNC)
                 mk_pointer(&vtop->type);
 	    type1 = vtop->type;
             sv = *vtop; /* save value to handle it later */
             vtop--; /* no vpop so that FP stack is not flushed */
-            skip(':');
 
-            u = 0;
-            if (c < 0)
+            if (g) {
+                u = tt;
+            } else if (c < 0) {
                 u = gjmp(0);
-            gsym(tt);
+                gsym(tt);
+            } else
+                u = 0;
 
-            if (c == 0)
-                nocode_wanted--;
+            nocode_wanted = ncw_prev;
             if (c == 1)
                 nocode_wanted++;
+            skip(':');
             expr_cond();
-            if (c == 1)
-                nocode_wanted--;
+
+            if (c < 0 && is_cond_bool(vtop) && is_cond_bool(&sv)) {
+                if (sv.r == VT_CMP) {
+                    t1 = sv.jtrue;
+                    t2 = u;
+                } else {
+                    t1 = gvtst(0, 0);
+                    t2 = gjmp(0);
+                    gsym(u);
+                    vpushv(&sv);
+                }
+                gvtst_set(0, t1);
+                gvtst_set(1, t2);
+                nocode_wanted = ncw_prev;
+                //  tcc_warning("two conditions expr_cond");
+                return;
+            }
 
             if ((vtop->type.t & VT_BTYPE) == VT_FUNC)
                 mk_pointer(&vtop->type);
@@ -5719,7 +5798,6 @@ static void expr_cond(void)
             t2 = type2.t;
             bt2 = t2 & VT_BTYPE;
             type.ref = NULL;
-
 
             /* cast operands to correct type according to ISOC rules */
             if (bt1 == VT_VOID || bt2 == VT_VOID) {
@@ -5838,6 +5916,7 @@ static void expr_cond(void)
                 tt = gjmp(0);
             }
             gsym(u);
+            nocode_wanted = ncw_prev;
 
             /* this is horrible, but we must also convert first
                operand */
@@ -5851,14 +5930,15 @@ static void expr_cond(void)
                     gaddrof();
             }
 
-            if (c < 0 || islv) {
+            if (c < 0) {
                 r1 = gv(rc);
                 move_reg(r2, r1, type.t);
                 vtop->r = r2;
                 gsym(tt);
-                if (islv)
-                    indir();
             }
+
+            if (islv)
+                indir();
         }
     }
 }
@@ -5931,25 +6011,8 @@ ST_FUNC int expr_const(void)
     return c;
 }
 
-/* return the label token if current token is a label, otherwise
-   return zero */
-static int is_label(void)
-{
-    int last_tok;
-
-    /* fast test first */
-    if (tok < TOK_UIDENT)
-        return 0;
-    /* no need to save tokc because tok is an identifier */
-    last_tok = tok;
-    next();
-    if (tok == ':') {
-        return last_tok;
-    } else {
-        unget_tok(last_tok);
-        return 0;
-    }
-}
+/* ------------------------------------------------------------------------- */
+/* return from function */
 
 #ifndef TCC_TARGET_ARM64
 static void gfunc_return(CType *func_type)
@@ -6017,6 +6080,24 @@ static void gfunc_return(CType *func_type)
 }
 #endif
 
+static void check_func_return(void)
+{
+    if ((func_vt.t & VT_BTYPE) == VT_VOID)
+        return;
+    if (!strcmp (funcname, "main")
+        && (func_vt.t & VT_BTYPE) == VT_INT) {
+        /* main returns 0 by default */
+        vpushi(0);
+        gen_assign_cast(&func_vt);
+        gfunc_return(&func_vt);
+    } else {
+        tcc_warning("function might return no value: '%s'", funcname);
+    }
+}
+
+/* ------------------------------------------------------------------------- */
+/* switch/case */
+
 static int case_cmp(const void *pa, const void *pb)
 {
     int64_t a = (*(struct case_t**) pa)->v1;
@@ -6024,13 +6105,17 @@ static int case_cmp(const void *pa, const void *pb)
     return a < b ? -1 : a > b;
 }
 
+static void gtst_addr(int t, int a)
+{
+    gsym_addr(gvtst(0, t), a);
+}
+
 static void gcase(struct case_t **base, int len, int *bsym)
 {
     struct case_t *p;
     int e;
     int ll = (vtop->type.t & VT_BTYPE) == VT_LLONG;
-    gv(RC_INT);
-    while (len > 4) {
+    while (len > 8) {
         /* binary search */
         p = base[len/2];
         vdup();
@@ -6039,7 +6124,7 @@ static void gcase(struct case_t **base, int len, int *bsym)
 	else
 	    vpushi(p->v2);
         gen_op(TOK_LE);
-        e = gtst(1, 0);
+        e = gvtst(1, 0);
         vdup();
 	if (ll)
 	    vpushll(p->v1);
@@ -6049,10 +6134,6 @@ static void gcase(struct case_t **base, int len, int *bsym)
         gtst_addr(0, p->sym); /* v1 <= x <= v2 */
         /* x < v1 */
         gcase(base, len/2, bsym);
-        if (cur_switch->def_sym)
-            gjmp_addr(cur_switch->def_sym);
-        else
-            *bsym = gjmp(*bsym);
         /* x > v2 */
         gsym(e);
         e = len/2 + 1;
@@ -6071,7 +6152,7 @@ static void gcase(struct case_t **base, int len, int *bsym)
             gtst_addr(0, p->sym);
         } else {
             gen_op(TOK_LE);
-            e = gtst(1, 0);
+            e = gvtst(1, 0);
             vdup();
 	    if (ll)
 	        vpushll(p->v1);
@@ -6082,16 +6163,166 @@ static void gcase(struct case_t **base, int len, int *bsym)
             gsym(e);
         }
     }
+    *bsym = gjmp(*bsym);
 }
 
-static void block(int *bsym, Sym *bcl, int *csym, Sym *ccl, int is_expr)
-{
-    int a, b, c, d, cond;
-    Sym *s;
+/* ------------------------------------------------------------------------- */
+/* __attribute__((cleanup(fn))) */
 
-    /* generate line number info */
-    if (tcc_state->do_debug)
-        tcc_debug_line(tcc_state);
+static void try_call_scope_cleanup(Sym *stop)
+{
+    Sym *cls = cur_scope->cl.s;
+
+    for (; cls != stop; cls = cls->ncl) {
+	Sym *fs = cls->next;
+	Sym *vs = cls->prev_tok;
+
+	vpushsym(&fs->type, fs);
+	vset(&vs->type, vs->r, vs->c);
+	vtop->sym = vs;
+        mk_pointer(&vtop->type);
+	gaddrof();
+	gfunc_call(1);
+    }
+}
+
+static void try_call_cleanup_goto(Sym *cleanupstate)
+{
+    Sym *oc, *cc;
+    int ocd, ccd;
+
+    if (!cur_scope->cl.s)
+	return;
+
+    /* search NCA of both cleanup chains given parents and initial depth */
+    ocd = cleanupstate ? cleanupstate->v & ~SYM_FIELD : 0;
+    for (ccd = cur_scope->cl.n, oc = cleanupstate; ocd > ccd; --ocd, oc = oc->ncl)
+      ;
+    for (cc = cur_scope->cl.s; ccd > ocd; --ccd, cc = cc->ncl)
+      ;
+    for (; cc != oc; cc = cc->ncl, oc = oc->ncl, --ccd)
+      ;
+
+    try_call_scope_cleanup(cc);
+}
+
+/* call 'func' for each __attribute__((cleanup(func))) */
+static void block_cleanup(struct scope *o)
+{
+    int jmp = 0;
+    Sym *g, **pg;
+    for (pg = &pending_gotos; (g = *pg) && g->c > o->cl.n;) {
+        if (g->prev_tok->r & LABEL_FORWARD) {
+            Sym *pcl = g->next;
+            if (!jmp)
+                jmp = gjmp(0);
+            gsym(pcl->jnext);
+            try_call_scope_cleanup(o->cl.s);
+            pcl->jnext = gjmp(0);
+            if (!o->cl.n)
+                goto remove_pending;
+            g->c = o->cl.n;
+            pg = &g->prev;
+        } else {
+    remove_pending:
+            *pg = g->prev;
+            sym_free(g);
+        }
+    }
+    gsym(jmp);
+    try_call_scope_cleanup(o->cl.s);
+}
+
+/* ------------------------------------------------------------------------- */
+/* VLA */
+
+static void vla_restore(int loc)
+{
+    if (loc)
+        gen_vla_sp_restore(loc);
+}
+
+static void vla_leave(struct scope *o)
+{
+    if (o->vla.num < cur_scope->vla.num)
+        vla_restore(o->vla.loc);
+}
+
+/* ------------------------------------------------------------------------- */
+/* local scopes */
+
+void new_scope(struct scope *o)
+{
+    /* copy and link previous scope */
+    *o = *cur_scope;
+    o->prev = cur_scope;
+    cur_scope = o;
+
+    /* record local declaration stack position */
+    o->lstk = local_stack;
+    o->llstk = local_label_stack;
+
+    ++local_scope;
+}
+
+void prev_scope(struct scope *o, int is_expr)
+{
+    vla_leave(o->prev);
+
+    if (o->cl.s != o->prev->cl.s)
+        block_cleanup(o->prev);
+
+    /* pop locally defined labels */
+    label_pop(&local_label_stack, o->llstk, is_expr);
+
+    /* In the is_expr case (a statement expression is finished here),
+       vtop might refer to symbols on the local_stack.  Either via the
+       type or via vtop->sym.  We can't pop those nor any that in turn
+       might be referred to.  To make it easier we don't roll back
+       any symbols in that case; some upper level call to block() will
+       do that.  We do have to remove such symbols from the lookup
+       tables, though.  sym_pop will do that.  */
+
+    /* pop locally defined symbols */
+    sym_pop(&local_stack, o->lstk, is_expr);
+
+    cur_scope = o->prev;
+    --local_scope;
+}
+
+/* leave a scope via break/continue(/goto) */
+void leave_scope(struct scope *o)
+{
+    if (!o)
+        return;
+    try_call_scope_cleanup(o->cl.s);
+    vla_leave(o);
+}
+
+/* ------------------------------------------------------------------------- */
+/* call block from 'for do while' loops */
+
+static void lblock(int *bsym, int *csym)
+{
+    struct scope *lo = loop_scope, *co = cur_scope;
+    int *b = co->bsym, *c = co->csym;
+    if (csym) {
+        co->csym = csym;
+        loop_scope = co;
+    }
+    co->bsym = bsym;
+    block(0);
+    co->bsym = b;
+    if (csym) {
+        co->csym = c;
+        loop_scope = lo;
+    }
+}
+
+static void block(int is_expr)
+{
+    int a, b, c, d, e, t;
+    Sym *s;
 
     if (is_expr) {
         /* default return value is (void) */
@@ -6099,192 +6330,110 @@ static void block(int *bsym, Sym *bcl, int *csym, Sym *ccl, int is_expr)
         vtop->type.t = VT_VOID;
     }
 
-    if (tok == TOK_IF) {
-        /* if test */
-	int saved_nocode_wanted = nocode_wanted;
-        next();
+again:
+    t = tok, next();
+
+    if (t == TOK_IF) {
         skip('(');
         gexpr();
         skip(')');
-	cond = condition_3way();
-        if (cond == 1)
-            a = 0, vpop();
-        else
-            a = gvtst(1, 0);
-        if (cond == 0)
-	    nocode_wanted |= 0x20000000;
-        block(bsym, bcl, csym, ccl, 0);
-	if (cond != 1)
-	    nocode_wanted = saved_nocode_wanted;
+        a = gvtst(1, 0);
+        block(0);
         if (tok == TOK_ELSE) {
-            next();
             d = gjmp(0);
             gsym(a);
-	    if (cond == 1)
-	        nocode_wanted |= 0x20000000;
-            block(bsym, bcl, csym, ccl, 0);
+            next();
+            block(0);
             gsym(d); /* patch else jmp */
-	    if (cond != 0)
-		nocode_wanted = saved_nocode_wanted;
-        } else
+        } else {
             gsym(a);
-    } else if (tok == TOK_WHILE) {
-	int saved_nocode_wanted;
-	nocode_wanted &= ~0x20000000;
-        next();
-        d = ind;
-        vla_sp_restore();
+        }
+
+    } else if (t == TOK_WHILE) {
+        d = gind();
         skip('(');
         gexpr();
         skip(')');
         a = gvtst(1, 0);
         b = 0;
-	++local_scope;
-	saved_nocode_wanted = nocode_wanted;
-        block(&a, current_cleanups, &b, current_cleanups, 0);
-	nocode_wanted = saved_nocode_wanted;
-	--local_scope;
+        lblock(&a, &b);
         gjmp_addr(d);
-        gsym(a);
         gsym_addr(b, d);
-    } else if (tok == '{') {
-        Sym *llabel, *lcleanup;
-        int block_vla_sp_loc = vla_sp_loc, saved_vlas_in_scope = vlas_in_scope;
-        int lncleanups = ncleanups;
+        gsym(a);
 
-        next();
-        /* record local declaration stack position */
-        s = local_stack;
-        llabel = local_label_stack;
-        lcleanup = current_cleanups;
-	++local_scope;
+    } else if (t == '{') {
+        struct scope o;
+        new_scope(&o);
 
         /* handle local labels declarations */
         while (tok == TOK_LABEL) {
-            next();
-            for(;;) {
+            do {
+                next();
                 if (tok < TOK_UIDENT)
                     expect("label identifier");
                 label_push(&local_label_stack, tok, LABEL_DECLARED);
                 next();
-                if (tok == ',') {
-                    next();
-                } else {
-                    skip(';');
-                    break;
-                }
-            }
+            } while (tok == ',');
+            skip(';');
         }
+
         while (tok != '}') {
-	    if ((a = is_label()))
-		unget_tok(a);
-	    else
-	        decl(VT_LOCAL);
+	    decl(VT_LOCAL);
             if (tok != '}') {
                 if (is_expr)
                     vpop();
-                block(bsym, bcl, csym, ccl, is_expr);
+                block(is_expr);
             }
         }
 
-        if (current_cleanups != lcleanup) {
-            int jmp = 0;
-            Sym *g, **pg;
+        prev_scope(&o, is_expr);
 
-            for (pg = &pending_gotos; (g = *pg) && g->c > lncleanups;)
-              if (g->prev_tok->r & LABEL_FORWARD) {
-                  Sym *pcl = g->next;
-                  if (!jmp)
-                    jmp = gjmp(0);
-                  gsym(pcl->jnext);
-                  try_call_scope_cleanup(lcleanup);
-                  pcl->jnext = gjmp(0);
-                  if (!lncleanups)
-                    goto remove_pending;
-                  g->c = lncleanups;
-                  pg = &g->prev;
-              } else {
-                remove_pending:
-                  *pg = g->prev;
-                  sym_free(g);
-              }
-            gsym(jmp);
-            if (!nocode_wanted) {
-                try_call_scope_cleanup(lcleanup);
-            }
-        }
-
-        current_cleanups = lcleanup;
-        ncleanups = lncleanups;
-        /* pop locally defined labels */
-        label_pop(&local_label_stack, llabel, is_expr);
-        /* pop locally defined symbols */
-	--local_scope;
-	/* In the is_expr case (a statement expression is finished here),
-	   vtop might refer to symbols on the local_stack.  Either via the
-	   type or via vtop->sym.  We can't pop those nor any that in turn
-	   might be referred to.  To make it easier we don't roll back
-	   any symbols in that case; some upper level call to block() will
-	   do that.  We do have to remove such symbols from the lookup
-	   tables, though.  sym_pop will do that.  */
-	sym_pop(&local_stack, s, is_expr);
-
-        /* Pop VLA frames and restore stack pointer if required */
-        if (vlas_in_scope > saved_vlas_in_scope) {
-            vla_sp_loc = saved_vlas_in_scope ? block_vla_sp_loc : vla_sp_root_loc;
-            vla_sp_restore();
-        }
-        vlas_in_scope = saved_vlas_in_scope;
-
+        if (0 == local_scope && !nocode_wanted)
+            check_func_return();
         next();
-    } else if (tok == TOK_RETURN) {
-        next();
-        if (tok != ';') {
-            gexpr();
-            gen_assign_cast(&func_vt);
-	    try_call_scope_cleanup(NULL);
-            if ((func_vt.t & VT_BTYPE) == VT_VOID)
-                vtop--;
-            else
-                gfunc_return(&func_vt);
-        } else {
-	    try_call_scope_cleanup(NULL);
-	}
+
+    } else if (t == TOK_RETURN) {
+        a = tok != ';';
+        b = (func_vt.t & VT_BTYPE) != VT_VOID;
+        if (a)
+            gexpr(), gen_assign_cast(&func_vt);
+        leave_scope(root_scope);
+        if (a && b)
+            gfunc_return(&func_vt);
+        else if (a)
+            vtop--;
+        else if (b)
+            tcc_warning("'return' with no value.");
         skip(';');
         /* jump unless last stmt in top-level block */
         if (tok != '}' || local_scope != 1)
             rsym = gjmp(rsym);
-	nocode_wanted |= 0x20000000;
-    } else if (tok == TOK_BREAK) {
-        /* compute jump */
-        if (!bsym)
-            tcc_error("cannot break");
-	try_call_scope_cleanup(bcl);
-        *bsym = gjmp(*bsym);
-        next();
-        skip(';');
-	nocode_wanted |= 0x20000000;
-    } else if (tok == TOK_CONTINUE) {
-        /* compute jump */
-        if (!csym)
-            tcc_error("cannot continue");
-	try_call_scope_cleanup(ccl);
-        vla_sp_restore_root();
-        *csym = gjmp(*csym);
-        next();
-        skip(';');
-        nocode_wanted |= 0x20000000;
-    } else if (tok == TOK_FOR) {
-        int e;
-	int saved_nocode_wanted;
-	Sym *lcleanup = current_cleanups;
-	int lncleanups = ncleanups;
+        CODE_OFF();
 
-	nocode_wanted &= ~0x20000000;
-        next();
+    } else if (t == TOK_BREAK) {
+        /* compute jump */
+        if (!cur_scope->bsym)
+            tcc_error("cannot break");
+        if (!cur_switch || cur_scope->bsym != cur_switch->bsym)
+            leave_scope(loop_scope);
+        else
+            leave_scope(cur_switch->scope);
+        *cur_scope->bsym = gjmp(*cur_scope->bsym);
+        skip(';');
+
+    } else if (t == TOK_CONTINUE) {
+        /* compute jump */
+        if (!cur_scope->csym)
+            tcc_error("cannot continue");
+        leave_scope(loop_scope);
+        *cur_scope->csym = gjmp(*cur_scope->csym);
+        skip(';');
+
+    } else if (t == TOK_FOR) {
+        struct scope o;
+        new_scope(&o);
+
         skip('(');
-        s = local_stack;
-	++local_scope;
         if (tok != ';') {
             /* c99 for-loop init decl? */
             if (!decl0(VT_LOCAL, 1, NULL)) {
@@ -6294,11 +6443,8 @@ static void block(int *bsym, Sym *bcl, int *csym, Sym *ccl, int is_expr)
             }
         }
         skip(';');
-        d = ind;
-        c = ind;
-        vla_sp_restore();
-        a = 0;
-        b = 0;
+        a = b = 0;
+        c = d = gind();
         if (tok != ';') {
             gexpr();
             a = gvtst(1, 0);
@@ -6306,93 +6452,85 @@ static void block(int *bsym, Sym *bcl, int *csym, Sym *ccl, int is_expr)
         skip(';');
         if (tok != ')') {
             e = gjmp(0);
-            c = ind;
-            vla_sp_restore();
+            d = gind();
             gexpr();
             vpop();
-            gjmp_addr(d);
+            gjmp_addr(c);
             gsym(e);
         }
         skip(')');
-	saved_nocode_wanted = nocode_wanted;
-        block(&a, current_cleanups, &b, current_cleanups, 0);
-	nocode_wanted = saved_nocode_wanted;
-        gjmp_addr(c);
+        lblock(&a, &b);
+        gjmp_addr(d);
+        gsym_addr(b, d);
         gsym(a);
-        gsym_addr(b, c);
-	--local_scope;
-	try_call_scope_cleanup(lcleanup);
-	ncleanups = lncleanups;
-	current_cleanups = lcleanup;
-        sym_pop(&local_stack, s, 0);
+        prev_scope(&o, 0);
 
-    } else 
-    if (tok == TOK_DO) {
-	int saved_nocode_wanted;
-	nocode_wanted &= ~0x20000000;
-        next();
-        a = 0;
-        b = 0;
-        d = ind;
-        vla_sp_restore();
-	saved_nocode_wanted = nocode_wanted;
-        block(&a, current_cleanups, &b, current_cleanups, 0);
+    } else if (t == TOK_DO) {
+        a = b = 0;
+        d = gind();
+        lblock(&a, &b);
+        gsym(b);
         skip(TOK_WHILE);
         skip('(');
-        gsym(b);
-	if (b)
-	    nocode_wanted = saved_nocode_wanted;
 	gexpr();
+        skip(')');
+        skip(';');
 	c = gvtst(0, 0);
 	gsym_addr(c, d);
-	nocode_wanted = saved_nocode_wanted;
-        skip(')');
         gsym(a);
-        skip(';');
-    } else
-    if (tok == TOK_SWITCH) {
+
+    } else if (t == TOK_SWITCH) {
         struct switch_t *saved, sw;
-	int saved_nocode_wanted = nocode_wanted;
 	SValue switchval;
-        next();
+
+        sw.p = NULL;
+        sw.n = 0;
+        sw.def_sym = 0;
+        sw.bsym = &a;
+        sw.scope = cur_scope;
+
+        saved = cur_switch;
+        cur_switch = &sw;
+
         skip('(');
         gexpr();
         skip(')');
 	switchval = *vtop--;
+
         a = 0;
         b = gjmp(0); /* jump to first case */
-        sw.p = NULL; sw.n = 0; sw.def_sym = 0;
-        saved = cur_switch;
-        cur_switch = &sw;
-        block(&a, current_cleanups, csym, ccl, 0);
-	nocode_wanted = saved_nocode_wanted;
+        lblock(&a, NULL);
         a = gjmp(a); /* add implicit break */
         /* case lookup */
         gsym(b);
+
         qsort(sw.p, sw.n, sizeof(void*), case_cmp);
         for (b = 1; b < sw.n; b++)
             if (sw.p[b - 1]->v2 >= sw.p[b]->v1)
                 tcc_error("duplicate case value");
+
         /* Our switch table sorting is signed, so the compared
            value needs to be as well when it's 64bit.  */
         if ((switchval.type.t & VT_BTYPE) == VT_LLONG)
             switchval.type.t &= ~VT_UNSIGNED;
         vpushv(&switchval);
-        gcase(sw.p, sw.n, &a);
+        gv(RC_INT);
+        d = 0, gcase(sw.p, sw.n, &d);
         vpop();
         if (sw.def_sym)
-          gjmp_addr(sw.def_sym);
-        dynarray_reset(&sw.p, &sw.n);
-        cur_switch = saved;
+            gsym_addr(d, sw.def_sym);
+        else
+            gsym(d);
         /* break label */
         gsym(a);
-    } else
-    if (tok == TOK_CASE) {
+
+        dynarray_reset(&sw.p, &sw.n);
+        cur_switch = saved;
+
+    } else if (t == TOK_CASE) {
         struct case_t *cr = tcc_malloc(sizeof(struct case_t));
         if (!cur_switch)
             expect("switch");
-	nocode_wanted &= ~0x20000000;
-        next();
         cr->v1 = cr->v2 = expr_const64();
         if (gnu_ext && tok == TOK_DOTS) {
             next();
@@ -6400,25 +6538,24 @@ static void block(int *bsym, Sym *bcl, int *csym, Sym *ccl, int is_expr)
             if (cr->v2 < cr->v1)
                 tcc_warning("empty case range");
         }
-        cr->sym = ind;
+        cr->sym = gind();
         dynarray_add(&cur_switch->p, &cur_switch->n, cr);
         skip(':');
         is_expr = 0;
         goto block_after_label;
-    } else 
-    if (tok == TOK_DEFAULT) {
-        next();
-        skip(':');
+
+    } else if (t == TOK_DEFAULT) {
         if (!cur_switch)
             expect("switch");
         if (cur_switch->def_sym)
             tcc_error("too many 'default'");
-        cur_switch->def_sym = ind;
+        cur_switch->def_sym = gind();
+        skip(':');
         is_expr = 0;
         goto block_after_label;
-    } else
-    if (tok == TOK_GOTO) {
-        next();
+
+    } else if (t == TOK_GOTO) {
+        vla_restore(root_scope->vla.loc);
         if (tok == '*' && gnu_ext) {
             /* computed goto */
             next();
@@ -6426,6 +6563,7 @@ static void block(int *bsym, Sym *bcl, int *csym, Sym *ccl, int is_expr)
             if ((vtop->type.t & VT_BTYPE) != VT_PTR)
                 expect("pointer");
             ggoto();
+
         } else if (tok >= TOK_UIDENT) {
 	    s = label_find(tok);
 	    /* put forward definition if needed */
@@ -6434,11 +6572,10 @@ static void block(int *bsym, Sym *bcl, int *csym, Sym *ccl, int is_expr)
             else if (s->r == LABEL_DECLARED)
               s->r = LABEL_FORWARD;
 
-	    vla_sp_restore_root();
 	    if (s->r & LABEL_FORWARD) {
 		/* start new goto chain for cleanups, linked via label->next */
-		if (current_cleanups) {
-                    sym_push2(&pending_gotos, SYM_FIELD, 0, ncleanups);
+		if (cur_scope->cl.s && !nocode_wanted) {
+                    sym_push2(&pending_gotos, SYM_FIELD, 0, cur_scope->cl.n);
                     pending_gotos->prev_tok = s;
                     s = sym_push2(&s->next, SYM_FIELD, 0, 0);
                     pending_gotos->next = s;
@@ -6449,18 +6586,20 @@ static void block(int *bsym, Sym *bcl, int *csym, Sym *ccl, int is_expr)
 		gjmp_addr(s->jnext);
 	    }
 	    next();
-	} else {
+
+        } else {
             expect("label identifier");
         }
         skip(';');
-    } else if (tok == TOK_ASM1 || tok == TOK_ASM2 || tok == TOK_ASM3) {
+
+    } else if (t == TOK_ASM1 || t == TOK_ASM2 || t == TOK_ASM3) {
         asm_instr();
+
     } else {
-        b = is_label();
-        if (b) {
+        if (tok == ':' && t >= TOK_UIDENT) {
             /* label case */
 	    next();
-            s = label_find(b);
+            s = label_find(t);
             if (s) {
                 if (s->r == LABEL_DEFINED)
                     tcc_error("duplicate label '%s'", get_tok_str(s->v, NULL));
@@ -6473,24 +6612,24 @@ static void block(int *bsym, Sym *bcl, int *csym, Sym *ccl, int is_expr)
 		} else
 		  gsym(s->jnext);
             } else {
-                s = label_push(&global_label_stack, b, LABEL_DEFINED);
+                s = label_push(&global_label_stack, t, LABEL_DEFINED);
             }
-            s->jnext = ind;
-	    s->cleanupstate = current_cleanups;
-            vla_sp_restore();
+            s->jnext = gind();
+            s->cleanupstate = cur_scope->cl.s;
+
+    block_after_label:
+            vla_restore(cur_scope->vla.loc);
             /* we accept this, but it is a mistake */
-        block_after_label:
-	    nocode_wanted &= ~0x20000000;
             if (tok == '}') {
                 tcc_warning("deprecated use of label at end of compound statement");
             } else {
-                if (is_expr)
-                    vpop();
-                block(bsym, bcl, csym, ccl, is_expr);
+                goto again;
             }
+
         } else {
             /* expression case */
-            if (tok != ';') {
+            if (t != ';') {
+                unget_tok(t);
                 if (is_expr) {
                     vpop();
                     gexpr();
@@ -6498,8 +6637,8 @@ static void block(int *bsym, Sym *bcl, int *csym, Sym *ccl, int is_expr)
                     gexpr();
                     vpop();
                 }
+                skip(';');
             }
-            skip(';');
         }
     }
 }
@@ -6610,10 +6749,17 @@ static int decl_designator(CType *type, Section *sec, unsigned long c,
 
     elem_size = 0;
     nb_elems = 1;
+
     if (flags & DIF_HAVE_ELEM)
         goto no_designator;
-    if (gnu_ext && (l = is_label()) != 0)
-        goto struct_field;
+
+    if (gnu_ext && tok >= TOK_UIDENT) {
+        l = tok, next();
+        if (tok == ':')
+            goto struct_field;
+        unget_tok(l);
+    }
+
     /* NOTE: we only support ranges for last designator */
     while (nb_elems == 1 && (tok == '[' || tok == '.')) {
         if (tok == '[') {
@@ -6637,13 +6783,14 @@ static int decl_designator(CType *type, Section *sec, unsigned long c,
             c += index * elem_size;
             nb_elems = index_last - index + 1;
         } else {
-            int cumofs = 0;
+            int cumofs;
             next();
             l = tok;
         struct_field:
             next();
             if ((type->t & VT_BTYPE) != VT_STRUCT)
                 expect("struct/union type");
+            cumofs = 0;
 	    f = find_field(type, l, &cumofs);
             if (!f)
                 expect("field");
@@ -7215,11 +7362,12 @@ static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r,
 #endif
             sym = sym_push(v, type, r, addr);
 	    if (ad->cleanup_func) {
-		Sym *cls = sym_push2(&all_cleanups, SYM_FIELD | ++ncleanups, 0, 0);
+		Sym *cls = sym_push2(&all_cleanups,
+                    SYM_FIELD | ++cur_scope->cl.n, 0, 0);
 		cls->prev_tok = sym;
 		cls->next = ad->cleanup_func;
-		cls->ncl = current_cleanups;
-		current_cleanups = cls;
+		cls->ncl = cur_scope->cl.s;
+		cur_scope->cl.s = cls;
 	    }
 
             sym->a = ad->a;
@@ -7265,9 +7413,6 @@ static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r,
                 sym = sym_push(v, type, r | VT_SYM, 0);
                 patch_storage(sym, ad, NULL);
             }
-            /* Local statics have a scope until now (for
-               warnings), remove it here.  */
-            sym->sym_scope = 0;
             /* update symbol definition */
 	    put_extern_sym(sym, sec, addr, size);
         } else {
@@ -7299,10 +7444,10 @@ static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r,
             goto no_alloc;
 
         /* save current stack pointer */
-        if (vlas_in_scope == 0) {
-            if (vla_sp_root_loc == -1)
-                vla_sp_root_loc = (loc -= PTR_SIZE);
-            gen_vla_sp_save(vla_sp_root_loc);
+        if (root_scope->vla.loc == 0) {
+            struct scope *v = cur_scope;
+            gen_vla_sp_save(loc -= PTR_SIZE);
+            do v->vla.loc = loc; while ((v = v->prev));
         }
 
         vla_runtime_type_size(type, &a);
@@ -7313,8 +7458,8 @@ static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r,
         gen_vla_result(addr), addr = (loc -= PTR_SIZE);
 #endif
         gen_vla_sp_save(addr);
-        vla_sp_loc = addr;
-        vlas_in_scope++;
+        cur_scope->vla.loc = addr;
+        cur_scope->vla.num++;
 
     } else if (has_init) {
 	size_t oldreloc_offset = 0;
@@ -7343,6 +7488,10 @@ static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r,
    'cur_text_section' */
 static void gen_function(Sym *sym)
 {
+    /* Initialize VLA state */
+    struct scope f = { 0 };
+    cur_scope = root_scope = &f;
+
     nocode_wanted = 0;
     ind = cur_text_section->data_offset;
     if (sym->a.aligned) {
@@ -7352,41 +7501,32 @@ static void gen_function(Sym *sym)
     }
     /* NOTE: we patch the symbol size later */
     put_extern_sym(sym, cur_text_section, ind, 0);
+
     funcname = get_tok_str(sym->v, NULL);
     func_ind = ind;
-    /* Initialize VLA state */
-    vla_sp_loc = -1;
-    vla_sp_root_loc = -1;
+
     /* put debug symbol */
     tcc_debug_funcstart(tcc_state, sym);
     /* push a dummy symbol to enable local sym storage */
     sym_push2(&local_stack, SYM_FIELD, 0, 0);
     local_scope = 1; /* for function parameters */
     gfunc_prolog(&sym->type);
-    reset_local_scope();
+    local_scope = 0;
     rsym = 0;
-	clear_temp_local_var_list();
-	block(NULL, NULL, NULL, NULL, 0);
-    if (!(nocode_wanted & 0x20000000)
-	&& ((func_vt.t & VT_BTYPE) == VT_INT)
-	&& !strcmp (funcname, "main"))
-      {
-	nocode_wanted = 0;
-	vpushi(0);
-	gen_assign_cast(&func_vt);
-	gfunc_return(&func_vt);
-      }
-    nocode_wanted = 0;
+    clear_temp_local_var_list();
+    block(0);
     gsym(rsym);
+    nocode_wanted = 0;
     gfunc_epilog();
     cur_text_section->data_offset = ind;
-    label_pop(&global_label_stack, NULL, 0);
     /* reset local stack */
-    reset_local_scope();
     sym_pop(&local_stack, NULL, 0);
-    /* end of function */
+    local_scope = 0;
+    label_pop(&global_label_stack, NULL, 0);
+    sym_pop(&all_cleanups, NULL, 0);
     /* patch symbol size */
     elfsym(sym)->st_size = ind - func_ind;
+    /* end of function */
     tcc_debug_funcend(tcc_state, ind - func_ind);
     /* It's better to crash than to generate wrong code */
     cur_text_section = NULL;
@@ -7401,27 +7541,22 @@ static void gen_function(Sym *sym)
 static void gen_inline_functions(TCCState *s)
 {
     Sym *sym;
-    int inline_generated, i, ln;
+    int inline_generated, i;
     struct InlineFunc *fn;
 
-    ln = file->line_num;
+    tcc_open_bf(s, ":inline:", 0);
     /* iterate while inline function are referenced */
     do {
         inline_generated = 0;
         for (i = 0; i < s->nb_inline_fns; ++i) {
             fn = s->inline_fns[i];
             sym = fn->sym;
-            if (sym && (sym->c || (sym->type.t&VT_INSTINL) )){
-                /* the function was used: generate its code and
-                   convert it to a normal function */
+            if (sym && (sym->c || !(sym->type.t & VT_INLINE))) {
+                /* the function was used or forced (and then not internal):
+                   generate its code and convert it to a normal function */
                 fn->sym = NULL;
                 if (file)
                     pstrcpy(file->filename, sizeof file->filename, fn->filename);
-                sym->type.t &= ~VT_INLINE;
-
-                if (sym->type.t&VT_INSTINL)
-                    sym->type.t &= ~VT_STATIC;
-
                 begin_macro(fn->func_str, 1);
                 next();
                 cur_text_section = text_section;
@@ -7432,7 +7567,7 @@ static void gen_inline_functions(TCCState *s)
             }
         }
     } while (inline_generated);
-    file->line_num = ln;
+    tcc_close();
 }
 
 ST_FUNC void free_inline_functions(TCCState *s)
@@ -7529,29 +7664,37 @@ static int decl0(int l, int is_for_loop_init, Sym *func_sym)
             }
 #endif
             if ((type.t & VT_BTYPE) == VT_FUNC) {
-                if ((type.t & VT_STATIC) && (l == VT_LOCAL)) {
-                    tcc_error("function without file scope cannot be static");
-                }
                 /* if old style function prototype, we accept a
                    declaration list */
                 sym = type.ref;
                 if (sym->f.func_type == FUNC_OLD && l == VT_CONST)
                     decl0(VT_CMP, 0, sym);
+                /* always compile 'extern inline' */
+                if (type.t & VT_EXTERN)
+                    type.t &= ~VT_INLINE;
             }
 
             if (gnu_ext && (tok == TOK_ASM1 || tok == TOK_ASM2 || tok == TOK_ASM3)) {
                 ad.asm_label = asm_label_instr();
                 /* parse one last attribute list, after asm label */
                 parse_attribute(&ad);
+            #if 0
+                /* gcc does not allow __asm__("label") with function definition,
+                   but why not ... */
                 if (tok == '{')
                     expect(";");
+            #endif
             }
 
 #ifdef TCC_TARGET_PE
             if (ad.a.dllimport || ad.a.dllexport) {
-                if (type.t & (VT_STATIC|VT_TYPEDEF))
-                    tcc_error("cannot have dll linkage with static or typedef");
-                if (ad.a.dllimport) {
+                if (type.t & VT_STATIC)
+                    tcc_error("cannot have dll linkage with static");
+                if (type.t & VT_TYPEDEF) {
+                    tcc_warning("'%s' attribute ignored for typedef",
+                        ad.a.dllimport ? (ad.a.dllimport = 0, "dllimport") :
+                        (ad.a.dllexport = 0, "dllexport"));
+                } else if (ad.a.dllimport) {
                     if ((type.t & VT_BTYPE) == VT_FUNC)
                         ad.a.dllimport = 0;
                     else
@@ -7574,46 +7717,14 @@ static int decl0(int l, int is_for_loop_init, Sym *func_sym)
                     if (sym->type.t == VT_VOID)
                         sym->type = int_type;
                 }
-                sym = type.ref;
-                sym = sym_find(v);
-                /* temporarily convert even extern inlines to statics */
-                if (!sym){
-                    if( (type.t & VT_EXTERN) && (type.t & VT_INLINE) ){
-                        type.t |= VT_INSTINL;
-                        type.t = (type.t & ~VT_EXTERN) | VT_STATIC | VT_FAKESTC;
-                    }else if ( type.t & VT_INLINE ){
-                        if(!(type.t&VT_STATIC)) type.t |= VT_FAKESTC;
-                        type.t = (type.t & ~VT_EXTERN) | VT_STATIC;
-                    }
-                }else{
-                    if ( !(type.t & VT_STATIC) && !(sym->type.t & VT_STATIC) ){
-                        if(
-                                ((type.t & VT_INLINE) != (sym->type.t & VT_INLINE)) ||
-                                ( (type.t & VT_INLINE) &&  (type.t & VT_EXTERN) )
-                          ){
-                            /* noninline decl + inline def OR inline decl + noinline def OR
-                               inline explicitly extern def ALL instantiate the inline */
-                            type.t |= sym->type.t | VT_INSTINL;
-                            type.t = (type.t & ~VT_EXTERN) | VT_STATIC;
-                        }
-                    }else{
-                        /*(extern on nonstatic defs following static decls are turned into true static defs)*/
-                    }
-                    if ( sym->type.t & VT_INLINE ){
-                        if(!(type.t&VT_STATIC)) type.t |= VT_FAKESTC;
-                        type.t |= sym->type.t;
-                        type.t = (type.t & ~VT_EXTERN) | VT_STATIC;
-                    }
-                }
 
                 /* put function symbol */
+                type.t &= ~VT_EXTERN;
                 sym = external_sym(v, &type, 0, &ad);
-
                 /* static inline functions are just recorded as a kind
                    of macro. Their code will be emitted at the end of
                    the compilation unit only if they are used */
-                if ((sym->type.t & (VT_INLINE | VT_STATIC)) ==
-                    (VT_INLINE | VT_STATIC)) {
+                if (sym->type.t & VT_INLINE) {
                     struct InlineFunc *fn;
                     const char *filename;
                            
@@ -7680,24 +7791,16 @@ found:
                     has_init = (tok == '=');
                     if (has_init && (type.t & VT_VLA))
                         tcc_error("variable length array cannot be initialized");
-                    if (((type.t & VT_EXTERN) && (!has_init || l != VT_CONST)) ||
-			((type.t & VT_BTYPE) == VT_FUNC) ||
-                        ((type.t & VT_ARRAY) && (type.t & VT_STATIC) &&
-                         !has_init && l == VT_CONST && type.ref->c < 0)) {
+                    if (((type.t & VT_EXTERN) && (!has_init || l != VT_CONST))
+		        || (type.t & VT_BTYPE) == VT_FUNC
+                        /* as with GCC, uninitialized global arrays with no size
+                           are considered extern: */
+                        || ((type.t & VT_ARRAY) && !has_init
+                            && l == VT_CONST && type.ref->c < 0)
+                        ) {
                         /* external variable or function */
-                        /* NOTE: as GCC, uninitialized global static
-                           arrays of null size are considered as
-                           extern */
-                        int t = type.t;
                         type.t |= VT_EXTERN;
                         sym = external_sym(v, &type, r, &ad);
-
-                        if ( (!(sym->type.t&VT_STATIC) || sym->type.t&VT_FAKESTC ) &&
-                                ( ((sym->type.t&VT_INLINE)!=(t&VT_INLINE)) ||
-                                  ( (t&VT_INLINE) && (t&VT_EXTERN) ) )
-                           ){
-                            sym->type.t |= VT_INSTINL;
-                        }
                         if (ad.alias_target) {
                             ElfSym *esym;
                             Sym *alias_target;
@@ -7705,9 +7808,6 @@ found:
                             esym = elfsym(alias_target);
                             if (!esym)
                                 tcc_error("unsupported forward __alias__ attribute");
-                            /* Local statics have a scope until now (for
-                               warnings), remove it here.  */
-                            sym->sym_scope = 0;
                             put_extern_sym2(sym, esym->st_shndx, esym->st_value, esym->st_size, 0);
                         }
                     } else {
@@ -7741,4 +7841,7 @@ static void decl(int l)
     decl0(l, 0, NULL);
 }
 
+/* ------------------------------------------------------------------------- */
+#undef gjmp_addr
+#undef gjmp
 /* ------------------------------------------------------------------------- */
