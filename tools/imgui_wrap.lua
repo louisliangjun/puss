@@ -369,7 +369,6 @@ static int window_class_create(lua_State* L) {
 static ImDrawList* drawlist_check(lua_State* L, int arg) {
 	int layer = (int)luaL_optinteger(L, arg, 0);
 	ImGuiContext* context = ImGui::GetCurrentContext();
-	ImGuiWindow* window = context ? ImGui::GetCurrentWindow() : NULL;
 	ImDrawList* draw_list = NULL;
 	if( context ) {
 		if( layer==0 ) {
