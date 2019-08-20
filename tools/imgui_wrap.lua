@@ -347,13 +347,10 @@ static int window_class_create(lua_State* L) {
 	ImGuiWindowClass klass;
 	klass.ClassId = (ImGuiID)luaL_optinteger(L, 1, klass.ClassId);
 	klass.ParentViewportId = (ImGuiID)luaL_optinteger(L, 2, klass.ParentViewportId);
-	klass.ViewportFlagsOverrideMask = (ImGuiViewportFlags)luaL_optinteger(L, 3, klass.ViewportFlagsOverrideMask);
-	klass.ViewportFlagsOverrideValue = (ImGuiViewportFlags)luaL_optinteger(L, 4, klass.ViewportFlagsOverrideValue);
-	if( !klass.DockingAllowUnclassed ) {
-		klass.DockingAllowUnclassed = lua_toboolean(L, 5);
-	} else if( !lua_isnoneornil(L, 5) ) {
-		klass.DockingAllowUnclassed = lua_toboolean(L, 5);
-	}
+	klass.ViewportFlagsOverrideSet = (ImGuiViewportFlags)luaL_optinteger(L, 3, klass.ViewportFlagsOverrideSet);
+	klass.ViewportFlagsOverrideClear = (ImGuiViewportFlags)luaL_optinteger(L, 4, klass.ViewportFlagsOverrideClear);
+	if( !lua_isnoneornil(L, 5) )	klass.DockingAlwaysTabBar = lua_toboolean(L, 5)!=0;
+	if( !lua_isnoneornil(L, 6) )	klass.DockingAllowUnclassed = lua_toboolean(L, 6)!=0;
 
 	ud = (ImGuiWindowClass*)lua_newuserdata(L, sizeof(ImGuiWindowClass));
 	*ud = klass;

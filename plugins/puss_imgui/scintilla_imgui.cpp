@@ -817,7 +817,7 @@ static ScintillaIMEnum sci_ext_enums[] =
 	{ {"STYLE_EXT_THUMBNAIL_BAR", STYLE_EXT_THUMBNAIL_BAR}
 	, {"STYLE_EXT_THUMBNAIL_VIEW", STYLE_EXT_THUMBNAIL_VIEW}
 	, {"STYLE_EXT_THUMBNAIL_SEL", STYLE_EXT_THUMBNAIL_SEL}
-	, {NULL, NULL}
+	, {NULL, 0}
 	};
 
 static ViewStyle _temp_thumbnail_style;
