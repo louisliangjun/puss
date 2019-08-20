@@ -14,14 +14,61 @@ local search = puss.import('core.search')
 
 local run_sign = true
 
-show_imgui_demos = show_imgui_demos or false
-show_imgui_metrics = show_imgui_metrics or false
+local windows =
+	{ {name='Console', module='core.console'}
+	, {name='Shotcuts', module='core.shotcuts'}
+	, {name='Search', module='core.search', visible=true}
+	}
 
-show_samples_window = show_samples_window or false
-show_tcc_samples_window = show_tcc_samples_window or false
-show_console_window = show_console_window or false
-show_shutcut_window = show_shutcut_window or false
-show_search_window = show_search_window or true
+local helps =
+	{ {name='ImGUI Demos', module=imgui.ShowDemoWindow}
+	, {name='ImGUI Metrics', module=imgui.ShowMetricsWindow}
+	, {name='Samples', module='core.samples'}
+	, {name='TccSamples', module='core.c.samples'}
+	}
+
+local function menu_windows(wins)
+	local active
+	for i,v in ipairs(wins) do
+		active, v.visible = imgui.MenuItem(v.name, nil, v.visible)
+		if v.clicked and active then
+			imgui.protect_pcall(v.clicked, v.visible, v.plat)
+		end
+	end
+end
+
+local function dummy_update(visible)
+	return visible
+end
+
+local function load_window(w)
+	local update = dummy_update
+	local module_type = type(w.module)
+	if module_type=='function' then
+		update = w.module
+	elseif module_type=='string' then
+		local ok, m = puss.trace_pcall(puss.import, w.module)
+		if ok then 
+			update = m.update 
+			if m.init then
+				imgui.protect_pcall(m.init)
+			end
+		end
+	end
+	w.update = update
+	return update
+end
+
+local function show_windows(wins)
+	for i,v in ipairs(wins) do
+		if v.visible then
+			local ok, res = imgui.protect_pcall(v.update or load_window(v), true)
+			if ok then
+				v.visible = res
+			end
+		end
+	end
+end
 
 local function file_skey_fetch(filepath)
 	local ok, st = puss.stat(filepath, true)
@@ -83,16 +130,11 @@ local function main_menu()
 	if imgui.BeginMenu('Window') then
 		if shotcuts.menu_item('miniline/open') then miniline.open() end
 		imgui.Separator()
-		active, show_console_window = imgui.MenuItem('Conosle', nil, show_console_window)
-		active, show_shutcut_window = imgui.MenuItem('Shutcut', nil, show_shutcut_window)
-		active, show_search_window = imgui.MenuItem('Search', nil, show_search_window)
+		menu_windows(windows)
 		imgui.EndMenu()
 	end
 	if imgui.BeginMenu('Help') then
-		active, show_imgui_demos = imgui.MenuItem('ImGUI Demos', nil, show_imgui_demos)
-		active, show_imgui_metrics = imgui.MenuItem('ImGUI Metrics', nil, show_imgui_metrics)
-		active, show_samples_window = imgui.MenuItem('Samples', nil, show_samples_window)
-		active, show_tcc_samples_window = imgui.MenuItem('TccSamples', nil, show_tcc_samples_window)
+		menu_windows(helps)
 		imgui.Separator()
 		if imgui.MenuItem('Reload', 'Ctrl+F12') then puss.reload() end
 		imgui.Separator()
@@ -188,13 +230,8 @@ local function show_main_window()
 	imgui.SetNextWindowSize(w - left_size, h - menu_size, ImGuiCond_FirstUseEver)
 	editor_window()
 
-	show_imgui_demos = show_imgui_demos and imgui.ShowDemoWindow(true)
-	show_imgui_metrics = show_imgui_metrics and imgui.ShowMetricsWindow(true)
-	show_samples_window = show_samples_window and samples.update(true)
-	show_tcc_samples_window = show_tcc_samples_window and tcc_samples.update(true)
-	show_console_window = show_console_window and console.update(true)
-	show_shutcut_window = show_shutcut_window and shotcuts.update(true)
-	show_search_window = show_search_window and search.update(true)
+	show_windows(windows)
+	show_windows(helps)
 end
 
 local function do_quit_update()
