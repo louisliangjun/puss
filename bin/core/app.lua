@@ -173,7 +173,7 @@ local function show_main_window()
 	imgui.PushStyleVar(ImGuiStyleVar_WindowPadding, 0, 0)
 	imgui.Begin('PussMainDockWindow', nil, MAIN_DOCK_WINDOW_FLAGS)
 	imgui.PopStyleVar(3)
-	imgui.DockSpace(imgui.GetID('#MainDockspace'))
+	imgui.DockSpace(imgui.GetID('#MainDockspace'), 0, 0, ImGuiDockNodeFlags_AutoHideTabBar)
 	main_menu()
 	imgui.End()
 
