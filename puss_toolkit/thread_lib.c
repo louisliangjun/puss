@@ -151,13 +151,8 @@ static int queue_pack_push(lua_State* L, TQueue* q, int start) {
 	#define PUSS_THREAD_SIGNAL	SIGRTMAX
 	static int thread_signal_installed = 0;
 
-	static __thread TQueue* thread_wait_queue;
-
 	static void thread_queue_signal(int sig) {
 		// fprintf(stderr, "recv signal: %d\n", sig);
-		if( thread_wait_queue ) {
-			pthread_cond_broadcast(&thread_wait_queue->cond);	// thread_wait_queue maybe wait by more threads, need broadcast notify self wakeup
-		}
 	}
 
 	static inline void fill_timeout(struct timespec* timeout, uint32_t wait_time_ms) {
@@ -465,6 +460,21 @@ static inline int check_thread_queue_handle(lua_State* L, int custom_handle, TQu
 	return 1;
 }
 
+#ifndef _WIN32
+	static void pthread_wait_queue_or_signal(TQueue* q, uint32_t wait_time) {
+		struct timespec timeout;
+		sigset_t n, o;
+		sigemptyset(&n);
+		sigaddset(&n, PUSS_THREAD_SIGNAL);
+		sigprocmask(SIG_UNBLOCK, &n, &o);
+		fill_timeout(&timeout, wait_time);
+		// fprintf(stderr, "thread(%p) wait ...\n", q);
+		pthread_cond_timedwait(&q->cond, &q->mutex, &timeout);
+		// fprintf(stderr, "thread(%p) wait finished\n", q);
+		sigprocmask(SIG_SETMASK, &o, NULL);
+	}
+#endif
+
 static int thread_wait(lua_State* L) {
 	TQueue* tq = *((TQueue**)lua_touserdata(L, lua_upvalueindex(1)));
 	int custom_handle = lua_isfunction(L, 1);
@@ -510,22 +520,15 @@ static int thread_wait(lua_State* L) {
 #else
 	if( wq ) {
 		puss_mutex_lock(&wq->mutex);
-		if( wq->head==NULL ) {
-			struct timespec timeout;
-			fill_timeout(&timeout, wait_time);
-			thread_wait_queue = wq;
-			pthread_cond_timedwait(&wq->cond, &wq->mutex, &timeout);
-			thread_wait_queue = NULL;
-		}
+		if( wq->head==NULL )
+			pthread_wait_queue_or_signal(wq, wait_time);
 		puss_mutex_unlock(&wq->mutex);
 		check_thread_queue_handle(L, custom_handle, tq);
 	} else if( tq ) {
 		TMsg* msg;
 		puss_mutex_lock(&tq->mutex);
 		if( (msg = tq->head)==NULL ) {
-			struct timespec timeout;
-			fill_timeout(&timeout, wait_time);
-			pthread_cond_timedwait(&tq->cond, &tq->mutex, &timeout);
+			pthread_wait_queue_or_signal(tq, wait_time);
 			msg = tq->head;
 		}
 		if( msg ) {
@@ -628,6 +631,10 @@ static luaL_Reg thread_service_methods[] =
 int puss_reg_thread_service(lua_State* L) {
 #ifndef _WIN32
 	if( !thread_signal_installed ) {
+		sigset_t n;
+		sigemptyset(&n);
+		sigaddset(&n, PUSS_THREAD_SIGNAL);
+		sigprocmask(SIG_BLOCK, &n, NULL);
 		signal(PUSS_THREAD_SIGNAL, thread_queue_signal);
 		thread_signal_installed = 1;
 	}

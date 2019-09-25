@@ -8,7 +8,8 @@
 
 	typedef int	socklen_t;
 	#define get_last_error()		(int)WSAGetLastError()
-	#define can_ignore_error(err)	((err)==WSAEWOULDBLOCK)
+	#define SOCK_ERR_EINTR			WSAEINTR
+	#define	SOCK_ERR_EAGAIN			WSAEWOULDBLOCK
 
 	static int socket_set_nonblock(SOCKET fd, int nonblock) {
 		u_long flag = nonblock ? 1 : 0;
@@ -37,10 +38,11 @@
 	}
 
 	typedef int	SOCKET;
-	#define INVALID_SOCKET		-1
-	#define closesocket(fd)		close(fd)
-	#define get_last_error()	errno
-	#define can_ignore_error(err)	((err)==EAGAIN || (err)==EINTR)
+	#define INVALID_SOCKET			-1
+	#define closesocket(fd)			close(fd)
+	#define get_last_error()		errno
+	#define SOCK_ERR_EINTR			EINTR
+	#define	SOCK_ERR_EAGAIN			EAGAIN
 
 	static int socket_set_nonblock(SOCKET fd, int nonblock) {
 		int flags = fcntl(fd, F_GETFL, 0);
@@ -316,7 +318,7 @@ static int lua_socket_recv(lua_State* L) {
 					break;
 				} else {
 					res = get_last_error();
-					if( !can_ignore_error(res) ) {
+					if( !(res==SOCK_ERR_EAGAIN || res==SOCK_ERR_EINTR) ) {
 						socket_close(ud);
 						break;
 					}
@@ -335,7 +337,7 @@ static int lua_socket_recv(lua_State* L) {
 		socket_close(ud);
 	} else {
 		res = get_last_error();
-		if( !can_ignore_error(res) ) {
+		if( !(res==SOCK_ERR_EAGAIN || res==SOCK_ERR_EINTR) ) {
 			socket_close(ud);
 		}
 	}
