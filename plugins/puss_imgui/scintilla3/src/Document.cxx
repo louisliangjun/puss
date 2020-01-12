@@ -2035,7 +2035,7 @@ int Document::GetCharsOfClass(CharClassify::cc characterClass, unsigned char *bu
 }
 
 void SCI_METHOD Document::StartStyling(Sci_Position position, char) {
-	endStyled = position;
+	endStyled = static_cast<Sci::Position>(position);
 }
 
 bool SCI_METHOD Document::SetStyleFor(Sci_Position length, char style) {
@@ -2044,7 +2044,7 @@ bool SCI_METHOD Document::SetStyleFor(Sci_Position length, char style) {
 	} else {
 		enteredStyling++;
 		const Sci::Position prevEndStyled = endStyled;
-		if (cb.SetStyleFor(static_cast<Sci::Position>(endStyled), static_cast<Sci::Position>(length), style)) {
+		if (cb.SetStyleFor(endStyled, static_cast<Sci::Position>(length), style)) {
 			const DocModification mh(SC_MOD_CHANGESTYLE | SC_PERFORMED_USER,
 			                   prevEndStyled, static_cast<Sci::Position>(length));
 			NotifyModified(mh);

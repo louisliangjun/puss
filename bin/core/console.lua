@@ -22,7 +22,7 @@ local function output_stack_push(line)
 end
 
 local function console_execute(input)
-	output_stack_push(string.format('> %s', input))
+	-- output_stack_push(string.format('> %s', input))
 	local f, e = load(input, input, 't')
 	if f then return f() end
 	output_stack_push(string.format('[ERR] %s', e))

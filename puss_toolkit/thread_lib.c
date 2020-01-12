@@ -13,6 +13,20 @@
 #define PUSS_NAME_QUEUE_MT	"_@PussQueue@_"
 #define PUSS_NAME_THREAD_MT	"_@PussThread@_"
 
+#define PUSS_THREAD_DETACH_WAIT_TIMEOUT	50
+
+#ifndef _WIN32
+	#define MAX_WAIT_THREAD_NUM		8
+
+	static inline void fill_timeout(struct timespec* timeout, uint32_t wait_time_ms) {
+		uint64_t ns = wait_time_ms;
+		clock_gettime(CLOCK_REALTIME, timeout);
+		ns = ns * 1000000 + timeout->tv_nsec;
+		timeout->tv_sec += ns / 1000000000;
+		timeout->tv_nsec = ns % 1000000000;
+	}
+#endif
+
 typedef struct _TMsg	TMsg;
 typedef struct _TQueue	TQueue;
 
@@ -108,9 +122,17 @@ static void queue_push(TQueue* q, TMsg* task) {
 		SetEvent(q->ev);
 	puss_mutex_unlock(&q->mutex);
 #else
+	TQueue* tq;
+	int i;
 	puss_mutex_lock(&q->mutex);
 	task_queue_push(q, task);
 	pthread_cond_signal(&q->cond);
+	for( i=0; i<MAX_WAIT_THREAD_NUM; ++i ) {
+		if( (tq = q->waits[i])==NULL )
+			break;
+		pthread_cond_signal(&tq->cond);
+	}
+	
 	puss_mutex_unlock(&q->mutex);
 #endif
 }
@@ -146,23 +168,6 @@ static int queue_pack_push(lua_State* L, TQueue* q, int start) {
 	queue_push(q, msg);
 	return 1;
 }
-
-#ifndef _WIN32
-	#define PUSS_THREAD_SIGNAL	SIGRTMAX
-	static int thread_signal_installed = 0;
-
-	static void thread_queue_signal(int sig) {
-		// fprintf(stderr, "recv signal: %d\n", sig);
-	}
-
-	static inline void fill_timeout(struct timespec* timeout, uint32_t wait_time_ms) {
-		uint64_t ns = wait_time_ms;
-		clock_gettime(CLOCK_REALTIME, timeout);
-		ns = ns * 1000000 + timeout->tv_nsec;
-		timeout->tv_sec += ns / 1000000000;
-		timeout->tv_nsec = ns % 1000000000;
-	}
-#endif
 
 static int tqueue_close(lua_State* L) {
 	TQueue** ud = (TQueue**)luaL_checkudata(L, 1, PUSS_NAME_QUEUE_MT);
@@ -271,13 +276,14 @@ static int puss_lua_queue_create(lua_State* L) {
 static void queue_detach(THandle* ud) {
 	TQueue* tq = ud->q;
 	if( tq ) {
-		tq->_detached = 1;
 #ifdef _WIN32
+		tq->_detached = 1;
 		SetEvent(tq->ev);
 #else
+		puss_mutex_lock(&tq->mutex);
+		tq->_detached = 1;
 		pthread_cond_signal(&tq->cond);
-		if( ud->tid )
-			pthread_kill(ud->tid, PUSS_THREAD_SIGNAL);
+		puss_mutex_unlock(&tq->mutex);
 #endif
 		ud->q = queue_unref(tq);
 	}
@@ -311,10 +317,6 @@ static int thread_join(lua_State* L) {
 static int thread_post(lua_State* L) {
 	THandle* ud = (THandle*)luaL_checkudata(L, 1, PUSS_NAME_THREAD_MT);
 	int ok = queue_pack_push(L, ud->q, 2);
-#ifndef _WIN32
-	if( ok && ud->tid )
-		pthread_kill(ud->tid, PUSS_THREAD_SIGNAL);
-#endif
 	lua_pushboolean(L, ok);
 	return 1;
 }
@@ -460,78 +462,129 @@ static inline int check_thread_queue_handle(lua_State* L, int custom_handle, TQu
 	return 1;
 }
 
-#ifndef _WIN32
-	static void pthread_wait_queue_or_signal(TQueue* q, uint32_t wait_time) {
-		struct timespec timeout;
-		sigset_t n, o;
-		sigemptyset(&n);
-		sigaddset(&n, PUSS_THREAD_SIGNAL);
-		sigprocmask(SIG_UNBLOCK, &n, &o);
-		fill_timeout(&timeout, wait_time);
-		// fprintf(stderr, "thread(%p) wait ...\n", q);
-		pthread_cond_timedwait(&q->cond, &q->mutex, &timeout);
-		// fprintf(stderr, "thread(%p) wait finished\n", q);
-		sigprocmask(SIG_SETMASK, &o, NULL);
-	}
-#endif
-
 static int thread_wait(lua_State* L) {
 	TQueue* tq = *((TQueue**)lua_touserdata(L, lua_upvalueindex(1)));
 	int custom_handle = lua_isfunction(L, 1);
-	int arg;
-	uint32_t wait_time;
-	TQueue** wait_ud;
-	TQueue* wq;
+	int i = custom_handle ? 2 : 1;
+	uint32_t wait_time = (uint32_t)luaL_optinteger(L, i++, 0);
+	TQueue** wait_ud = luaL_testudata(L, i, PUSS_NAME_QUEUE_MT);
+	TQueue* wq = wait_ud ? *wait_ud : NULL;
+	
+#ifdef _WIN32
+	HANDLE evs[2];
+#else
+	struct timespec timeout;
+	TMsg* msg = NULL;
+	int added;
+#endif
+
 	if( check_thread_queue_handle(L, custom_handle, tq) )
 		goto final_label;
-
-	arg = custom_handle ? 2 : 1;
-	wait_time = (uint32_t)luaL_optinteger(L, arg++, 0);
 	if( wait_time==0 )
 		goto final_label;
-
-	wait_ud = luaL_testudata(L, arg, PUSS_NAME_QUEUE_MT);
-	wq = wait_ud ? *wait_ud : NULL;
 	if( wq && wq->head )
 		goto final_label;
 
 #ifdef _WIN32
 	if( wq ) {
-		if( wq->head==NULL ) {
-			if( tq ) {
-				HANDLE evs[2] = { tq->ev, wq->ev };	// wait for tq & wq
-				switch( WaitForMultipleObjects(2, evs, FALSE, wait_time) ) {
-				case WAIT_OBJECT_0:
-					check_thread_queue_handle(L, custom_handle, tq);
-					break;
-				default:
-					break;
-				}
-			} else {
-				WaitForSingleObject(wq->ev, wait_time);
+		if( tq ) {
+			if( tq->_detached && wait_time > PUSS_THREAD_DETACH_WAIT_TIMEOUT )
+				wait_time = PUSS_THREAD_DETACH_WAIT_TIMEOUT;
+			evs[0] = tq->ev; evs[1] = wq->ev;	// wait for tq & wq
+			switch( WaitForMultipleObjects(2, evs, FALSE, wait_time) ) {
+			case WAIT_OBJECT_0:
+				check_thread_queue_handle(L, custom_handle, tq);
+				break;
+			default:
+				break;
 			}
+		} else {
+			WaitForSingleObject(wq->ev, wait_time);
 		}
 	} else if( tq ) {
+		if( tq->_detached && wait_time > PUSS_THREAD_DETACH_WAIT_TIMEOUT )
+			wait_time = PUSS_THREAD_DETACH_WAIT_TIMEOUT;
 		if( WaitForSingleObject(tq->ev, wait_time)==WAIT_OBJECT_0 )
 			check_thread_queue_handle(L, custom_handle, tq);
 	} else {
-		Sleep(wait_time);
+		Sleep(PUSS_THREAD_DETACH_WAIT_TIMEOUT);
 	}
 #else
 	if( wq ) {
-		puss_mutex_lock(&wq->mutex);
-		if( wq->head==NULL )
-			pthread_wait_queue_or_signal(wq, wait_time);
-		puss_mutex_unlock(&wq->mutex);
-		check_thread_queue_handle(L, custom_handle, tq);
-	} else if( tq ) {
-		TMsg* msg;
-		puss_mutex_lock(&tq->mutex);
-		if( (msg = tq->head)==NULL ) {
-			pthread_wait_queue_or_signal(tq, wait_time);
-			msg = tq->head;
+		if( tq ) {
+			puss_mutex_lock(&tq->mutex);
+			if( tq->head==NULL ) {
+				// waits add
+				puss_mutex_lock(&wq->mutex);
+				if( wq->head ) {
+					added = -1;	// not need wait
+				} else {
+					added = MAX_WAIT_THREAD_NUM;	// want add to wait queue, but wait queue already full
+					for( i=0; i<MAX_WAIT_THREAD_NUM; ++i ) {
+						if( wq->waits[i]==NULL ) {
+							wq->waits[i] = tq;
+							added = i;
+							break;
+						}
+					}
+				}
+				puss_mutex_unlock(&wq->mutex);
+
+				if( added < 0 ) {
+					puss_mutex_unlock(&tq->mutex);
+					goto final_label;
+				}
+
+				if( (added == MAX_WAIT_THREAD_NUM) && (wait_time > 10) ) {
+					wait_time = 10;
+				} else if( tq->_detached && (wait_time > PUSS_THREAD_DETACH_WAIT_TIMEOUT) ) {
+					wait_time = PUSS_THREAD_DETACH_WAIT_TIMEOUT;
+				}
+				fill_timeout(&timeout, wait_time);
+				pthread_cond_timedwait(&tq->cond, &tq->mutex, &timeout);
+
+				// waits del
+				if( added >= 0 ) {
+					puss_mutex_lock(&wq->mutex);
+					for( i=0; i<MAX_WAIT_THREAD_NUM; ++i ) {
+						if( wq->waits[i]==tq ) {
+							wq->waits[i] = NULL;
+							for( ++i; i<MAX_WAIT_THREAD_NUM; ++i ) {
+								if( wq->waits[i]==NULL )
+									break;
+								wq->waits[i-1] = wq->waits[i];
+								wq->waits[i] = NULL;
+							}
+							break;
+						}
+					}
+					puss_mutex_unlock(&wq->mutex);
+				}
+			}
+			if( (msg = tq->head) != NULL ) {
+				tq->head = msg->next;
+				msg->next = NULL;
+			}
+			puss_mutex_unlock(&tq->mutex);
+			if( msg )
+				thread_queue_handle(L, custom_handle, msg);
+		} else {
+			puss_mutex_lock(&wq->mutex);
+			if( wq->head==NULL ) {
+				fill_timeout(&timeout, wait_time);
+				pthread_cond_timedwait(&wq->cond, &wq->mutex, &timeout);
+			}
+			puss_mutex_unlock(&wq->mutex);
 		}
-		if( msg ) {
+	} else if( tq ) {
+		puss_mutex_lock(&tq->mutex);
+		if( tq->head==NULL ) {
+			 if( tq->_detached && (wait_time > PUSS_THREAD_DETACH_WAIT_TIMEOUT) )
+				wait_time = PUSS_THREAD_DETACH_WAIT_TIMEOUT;
+			fill_timeout(&timeout, wait_time);
+			pthread_cond_timedwait(&tq->cond, &tq->mutex, &timeout);
+		}
+		if( (msg = tq->head) != NULL ) {
 			tq->head = msg->next;
 			msg->next = NULL;
 		}
@@ -539,28 +592,37 @@ static int thread_wait(lua_State* L) {
 		if( msg )
 			thread_queue_handle(L, custom_handle, msg);
 	} else {
-		usleep(wait_time*1000);
+		usleep(PUSS_THREAD_DETACH_WAIT_TIMEOUT*1000);
 	}
 #endif
 
 final_label:
-	lua_pushboolean(L, tq ? tq->_detached : 1);
-	return 1;
+	if( !tq ) {
+		lua_pushboolean(L, 1);	// true: detached
+	} else if( tq->head ) {
+		lua_pushnil(L);			// nil: more message
+	} else {
+		lua_pushboolean(L, tq->_detached);	// true: detached, false: no message
+	}
+	if( wq ) {
+		lua_pushboolean(L, wq->head!=NULL);
+	} else {
+		lua_pushnil(L);
+	}
+	return 2;
 }
 
 static int thread_prepare(lua_State* L) {
 	TArg* args = (TArg*)lua_touserdata(L, 1);
 	TQueue* tq = (TQueue*)lua_touserdata(L, 2);
-	if( tq ) {
-		puss_lua_get(L, PUSS_KEY_PUSS);
-		if( lua_getfield(L, -1, "thread_wait")==LUA_TFUNCTION ) {
-			tqueue_create(L, tq, 0);
-			lua_setupvalue(L, -2, 1);
-		} else {
-			tqueue_create(L, tq, 0);
-			lua_pushcclosure(L, thread_wait, 1);
-			lua_setfield(L, -2, "thread_wait");	// replace 
-		}
+	puss_lua_get(L, PUSS_KEY_PUSS);
+	if( lua_getfield(L, -1, "thread_wait")==LUA_TFUNCTION ) {
+		tqueue_create(L, tq, 0);
+		lua_setupvalue(L, -2, 1);
+	} else {
+		tqueue_create(L, tq, 0);
+		lua_pushcclosure(L, thread_wait, 1);
+		lua_setfield(L, -2, "thread_wait");	// replace 
 	}
 	lua_settop(L, 0);
 	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
@@ -574,13 +636,13 @@ static int thread_prepare(lua_State* L) {
 
 static int puss_lua_thread_create(lua_State* L) {
 	int n = lua_gettop(L);
-	int enable_thread_event = lua_toboolean(L, 1);
 	THandle* ud = lua_newuserdata(L, sizeof(THandle));
+	TQueue* q;
 	lua_State* new_state;
 	TArg args[THREAD_ARGS_MAX+1];
 	if( n > THREAD_ARGS_MAX )
 		return luaL_error(L, "too many args!");
-	luaL_checktype(L, enable_thread_event ? 1 : 2, LUA_TSTRING);
+	luaL_checktype(L, 1, LUA_TSTRING);
 
 	ud->tid = 0;
 	ud->q = NULL;
@@ -591,15 +653,12 @@ static int puss_lua_thread_create(lua_State* L) {
 	}
 	lua_setmetatable(L, -2);
 
-	if( enable_thread_event ) {
-		TQueue* q = queue_new();
-		if( !q )
-			return luaL_error(L, "create thread queue failed!");
-		ud->q = queue_ref(q);
-	}
+	if( (q = queue_new())==NULL )
+		return luaL_error(L, "create thread queue failed!");
+	ud->q = queue_ref(q);
 
 	memset(args, 0, sizeof(args));
-	targs_build(L, args, enable_thread_event ? 1 : 2, n);
+	targs_build(L, args, 1, n);
 
 	new_state = puss_lua_newstate();
 	if( !new_state )
@@ -629,16 +688,6 @@ static luaL_Reg thread_service_methods[] =
 	};
 
 int puss_reg_thread_service(lua_State* L) {
-#ifndef _WIN32
-	if( !thread_signal_installed ) {
-		sigset_t n;
-		sigemptyset(&n);
-		sigaddset(&n, PUSS_THREAD_SIGNAL);
-		sigprocmask(SIG_BLOCK, &n, NULL);
-		signal(PUSS_THREAD_SIGNAL, thread_queue_signal);
-		thread_signal_installed = 1;
-	}
-#endif
 	tqueue_create(L, NULL, 0);
 	lua_pushcclosure(L, thread_wait, 1);
 	lua_setfield(L, -2, "thread_wait");

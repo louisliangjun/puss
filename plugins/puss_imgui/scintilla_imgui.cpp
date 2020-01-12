@@ -941,12 +941,12 @@ public: 	// Public for scintilla_send_message
 		// mouse click handler
 		if( hovered && (mx < (window->Size.x - scrollThumbnailWidth)) ) {
 			ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
-			if( ImGui::IsMouseClicked(0) ) {
+			if( ImGui::IsMouseClicked(ImGuiMouseButton_Left) ) {
 				ButtonDownWithModifiers(mpos, now, modifiers);
 				// fprintf(stderr, "mouse down\n");
 			}
 
-			if( ImGui::IsMouseClicked(1) ) {
+			if( ImGui::IsMouseClicked(ImGuiMouseButton_Right) ) {
 				if(!PointInSelection(mpos))
 					SetEmptySelection(PositionFromLocation(mpos));
 				if(ShouldDisplayPopup(mpos)) {
@@ -957,7 +957,7 @@ public: 	// Public for scintilla_send_message
 			}
 		}
 
-		if( ImGui::IsMouseReleased(0) ) {
+		if( ImGui::IsMouseReleased(ImGuiMouseButton_Left) ) {
 			// fprintf(stderr, "mouse up\n");
 			ButtonUpWithModifiers(mpos, now, modifiers);
 		}
@@ -1105,7 +1105,7 @@ public: 	// Public for scintilla_send_message
 
 		float my = io.MousePos.y - window->Pos.y;
 		if( scrollThumbnailActive ) {
-			if( ImGui::IsMouseReleased(0) ) {
+			if( ImGui::IsMouseReleased(ImGuiMouseButton_Left) ) {
 				scrollThumbnailActive = false;
 			} else {
 				Sci::Line mpos = (my / mainWindow.size.y) * (line_num + view_lines);
@@ -1119,7 +1119,7 @@ public: 	// Public for scintilla_send_message
 					spos = (line_num - 1);
 				ImGui::SetScrollY(spos * vs.lineHeight);
 			}
-		} else if( hovered && ImGui::IsMouseClicked(0) ) {
+		} else if( hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) ) {
 			float mx = io.MousePos.x - window->Pos.x;
 			if( mx > mainWindow.size.x ) {
 				scrollThumbnailActive = true;
