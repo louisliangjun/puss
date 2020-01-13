@@ -5,16 +5,16 @@ local REPLY_ASYNC = 2
 
 local replys = {}
 
-local thread_name, request_queue, response_queue = ...
+local thread_name, request_queue = ...
 
 if thread_name then
 	replys[REPLY_QUERY] = function(module_name, handle_name, pt, ...)
 		if not handle_name then return end
-		response_queue:push(REPLY_QUERY, module_name, handle_name, ...)
+		puss.thread_reply(REPLY_QUERY, module_name, handle_name, ...)
 	end
 
 	replys[REPLY_ASYNC] = function(co, sk, pt, ...)
-		response_queue:push(REPLY_ASYNC, co, sk, false, ...)
+		puss.thread_reply(REPLY_ASYNC, co, sk, false, ...)
 	end
 
 	local function handle_request(reply_mode, k1, k2, pt, ...)
@@ -33,7 +33,7 @@ if thread_name then
 	end
 
 	puss.thread_notify = function(module_name, handle_name, ...)
-		response_queue:push(REPLY_QUERY, module_name, handle_name, ...)
+		puss.thread_reply(REPLY_QUERY, module_name, handle_name, ...)
 	end
 
 	puss.import('core.thread_search_file')
@@ -74,13 +74,13 @@ if thread_name then
 end
 
 -- main thread
-thread_name, request_queue, response_queue = 'MAIN', puss.queue_create(), puss.queue_create()
+thread_name, request_queue = 'MAIN', puss.queue_create()
 
 local modules = puss._modules
 local threads = {}
 local THREAD_NUM = 1
 for i=1, THREAD_NUM do
-	threads[i] = puss.thread_create('puss.trace_dofile', puss._path..'/core/thread.lua', nil, 'PussThread:'..i, request_queue, response_queue)
+	threads[i] = puss.thread_create('puss.trace_dofile', puss._path..'/core/thread.lua', nil, 'PussThread:'..i, request_queue)
 end
 
 local function check_thread_args(resp_module, resp_handle, pt)
@@ -134,9 +134,9 @@ local function dispatch(reply_mode, k1, k2, ...)
 end
 
 __exports.update = function()
-	local ok, empty
 	for i=1, 64 do
-		ok, empty = puss.trace_pcall(dispatch, response_queue:pop(0))
-		if ok and empty then break end
+		if puss.thread_wait(dispatch)~=nil then
+			break
+		end
 	end
 end

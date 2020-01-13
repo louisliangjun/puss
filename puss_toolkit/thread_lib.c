@@ -242,7 +242,7 @@ static luaL_Reg tqueue_methods[] =
 	, { NULL, NULL }
 	};
 
-static TQueue** tqueue_create(lua_State* L, TQueue* q, int ensure_queue) {
+static TQueue** tqueue_create(lua_State* L) {
 	TQueue** ud = (TQueue**)lua_newuserdata(L, sizeof(TQueue*));
 	*ud = NULL;
 	if( luaL_newmetatable(L, PUSS_NAME_QUEUE_MT) ) {
@@ -251,10 +251,6 @@ static TQueue** tqueue_create(lua_State* L, TQueue* q, int ensure_queue) {
 		lua_setfield(L, -2, "__index");
 	}
 	lua_setmetatable(L, -2);
-
-	if( !q && (ensure_queue) )
-		q = queue_new();
-	*ud = queue_ref(q);
 	return ud;
 }
 
@@ -270,7 +266,9 @@ static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
 }
 
 static int puss_lua_queue_create(lua_State* L) {
-	return (*tqueue_create(L, NULL, 1)) ? 1 : luaL_error(L, "tqueue_create failed!");
+	TQueue** ud = tqueue_create(L);
+	*ud = queue_ref(queue_new());
+	return *ud ? 1 : luaL_error(L, "tqueue_create failed!");
 }
 
 static void queue_detach(THandle* ud) {
@@ -409,7 +407,7 @@ static void targs_parse(lua_State* L, const TArg* a) {
 			puss_simple_unpack(L, a->s, a->len);
 			break;
 		case LUA_TUSERDATA:
-			tqueue_create(L, a->q, 0);
+			*tqueue_create(L) = queue_ref(a->q);
 			break;
 		default:
 			break;
@@ -612,19 +610,41 @@ final_label:
 	return 2;
 }
 
+static int thread_reply(lua_State* L) {
+	TQueue* rq = *((TQueue**)lua_touserdata(L, lua_upvalueindex(1)));
+	if( rq ) {
+		lua_pushboolean(L, queue_pack_push(L, rq, 1));
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
 static int thread_prepare(lua_State* L) {
 	TArg* args = (TArg*)lua_touserdata(L, 1);
 	TQueue* tq = (TQueue*)lua_touserdata(L, 2);
+	TQueue* rq = (TQueue*)lua_touserdata(L, 3);
+	*tqueue_create(L) = queue_ref(tq);
 	puss_lua_get(L, PUSS_KEY_PUSS);
-	if( lua_getfield(L, -1, "thread_wait")==LUA_TFUNCTION ) {
-		tqueue_create(L, tq, 0);
-		lua_setupvalue(L, -2, 1);
-	} else {
-		tqueue_create(L, tq, 0);
-		lua_pushcclosure(L, thread_wait, 1);
-		lua_setfield(L, -2, "thread_wait");	// replace 
-	}
+
+	if( lua_getfield(L, -1, "thread_wait")!=LUA_TFUNCTION )
+		luaL_error(L, "thread prepare thread_wait not function");
+	lua_pushvalue(L, -3);
+	lua_setupvalue(L, -2, 1);
+	lua_pop(L, 1);
+
+	if( lua_getfield(L, -1, "thread_create")!=LUA_TFUNCTION )
+		luaL_error(L, "thread prepare thread_create not function");
+	lua_pushvalue(L, -3);
+	lua_setupvalue(L, -2, 1);
+	lua_pop(L, 1);
+
+	*tqueue_create(L) = queue_ref(rq);
+	lua_pushcclosure(L, thread_reply, 1);
+	lua_setfield(L, -2, "thread_reply");
+
 	lua_settop(L, 0);
+
 	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
 	assert( args->type==LUA_TSTRING );
 	puss_get_value(L, args->s);
@@ -635,6 +655,7 @@ static int thread_prepare(lua_State* L) {
 #define THREAD_ARGS_MAX	32
 
 static int puss_lua_thread_create(lua_State* L) {
+	TQueue** rq_ud = (TQueue**)lua_touserdata(L, lua_upvalueindex(1));
 	int n = lua_gettop(L);
 	THandle* ud = lua_newuserdata(L, sizeof(THandle));
 	TQueue* q;
@@ -643,7 +664,8 @@ static int puss_lua_thread_create(lua_State* L) {
 	if( n > THREAD_ARGS_MAX )
 		return luaL_error(L, "too many args!");
 	luaL_checktype(L, 1, LUA_TSTRING);
-
+	if( *rq_ud==NULL && (*rq_ud = queue_new())==NULL )
+		return luaL_error(L, "ensure reply queue failed!");
 	ud->tid = 0;
 	ud->q = NULL;
 	if( luaL_newmetatable(L, PUSS_NAME_THREAD_MT) ) {
@@ -668,7 +690,8 @@ static int puss_lua_thread_create(lua_State* L) {
 	lua_pushcfunction(new_state, thread_prepare);
 	lua_pushlightuserdata(new_state, args);
 	lua_pushlightuserdata(new_state, ud->q);
-	if( lua_pcall(new_state, 2, LUA_MULTRET, 0) ) {
+	lua_pushlightuserdata(new_state, *rq_ud);
+	if( lua_pcall(new_state, 3, LUA_MULTRET, 0) ) {
 		lua_close(new_state);
 		return luaL_error(L, "new state prepare failed!");
 	}
@@ -681,16 +704,14 @@ static int puss_lua_thread_create(lua_State* L) {
 	return 1;
 }
 
-static luaL_Reg thread_service_methods[] =
-	{ {"queue_create", puss_lua_queue_create}
-	, {"thread_create", puss_lua_thread_create}
-	, {NULL, NULL}
-	};
-
 int puss_reg_thread_service(lua_State* L) {
-	tqueue_create(L, NULL, 0);
+	lua_pushcfunction(L, puss_lua_queue_create);
+	lua_setfield(L, -2, "queue_create");
+	tqueue_create(L);
+	lua_pushvalue(L, -1);
 	lua_pushcclosure(L, thread_wait, 1);
-	lua_setfield(L, -2, "thread_wait");
-	luaL_setfuncs(L, thread_service_methods, 0);
+	lua_setfield(L, -3, "thread_wait");
+	lua_pushcclosure(L, puss_lua_thread_create, 1);
+	lua_setfield(L, -2, "thread_create");
 	return 0;
 }
