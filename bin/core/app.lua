@@ -102,12 +102,22 @@ end
 
 shotcuts.register('app/reload', 'Reload scripts', 'F12', true, false, false, false)
 
+filebrowser.reset_select_callback(function(tp, info)
+	if tp=='file' then
+		docs.open(info.parent.path..'/'..info.name)
+	elseif tp=='dir' then
+		docs.reset_current_dir(info.path)
+	end
+end)
+
 local function main_menu()
 	local active, value
 	if not imgui.BeginMenuBar() then return end
 	if imgui.BeginMenu('File') then
-		if shotcuts.menu_item('docs/close') then pages.close() end
+		if shotcuts.menu_item('docs/new') then docs.new_page() end
 		if shotcuts.menu_item('docs/save') then pages.save() end
+		if imgui.MenuItem('Save as ...') then pages.save('rename') end
+		if shotcuts.menu_item('docs/close') then pages.close() end
 		imgui.Separator()
 		if shotcuts.menu_item('page/close_all') then pages.close_all() end
 		if shotcuts.menu_item('page/save_all') then pages.save_all() end

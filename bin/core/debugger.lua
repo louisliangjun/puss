@@ -8,6 +8,7 @@ local console = puss.import('core.console')
 local miniline = puss.import('core.miniline')
 local net = puss.import('core.net')
 local thread = puss.import('core.thread')
+local search = puss.import('core.search')
 
 docs.setup(function(event, ...)
 	local f = _ENV[event]
@@ -30,7 +31,14 @@ stack_vars = stack_vars or {}
 stack_current = stack_current or 1
 
 show_console_window = show_console_window or false
+show_search_window = show_search_window or true
 use_local_fs = use_local_fs or (use_local_fs==nil)
+
+filebrowser.reset_select_callback(function(tp, info)
+	if tp=='file' then
+		docs.open(info.parent.path..'/'..info.name)
+	end
+end)
 
 shotcuts.register('app/reload', 'Reload scripts', 'F12', true, false, false, false)
 shotcuts.register('debugger/bp', 'set/unset bp', 'F9', false, false, false, false)
@@ -491,6 +499,7 @@ local function main_menu()
 	if imgui.Button('Reload Ctrl+F12') then puss.reload() end
 	-- active, use_local_fs = imgui.Checkbox('UseLocalFS', use_local_fs)
 	active, show_console_window = imgui.Checkbox('Conosle', show_console_window)
+	active, show_search_window = imgui.Checkbox('Search', show_search_window)
 	imgui.EndMenuBar()
 
 	if shotcuts.is_pressed('app/reload') then puss.reload() end
@@ -660,9 +669,8 @@ local function show_main_window()
 	editor_window()
 	debug_window()
 
-	if show_console_window then
-		show_console_window = console.update(show_console_window)
-	end
+	show_console_window = show_console_window and console.update(show_console_window)
+	show_search_window = show_search_window and search.update(true)
 end
 
 local last_update_time = puss.timestamp()

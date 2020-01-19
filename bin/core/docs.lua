@@ -5,11 +5,15 @@ local sci = puss.import('core.sci')
 local shotcuts = puss.import('core.shotcuts')
 local hook = _hook or function(event, ...) end
 
+local current_selected_dir = puss._path
+local current_saving_dir
+
 _inbuf = _inbuf or imgui.CreateByteArray(4*1024)
 _rebuf = _rebuf or imgui.CreateByteArray(4*1024)
 local inbuf = _inbuf
 local rebuf = _rebuf
 
+shotcuts.register('docs/new', 'New file', 'N', true, false, false, false)
 shotcuts.register('docs/save', 'Save file', 'S', true, false, false, false)
 shotcuts.register('docs/close', 'Close file', 'W', true, false, false, false)
 shotcuts.register('docs/find', 'Find in file', 'F', true, false, false, false)
@@ -17,14 +21,28 @@ shotcuts.register('docs/jump', 'Jump in file', 'G', true, false, false, false)
 shotcuts.register('docs/replace', 'Replace in file', 'H', true, false, false, false)
 shotcuts.register('docs/quick_find', 'Quick find in file', 'F3', nil, nil, false, false)
 
-local function do_save_page(page)
-	page.unsaved = page.sv:GetModify()
-	if not page.unsaved then
-		return
+local function reset_fnbuf(page, filepath)
+	local fnbuf = page.fnbuf
+	if not fnbuf then
+		fnbuf = imgui.CreateByteArray(4*1024)
+		page.fnbuf = fnbuf
 	end
+	fnbuf:strcpy(filepath)
+end
+
+local function do_save_page(page, _filepath)
+	local name, label
+	page.unsaved = page.sv:GetModify()
 	if not page.filepath then
-		page.saving = true
-		return
+		if not _filepath then
+			page.saving = true
+			current_saving_dir = nil
+			return
+		end
+	elseif not page.unsaved then
+		if not _filepath then
+			return
+		end
 	end
 
 	local function page_after_save(ok, file_skey)
@@ -41,11 +59,18 @@ local function do_save_page(page)
 		page.saving_tip = nil
 		page.unsaved = nil
 		page.file_skey = file_skey
+		if _filepath then
+			local path, name = _filepath:match('^(.*)[/\\]([^/\\]+)$')
+			if not path then path, name = '', _filepath end
+			local label = name..'###'.._filepath
+			page.filepath = _filepath
+			pages.reset_label(page, label)
+		end
 	end
 
 	local len, ctx = page.sv:GetText(page.sv:GetTextLength()+1)
-	page.saving = true
-	puss.trace_pcall(hook, 'docs_page_on_save', page_after_save, page.filepath, ctx, page.file_skey)
+	page.saving = _filepath or page.filepath
+	puss.trace_pcall(hook, 'docs_page_on_save', page_after_save, page.saving, ctx, (page.saving==page.filepath) and page.file_skey or nil)
 end
 
 local function draw_saving_bar(page)
@@ -56,22 +81,24 @@ local function draw_saving_bar(page)
 
 	if imgui.Button('cancel') then
 		page.saving = nil
+		page.saving_tips = nil
 	end
 	imgui.SameLine()
 	if imgui.Button('save') then
-		do_save_page(page)
+		do_save_page(page, puss.filename_format(page.fnbuf:str()))
 	end
 	imgui.SameLine()
-	local pth = page.filepath
-	if pth then
-		imgui.Text(pth)
-	else
-		imgui.Text('TODO: input filename')
+	if (not page.fnbuf) or (current_saving_dir ~= current_selected_dir) then
+		current_saving_dir = current_selected_dir
+		reset_fnbuf(page, page.saving==true and current_saving_dir..'/noname' or page.saving)
 	end
+
+	imgui.InputText('##Filename', page.fnbuf, ImGuiInputTextFlags_EnterReturnsTrue)
 	imgui.SameLine()
 	if imgui.Button('close without save') then
 		page.sv:SetSavePoint()
 		page.saving = nil
+		page.saving_tips = nil
 		page.open = false
 	end
 end
@@ -290,6 +317,7 @@ end
 function tabs_page_draw(page, active_page)
 	if (not page.saving) and shotcuts.is_pressed('docs/save') then do_save_page(page) end
 	if shotcuts.is_pressed('docs/close') then page.open = false end
+	if shotcuts.is_pressed('docs/new') then new_page() end
 	puss.trace_pcall(hook, 'docs_page_before_draw', page)
 	if page.saving then draw_saving_bar(page) end
 
@@ -350,18 +378,25 @@ function tabs_page_draw(page, active_page)
 		dialog_active = false
 		dialog_show(page, active)
 	end
+
 	imgui.EndChild()
 end
 
-function tabs_page_save(page)
-	do_save_page(page)
+function tabs_page_save(page, rename)
+	if page.filepath and rename then
+		page.saving = page.filepath
+		current_saving_dir = nil
+	else
+		do_save_page(page)
+	end
 end
 
 function tabs_page_close(page)
 	if page.unsaved then
 		page.saving_tips = 'file not saved, need save ?'
-		page.saving = true
 		page.open = true
+		page.saving = page.filepath or true
+		current_saving_dir = nil
 	end
 end
 
@@ -500,4 +535,8 @@ __exports.setting = function(style_changed)
 		DOC_FOLD_MODE = value
 		view_reset_style = true
 	end
+end
+
+__exports.reset_current_dir = function(dir)
+	current_selected_dir = dir
 end

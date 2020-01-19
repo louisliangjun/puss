@@ -82,6 +82,17 @@ __exports.create = function(label, module)
 	return page
 end
 
+__exports.reset_label = function(page, label)
+	if page.label==label then return true end
+	local old = index[label]
+	if not old then
+		index[page.label] = nil
+		index[label] = page
+	end
+	page.label = label
+	return not old
+end
+
 __exports.active = function(label)
 	next_active_page_label = label
 end
@@ -94,11 +105,11 @@ __exports.lookup = function(label)
 	return index[label]
 end
 
-__exports.save = function(check_only)
+__exports.save = function(rename)
 	local page = index[selected_page_label]
 	if not page then return end
 	local save = page.module.tabs_page_save
-	if save then save(page) end
+	if save then save(page, rename) end
 end
 
 __exports.close = function()

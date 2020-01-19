@@ -1,7 +1,6 @@
 -- core.filebrowser
 
 local pages = puss.import('core.pages')
-local docs = puss.import('core.docs')
 local icons = puss.import('core.icons')
 local thread = puss.import('core.thread')
 
@@ -119,8 +118,15 @@ end
 local DIR_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick
 local FILE_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen
 
+local select_callback = _select_callback or function(tp, info) print('click', tp, info.name) end
+
+__exports.reset_select_callback = function(cb)
+	select_callback, _select_callback = cb, cb
+end
+
 local function show_folder(dir, root, depth)
 	if not dir.index then fill_folder(dir, root, depth) end
+	local clicked_type, clicked_item
 	if dir.dirs then
 		for _,v in ipairs(dir.dirs) do
 			local matched = (current_expand_file and depth and v.name==current_expand_file[depth])
@@ -128,34 +134,31 @@ local function show_folder(dir, root, depth)
 				-- print('   expand', v.name)
 				imgui.SetNextItemOpen(true)
 			end
-			if imgui.TreeNodeEx(v.name, DIR_FLAGS, v.name) then
+			local is_open = imgui.TreeNodeEx(v.name, DIR_FLAGS, v.name)
+			if imgui.IsItemClicked() then clicked_type, clicked_item = 'dir', v end
+			if is_open then
 				show_folder(v, root, matched and (depth+1))
 				imgui.TreePop()
 			end
-			-- if imgui.IsItemClicked() then print('dir', v.path) end
 		end
 	end
 
-	local file_clicked
 	if dir.files then
 		for _,v in ipairs(dir.files) do
 			local matched = (current_expand_file and depth and v.name==current_expand_file[depth])
 			local flags = FILE_FLAGS
 			if matched then flags = flags | ImGuiTreeNodeFlags_Selected end
 			imgui.TreeNodeEx(v.name, flags, v.name)
-			if imgui.IsItemClicked() then file_clicked = v end
+			if imgui.IsItemClicked() then clicked_type, clicked_item = 'file', v end
 			if matched and current_expand_need then
 				-- print(matched, current_expand_need)
 				current_expand_need = false
 				if not imgui.IsItemVisible() then imgui.SetScrollHereY() end
 			end
 		end
-
-		if file_clicked then
-			-- print('file', file_clicked.parent.path..'/'..file_clicked.name)
-			docs.open(file_clicked.parent.path..'/'..file_clicked.name)
-		end
 	end
+
+	if clicked_item then select_callback(clicked_type, clicked_item) end
 end
 
 local function check_expand_file()

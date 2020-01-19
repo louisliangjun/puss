@@ -918,6 +918,7 @@ static int imgui_create_lua(lua_State* L) {
 	lua_pushvalue(L, 1);
 	lua_call(L, 1, 1);
 	lua_replace(L, 1);
+	title = lua_tostring(L, 1);
 	if( !create_window((const TCHAR*)title, width, height) )
 		luaL_error(L, "create window failed!");
 #elif defined(PUSS_IMGUI_USE_GLFW)
