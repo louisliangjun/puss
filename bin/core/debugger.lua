@@ -9,11 +9,6 @@ local miniline = puss.import('core.miniline')
 local net = puss.import('core.net')
 local thread = puss.import('core.thread')
 
--- default not open tinycc debug
--- 
-local _dummy_tinycc = {debug_attach=print, debug_detach=print, debug_update=function() end}
-local tinycc = _dummy_tinycc or puss.import('core.tinycc')
-
 docs.setup(function(event, ...)
 	local f = _ENV[event]
 	if f then return f(...) end
@@ -143,8 +138,6 @@ debugger_events.attached = function(bps, pid)
 		local fname, line = k:match('^(.+):(%d+)$')
 		print(fname, line, v)
 	end
-
-	tinycc.debug_attach(pid, debugger_rpc)
 end
 
 debugger_events.continued = function()
@@ -196,8 +189,6 @@ local function tool_button(label, hint, icon)
 end
 
 local function disconnect()
-	tinycc.debug_detach()
-
 	if socket then
 		puss.async_service_group_cancel(GROUP_KEY)
 		socket:close()
@@ -685,8 +676,6 @@ local function do_update()
 	end
 
 	thread.update()
-
-	tinycc.debug_update()
 
 	imgui.protect_pcall(show_main_window)
 

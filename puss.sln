@@ -15,8 +15,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "puss_system", "plugins\puss
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "puss_toolkit", "puss_toolkit\puss_toolkit.vcxproj", "{6203C836-94E5-4EAE-9520-012E449058CF}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "puss_tinycc", "plugins\puss_tinycc\puss_tinycc.vcxproj", "{32611548-34D1-4228-9C2A-09EDDC60A8D9}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -43,10 +41,6 @@ Global
 		{6203C836-94E5-4EAE-9520-012E449058CF}.Debug|x64.Build.0 = Debug|x64
 		{6203C836-94E5-4EAE-9520-012E449058CF}.Release|x64.ActiveCfg = Release|x64
 		{6203C836-94E5-4EAE-9520-012E449058CF}.Release|x64.Build.0 = Release|x64
-		{32611548-34D1-4228-9C2A-09EDDC60A8D9}.Debug|x64.ActiveCfg = Debug|x64
-		{32611548-34D1-4228-9C2A-09EDDC60A8D9}.Debug|x64.Build.0 = Debug|x64
-		{32611548-34D1-4228-9C2A-09EDDC60A8D9}.Release|x64.ActiveCfg = Release|x64
-		{32611548-34D1-4228-9C2A-09EDDC60A8D9}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -55,7 +49,6 @@ Global
 		{FBEAE7E3-3F48-484C-978A-516C31D18862} = {EA77CC37-897E-41E8-B54C-552B5A7CAFF0}
 		{5EED7033-AF66-45F1-A199-27561C719F38} = {EA77CC37-897E-41E8-B54C-552B5A7CAFF0}
 		{CF27D656-24A4-4A0D-B36E-E82F33257FD3} = {EA77CC37-897E-41E8-B54C-552B5A7CAFF0}
-		{32611548-34D1-4228-9C2A-09EDDC60A8D9} = {EA77CC37-897E-41E8-B54C-552B5A7CAFF0}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {4CAFCE2B-9E1E-4D1D-9979-781016886863}

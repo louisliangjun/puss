@@ -6,7 +6,6 @@ local docs = puss.import('core.docs')
 local filebrowser = puss.import('core.filebrowser')
 local console = puss.import('core.console')
 local samples = puss.import('core.samples')
-local tcc_samples = puss.import('core.c.samples')
 local diskfs = puss.import('core.diskfs')
 local miniline = puss.import('core.miniline')
 local thread = puss.import('core.thread')
@@ -24,7 +23,6 @@ local helps =
 	{ {name='ImGUI Demos', module=imgui.ShowDemoWindow}
 	, {name='ImGUI Metrics', module=imgui.ShowMetricsWindow}
 	, {name='Samples', module='core.samples'}
-	, {name='TccSamples', module='core.c.samples'}
 	}
 
 local function menu_windows(wins)

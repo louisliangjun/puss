@@ -142,13 +142,6 @@ vmake_target_add('puss_system', function(target)
 	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs, libs)
 end)
 
-vmake_target_add('puss_tinycc', function(target)
-	local incs = array_pack(INCLUDES, LUA_SRC_PATH)
-	local objs = make_c2objs(path_concat('plugins', target), nil, incs, '-fPIC', '-fvisibility=hidden', '-DTCC_PROFILE')
-	local output = path_concat('bin', 'plugins', target..PUSS_CONFIG_SUFFIX..DLL_SUFFIX)
-	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs)
-end)
-
 -----------------------------
 -- imgui lua wrapper
 
@@ -240,7 +233,7 @@ local function make_puss_imgui(target)
 	local gl3wobjs = {}
 	if (vlua.OS=='win32' and target=='puss_imgui') then
 		flags = '-DUNICODE -D_UNICODE -DPUSS_IMGUI_USE_DX11 -DSCI_LEXER -DFOX'
-		libs  = '-ld3dcompiler -ldxgi -ld3d11 -lgdi32'
+		libs  = '-ld3dcompiler -ldxgi -ld3d11 -lxinput -lgdi32'
 	else
 		flags = shell('pkg-config --static --cflags glfw3')
 		libs  = shell('pkg-config --static --libs glfw3')

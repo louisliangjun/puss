@@ -133,9 +133,11 @@ static int imgui_image_texture_destroy_lua(lua_State* L) {
 #define WM_DPICHANGED 0x02E0 // From Windows SDK 8.1+ headers
 #endif
 
-#pragma comment(lib, "d3d11.lib")
-#pragma comment(lib, "d3dcompiler.lib")
-#pragma comment(lib, "dxgi.lib")
+#ifdef _MSC_VER
+	#pragma comment(lib, "d3d11.lib")
+	#pragma comment(lib, "d3dcompiler.lib")
+	#pragma comment(lib, "dxgi.lib")
+#endif
 
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
@@ -459,6 +461,7 @@ static int imgui_image_destroy(lua_State* L) {
 		pTextureView->Release();
 		pTextureView = NULL;
 	}
+	return 0;
 }
 
 static void image_texture_destroy(ImTextureID tex) {
@@ -578,7 +581,7 @@ BOOL WINAPI DllMain(HANDLE hinstDLL, DWORD dwReason, LPVOID lpvReserved) {
 		// puss_imgui_wc.hIcon = LoadIcon(puss_imgui_wc.hInstance, MAKEINTRESOURCE(IDI_ICON1));
 		puss_imgui_wc.hIcon = LoadIconW(GetModuleHandle(NULL), L"IDI_PUSS");
 		if( !puss_imgui_wc.hIcon )
-			EnumResourceNamesW(GetModuleHandle(NULL), RT_GROUP_ICON, on_enum_icons, NULL);
+			EnumResourceNamesW(GetModuleHandle(NULL), RT_GROUP_ICON, on_enum_icons, (LONG_PTR)0);
 		RegisterClassEx(&puss_imgui_wc);
 		_win32_vk_map_init();
 		break;
@@ -915,13 +918,13 @@ static int imgui_create_lua(lua_State* L) {
 	lua_pushvalue(L, 1);
 	lua_call(L, 1, 1);
 	lua_replace(L, 1);
-	if( !create_window((const TCHAR*)lua_tostring(L, 1), width, height) )
+	if( !create_window((const TCHAR*)title, width, height) )
 		luaL_error(L, "create window failed!");
 #elif defined(PUSS_IMGUI_USE_GLFW)
 	if( !create_window(title, width, height) )
 		luaL_error(L, "create window failed!");
 #else
-	luaL_error(L, "create window unknown platform!");
+	luaL_error(L, "create window(%s) unknown platform!", title);
 #endif
 
 	if( ini_filename ) {
