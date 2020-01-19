@@ -65,6 +65,7 @@ static TQueue* queue_new(void) {
 #else
 		pthread_cond_init(&q->cond, NULL);
 #endif
+		q->_ref = 1;
 		puss_mutex_init(&q->mutex);
 	}
 	return q;
@@ -267,7 +268,7 @@ static PUSS_THREAD_DECLARE(thread_main_wrapper, arg) {
 
 static int puss_lua_queue_create(lua_State* L) {
 	TQueue** ud = tqueue_create(L);
-	*ud = queue_ref(queue_new());
+	*ud = queue_new();
 	return *ud ? 1 : luaL_error(L, "tqueue_create failed!");
 }
 
@@ -620,10 +621,13 @@ static int thread_reply(lua_State* L) {
 	return 1;
 }
 
+#define THREAD_ARGS_MAX	32
+
 static int thread_prepare(lua_State* L) {
 	TArg* args = (TArg*)lua_touserdata(L, 1);
 	TQueue* tq = (TQueue*)lua_touserdata(L, 2);
 	TQueue* rq = (TQueue*)lua_touserdata(L, 3);
+	luaL_checkstack(L, 8 + THREAD_ARGS_MAX, NULL);
 	*tqueue_create(L) = queue_ref(tq);
 	puss_lua_get(L, PUSS_KEY_PUSS);
 
@@ -652,13 +656,10 @@ static int thread_prepare(lua_State* L) {
 	return lua_gettop(L);
 }
 
-#define THREAD_ARGS_MAX	32
-
 static int puss_lua_thread_create(lua_State* L) {
 	TQueue** rq_ud = (TQueue**)lua_touserdata(L, lua_upvalueindex(1));
 	int n = lua_gettop(L);
 	THandle* ud = lua_newuserdata(L, sizeof(THandle));
-	TQueue* q;
 	lua_State* new_state;
 	TArg args[THREAD_ARGS_MAX+1];
 	if( n > THREAD_ARGS_MAX )
@@ -675,9 +676,8 @@ static int puss_lua_thread_create(lua_State* L) {
 	}
 	lua_setmetatable(L, -2);
 
-	if( (q = queue_new())==NULL )
+	if( (ud->q = queue_new())==NULL )
 		return luaL_error(L, "create thread queue failed!");
-	ud->q = queue_ref(q);
 
 	memset(args, 0, sizeof(args));
 	targs_build(L, args, 1, n);
