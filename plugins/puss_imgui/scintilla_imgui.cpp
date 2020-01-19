@@ -923,7 +923,7 @@ public: 	// Public for scintilla_send_message
 		const bool focus_requested = ImGui::FocusableItemRegister(window, window->ID);
 		// const bool focus_requested_by_code = focus_requested && (window->FocusIdxAllCounter == window->FocusIdxAllRequestCurrent);
 		// const bool focus_requested_by_tab = focus_requested && !focus_requested_by_code;
-		const bool user_clicked = hovered && io.MouseClicked[0];
+		const bool user_clicked = hovered && io.MouseClicked[ImGuiMouseButton_Left];
 		const bool user_scrolled = hovered && (io.MouseWheel != 0.0f || io.MouseWheelH != 0.0f);
 	    if( focus_requested || user_clicked || user_scrolled ) {
 			// fprintf(stderr, "grab focus!\n");

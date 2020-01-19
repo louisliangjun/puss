@@ -51,6 +51,7 @@ static ImGuiMouseCursor     g_LastMouseCursor = ImGuiMouseCursor_COUNT;
 static bool                 g_HasGamepad = false;
 static bool                 g_WantUpdateHasGamepad = true;
 static bool                 g_WantUpdateMonitors = true;
+static bool                 g_MouseJustPressed[5] = { false, false, false, false, false };
 
 // Forward Declarations
 static void ImGui_ImplWin32_InitPlatformInterface();
@@ -148,9 +149,18 @@ static bool ImGui_ImplWin32_UpdateMouseCursor()
 
 // This code supports multi-viewports (multiple OS Windows mapped into different Dear ImGui viewports)
 // Because of that, it is a little more complicated than your typical single-viewport binding code!
-static void ImGui_ImplWin32_UpdateMousePos()
+static void ImGui_ImplWin32_UpdateMousePosAndButtons()
 {
     ImGuiIO& io = ImGui::GetIO();
+	for (int i = 0; i < IM_ARRAYSIZE(io.MouseDown); i++)
+	{
+		// If a mouse press event came, always pass it as "mouse held this frame", so we don't miss click-release events that are shorter than 1 frame.
+		io.MouseDown[i] = g_MouseJustPressed[i];
+		g_MouseJustPressed[i] = false;
+	}
+	if( ::GetAsyncKeyState(VK_LBUTTON) & 0x8000 )	io.MouseDown[ImGuiMouseButton_Left] = true;
+	if( ::GetAsyncKeyState(VK_RBUTTON) & 0x8000 )	io.MouseDown[ImGuiMouseButton_Right] = true;
+	if( ::GetAsyncKeyState(VK_MBUTTON) & 0x8000 )	io.MouseDown[ImGuiMouseButton_Middle] = true;
 
     // Set OS mouse position if requested (rarely used, only when ImGuiConfigFlags_NavEnableSetMousePos is enabled by user)
     // (When multi-viewports are enabled, all imgui positions are same as OS positions)
@@ -282,7 +292,7 @@ void    ImGui_ImplWin32_NewFrame()
     // io.KeysDown[], io.MousePos, io.MouseDown[], io.MouseWheel: filled by the WndProc handler below.
 
     // Update OS mouse position
-    ImGui_ImplWin32_UpdateMousePos();
+    ImGui_ImplWin32_UpdateMousePosAndButtons();
 
     // Update OS mouse cursor with the cursor requested by imgui
     ImGuiMouseCursor mouse_cursor = io.MouseDrawCursor ? ImGuiMouseCursor_None : ImGui::GetMouseCursor();
@@ -331,9 +341,10 @@ IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARA
         if (msg == WM_RBUTTONDOWN || msg == WM_RBUTTONDBLCLK) { button = 1; }
         if (msg == WM_MBUTTONDOWN || msg == WM_MBUTTONDBLCLK) { button = 2; }
         if (msg == WM_XBUTTONDOWN || msg == WM_XBUTTONDBLCLK) { button = (GET_XBUTTON_WPARAM(wParam) == XBUTTON1) ? 3 : 4; }
-        if (!ImGui::IsAnyMouseDown() && ::GetCapture() == NULL)
-            ::SetCapture(hwnd);
-        io.MouseDown[button] = true;
+        // if (!ImGui::IsAnyMouseDown() && ::GetCapture() == NULL)
+		//     ::SetCapture(hwnd);
+        // io.MouseDown[button] = true;
+		g_MouseJustPressed[button] = true;
         return 0;
     }
     case WM_LBUTTONUP:
@@ -346,9 +357,9 @@ IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARA
         if (msg == WM_RBUTTONUP) { button = 1; }
         if (msg == WM_MBUTTONUP) { button = 2; }
         if (msg == WM_XBUTTONUP) { button = (GET_XBUTTON_WPARAM(wParam) == XBUTTON1) ? 3 : 4; }
-        io.MouseDown[button] = false;
-        if (!ImGui::IsAnyMouseDown() && ::GetCapture() == hwnd)
-            ::ReleaseCapture();
+        // io.MouseDown[button] = false;
+		// if (!ImGui::IsAnyMouseDown() && ::GetCapture() == hwnd)
+		//     ::ReleaseCapture();
         return 0;
     }
     case WM_MOUSEWHEEL:
