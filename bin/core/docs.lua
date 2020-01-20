@@ -29,6 +29,12 @@ local function reset_fnbuf(page, filepath)
 	fnbuf:strcpy(filepath)
 end
 
+local function clear_saving(page)
+	page.saving = nil
+	page.saving_tip = nil
+	page.fnbuf = nil
+end
+
 local function do_save_page(page, _filepath)
 	local name, label
 	page.unsaved = page.sv:GetModify()
@@ -53,8 +59,7 @@ local function do_save_page(page, _filepath)
 			return
 		end
 		page.sv:SetSavePoint()
-		page.saving = nil
-		page.saving_tip = nil
+		clear_saving(page)
 		page.unsaved = nil
 		page.file_skey = file_skey
 		if _filepath then
@@ -76,8 +81,7 @@ local function draw_saving_bar(page)
 	if tips then imgui.TextColored(0.7, 0, 0, 1, tips) end
 
 	if imgui.Button('cancel') then
-		page.saving = nil
-		page.saving_tips = nil
+		clear_saving(page)
 	end
 	imgui.SameLine()
 	if imgui.Button('save') then
@@ -99,8 +103,7 @@ local function draw_saving_bar(page)
 	imgui.SameLine()
 	if imgui.Button('close without save') then
 		page.sv:SetSavePoint()
-		page.saving = nil
-		page.saving_tips = nil
+		clear_saving(page)
 		page.open = false
 	end
 	if not input_active then
