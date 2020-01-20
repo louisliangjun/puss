@@ -116,9 +116,19 @@ local function fill_folder(dir, root, matched)
 end
 
 local DIR_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick
-local FILE_FLAGS = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen
+local FILE_FLAGS = ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen
 
 local select_callback = _select_callback or function(tp, info) print('click', tp, info.name) end
+
+local clicked_item, clicked_button
+
+local function check_clicked(v)
+	if imgui.IsItemClicked(ImGuiMouseButton_Left) then
+		clicked_item, clicked_button = v, ImGuiMouseButton_Left
+	elseif imgui.IsItemClicked(ImGuiMouseButton_Right) then
+		clicked_item, clicked_button = v, ImGuiMouseButton_Right
+	end
+end
 
 __exports.reset_select_callback = function(cb)
 	select_callback, _select_callback = cb, cb
@@ -126,7 +136,6 @@ end
 
 local function show_folder(dir, root, depth)
 	if not dir.index then fill_folder(dir, root, depth) end
-	local clicked_type, clicked_item
 	if dir.dirs then
 		for _,v in ipairs(dir.dirs) do
 			local matched = (current_expand_file and depth and v.name==current_expand_file[depth])
@@ -135,7 +144,7 @@ local function show_folder(dir, root, depth)
 				imgui.SetNextItemOpen(true)
 			end
 			local is_open = imgui.TreeNodeEx(v.name, DIR_FLAGS, v.name)
-			if imgui.IsItemClicked() then clicked_type, clicked_item = 'dir', v end
+			check_clicked(v)
 			if is_open then
 				show_folder(v, root, matched and (depth+1))
 				imgui.TreePop()
@@ -149,7 +158,7 @@ local function show_folder(dir, root, depth)
 			local flags = FILE_FLAGS
 			if matched then flags = flags | ImGuiTreeNodeFlags_Selected end
 			imgui.TreeNodeEx(v.name, flags, v.name)
-			if imgui.IsItemClicked() then clicked_type, clicked_item = 'file', v end
+			check_clicked(v)
 			if matched and current_expand_need then
 				-- print(matched, current_expand_need)
 				current_expand_need = false
@@ -157,8 +166,6 @@ local function show_folder(dir, root, depth)
 			end
 		end
 	end
-
-	if clicked_item then select_callback(clicked_type, clicked_item) end
 end
 
 local function check_expand_file()
@@ -248,10 +255,12 @@ __exports.update = function(async_list_dir)
 	check_expand_file()
 
 	local remove_id
+	clicked_item = nil
 	for i,v in ipairs(root_folders) do
 		local matched = (current_expand_file and v.path==current_expand_file[1])
 		if matched and current_expand_need then imgui.SetNextItemOpen(true) end
 		local show, open = imgui.CollapsingHeader(v._label, true)
+		check_clicked(v)
 		if not open then remove_id = i end
 		if show then
 			imgui.PushID(v._label)
@@ -259,6 +268,7 @@ __exports.update = function(async_list_dir)
 			imgui.PopID()
 		end
 	end
+	if clicked_item then select_callback(clicked_item, clicked_button) end
 	if remove_id then table.remove(root_folders, remove_id) end
 	imgui.EndChild()
 end

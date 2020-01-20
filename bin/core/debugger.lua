@@ -34,9 +34,13 @@ show_console_window = show_console_window or false
 show_search_window = show_search_window or true
 use_local_fs = use_local_fs or (use_local_fs==nil)
 
-filebrowser.reset_select_callback(function(tp, info)
-	if tp=='file' then
-		docs.open(info.parent.path..'/'..info.name)
+filebrowser.reset_select_callback(function(item, btn)
+	if item.path then
+		docs.reset_current_dir(item.path)
+	elseif btn==ImGuiMouseButton_Left then
+		docs.open(item.parent.path..'/'..item.name)
+	else
+		docs.reset_current_dir(item.parent.path)
 	end
 end)
 

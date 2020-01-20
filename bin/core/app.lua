@@ -100,15 +100,17 @@ local function fs_list(dir, callback)
 	callback(true, puss.file_list(dir, true))	-- list file & convert name to utf8
 end
 
-shotcuts.register('app/reload', 'Reload scripts', 'F12', true, false, false, false)
-
-filebrowser.reset_select_callback(function(tp, info)
-	if tp=='file' then
-		docs.open(info.parent.path..'/'..info.name)
-	elseif tp=='dir' then
-		docs.reset_current_dir(info.path)
+filebrowser.reset_select_callback(function(item, btn)
+	if item.path then
+		docs.reset_current_dir(item.path)
+	elseif btn==ImGuiMouseButton_Left then
+		docs.open(item.parent.path..'/'..item.name)
+	else
+		docs.reset_current_dir(item.parent.path)
 	end
 end)
+
+shotcuts.register('app/reload', 'Reload scripts', 'F12', true, false, false, false)
 
 local function main_menu()
 	local active, value

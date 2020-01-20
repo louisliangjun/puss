@@ -6,7 +6,6 @@ local shotcuts = puss.import('core.shotcuts')
 local hook = _hook or function(event, ...) end
 
 local current_selected_dir = puss._path
-local current_saving_dir
 
 _inbuf = _inbuf or imgui.CreateByteArray(4*1024)
 _rebuf = _rebuf or imgui.CreateByteArray(4*1024)
@@ -36,7 +35,6 @@ local function do_save_page(page, _filepath)
 	if not page.filepath then
 		if not _filepath then
 			page.saving = true
-			current_saving_dir = nil
 			return
 		end
 	elseif not page.unsaved then
@@ -47,8 +45,8 @@ local function do_save_page(page, _filepath)
 
 	local function page_after_save(ok, file_skey)
 		if not ok then
-			if page.file_skey~=file_skey then				
-				page.saving_tips = 'file modified by other.'
+			if page.file_skey~=file_skey then
+				page.saving_tips = 'bad filename or path or file modified by other.'
 			else
 				page.saving_tips = 'save file failed, maybe readonly.'
 			end
@@ -75,9 +73,7 @@ end
 
 local function draw_saving_bar(page)
 	local tips = page.saving_tips
-	if tips then
-		imgui.Text(tips)
-	end
+	if tips then imgui.TextColored(0.7, 0, 0, 1, tips) end
 
 	if imgui.Button('cancel') then
 		page.saving = nil
@@ -88,18 +84,27 @@ local function draw_saving_bar(page)
 		do_save_page(page, puss.filename_format(page.fnbuf:str()))
 	end
 	imgui.SameLine()
-	if (not page.fnbuf) or (current_saving_dir ~= current_selected_dir) then
-		current_saving_dir = current_selected_dir
-		reset_fnbuf(page, page.saving==true and current_saving_dir..'/noname' or page.saving)
+
+	if (not page.fnbuf) or page.saving_changed_dir then
+		local pth = page.filepath or current_selected_dir..'/'
+		if page.saving_changed_dir then
+			pth = page.saving_changed_dir..'/'
+		end
+		page.saving_changed_dir = nil
+		reset_fnbuf(page, pth)
 	end
 
-	imgui.InputText('##Filename', page.fnbuf, ImGuiInputTextFlags_EnterReturnsTrue)
+	imgui.InputText('##Filename', page.fnbuf)
+	local input_active = imgui.IsItemActive()
 	imgui.SameLine()
 	if imgui.Button('close without save') then
 		page.sv:SetSavePoint()
 		page.saving = nil
 		page.saving_tips = nil
 		page.open = false
+	end
+	if not input_active then
+		imgui.TextColored(0.7, 0.7, 0, 1, 'right click file or folder in filebrowser to set path.')
 	end
 end
 
@@ -384,8 +389,8 @@ end
 
 function tabs_page_save(page, rename)
 	if page.filepath and rename then
-		page.saving = page.filepath
-		current_saving_dir = nil
+		page.saving = true
+		page.saving_changed_dir = nil
 	else
 		do_save_page(page)
 	end
@@ -395,8 +400,8 @@ function tabs_page_close(page)
 	if page.unsaved then
 		page.saving_tips = 'file not saved, need save ?'
 		page.open = true
-		page.saving = page.filepath or true
-		current_saving_dir = nil
+		page.saving = true
+		page.saving_changed_dir = nil
 	end
 end
 
@@ -538,5 +543,12 @@ __exports.setting = function(style_changed)
 end
 
 __exports.reset_current_dir = function(dir)
+	local selected = pages.selected()
+	if selected then
+		local page = pages.lookup(selected)
+		if page.saving then
+			page.saving_changed_dir = dir
+		end
+	end
 	current_selected_dir = dir
 end
