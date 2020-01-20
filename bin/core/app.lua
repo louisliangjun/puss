@@ -25,6 +25,10 @@ local helps =
 	, {name='Samples', module='core.samples'}
 	}
 
+if imgui.ShowFreetypeOptionsWindow then
+	table.insert(helps, {name='Font Options', module=imgui.ShowFreetypeOptionsWindow})
+end
+
 local function menu_windows(wins)
 	local active
 	for i,v in ipairs(wins) do
@@ -150,7 +154,7 @@ local function main_menu()
 		imgui.Separator()
 		if puss.debug then
 			if imgui.MenuItem('Load Debugger') then
-				if os.getenv('OS')=='Windows_NT' then
+				if puss.OS=='win32' then
 					os.execute(string.format('start %s\\%s --main=core.debugger -X-console', puss._path, puss._self))
 				else
 					os.execute(string.format('%s/%s --main=core.debugger &', puss._path, puss._self))

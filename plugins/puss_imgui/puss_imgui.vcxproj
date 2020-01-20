@@ -15,6 +15,7 @@
     <ClCompile Include="imgui\imgui_demo.cpp" />
     <ClCompile Include="imgui\imgui_draw.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
+    <ClCompile Include="imgui\misc\freetype\imgui_freetype.cpp" />
     <ClCompile Include="imgui_impl_dx11.cpp" />
     <ClCompile Include="imgui_impl_win32.cpp" />
     <ClCompile Include="puss_module_imgui.cpp" />
@@ -174,6 +175,7 @@
     <ClInclude Include="imgui\imstb_rectpack.h" />
     <ClInclude Include="imgui\imstb_textedit.h" />
     <ClInclude Include="imgui\imstb_truetype.h" />
+    <ClInclude Include="imgui\misc\freetype\imgui_freetype.h" />
     <ClInclude Include="imgui_impl_dx11.h" />
     <ClInclude Include="imgui_impl_win32.h" />
     <ClInclude Include="puss_imgui_keys.inl" />
@@ -294,8 +296,8 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <AdditionalIncludeDirectories>$(ProjectDir)scintilla3\include\;$(ProjectDir)scintilla3\src\;$(ProjectDir)scintilla3\lexlib\;$(ProjectDir)imgui\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>PUSS_IMGUI_USE_DX11;UNICODE;_UNICODE;SCI_LEXER;_SCL_SECURE_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)scintilla3\include\;$(ProjectDir)scintilla3\src\;$(ProjectDir)scintilla3\lexlib\;$(ProjectDir)imgui\;$(ProjectDir)freetype\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>PUSS_IMGUI_USE_FREETYPE;PUSS_IMGUI_USE_DX11;UNICODE;_UNICODE;SCI_LEXER;_SCL_SECURE_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
     </ClCompile>
     <Link>
@@ -303,6 +305,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(ProjectDir)freetype\objs\freetype.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>$(PussRoot)vmake imgui_wrap scintilla_iface</Command>
@@ -312,13 +315,14 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(ProjectDir)scintilla3\include\;$(ProjectDir)scintilla3\src\;$(ProjectDir)scintilla3\lexlib\;$(ProjectDir)imgui\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>PUSS_IMGUI_USE_DX11;UNICODE;_UNICODE;SCI_LEXER;_SCL_SECURE_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)scintilla3\include\;$(ProjectDir)scintilla3\src\;$(ProjectDir)scintilla3\lexlib\;$(ProjectDir)imgui\;$(ProjectDir)freetype\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>PUSS_IMGUI_USE_FREETYPE;PUSS_IMGUI_USE_DX11;UNICODE;_UNICODE;SCI_LEXER;_SCL_SECURE_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(ProjectDir)freetype\objs\freetype.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>$(PussRoot)vmake imgui_wrap scintilla_iface</Command>

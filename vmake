@@ -246,7 +246,8 @@ local function make_puss_imgui(target)
 
 	local srcs = scan_files(src, function(f) return f:match('^.+%.cpp$') end, nil, true)
 	local objs = make_cpp2objs(srcs, objpath, incs, '-fPIC', '-fvisibility=hidden', flags)
-	local imguiobjs = make_cpp2objs(path_concat(src, 'imgui'), objpath, incs, '-fPIC', '-fvisibility=hidden', flags)
+	local imguisrcs = scan_files(path_concat(src, 'imgui'), function(f) return f:match('^.+%.cpp$') end, nil, true)
+	local imguiobjs = make_cpp2objs(imguisrcs, objpath, incs, '-fPIC', '-fvisibility=hidden', flags)
 	local output = path_concat('bin', 'plugins', target..PUSS_CONFIG_SUFFIX..DLL_SUFFIX)
 	return make_target(output, {objs, imguiobjs, gl3wobjs}, CXX, CFLAGS, flags, '-shared', '-o', output, objs, imguiobjs, gl3wobjs, slibs, libs)
 end

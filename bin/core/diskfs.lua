@@ -35,7 +35,7 @@ __exports.exist = function(filepath)
 	return ctx and true
 end
 
-if os.getenv('OS')=='Windows_NT' then
+if puss.OS=='win32' then
 	O_WRITE, O_READ = 'wb', 'rb'
 
 	__exports.filename_hash = function(filepath)

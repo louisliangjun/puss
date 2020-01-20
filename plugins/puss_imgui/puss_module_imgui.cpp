@@ -13,6 +13,93 @@
 #define STB_IMAGE_STATIC
 #include "stb_image.h"
 
+#ifdef PUSS_IMGUI_USE_FREETYPE
+#include "misc/freetype/imgui_freetype.h"
+
+struct FreeTypeTest
+{
+	enum FontBuildMode
+	{
+		FontBuildMode_FreeType,
+		FontBuildMode_Stb
+	};
+
+	FontBuildMode BuildMode;
+	bool          WantRebuild;
+	float         FontsMultiply;
+	int           FontsPadding;
+	unsigned int  FontsFlags;
+
+	FreeTypeTest()
+	{
+		BuildMode = FontBuildMode_FreeType;
+		WantRebuild = true;
+		FontsMultiply = 1.0f;
+		FontsPadding = 1;
+		FontsFlags = ImGuiFreeType::LightHinting;
+	}
+
+	// Call _BEFORE_ NewFrame()
+	bool UpdateRebuild()
+	{
+		if (!WantRebuild)
+			return false;
+		ImGuiIO& io = ImGui::GetIO();
+		io.Fonts->TexGlyphPadding = FontsPadding;
+		for (int n = 0; n < io.Fonts->ConfigData.Size; n++)
+		{
+			ImFontConfig* font_config = (ImFontConfig*)&io.Fonts->ConfigData[n];
+			font_config->RasterizerMultiply = FontsMultiply;
+			font_config->RasterizerFlags = (BuildMode == FontBuildMode_FreeType) ? FontsFlags : 0x00;
+		}
+		if (BuildMode == FontBuildMode_FreeType)
+			ImGuiFreeType::BuildFontAtlas(io.Fonts, FontsFlags);
+		else if (BuildMode == FontBuildMode_Stb)
+			io.Fonts->Build();
+		WantRebuild = false;
+		return true;
+	}
+
+	// Call to draw interface
+	void ShowFreetypeOptionsWindow(bool* p_open)
+	{
+		if( !ImGui::Begin("FreeType Options", p_open) ) {
+			ImGui::End();
+			return;
+		}
+		ImGui::ShowFontSelector("Fonts");
+		WantRebuild |= ImGui::RadioButton("FreeType", (int*)&BuildMode, FontBuildMode_FreeType);
+		ImGui::SameLine();
+		WantRebuild |= ImGui::RadioButton("Stb (Default)", (int*)&BuildMode, FontBuildMode_Stb);
+		WantRebuild |= ImGui::DragFloat("Multiply", &FontsMultiply, 0.001f, 0.0f, 2.0f);
+		WantRebuild |= ImGui::DragInt("Padding", &FontsPadding, 0.1f, 0, 16);
+		if (BuildMode == FontBuildMode_FreeType)
+		{
+			WantRebuild |= ImGui::CheckboxFlags("NoHinting",     &FontsFlags, ImGuiFreeType::NoHinting);
+			WantRebuild |= ImGui::CheckboxFlags("NoAutoHint",    &FontsFlags, ImGuiFreeType::NoAutoHint);
+			WantRebuild |= ImGui::CheckboxFlags("ForceAutoHint", &FontsFlags, ImGuiFreeType::ForceAutoHint);
+			WantRebuild |= ImGui::CheckboxFlags("LightHinting",  &FontsFlags, ImGuiFreeType::LightHinting);
+			WantRebuild |= ImGui::CheckboxFlags("MonoHinting",   &FontsFlags, ImGuiFreeType::MonoHinting);
+			WantRebuild |= ImGui::CheckboxFlags("Bold",          &FontsFlags, ImGuiFreeType::Bold);
+			WantRebuild |= ImGui::CheckboxFlags("Oblique",       &FontsFlags, ImGuiFreeType::Oblique);
+			WantRebuild |= ImGui::CheckboxFlags("Monochrome",    &FontsFlags, ImGuiFreeType::Monochrome);
+		}
+		ImGui::End();
+	}
+};
+
+static FreeTypeTest	freetype_test;
+
+static int imgui_show_freetype_options_window_lua(lua_State* L) {
+	bool open = lua_toboolean(L, 1)!=0;
+	bool* p_open = lua_gettop(L)>0 ? &open : NULL;
+	freetype_test.ShowFreetypeOptionsWindow(p_open);
+	if(p_open) lua_pushboolean(L, (*p_open) ? 1 : 0); else lua_pushnil(L);
+	return 1;
+}
+
+#endif
+
 #if defined(__GNUC__)
 	#pragma GCC diagnostic ignored "-Wunused-function"          // warning: 'xxxx' defined but not used
 #endif
@@ -372,6 +459,11 @@ static bool prepare_newframe() {
 	if( !ctx )
 		return false;
 
+#ifdef PUSS_IMGUI_USE_FREETYPE
+	if (freetype_test.UpdateRebuild())
+		g_resizeParam = 1;
+#endif
+
 	if( g_resizeParam ) { 
 		LPARAM lParam = g_resizeParam;
 		g_resizeParam = 0;
@@ -385,14 +477,14 @@ static bool prepare_newframe() {
 	ImGuiIO& io = ImGui::GetIO();
 	ImGui_ImplDX11_NewFrame();
 	ImGui_ImplWin32_NewFrame();
-	io.KeysDown[PUSS_IMGUI_KEY_LEFT_SHIFT] = (GetKeyState(VK_LSHIFT) & 0x8000) != 0;
-	io.KeysDown[PUSS_IMGUI_KEY_RIGHT_SHIFT] = (GetKeyState(VK_RSHIFT) & 0x8000) != 0;
-	io.KeysDown[PUSS_IMGUI_KEY_LEFT_CONTROL] = (GetKeyState(VK_LCONTROL) & 0x8000) != 0;
-	io.KeysDown[PUSS_IMGUI_KEY_RIGHT_CONTROL] = (GetKeyState(VK_RCONTROL) & 0x8000) != 0;
-	io.KeysDown[PUSS_IMGUI_KEY_LEFT_ALT] = (GetKeyState(VK_LMENU) & 0x8000) != 0;
-	io.KeysDown[PUSS_IMGUI_KEY_RIGHT_ALT] = (GetKeyState(VK_RMENU) & 0x8000) != 0;
-	io.KeysDown[PUSS_IMGUI_KEY_LEFT_SUPER] = (GetKeyState(VK_LWIN) & 0x8000) != 0;
-	io.KeysDown[PUSS_IMGUI_KEY_RIGHT_SUPER] = (GetKeyState(VK_RWIN) & 0x8000) != 0;
+	io.KeysDown[PUSS_IMGUI_KEY_LEFT_SHIFT] = (GetAsyncKeyState(VK_LSHIFT) & 0x8000) != 0;
+	io.KeysDown[PUSS_IMGUI_KEY_RIGHT_SHIFT] = (GetAsyncKeyState(VK_RSHIFT) & 0x8000) != 0;
+	io.KeysDown[PUSS_IMGUI_KEY_LEFT_CONTROL] = (GetAsyncKeyState(VK_LCONTROL) & 0x8000) != 0;
+	io.KeysDown[PUSS_IMGUI_KEY_RIGHT_CONTROL] = (GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0;
+	io.KeysDown[PUSS_IMGUI_KEY_LEFT_ALT] = (GetAsyncKeyState(VK_LMENU) & 0x8000) != 0;
+	io.KeysDown[PUSS_IMGUI_KEY_RIGHT_ALT] = (GetAsyncKeyState(VK_RMENU) & 0x8000) != 0;
+	io.KeysDown[PUSS_IMGUI_KEY_LEFT_SUPER] = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0;
+	io.KeysDown[PUSS_IMGUI_KEY_RIGHT_SUPER] = (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
 	return true;
 }
 
@@ -941,6 +1033,7 @@ static int imgui_create_lua(lua_State* L) {
 			lua_pop(L, 1);
 		}
 	}
+	ImGui::GetIO().Fonts->AddFontDefault();
 
 	// first frame
 	if( prepare_newframe() ) {
@@ -975,6 +1068,9 @@ static luaL_Reg imgui_plat_lua_apis[] =
 	, {"wait_events", imgui_wait_events_lua}
 	, {"create_image", imgui_image_texture_create_lua}
 	, {"destroy_image", imgui_image_texture_destroy_lua}
+#ifdef PUSS_IMGUI_USE_FREETYPE
+	, {"ShowFreetypeOptionsWindow", imgui_show_freetype_options_window_lua}
+#endif
 	, {NULL, NULL}
 	};
 

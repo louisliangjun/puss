@@ -458,6 +458,9 @@
     </ClCompile>
     <ClCompile Include="imgui_impl_dx11.cpp" />
     <ClCompile Include="imgui_impl_win32.cpp" />
+    <ClCompile Include="imgui\misc\freetype\imgui_freetype.cpp">
+      <Filter>imgui\misc\freetype</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="scintilla_imgui.h" />
@@ -659,6 +662,9 @@
     <ClInclude Include="imgui_impl_win32.h" />
     <ClInclude Include="imgui_impl_dx11.h" />
     <ClInclude Include="puss_imgui_keys.inl" />
+    <ClInclude Include="imgui\misc\freetype\imgui_freetype.h">
+      <Filter>imgui\misc\freetype</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="imgui">
@@ -681,6 +687,12 @@
     </Filter>
     <Filter Include="scintilla3\src">
       <UniqueIdentifier>{d448ffea-0036-4c7b-ac41-74a4d6275b19}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imgui\misc">
+      <UniqueIdentifier>{56375b7b-bf7e-4a5f-b85e-39400350354a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imgui\misc\freetype">
+      <UniqueIdentifier>{0ed5dff7-32ac-4681-b04b-55da265c106a}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
