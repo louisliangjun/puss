@@ -38,22 +38,12 @@ if thread_name then
 
 	puss.import('core.thread_search_file')
 
-	local last_update_time = puss.timestamp()
-	local wait_timeout = 100
+	local wait_timeout = 500
 
 	local function idle()
 		puss.trace_pcall(wait_request)
-
-		local now = puss.timestamp()
-		local delta = now - last_update_time
-		last_update_time = now
-		local more, first_timeout = puss.async_service_update(delta, 32)
-		if first_timeout < 0 then
-			first_timeout = 0
-		elseif first_timeout > 1000 then
-			first_timeout = 1000
-		end
-		wait_timeout = first_timeout
+		wait_timeout = puss.async_service_update() or 500
+		if wait_timeout > 500 then wait_timeout = 500 end
 	end
 
 	if puss.debug then

@@ -10,6 +10,12 @@
 	#include <windows.h>
 	#include <wchar.h>
 
+	#if defined(_MSC_VER) || defined(_MSC_EXTENSIONS)
+		#define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
+	#else
+		#define DELTA_EPOCH_IN_MICROSECS  11644473600000000ULL
+	#endif
+
 	static int _lua_mbcs2wch(lua_State* L, int stridx, UINT code_page, const char* code_page_name) {
 		size_t len = 0;
 		const char* str = luaL_checklstring(L, stridx, &len);
@@ -82,6 +88,29 @@ static inline char* copy_str(char* dst, char* src, size_t n) {
 		}
 	}
 	return dst + n;
+}
+
+lua_Unsigned puss_timestamp_us(void) {
+#ifdef _WIN32
+	FILETIME ft;
+	unsigned __int64 ret = 0;
+	GetSystemTimePreciseAsFileTime(&ft);
+	// GetSystemTimeAsFileTime(&ft);
+	ret |= ft.dwHighDateTime;
+	ret <<= 32;
+	ret |= ft.dwLowDateTime;
+
+	// converting file time to unix epoch
+	ret -= DELTA_EPOCH_IN_MICROSECS;
+	return (lua_Unsigned)(ret / 10);
+#else
+	struct timeval tv;
+	lua_Unsigned ret;
+	gettimeofday(&tv, 0);
+	ret = tv.tv_sec;
+	ret *= 1000000;
+	return ret + tv.tv_usec;
+#endif
 }
 
 size_t puss_format_filename(char* fname) {
@@ -392,37 +421,9 @@ not_found:
 }
 
 static int puss_lua_timestamp(lua_State* L) {
-#ifdef _WIN32
-	#if defined(_MSC_VER) || defined(_MSC_EXTENSIONS)
-		#define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
-	#else
-		#define DELTA_EPOCH_IN_MICROSECS  11644473600000000ULL
-	#endif
-	FILETIME ft;
-	unsigned __int64 ret = 0;
-	GetSystemTimeAsFileTime(&ft);
-	ret |= ft.dwHighDateTime;
-	ret <<= 32;
-	ret |= ft.dwLowDateTime;
-
-	// converting file time to unix epoch
-	ret -= DELTA_EPOCH_IN_MICROSECS;
-	ret /= 10;  // convert into microseconds
-	lua_pushinteger(L, (lua_Integer)(ret / 1000));
-	lua_pushinteger(L, (lua_Integer)(ret / 1000000UL));
-	lua_pushinteger(L, (lua_Integer)(ret % 1000000UL));
-#else
-	struct timeval tv;
-	lua_Unsigned ret;
-	gettimeofday(&tv, 0);
-	ret = tv.tv_sec;
-	ret *= 1000;
-	ret += (tv.tv_usec / 1000);
-	lua_pushinteger(L, (lua_Integer)ret);
-	lua_pushinteger(L, (lua_Integer)tv.tv_sec);
-	lua_pushinteger(L, (lua_Integer)tv.tv_usec);
-#endif
-	return 3;
+	lua_Unsigned us = puss_timestamp_us();
+	lua_pushinteger(L, lua_toboolean(L, 1) ? us : us/1000);
+	return 1;
 }
 
 static int puss_lua_sleep(lua_State* L) {

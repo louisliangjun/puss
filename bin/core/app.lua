@@ -283,6 +283,7 @@ local function do_quit_update()
 end
 
 local function do_update()
+	puss.async_service_update()
 	thread.update()
 	imgui.protect_pcall(show_main_window)
 	do_quit_update()

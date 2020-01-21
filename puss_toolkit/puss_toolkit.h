@@ -41,27 +41,30 @@ typedef struct _PussConfig {
 
 extern PussConfig	__puss_config__;
 
-void		puss_config_init(int argc, char* argv[]);
+void	puss_config_init(int argc, char* argv[]);
 
-#define		puss_lua_get(L, K)	((*(__puss_config__.state_get_key))((L), (K)))
-#define		puss_lua_newstate()	((*(__puss_config__.state_new))())
+#define	puss_lua_get(L, K)	((*(__puss_config__.state_get_key))((L), (K)))
+#define	puss_lua_newstate()	((*(__puss_config__.state_new))())
 
 // export C utils
 
-size_t		puss_format_filename(char* fname);
-int			puss_get_value(lua_State* L, const char* path);
-void*		puss_simple_pack(size_t* plen, lua_State* L, int start, int end);
-int			puss_simple_unpack(lua_State* L, const void* pkt, size_t len);
+size_t	puss_format_filename(char* fname);
+int		puss_get_value(lua_State* L, const char* path);
+void*	puss_simple_pack(size_t* plen, lua_State* L, int start, int end);
+int		puss_simple_unpack(lua_State* L, const void* pkt, size_t len);
+
+#define			puss_timestamp()	(puss_timestamp_us()/1000)
+lua_Unsigned	puss_timestamp_us(void);
 
 // puss builtin modules declare
 
-int			puss_toolkit_open(lua_State* L);
+int	puss_toolkit_open(lua_State* L);
 
-int			puss_reg_puss_utils(lua_State* L);
-int			puss_reg_simple_pickle(lua_State* L);
-int			puss_reg_simple_luastate(lua_State* L);
-int			puss_reg_async_service(lua_State* L);
-int			puss_reg_thread_service(lua_State* L);
+int	puss_reg_puss_utils(lua_State* L);
+int	puss_reg_simple_pickle(lua_State* L);
+int	puss_reg_simple_luastate(lua_State* L);
+int	puss_reg_async_service(lua_State* L);
+int	puss_reg_thread_service(lua_State* L);
 
 PUSS_DECLS_END
 

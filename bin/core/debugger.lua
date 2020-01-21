@@ -677,18 +677,9 @@ local function show_main_window()
 	show_search_window = show_search_window and search.update(true)
 end
 
-local last_update_time = puss.timestamp()
-
 local function do_update()
-	do
-		local now = puss.timestamp()
-		local delta = now - last_update_time
-		last_update_time = now
-		puss.async_service_update(delta, 32)
-	end
-
+	puss.async_service_update()
 	thread.update()
-
 	imgui.protect_pcall(show_main_window)
 
 	if run_sign and imgui.should_close() then

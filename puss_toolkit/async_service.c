@@ -38,7 +38,8 @@ typedef struct _AsyncTask {
 } AsyncTask;
 
 typedef struct _AsyncTaskService {
-	uint64_t		now;				// async task now
+	uint64_t		tm_now;		// async task now
+	uint64_t		tm_last;	// async task last
 	lua_Integer		id_last;
 	lua_Integer		skey_last;
 	lua_Integer		count;
@@ -133,10 +134,11 @@ static inline void async_task_append_to(AsyncTaskService* svs, AsyncTask* task, 
 }
 
 static void async_task_delay(AsyncTaskService* svs, AsyncTask* task, uint64_t delay) {
-	uint64_t timeout = svs->now + delay;
-	if( timeout <= svs->now )
-		timeout = svs->now + 1;
-	if( (timeout < svs->now) || (timeout > TIMEOUT_MAX) )
+	uint64_t now = svs->tm_now;
+	uint64_t timeout = now + delay;
+	if( timeout <= now )
+		timeout = now + 1;
+	if( (timeout < now) || (timeout > TIMEOUT_MAX) )
 		timeout = TIMEOUT_MAX;
 	async_task_reset_timeout(svs, task, timeout);
 }
@@ -368,13 +370,15 @@ static int lua_async_service_resume(lua_State* L) {
 
 static int lua_async_service_update(lua_State* L) {
 	AsyncTaskService* svs = lua_touserdata(L, SERVICE_INDEX);
-	uint64_t now = svs->now + (uint64_t)luaL_checkinteger(L, 1);
-	int step = (int)luaL_optinteger(L, 2, 1);
+	int step = (int)luaL_optinteger(L, 1, 64);
 	AsyncTask* task = NULL;
 	RBXNode* list = &(svs->timers.list);
 	RBXNode* iter;
-
-	svs->now = now;
+	uint64_t now = puss_timestamp();
+	uint64_t delta = (now > svs->tm_last) ? (now - svs->tm_last) : 0;
+	svs->tm_last = now;
+	now = svs->tm_now + delta;
+	svs->tm_now = now;
 
 	for( ; step > 0; --step ) {
 		if( (iter = list->next) == list )
@@ -387,15 +391,12 @@ static int lua_async_service_update(lua_State* L) {
 		async_task_resume(L, svs, task, 0);	// on timer, not need
 	}
 
-	lua_pushboolean(L, task!=NULL);	// need more
-
-	task = (AsyncTask*)(list->next);
-	if( task && (task->timeout <= TIMEOUT_MAX) ) {
-		lua_pushinteger(L, task->timeout - now);	// next interval
+	if( ((task = (AsyncTask*)(list->next))!=NULL) && (task->timeout <= TIMEOUT_MAX) ) {
+		lua_pushinteger(L, (task->timeout <= now) ? (task->timeout - now) : 0);	// next interval
 	} else {
-		lua_pushinteger(L, LUA_MAXINTEGER);
+		lua_pushnil(L);
 	}
-	return 2;
+	return 1;
 }
 
 static int lua_async_service_group_reg(lua_State* L) {
@@ -437,16 +438,18 @@ static int lua_async_service_group_cancel(lua_State* L) {
 	GroupNode* grp;
 	GroupNode* iter;
 	AsyncTask* task;
+	uint64_t now;
 	luaL_checkany(L, 1);
 	lua_pushvalue(L, 1);
 	if( lua_rawget(L, GROUP_MAP_INDEX)!=LUA_TUSERDATA )
 		return 0;
+	now = svs->tm_now;
 	grp = (GroupNode*)lua_touserdata(L, -1);
 	while( (iter = grp->next) != grp ) {
 		task = grp_cast(iter);
 		assert( task->gkey==grp );
 		grp_list_reset(task, NULL);
-		async_task_reset_timeout(svs, task, svs->now);
+		async_task_reset_timeout(svs, task, now);
 	}
 	return 0;
 }
@@ -552,6 +555,9 @@ static luaL_Reg async_task_service_methods[] =
 int puss_reg_async_service(lua_State* L) {
 	AsyncTaskService* svs = lua_newuserdata(L, sizeof(AsyncTaskService));
 	memset(svs, 0, sizeof(AsyncTaskService));
+	svs->tm_now = 0;
+	svs->tm_last = puss_timestamp();
+
 	rbx_init(&(svs->timers));
 	grp_list_init(&(svs->sleep_group));
 

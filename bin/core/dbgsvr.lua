@@ -89,10 +89,7 @@ if puss._debug_proxy then
 				end
 			end
 			puss_debug:continue()
-			return
-		end
-
-		if step < 0 then
+		elseif step < 0 then
 			local ok, stack = puss_debug:__host_pcall('puss._debug_fetch_stack')
 			--print('* host breaked', socket, address)
 			net.send(socket, nil, 'breaked', ok and stack or {})
@@ -100,15 +97,13 @@ if puss._debug_proxy then
 		elseif step > 0 then
 			--print('* host continued', socket, address)
 			net.send(socket, nil, 'continued')
+		elseif socket:valid() then
+			net.update(socket, dispatch)
 		else
-			if socket:valid() then
-				net.update(socket, dispatch)
-			else
-				print('* host detach', socket, address)
-				puss_debug:__reset(hook_main_update, false, 8192)	-- detached
-				socket, address = nil, nil
-				puss_debug:continue()
-			end
+			print('* host detach', socket, address)
+			puss_debug:__reset(hook_main_update, false, 8192)	-- detached
+			socket, address = nil, nil
+			puss_debug:continue()
 		end
 	end
 
