@@ -142,6 +142,13 @@ vmake_target_add('puss_system', function(target)
 	return make_target(output, objs, CC, CFLAGS, '-shared', '-o', output, objs, libs)
 end)
 
+vmake_target_add('puss_linenoise_ng', function(target)
+	vmake('luaproxy')
+	local objs = make_cpp2objs(path_concat('plugins', target), nil, INCLUDES, '-fPIC', '-fvisibility=hidden')
+	local output = path_concat('bin', 'plugins', target..PUSS_CONFIG_SUFFIX..DLL_SUFFIX)
+	return make_target(output, objs, CXX, CXXFLAGS, '-shared', '-o', output, objs)
+end)
+
 -----------------------------
 -- imgui lua wrapper
 

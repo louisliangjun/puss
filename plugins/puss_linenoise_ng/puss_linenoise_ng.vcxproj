@@ -13,7 +13,7 @@
   <ItemGroup>
     <ClCompile Include="ConvertUTF.cpp" />
     <ClCompile Include="linenoise.cpp" />
-    <ClCompile Include="puss_module_linenoise_ng.c" />
+    <ClCompile Include="puss_module_linenoise_ng.cpp" />
     <ClCompile Include="wcwidth.cpp" />
   </ItemGroup>
   <ItemGroup>
