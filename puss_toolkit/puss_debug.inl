@@ -1106,7 +1106,6 @@ static DebugEnv* lua_debugger_new(lua_Alloc f, void* ud) {
 		lua_close(L);
 		L = NULL;
 	}
-	lua_pop(L, 1);
 	return env;
 }
 
