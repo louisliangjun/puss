@@ -47,10 +47,12 @@ static int lua_linenoiseSetCompletionCallback(lua_State* L) {
 }
 
 static int lua_linenoise(lua_State* L) {
-	void linenoiseAddCompletion(linenoiseCompletions* lc, const char* str);
 	const char* prompt = luaL_optstring(L, 1, "");
 	int setup = (linenoiseCompletionState==NULL) && lua_isfunction(L, lua_upvalueindex(1));
 	char* result;
+#ifdef _WIN32
+	if (!GetConsoleWindow())	return 0;
+#endif
 	if( setup )	linenoiseCompletionState = L;
 	result = linenoise(prompt);
 	if( setup )	linenoiseCompletionState = NULL;
@@ -103,6 +105,9 @@ static int lua_linenoiseHistoryFree(lua_State* L) {
 }
 
 static int lua_linenoiseClearScreen(lua_State* L) {
+#ifdef _WIN32
+	if (!GetConsoleWindow())	return 0;
+#endif
 	linenoiseClearScreen();
 	return 0;
 }
@@ -113,6 +118,9 @@ static int lua_linenoiseSetMultiLine(lua_State* L) {
 }
 
 static int lua_linenoisePrintKeyCodes(lua_State* L) {
+#ifdef _WIN32
+	if (!GetConsoleWindow())	return 0;
+#endif
 	linenoisePrintKeyCodes();
 	return 0;
 }
@@ -147,18 +155,6 @@ static luaL_Reg lib_methods[] =
 PussInterface* __puss_iface__ = NULL;
 
 PUSS_PLUGIN_EXPORT int __puss_plugin_init__(lua_State* L, PussInterface* puss) {
-#ifdef _WIN32
-	HWND hWnd = GetConsoleWindow();
-	if (!hWnd) {
-		AllocConsole();
-		if( (hWnd = GetConsoleWindow())!=NULL ) {
-			ShowWindow(hWnd, SW_SHOW);
-			freopen("CONIN$", "r+t", stdin);
-			freopen("CONOUT$", "w+t", stdout);
-			freopen("CONOUT$", "w+t", stderr);
-		}
-	}
-#endif
 	__puss_iface__ = puss;
 	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_LINENOISE_NG_LIB_NAME)==LUA_TTABLE ) {
 		return 1;
