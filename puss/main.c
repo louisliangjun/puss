@@ -7,6 +7,8 @@
 #ifdef _WIN32
 	#define WIN32_LEAN_AND_MEAN
 	#include <windows.h>
+	#include <conio.h>
+	#include <io.h>
 #endif
 
 #include <stdio.h>
@@ -138,10 +140,24 @@ int main(int argc, char* argv[]) {
 restart_label:
 #ifdef _WIN32
 	if( console_mode || (reboot_as_debug_level)) {
-		AllocConsole();
-		freopen("CONIN$", "r+t", stdin);
-		freopen("CONOUT$", "w+t", stdout);
-		freopen("CONOUT$", "w+t", stderr);
+		if( !GetConsoleWindow() ) {
+			HANDLE hConIn, hConOut;
+			AllocConsole();
+			// crt
+			freopen("CONIN$", "r+t", stdin);
+			freopen("CONOUT$", "w+t", stdout);
+			freopen("CONOUT$", "w+t", stderr);
+			// posix
+			_dup2(_fileno(stdin), 0);
+			_dup2(_fileno(stdout), 1);
+			_dup2(_fileno(stderr), 2);
+			// win32
+			hConOut = CreateFileA("CONOUT$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+			hConIn = CreateFileA("CONIN$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+			SetStdHandle(STD_OUTPUT_HANDLE, hConOut);
+			SetStdHandle(STD_ERROR_HANDLE, hConOut);
+			SetStdHandle(STD_INPUT_HANDLE, hConIn);
+		}
 	}
 #endif
 	reboot_as_debug_level = (__puss_config_debug_level__==0);

@@ -46,16 +46,22 @@ static int lua_linenoiseSetCompletionCallback(lua_State* L) {
 	return 0;
 }
 
-static int lua_linenoise(lua_State* L) {
+static int lua_linenoiseReadLine(lua_State* L) {
 	const char* prompt = luaL_optstring(L, 1, "");
 	int setup = (linenoiseCompletionState==NULL) && lua_isfunction(L, lua_upvalueindex(1));
 	char* result;
 #ifdef _WIN32
 	if (!GetConsoleWindow())	return 0;
 #endif
-	if( setup )	linenoiseCompletionState = L;
+	if( setup ) {
+		linenoiseCompletionState = L;
+		linenoiseSetCompletionCallback(linenoiseCompletionCallbackWrapper);
+	}
 	result = linenoise(prompt);
-	if( setup )	linenoiseCompletionState = NULL;
+	if( setup )	{
+		linenoiseSetCompletionCallback(NULL);
+		linenoiseCompletionState = NULL;
+	}
 	if( result ) {
 		lua_pushstring(L, result);
 		free(result);
@@ -136,19 +142,19 @@ static int lua_linenoiseKeyType(lua_State* L) {
 }
 
 static luaL_Reg lib_methods[] =
-	{ {"linenoiseAddCompletion", lua_linenoiseAddCompletion}
-	, {"linenoisePreloadBuffer", lua_linenoisePreloadBuffer}
-	, {"linenoiseHistoryAdd", lua_linenoiseHistoryAdd}
-	, {"linenoiseHistorySetMaxLen", lua_linenoiseHistorySetMaxLen}
-	, {"linenoiseHistoryLine", lua_linenoiseHistoryLine}
-	, {"linenoiseHistorySave", lua_linenoiseHistorySave}
-	, {"linenoiseHistoryLoad", lua_linenoiseHistoryLoad}
-	, {"linenoiseHistoryFree", lua_linenoiseHistoryFree}
-	, {"linenoiseClearScreen", lua_linenoiseClearScreen}
-	, {"linenoiseSetMultiLine", lua_linenoiseSetMultiLine}
-	, {"linenoisePrintKeyCodes", lua_linenoisePrintKeyCodes}
-	, {"linenoiseInstallWindowChangeHandler", lua_linenoiseInstallWindowChangeHandler}
-	, {"linenoiseKeyType", lua_linenoiseKeyType}
+	{ {"AddCompletion", lua_linenoiseAddCompletion}
+	, {"PreloadBuffer", lua_linenoisePreloadBuffer}
+	, {"HistoryAdd", lua_linenoiseHistoryAdd}
+	, {"HistorySetMaxLen", lua_linenoiseHistorySetMaxLen}
+	, {"HistoryLine", lua_linenoiseHistoryLine}
+	, {"HistorySave", lua_linenoiseHistorySave}
+	, {"HistoryLoad", lua_linenoiseHistoryLoad}
+	, {"HistoryFree", lua_linenoiseHistoryFree}
+	, {"ClearScreen", lua_linenoiseClearScreen}
+	, {"SetMultiLine", lua_linenoiseSetMultiLine}
+	, {"PrintKeyCodes", lua_linenoisePrintKeyCodes}
+	, {"InstallWindowChangeHandler", lua_linenoiseInstallWindowChangeHandler}
+	, {"KeyType", lua_linenoiseKeyType}
 	, {NULL, NULL}
 	};
 
@@ -168,11 +174,11 @@ PUSS_PLUGIN_EXPORT int __puss_plugin_init__(lua_State* L, PussInterface* puss) {
 	luaL_setfuncs(L, lib_methods, 0);
 
 	lua_pushboolean(L, 0);
-	lua_pushcclosure(L, lua_linenoise, 1);
+	lua_pushcclosure(L, lua_linenoiseReadLine, 1);
 	lua_pushvalue(L, -1);
-	lua_setfield(L, -3, "linenoise");
+	lua_setfield(L, -3, "ReadLine");
 	lua_pushcclosure(L, lua_linenoiseSetCompletionCallback, 1);
-	lua_setfield(L, -2, "linenoiseSetCompletionCallback");
+	lua_setfield(L, -2, "SetCompletionCallback");
 	return 1;
 }
 
