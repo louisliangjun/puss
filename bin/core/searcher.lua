@@ -104,7 +104,7 @@ local function do_file_search(search_key)
 	return res
 end
 
-_G.search_file = function(search_key)
+__exports.search_file = function(search_key)
 	-- print('search start: ', search_key)
 	local res = do_file_search(search_key)
 	-- print('search', search_key, #res)
@@ -157,11 +157,11 @@ local function do_text_search(search_key)
 	if current_search_task==thread_self then current_search_task = nil end
 end
 
-_G.set_suffix_filter = function(filters)
+__exports.set_suffix_filter = function(filters)
 	current_search_filter = filters
 end
 
-_G.search_text = function(search_key)
+__exports.search_text = function(search_key)
 	if search_key then
 		puss.async_service_run(do_text_search, search_key)
 	else

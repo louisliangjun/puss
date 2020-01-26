@@ -51,7 +51,7 @@ STYLE_COLOR_MAP.dark =
 	, ['number'] = RGB('#F080F0')
 	, ['word'] = RGB('#FFFF00')
 	, ['string'] = RGB('#63A515')
-	, ['preprocessor'] = RGB('#800080')
+	, ['preprocessor'] = RGB('#C000C0')
 	, ['operator'] = RGB('#FF7FFF')
 	, ['label'] = RGB('#00FFFF')
 	}

@@ -33,7 +33,7 @@ local suffix_filter = {}
 local function refresh_suffix_filter()
 	suffix_filter = {}
 	for suffix in ftbuf:str():gmatch('%S+') do suffix_filter[suffix]=true end
-	thread.broadcast(nil, nil, 'set_suffix_filter', suffix_filter)
+	thread.broadcast(nil, nil, 'core.searcher.set_suffix_filter', suffix_filter)
 end
 
 refresh_suffix_filter()

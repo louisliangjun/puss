@@ -4,6 +4,8 @@
     <None Include="thread_utils.h" />
     <None Include="puss_debug.inl" />
     <None Include="puss_plugin.inl" />
+    <None Include="mempe_lua.inl" />
+    <None Include="plugin_protect.inl" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="rbx_tree.h" />

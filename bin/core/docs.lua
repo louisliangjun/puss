@@ -325,7 +325,6 @@ end
 function tabs_page_draw(page, active_page)
 	if (not page.saving) and shotcuts.is_pressed('docs/save') then do_save_page(page) end
 	if shotcuts.is_pressed('docs/close') then page.open = false end
-	if shotcuts.is_pressed('docs/new') then new_page() end
 	puss.trace_pcall(hook, 'docs_page_before_draw', page)
 	if page.saving then draw_saving_bar(page) end
 

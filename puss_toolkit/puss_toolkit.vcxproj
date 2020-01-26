@@ -73,6 +73,8 @@
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <None Include="mempe_lua.inl" />
+    <None Include="plugin_protect.inl" />
     <None Include="puss_debug.inl" />
     <None Include="puss_plugin.inl" />
     <None Include="thread_utils.h" />

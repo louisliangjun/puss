@@ -194,6 +194,7 @@ local function editor_window()
 			docs.open(path)
 		end
 	end
+	if shotcuts.is_pressed('docs/new') then docs.new_page() end
 	pages.update()
 	miniline.update()
 	imgui.End()

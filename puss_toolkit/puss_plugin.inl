@@ -1,15 +1,5 @@
 // puss_plugin.inl
 
-#define _PUSS_IMPLEMENT
-#include "puss_plugin.h"
-
-#include "puss_toolkit.h"
-
-#include <assert.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-
 // interface
 // 
 #define PUSS_NAME_INTERFACES	"_@PussInterface@_"
@@ -105,7 +95,18 @@ static int _puss_lua_plugin_load(lua_State* L) {
 	return 1;
 }
 
+#ifdef _PUSS_PLUGIN_BASIC_PROTECT
+	#include "plugin_protect.inl"
+#endif
+
+#ifdef _PUSS_PLUGIN_USE_MEMORY_PE
+	#include "mempe_lua.inl"
+#endif
+
 static int puss_plugin_loader_reg(lua_State* L) {
+#ifdef _PUSS_PLUGIN_BASIC_PROTECT
+	puss_protect_ensure();
+#endif
 	lua_newtable(L);					// up[1]: plugins
 	lua_pushvalue(L, -2);				// puss
 	lua_setfield(L, -2, "puss");		// puss plugins["puss"] = puss-self
@@ -117,12 +118,21 @@ static int puss_plugin_loader_reg(lua_State* L) {
 	lua_remove(L, -2);
 
 	lua_pushfstring(L, "%s/plugins/", __puss_config__.app_path);	// up[3]: plugin_prefix
+	lua_pushvalue(L, -1);	lua_setfield(L, 1, "_plugin_prefix");
 #ifdef _WIN32
 	lua_pushfstring(L, "%s.dll", __puss_config__.app_config);		// up[4]: plugin_suffix win32
 #else
 	lua_pushfstring(L, "%s.so", __puss_config__.app_config);		// up[4]: plugin_suffix unix
 #endif
+	lua_pushvalue(L, -1);	lua_setfield(L, 1, "_plugin_suffix");
 	lua_pushcclosure(L, _puss_lua_plugin_load, 4);
 	lua_setfield(L, 1, "load_plugin");	// puss.load_plugin
+
+#ifdef _PUSS_PLUGIN_USE_MEMORY_PE
+	lua_pushcfunction(L, _puss_lua_plugin_load_mpe);
+	lua_setfield(L, -2, "load_plugin_mpe");	// puss.load_plugin_mpe
+#endif
+
+	lua_pop(L, 1);
 	return 0;
 }

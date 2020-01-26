@@ -107,7 +107,7 @@ __exports.start_search = function(text)
 	else
 		text = nil
 	end
-	thread.query(nil, nil, 'search_text', text)
+	thread.query(nil, nil, 'core.searcher.search_text', text)
 end
 
 __exports.update = function(show)

@@ -7,7 +7,11 @@ local replys = {}
 
 local thread_name, request_queue = ...
 
+local modules = puss._modules
+
 if thread_name then
+	local modules = puss._modules
+
 	replys[REPLY_QUERY] = function(module_name, handle_name, pt, ...)
 		if not handle_name then return end
 		puss.thread_reply(REPLY_QUERY, module_name, handle_name, ...)
@@ -17,10 +21,22 @@ if thread_name then
 		puss.thread_reply(REPLY_ASYNC, co, sk, false, ...)
 	end
 
+	local function lookup_module_stub(pt)
+		local module_name, handle_name = pt:match('^(.-)%.([_%w]+)$')
+		if not module_name then return end
+		local module = modules[module_name]
+		if not module then
+			local ok, rs = pcall(puss.import, module_name)
+			if ok then module = rs end
+			if not module then return end
+		end
+		return module[handle_name]
+	end
+
 	local function handle_request(reply_mode, k1, k2, pt, ...)
 		if not reply_mode then return end
 		local reply = replys[reply_mode]
-		local stub = _G[pt]
+		local stub = _G[pt] or lookup_module_stub(pt)
 		if type(stub)~='function' then
 			reply(k1, k2, pt, false, string.format('pt(%s) not found', pt))
 		else
@@ -35,8 +51,6 @@ if thread_name then
 	puss.thread_notify = function(module_name, handle_name, ...)
 		puss.thread_reply(REPLY_QUERY, module_name, handle_name, ...)
 	end
-
-	puss.import('core.thread_search_file')
 
 	local wait_timeout = 500
 
@@ -66,7 +80,6 @@ end
 -- main thread
 thread_name, request_queue = 'MAIN', puss.queue_create()
 
-local modules = puss._modules
 local threads = {}
 local THREAD_NUM = 1
 for i=1, THREAD_NUM do

@@ -35,7 +35,7 @@ do
 		-- print(last_index_ver, ver)
 		last_index_ver = ver
 		if folders then
-			thread.broadcast(nil, nil, 'search_indexes_rebuild', folders)
+			thread.broadcast(nil, nil, 'core.searcher.search_indexes_rebuild', folders)
 		end
 	end
 end
@@ -52,7 +52,7 @@ local function show_miniline()
 	if imgui.InputText('##input', inbuf) then
 		local str = inbuf:str()
 		-- print('start search', str)
-		thread.query('core.miniline', 'on_search_result', 'search_file', str)
+		thread.query('core.miniline', 'on_search_result', 'core.searcher.search_file', str)
 	end
 	imgui.PopItemWidth()
 	if not focused then

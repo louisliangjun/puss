@@ -5,8 +5,8 @@
 #endif
 
 #ifdef _WIN32
-	#define WIN32_LEAN_AND_MEAN
 	#include <windows.h>
+	#include <winternl.h>
 	#include <conio.h>
 	#include <io.h>
 #endif
@@ -14,9 +14,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
+#include <stdint.h>
 
-#include "puss_plugin.inl"
+#define _PUSS_IMPLEMENT
+#include "puss_plugin.h"
+#include "puss_toolkit.h"
+
+#define _PUSS_PLUGIN_BASIC_PROTECT
+#define _PUSS_PLUGIN_USE_MEMORY_PE
 #include "puss_debug.inl"
+#include "puss_plugin.inl"
 
 #define PUSS_DEFAULT_SCRIPT_FILE "default.lua"
 

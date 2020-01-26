@@ -702,11 +702,6 @@ static int lua_debug_capture_error(lua_State* L) {
 }
 
 #ifndef PUSS_DEBUG_NOT_USE_DISASM
-	#ifdef VOID
-		#undef VOID
-	#endif
-	#define VOID(p)		((const void*)(p))
-
 	#ifdef _MSC_VER
 		#if (_MSC_VER < 1900)
 			#ifndef snprintf
@@ -878,7 +873,7 @@ static int lua_debug_capture_error(lua_State* L) {
 				printf("\t; to %d", sbx + pc + 2);
 				break;
 			case OP_CLOSURE:
-				printf("\t; %p", VOID(f->p[bx]));
+				printf("\t; %p", (void*)(f->p[bx]));
 				break;
 			case OP_SETLIST:
 				if (c == 0) printf("\t; %d", (int)code[++pc]); else printf("\t; %d", c);
@@ -948,7 +943,7 @@ static int lua_debug_capture_error(lua_State* L) {
 		printf("\n%s <%s:%d,%d> (%d instruction%s at %p)\n",
 			(f->linedefined == 0) ? "main" : "function", s,
 			f->linedefined, f->lastlinedefined,
-			S(f->sizecode), VOID(f));
+			S(f->sizecode), (void*)(f));
 		printf("%d%s param%s, %d slot%s, %d upvalue%s, ",
 			(int)(f->numparams), f->is_vararg ? "+" : "", SS(f->numparams),
 			S(f->maxstacksize), S(f->sizeupvalues));
@@ -961,7 +956,7 @@ static int lua_debug_capture_error(lua_State* L) {
 	{
 		int i, n;
 		n = f->sizek;
-		printf("constants (%d) for %p:\n", n, VOID(f));
+		printf("constants (%d) for %p:\n", n, (void*)(f));
 		for (i = 0; i < n; i++)
 		{
 			printf("\t%d\t", i + 1);
@@ -969,14 +964,14 @@ static int lua_debug_capture_error(lua_State* L) {
 			printf("\n");
 		}
 		n = f->sizelocvars;
-		printf("locals (%d) for %p:\n", n, VOID(f));
+		printf("locals (%d) for %p:\n", n, (void*)(f));
 		for (i = 0; i < n; i++)
 		{
 			printf("\t%d\t%s\t%d\t%d\n",
 				i, getstr(f->locvars[i].varname), f->locvars[i].startpc + 1, f->locvars[i].endpc + 1);
 		}
 		n = f->sizeupvalues;
-		printf("upvalues (%d) for %p:\n", n, VOID(f));
+		printf("upvalues (%d) for %p:\n", n, (void*)(f));
 		for (i = 0; i < n; i++)
 		{
 			printf("\t%d\t%s\t%d\t%d\n",
