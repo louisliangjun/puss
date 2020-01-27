@@ -56,21 +56,15 @@ __exports.build_plugin = function(toolchain, plugin_name, srcs)
 		)
 end
 
-__exports.build_plugin_sample = function()
-	build_plugin(tinycc, 'sample_plugin', puss._path..'/test/sample_plugin.c')
-end
-
 --[[
 	-- build & load
-	puss.import('core.cc').build_plugin_sample()
+	puss.import('core.cc').build_plugin(tinycc, 'sample_plugin', puss._path..'/test/sample_plugin.c')
 	tee = puss.load_plugin('sample_plugin')
 	print( tee.add(3,4) )
 	local reload = true
 	tee = puss.load_plugin_mpe('sample_plugin', reload)
 	print( tee.add(3,4) )
---]]
 
---[[
 	-- load from mem
 	local diskfs = puss.import('core.diskfs')
 	local plugin_name = puss._plugin_prefix..'sample_plugin'..puss._plugin_suffix
@@ -78,11 +72,9 @@ end
 	print(tee)
 	print(tee.add(3,4))
 	print(tee.div(9,2))
---]]
 
---[[
+	-- exception handle
 	tee = puss.load_plugin_mpe('sample_plugin')
 	print( tee.add(3,4) )
 	print( tee.div(4,0) )
 --]]
-
