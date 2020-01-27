@@ -41,9 +41,9 @@ static lua_CFunction ppp_wrap_fetch_raw_cfunction(lua_State* L) {
 
 	static DWORD WINAPI except_filter(EXCEPTION_POINTERS *ex_info) {
 		if( _ppp_sigLJ ) {
-			// MessageBoxA(NULL, "XX", except_handle_tid==tid ? "XXX" : "YYY", MB_OK);	// used for debug
+			// MessageBoxA(NULL, "XX", "YYY", MB_OK);	// used for debug
 			if( _ppp_sigLJ->e==0 ) {
-				char msg[64];
+				// char msg[64];
 				switch (ex_info->ExceptionRecord->ExceptionCode) {
 				case EXCEPTION_ACCESS_VIOLATION:	_ppp_sigLJ->e = "EXCEPTION_ACCESS_VIOLATION";	break;
 				case EXCEPTION_INT_DIVIDE_BY_ZERO:	_ppp_sigLJ->e = "EXCEPTION_INT_DIVIDE_BY_ZERO";	break;
@@ -51,7 +51,7 @@ static lua_CFunction ppp_wrap_fetch_raw_cfunction(lua_State* L) {
 				default:							_ppp_sigLJ->e = "Exception";						break;
 				}
 				// Trace RT: _ppp_sigLJ->f, ex_info->ContextRecord
-				sprintf(msg, "%s(%x)\n", _ppp_sigLJ->e, ex_info->ExceptionRecord->ExceptionCode);
+				// sprintf(msg, "%s(%x)\n", _ppp_sigLJ->e, ex_info->ExceptionRecord->ExceptionCode);
 				// MessageBoxA(NULL, msg, "PluginProtect Error", MB_OK | MB_ICONERROR);	// used for debug
 			}
 			return EXCEPTION_EXECUTE_HANDLER;

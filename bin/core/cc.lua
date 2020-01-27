@@ -61,11 +61,28 @@ __exports.build_plugin_sample = function()
 end
 
 --[[
-puss.import('core.cc').build_plugin_sample()
-local diskfs = puss.import('core.diskfs')
-local plugin_name = puss._plugin_prefix..'sample_plugin'..puss._plugin_suffix
-mm = mm or puss.load_plugin_mpe('sample_plugin', diskfs.load(plugin_name))
-print(mm)
-print(mm.add(3,4))
-print(mm.div(9,2))
+	-- build & load
+	puss.import('core.cc').build_plugin_sample()
+	tee = puss.load_plugin('sample_plugin')
+	print( tee.add(3,4) )
+	local reload = true
+	tee = puss.load_plugin_mpe('sample_plugin', reload)
+	print( tee.add(3,4) )
 --]]
+
+--[[
+	-- load from mem
+	local diskfs = puss.import('core.diskfs')
+	local plugin_name = puss._plugin_prefix..'sample_plugin'..puss._plugin_suffix
+	tee = puss.load_plugin_mpe('mem_sample', diskfs.load(plugin_name))
+	print(tee)
+	print(tee.add(3,4))
+	print(tee.div(9,2))
+--]]
+
+--[[
+	tee = puss.load_plugin_mpe('sample_plugin')
+	print( tee.add(3,4) )
+	print( tee.div(4,0) )
+--]]
+

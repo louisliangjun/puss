@@ -95,8 +95,10 @@ static int _puss_lua_plugin_load(lua_State* L) {
 	return 1;
 }
 
-#ifdef _PUSS_PLUGIN_BASIC_PROTECT
+#ifdef _WIN32
+  #ifdef _PUSS_PLUGIN_BASIC_PROTECT
 	#include "plugin_protect.inl"
+  #endif
 #endif
 
 #ifdef _PUSS_PLUGIN_USE_MEMORY_PE
@@ -104,35 +106,61 @@ static int _puss_lua_plugin_load(lua_State* L) {
 #endif
 
 static int puss_plugin_loader_reg(lua_State* L) {
+	int top = lua_gettop(L);
 #ifdef _PUSS_PLUGIN_BASIC_PROTECT
 	puss_protect_ensure();
 #endif
-	lua_newtable(L);					// up[1]: plugins
+
+	// top + 1
+	lua_newtable(L);					// plugins
 	lua_pushvalue(L, -2);				// puss
 	lua_setfield(L, -2, "puss");		// puss plugins["puss"] = puss-self
 
-	luaL_requiref(L, LUA_LOADLIBNAME, luaopen_package, 0);
-	assert( lua_type(L, -1)==LUA_TTABLE );
-	lua_getfield(L, -1, "loadlib");		// up[2]: package.loadlib
-	assert( lua_type(L, -1)==LUA_TFUNCTION );
-	lua_remove(L, -2);
+	// top + 2
+	lua_pushfstring(L, "%s/plugins/", __puss_config__.app_path);
+	lua_pushvalue(L, -1);
+	lua_setfield(L, 1, "_plugin_prefix");	// puss._plugin_prefix
 
-	lua_pushfstring(L, "%s/plugins/", __puss_config__.app_path);	// up[3]: plugin_prefix
-	lua_pushvalue(L, -1);	lua_setfield(L, 1, "_plugin_prefix");
+	// top + 3
 #ifdef _WIN32
-	lua_pushfstring(L, "%s.dll", __puss_config__.app_config);		// up[4]: plugin_suffix win32
+	lua_pushfstring(L, "%s.dll", __puss_config__.app_config);
 #else
-	lua_pushfstring(L, "%s.so", __puss_config__.app_config);		// up[4]: plugin_suffix unix
+	lua_pushfstring(L, "%s.so", __puss_config__.app_config);
 #endif
-	lua_pushvalue(L, -1);	lua_setfield(L, 1, "_plugin_suffix");
-	lua_pushcclosure(L, _puss_lua_plugin_load, 4);
-	lua_setfield(L, 1, "load_plugin");	// puss.load_plugin
+	lua_pushvalue(L, -1);
+	lua_setfield(L, 1, "_plugin_suffix");	// puss._plugin_suffix
 
-#ifdef _PUSS_PLUGIN_USE_MEMORY_PE
-	lua_pushcfunction(L, _puss_lua_plugin_load_mpe);
-	lua_setfield(L, -2, "load_plugin_mpe");	// puss.load_plugin_mpe
+	// puss.load_plugin
+	{
+		lua_pushvalue(L, top+1);			// up[1]: puss.plugins
+
+		luaL_requiref(L, LUA_LOADLIBNAME, luaopen_package, 0);
+		assert( lua_type(L, -1)==LUA_TTABLE );
+		lua_getfield(L, -1, "loadlib");		// up[2]: package.loadlib
+		assert( lua_type(L, -1)==LUA_TFUNCTION );
+		lua_remove(L, -2);
+
+		lua_pushvalue(L, top + 2);			// up[3]: puss.plugin_prefix
+		lua_pushvalue(L, top + 3);			// up[4]: puss.plugin_suffix
+		lua_pushcclosure(L, _puss_lua_plugin_load, 4);
+		lua_setfield(L, 1, "load_plugin");	// puss.load_plugin
+	}
+
+#ifdef _WIN32
+  #ifdef _PUSS_PLUGIN_USE_MEMORY_PE
+	lua_pushvalue(L, top + 1);	// up[1]: puss.plugins
+	lua_pushvalue(L, top + 2);	// up[2]: puss.plugin_prefix
+	lua_pushvalue(L, top + 3);	// up[3]: puss.plugin_suffix
+	#ifdef _PUSS_PLUGIN_BASIC_PROTECT
+		lua_pushlightuserdata(L, &puss_protect_interface);	// up[4]: puss_interface, protect support
+	#else
+		lua_pushlightuserdata(L, &puss_interface);			// up[4]: puss_interface
+	#endif
+	lua_pushcclosure(L, _puss_lua_plugin_load_mpe, 4);
+	lua_setfield(L,1, "load_plugin_mpe");	// puss.load_plugin_mpe
+  #endif
 #endif
 
-	lua_pop(L, 1);
+	lua_settop(L, top);
 	return 0;
 }

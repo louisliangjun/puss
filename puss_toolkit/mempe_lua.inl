@@ -555,7 +555,7 @@ static HANDLE LoadFromFile(LPCSTR filename)
 
 static VOID AGT_mem_unload_dll(HANDLE hMod)
 {
-	;
+	FreeLibraryFromMemory(hMod);
 }
 
 static HANDLE AGT_load_from_resources(int IDD_RESOURCE)
@@ -782,7 +782,8 @@ static void MemoryDefaultFreeLibrary(HCUSTOMMODULE module, void *userdata)
 #define MPE_NAME	"MPEModule"
 
 typedef struct _MPELua {
-	HANDLE	module;
+	HANDLE				module;
+	struct LuaProxy*	luaproxy;
 } MPELua;
 
 static int mpe_destroy(lua_State* L) {
@@ -799,64 +800,118 @@ static luaL_Reg mpe_methods[] =
 	, {NULL, NULL}
 	};
 
+static const int MPE_KEY = 0;
+
+static void mpe_lua_pushcclosure(lua_State* L, lua_CFunction f, int nup) {
+	MPELua* mpe = NULL;
+	if( lua_rawgetp(L, LUA_REGISTRYINDEX, &MPE_KEY)==LUA_TUSERDATA )
+		mpe = luaL_testudata(L, -1, "MPEModule");
+	if( mpe && mpe->luaproxy ) {
+		mpe->luaproxy->lua_pushcclosure(L, f, nup+1);
+	} else {
+		lua_pushcclosure(L, f, nup+1);
+	}
+}
+
+static void mpe_luaL_setfuncs(lua_State *L, const luaL_Reg *l, int nup) {
+	luaL_checkstack(L, nup+2, "too many upvalues");
+	for (; l->name != NULL; l++) {  /* fill the table with given functions */
+		int i;
+		for (i = 0; i < nup; i++)  /* copy upvalues to the top */
+			lua_pushvalue(L, -nup);
+		mpe_lua_pushcclosure(L, l->func, nup);  /* closure with those upvalues */
+		lua_setfield(L, -(nup + 2), l->name);
+	}
+	lua_pop(L, nup);  /* remove upvalues */
+}
+
 static int _plugin_init_wrap(lua_State* L) {
 	PussPluginInit init = (PussPluginInit)lua_touserdata(L, lua_upvalueindex(1));
 	PussInterface* puss_iface = (PussInterface*)lua_touserdata(L, lua_upvalueindex(2));
+	lua_pushvalue(L, lua_upvalueindex(3));	// mpe
+	lua_rawsetp(L, LUA_REGISTRYINDEX, &MPE_KEY);
+	puss_iface->lua_proxy.lua_pushcclosure = mpe_lua_pushcclosure;
+	puss_iface->lua_proxy.luaL_setfuncs = mpe_luaL_setfuncs;
 	init(L, puss_iface);
 	return lua_gettop(L);
 }
 
+// function puss.load_plugin_mpe(plugin_name, reload)
+//	if type(reload)=='string' then
+//		-- reload plugin, reload is memory dll content
+//	elseif reload then
+//		-- reload plugin
+//	else
+//		-- use exist or load
+//	end
+// end
+// 
 static int _puss_lua_plugin_load_mpe(lua_State* L) {
-	PussInterface* puss_iface = &puss_interface;
 	const char* name = luaL_checkstring(L, 1);
-	size_t len = 0;
-	const char* mem = luaL_checklstring(L, 2, &len);
+	int reload = lua_toboolean(L, 2);
 	MPELua* ud = NULL;
 	PussPluginInit f = NULL;
-	if( lua_getfield(L, LUA_REGISTRYINDEX, name)==LUA_TUSERDATA ) {
-		ud = (MPELua*)lua_touserdata(L, -1);
-	} else {
+	PussInterface* puss_iface = lua_touserdata(L, lua_upvalueindex(4));
+	struct LuaProxy old;
+	int state;
+	lua_settop(L, 2);	// arg2
+
+	if( !reload ) {
+		if( lua_getfield(L, lua_upvalueindex(1), name) != LUA_TNIL )
+			return 1;
 		lua_pop(L, 1);
 	}
-	if( !ud ) {
-		ud = (MPELua*)lua_newuserdata(L, sizeof(MPELua));
-		ud->module = NULL;
 
-		if( luaL_newmetatable(L, MPE_NAME) ) {
-			luaL_setfuncs(L, mpe_methods, 0);
-			lua_pushvalue(L, -1);
-			lua_setfield(L, -2, "__index");
-		}
-		lua_setmetatable(L, -2);
-		ud->module = (HANDLE)AGT_mem_load_dll(mem, len, NULL, NULL, NULL, NULL);
-		if( !ud->module )
-			return luaL_error(L, "mpe load failed!");
-		lua_pushvalue(L, -1);
-		lua_setfield(L, LUA_REGISTRYINDEX, name);
+	ud = (MPELua*)lua_newuserdata(L, sizeof(MPELua));	// 3
+	ud->module = NULL;
+	ud->luaproxy = NULL;
+	if( luaL_newmetatable(L, MPE_NAME) ) {
+		luaL_setfuncs(L, mpe_methods, 0);
 	}
-	f = (PussPluginInit)AGT_get_proc_addr(ud->module, "__puss_plugin_init__");
-	if( !f )
+	lua_setmetatable(L, -2);
+
+	if( lua_isstring(L, 2) ) {
+		size_t len = 0;
+		const char* mem = lua_tolstring(L, 2, &len);
+		ud->module = AGT_mem_load_dll(mem, len, NULL, NULL, NULL, NULL);
+	} else {
+		lua_pushvalue(L, lua_upvalueindex(2));	// prefix
+		lua_pushvalue(L, 1);	// plugin_name
+		lua_pushvalue(L, lua_upvalueindex(3));	// suffix
+		lua_concat(L, 3);
+		ud->module = LoadFromFile(lua_tostring(L, -1));
+	}
+	lua_settop(L, 3);
+
+	if( !ud->module )
+		luaL_error(L, "plugin load failed!");
+
+	if( (f = (PussPluginInit)AGT_get_proc_addr(ud->module, "__puss_plugin_init__"))==NULL )
 		luaL_error(L, "load plugin fetch init __puss_plugin_init__ function failed!");
-	lua_settop(L, 0);
 
 	// __puss_plugin_init__()
+	lua_pushlightuserdata(L, f);
+	lua_pushvalue(L, lua_upvalueindex(4));	// puss_interface
+	lua_pushvalue(L, 3);	// mpe
+	puss_iface->lua_proxy.lua_pushcclosure(L, _plugin_init_wrap, 3);
+	lua_replace(L, 2);
+	lua_settop(L, 2);
+
+	old = puss_iface->lua_proxy;
+	ud->luaproxy = &old;
+	state = lua_pcall(L, 0, LUA_MULTRET, 0);
+	puss_iface->lua_proxy = old;
+	ud->luaproxy = NULL;
+
+	if( state )
+		luaL_error(L, "plugin init failed: %s", lua_tostring(L, -1));
+
 	// puss_plugin_loaded[name] = <last return value> or true
 	// 
-
-#ifdef _PUSS_PLUGIN_BASIC_PROTECT
-	puss_iface = &puss_protect_interface;
-#endif
-	lua_settop(L, 1);
-	lua_pushlightuserdata(L, f);
-	lua_pushlightuserdata(L, puss_iface);
-	puss_iface->lua_proxy.lua_pushcclosure(L, _plugin_init_wrap, 2);
-	lua_insert(L, 1);
-	lua_settop(L, 2);
-	lua_call(L, 1, LUA_MULTRET);
-	if( lua_isnoneornil(L, -1) ) {
-		lua_settop(L, 0);
+	if( lua_gettop(L) < 2 )
 		lua_pushboolean(L, 1);
-	}
+	lua_pushvalue(L, -1);
+	lua_setfield(L, lua_upvalueindex(1), name);
 	return 1;
 }
 
