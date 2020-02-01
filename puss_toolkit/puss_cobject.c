@@ -18,14 +18,15 @@
 #define PUSS_COBJREF_MT	"PussCObjRef"
 
 typedef struct _PussCProperty {
-	PussCObjectFormula	formular;	// formular
-	int					level;		// dependence level
-	const uint16_t*		actives;	// deps actives list, actives[0] used for num of array
-	const char*			name;		// property name
+	const char*			name;			// property name
+	PussCObjectFormula	formular;		// formular
+	const uint16_t*		actives;		// deps actives list, actives[0] used for num of array
+	int					level;			// dependence level
+	int					notify;			// change notify to lua
 } PussCProperty;
 
 struct _PussCPropsModule {
-	int					lock;		// lock changes notify
+	int					lock;			// lock changes notify
 	uint16_t			dirty[1];
 };
 
@@ -33,12 +34,13 @@ struct _PussCSchema {
 	lua_Unsigned		id_mask;
 	lua_Integer			field_count;
 	lua_Integer			prop_dirty_notify_max_loop_times;	// may modify object in changed event, so need loop notify dirty, default loop 3 times
-	PussCProperty*		properties;	// array of properties
+	PussCProperty*		properties;		// array of properties
 	const char*			types;
 	const PussCValue*	defs;
 	size_t				total_count;
 	size_t				cache_count;
 	PussCObjectChanged*	change_handles;	// array of handles, endswith NULL
+	int					change_notify;	// properties has notify & notify handle registed
 };
 
 typedef struct _PussCObjRef {
@@ -230,13 +232,27 @@ static inline uint16_t _dirtys_count(uint16_t num, uint16_t* arr) {
 
 // upvalueindex in these callbacks  1:values: 2:formulas
 // args 1: object or objref, other: unknown
-// 
+
+static int lua_formular_wrap(lua_State* L, const PussCObject* obj, lua_Integer field) {
+	assert( (field > 0) && (field <= obj->schema->field_count) );
+	lua_rawgeti(L, lua_upvalueindex(2), field);	// formular
+	assert( lua_isfunction(L, -1) );
+	lua_pushvalue(L, 1);	// object
+	lua_pushvalue(L, -3);	// value
+	if( lua_pcall(L, 2, LUA_MULTRET, 0) ) {
+		lua_pop(L, 1);
+		return 0;
+	}
+	return 1;
+}
+
 static void props_notify_once(lua_State* L, const PussCObject* obj, uint16_t num, uint16_t* arr, uint16_t n, int top) {
 	const PussCProperty* props = obj->schema->properties;
 	PussCObjectChanged* changes = obj->schema->change_handles;
 	PussCPropsModule* m = (PussCPropsModule*)(obj->props_module);
 	uint16_t* updates = (uint16_t*)_alloca(sizeof(uint16_t) * n);
 	uint16_t pos, i, j;
+	int change_notify = obj->schema->change_notify;
 	PussCObjectFormula formular;
 	PussCObjectChanged handle;
 
@@ -279,15 +295,17 @@ static void props_notify_once(lua_State* L, const PussCObject* obj, uint16_t num
 	// clear dirtys
 	PUSS_BITSETLIST_CLEAR(num, arr);
 
-	if( !changes )
+	if( !(changes || change_notify) )
 		return;
-	assert( *changes );
 
+	change_notify = 0;
 	i = 0;
 	for( j=i; j<n; ++j ) {
 		if( (pos = updates[j])!=0 ) {
 			if( i != j )
 				updates[i] = pos;
+			if( props[pos].notify )
+				change_notify = 1;
 			++i;
 		}
 	}
@@ -308,6 +326,22 @@ static void props_notify_once(lua_State* L, const PussCObject* obj, uint16_t num
 			lua_settop(L, top);
 		}
 	}
+
+	// notify lua changed handle, use formulars[NULL] as changed handle
+	if( change_notify ) {
+		if( lua_rawgetp(L, lua_upvalueindex(2), NULL)==LUA_TFUNCTION ) {
+			for( i=0; i<n; ++i ) {
+				if( props[updates[i]].notify ) {
+					lua_pushvalue(L, -1);
+					lua_pushvalue(L, 1);
+					lua_pushinteger(L, updates[i]);
+					if( lua_pcall(L, 2, 0, 0) )
+						lua_pop(L, 1);
+				}
+			}
+		}
+		lua_settop(L, top);
+	}
 }
 
 static void props_changes_notify(lua_State* L, const PussCObject* obj) {
@@ -324,7 +358,6 @@ static void props_changes_notify(lua_State* L, const PussCObject* obj) {
 	}
 }
 
-typedef void (*PussCObjectChanged)(lua_State* L, const PussCObject* obj, lua_Integer field);
 static PussCObject* cobject_check(lua_State* L, int arg) {
 	PussCObject* obj = (PussCObject*)lua_touserdata(L, 1);
 	if( obj
@@ -396,7 +429,6 @@ static int cobject_set(lua_State* L) {
 static int cobject_call(lua_State* L) {
 	PussCObject* obj = cobject_check(L, 1);
 	PussCPropsModule* m = obj->props_module;
-	int state;
 	luaL_checktype(L, 2, LUA_TFUNCTION);
 	lua_pushvalue(L, 1);
 	if( m==NULL || m->lock ) {
@@ -408,11 +440,10 @@ static int cobject_call(lua_State* L) {
 	}
 	lua_insert(L, 3);
 	m->lock = TRUE;
-	state = lua_pcall(L, lua_gettop(L) - 2, LUA_MULTRET, 0);
+	if( lua_pcall(L, lua_gettop(L) - 2, LUA_MULTRET, 0) )
+		lua_pop(L, 1);
 	props_changes_notify(L, obj);
 	m->lock = FALSE;
-	if( state )
-		luaL_error(L, "object batch call error: %s", lua_tostring(L, 2));
 	return lua_gettop(L) - 1;
 }
 
@@ -531,7 +562,6 @@ static int cobjref_set(lua_State* L) {
 static int cobjref_call(lua_State* L) {
 	PussCObjRef* ref = cobjref_check(L, 1);
 	PussCPropsModule* m;
-	int state;
 	if( !ref->obj )
 		luaL_argerror(L, 1, "already freed");
 	luaL_checktype(L, 2, LUA_TFUNCTION);
@@ -545,10 +575,11 @@ static int cobjref_call(lua_State* L) {
 	}
 	lua_insert(L, 3);
 	m->lock = TRUE;
-	state = lua_pcall(L, lua_gettop(L) - 2, LUA_MULTRET, 0);
+	if( lua_pcall(L, lua_gettop(L) - 2, LUA_MULTRET, 0) )
+		lua_pop(L, 1);
 	props_changes_notify(L, ref->obj);
 	m->lock = FALSE;
-	return state ? luaL_error(L, "object batch call error: %s", lua_tostring(L, 2)) : (lua_gettop(L) - 1);
+	return lua_gettop(L) - 1;
 }
 
 static int cobjref_stat(lua_State* L) {
@@ -745,7 +776,7 @@ static int cschema_prop_deps_parse(lua_State* L) {
 	return 0;
 }
 
-static void cschema_prop_reset_props(lua_State* L, PussCSchema* raw, int descs) {
+static void cschema_prop_reset_props(lua_State* L, PussCSchema* raw, int descs, int formulars) {
 	const char* types = raw->types;
 	PussCProperty* raw_props = (PussCProperty*)(raw->properties);
 	PussCProperty* prop;
@@ -758,6 +789,7 @@ static void cschema_prop_reset_props(lua_State* L, PussCSchema* raw, int descs) 
 	PussCSchema* schema = (PussCSchema*)lua_newuserdata(L, struct_sz);	// top
 	PussCValue* defs = (PussCValue*)(schema + 1);
 	PussCProperty* props = (PussCProperty*)(defs + 1 + n);
+	int enable_change_notify = 0;
 	int top = lua_gettop(L);
 	memset(schema, 0, struct_sz);
 	assert( (char*)props == ((char*)(schema + 1) + defs_sz) );
@@ -816,6 +848,14 @@ static void cschema_prop_reset_props(lua_State* L, PussCSchema* raw, int descs) 
 			}
 		}
 		lua_settop(L, desc);
+
+		if( lua_getfield(L, desc, "change_notify")!=LUA_TNIL ) {	// desc.change_notify
+			if( lua_toboolean(L, -1) ) {
+				prop->notify = 1;
+				enable_change_notify = 1;
+			}
+		}
+		lua_settop(L, desc);
 	}
 
 	memcpy((void*)(raw->defs), defs, defs_sz);
@@ -824,6 +864,13 @@ static void cschema_prop_reset_props(lua_State* L, PussCSchema* raw, int descs) 
 		raw_props[i] = props[i];
 		props[i] = tmp;
 	}
+
+	if( enable_change_notify ) {
+		// use formulars[NULL] as changed handle
+		enable_change_notify = (lua_rawgetp(L, formulars, NULL)==LUA_TFUNCTION);
+		lua_pop(L, 1);
+	}
+	raw->change_notify = enable_change_notify;
 }
 
 static int cschema_create(lua_State* L) {
@@ -931,7 +978,7 @@ static int cschema_create(lua_State* L) {
 	}
 #undef idxof_elem
 
-	cschema_prop_reset_props(L, schema, 2);
+	cschema_prop_reset_props(L, schema, 2, idxof_formulars);
 	lua_settop(L, idxof_names);
 
 	luaL_newmetatable(L, PUSS_COBJECT_MT);	lua_setmetatable(L, idxof_obj_mt);
@@ -1004,12 +1051,14 @@ static int cschema_refresh(lua_State* L) {
 	if( (n = schema->field_count) != luaL_len(L, 2) )
 		luaL_error(L, "cschema property num not matched!");
 	lua_settop(L, 2);
+	if( !(lua_getupvalue(L, 1, 4) && lua_type(L, -1)==LUA_TTABLE) )
+		luaL_error(L, "fetch formulars table failed!");
 
 	lua_pushcfunction(L, cschema_prop_deps_parse);
 	lua_pushvalue(L, 2);
 	lua_call(L, 1, 0);
 
-	// now stack 1:creator 2:descs
+	// now stack 1:creator 2:descs 3:formulars
 	for( i=1; i<=n; ++i ) {
 		PussCProperty* prop = &(schema->properties[i]);
 		const int desc = 4;
@@ -1031,7 +1080,7 @@ static int cschema_refresh(lua_State* L) {
 		lua_settop(L, desc);
 	}
 
-	cschema_prop_reset_props(L, schema, 2);
+	cschema_prop_reset_props(L, schema, 2, 3);
 	return 0;
 }
 
@@ -1069,15 +1118,6 @@ static int puss_cobject_cache(lua_State* L) {
 	return 2;
 }
 
-static int lua_formular_wrap(lua_State* L, const PussCObject* obj, lua_Integer field) {
-	assert( (field > 0) && (field <= obj->schema->field_count) );
-	lua_rawgeti(L, lua_upvalueindex(2), field);	// formular
-	assert( lua_isfunction(L, -1) );
-	lua_pushvalue(L, 1);	// object
-	lua_pushvalue(L, -3);	// value
-	return lua_pcall(L, 2, LUA_MULTRET, 0);
-}
-
 static int cschema_formular_reset(lua_State* L) {
 	PussCSchema* schema;
 	lua_Integer field = luaL_checkinteger(L, 2);
@@ -1087,7 +1127,7 @@ static int cschema_formular_reset(lua_State* L) {
 	schema = cschema_check_fetch(L, 1);
 	luaL_argcheck(L, (field>0 && field<=schema->field_count), 2, "out of range");
 	if( !(lua_getupvalue(L, 1, 4) && lua_type(L, -1)==LUA_TTABLE) )
-		luaL_error(L, "cschema fetch formular tables failed!");
+		luaL_error(L, "fetch formular table failed!");
 	if( clear ) {
 		lua_pushboolean(L, 0);
 		lua_rawseti(L, -2, field);
@@ -1097,6 +1137,33 @@ static int cschema_formular_reset(lua_State* L) {
 		lua_rawseti(L, -2, field);
 		schema->properties[field].formular = lua_formular_wrap;
 	}
+	return 0;
+}
+
+static int cschema_changed_reset(lua_State* L) {
+	PussCSchema* schema;
+	int clear = lua_isnoneornil(L, 2);
+	int change_notify = 0;
+	lua_Integer i;
+	if( !clear )
+		luaL_checktype(L, 2, LUA_TFUNCTION);
+	schema = cschema_check_fetch(L, 1);
+	if( !(lua_getupvalue(L, 1, 4) && lua_type(L, -1)==LUA_TTABLE) )
+		luaL_error(L, "fetch formular table failed!");
+	if( clear ) {
+		lua_pushboolean(L, 0);
+		lua_rawsetp(L, -2, NULL);	// use formulars[NULL] as changed handle
+	} else {
+		lua_pushvalue(L, 2);
+		lua_rawsetp(L, -2, NULL);	// use formulars[NULL] as changed handle
+		for( i=1; i<=schema->field_count; ++i ) {
+			if( schema->properties[i].notify ) {
+				change_notify = 1;
+				break;
+			}
+		}
+	}
+	schema->change_notify = change_notify;
 	return 0;
 }
 
@@ -1110,7 +1177,7 @@ void puss_cschema_formular_reset(lua_State* L, int creator, lua_Integer field, P
 	if( lua_isnoneornil(L, -1) )
 		luaL_error(L, "cschema formular ref MUST module ref, can NOT none or nil!");
 	if( !(lua_getupvalue(L, creator, 4) && lua_type(L, -1)==LUA_TTABLE) )
-		luaL_error(L, "cschema fetch formular table failed!");
+		luaL_error(L, "fetch formular table failed!");
 	lua_insert(L, -2);
 	lua_rawseti(L, -2, field);
 	lua_pop(L, 1);
@@ -1177,6 +1244,7 @@ static luaL_Reg cobject_lib_methods[] =
 	{ {"cschema_create", NULL}
 	, {"cschema_refresh", cschema_refresh}
 	, {"cschema_formular_reset", cschema_formular_reset}
+	, {"cschema_changed_reset", cschema_changed_reset}
 	, {"cschema_dirty_loop_reset", cschema_dirty_loop_reset}
 	, {"cobject_metatable", cobject_metatable}
 	, {"puss_cobject_cache", puss_cobject_cache}
