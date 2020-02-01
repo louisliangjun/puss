@@ -65,6 +65,7 @@ int	puss_reg_simple_pickle(lua_State* L);
 int	puss_reg_simple_luastate(lua_State* L);
 int	puss_reg_async_service(lua_State* L);
 int	puss_reg_thread_service(lua_State* L);
+int	puss_reg_cobject(lua_State* L);
 
 PUSS_DECLS_END
 

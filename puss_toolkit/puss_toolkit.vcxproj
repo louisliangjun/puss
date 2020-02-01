@@ -73,6 +73,8 @@
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\include\puss_bitset.h" />
+    <ClInclude Include="..\include\puss_cobject.h" />
     <None Include="mempe_lua.inl" />
     <None Include="plugin_protect.inl" />
     <None Include="puss_debug.inl" />
@@ -80,10 +82,14 @@
     <None Include="thread_utils.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\include\puss_lua.h" />
+    <ClInclude Include="..\include\puss_macros.h" />
+    <ClInclude Include="..\include\puss_plugin.h" />
     <ClInclude Include="puss_toolkit.h" />
     <ClInclude Include="rbx_tree.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="puss_cobject.c" />
     <ClCompile Include="puss_utils.c" />
     <ClCompile Include="async_service.c" />
     <ClCompile Include="puss_core.c" />

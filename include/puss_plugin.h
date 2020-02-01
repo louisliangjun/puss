@@ -4,6 +4,7 @@
 #define _INC_PUSS_LUA_PLUGIN_H_
 
 #include "puss_lua.h"
+#include "puss_cobject.h"
 
 typedef struct _PussInterface	PussInterface;
 
@@ -26,9 +27,18 @@ PUSS_DECLS_BEGIN
 struct _PussInterface {
 	struct LuaProxy	lua_proxy;
 
-	void*	(*interface_check)(lua_State* L, const char* name);
-	void	(*interface_register)(lua_State* L, const char* name, void* iface);
-	void	(*push_consts_table)(lua_State* L);
+	void* (*interface_check)(lua_State* L, const char* name);
+	void  (*interface_register)(lua_State* L, const char* name, void* iface);
+	void  (*push_consts_table)(lua_State* L);
+
+	// cobject
+	const PussCObject*	(*cobject_check)(lua_State* L, int arg, lua_Unsigned struct_id_mask);
+	const PussCObject*	(*cobject_test)(lua_State* L, int arg, lua_Unsigned struct_id_mask);
+	int   (*cobject_get)(lua_State* L, int obj, lua_Integer field);
+	int   (*cobject_set)(lua_State* L, int obj, lua_Integer field);
+	void  (*cobject_batch_call)(lua_State* L, int obj, int nargs, int nresults);
+	void  (*cschema_formular_reset)(lua_State* L, int creator, lua_Integer field, PussCObjectFormula formular);
+	void  (*cschema_changed_reset)(lua_State* L, int creator, const char* name, PussCObjectChanged handle);
 };
 
 #ifdef _WIN32

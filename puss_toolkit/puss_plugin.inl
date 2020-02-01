@@ -51,6 +51,14 @@ static PussInterface puss_interface =
 	, puss_interface_check
 	, puss_interface_register
 	, puss_push_consts_table
+
+	, puss_cobject_check
+	, puss_cobject_test
+	, puss_cobject_get
+	, puss_cobject_set
+	, puss_cobject_batch_call
+	, puss_cschema_formular_reset
+	, puss_cschema_changed_reset
 	};
 
 static void _push_plugin_filename(lua_State* L) {
