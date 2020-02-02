@@ -266,7 +266,7 @@ static void cobj_do_clear(lua_State* L, const PussCSchema* schema, const PussCOb
 	}
 }
 
-static lua_Integer sync_fetch_and_clear(lua_State* L, PussCObject* obj, PussCSyncModule* m, int ret) {
+static lua_Integer sync_fetch_and_reset(lua_State* L, PussCObject* obj, PussCSyncModule* m, int ret, uint8_t filter_mask) {
 	const uint8_t* masks = obj->schema->sync_field_mask;
 	const uint16_t* map = obj->schema->sync_idx_to_field;
 	uint16_t num = obj->schema->sync_field_count;
@@ -274,14 +274,30 @@ static lua_Integer sync_fetch_and_clear(lua_State* L, PussCObject* obj, PussCSyn
 	uint16_t pos;
 	lua_Integer i = 0;
 	lua_Integer field;
-	PUSS_BITSETLIST_ITER(num, arr, pos) {
-		assert( (pos > 0) && (pos <= num) );
-		field = map[pos];
-		assert( (field > 0) && (field <= obj->schema->field_count) );
+	if( filter_mask==0xFF ) {
+		PUSS_BITSETLIST_ITER(num, arr, pos) {
+			assert( (pos > 0) && (pos <= num) );
+			field = map[pos];
+			assert( (field > 0) && (field <= obj->schema->field_count) );
 
-		lua_pushinteger(L, field);			lua_rawseti(L, ret, ++i);
-		lua_pushinteger(L, masks[field]);	lua_rawseti(L, ret, ++i);
-		cobj_geti(L, obj, field);			lua_rawseti(L, ret, ++i);
+			lua_pushinteger(L, field);			lua_rawseti(L, ret, ++i);
+			lua_pushinteger(L, masks[field]);	lua_rawseti(L, ret, ++i);
+			cobj_geti(L, obj, field);			lua_rawseti(L, ret, ++i);
+		}
+		PUSS_BITSETLIST_CLEAR(num, arr);
+	} else {
+		PUSS_BITSETLIST_ITER(num, arr, pos) {
+			if( PUSS_BITSETLIST_TEST(num, arr, pos) ) {
+				field = map[pos];
+				if( (masks[field] & filter_mask)==filter_mask ) {
+					PUSS_BITSETLIST_RESET(num, arr, pos);
+
+					lua_pushinteger(L, field);			lua_rawseti(L, ret, ++i);
+					lua_pushinteger(L, masks[field]);	lua_rawseti(L, ret, ++i);
+					cobj_geti(L, obj, field);			lua_rawseti(L, ret, ++i);
+				}
+			}
+		}
 	}
 	return i / 3;
 }
@@ -554,8 +570,11 @@ static int cobject_call(lua_State* L) {
 static int cobject_sync(lua_State* L) {
 	PussCObject* obj = cobject_check(L, 1);
 	PussCSyncModule* m = obj->sync_module;
+	lua_Unsigned filter_mask;
 	luaL_checktype(L, 2, LUA_TTABLE);
-	lua_pushinteger(L, m ? sync_fetch_and_clear(L, obj, m, 2) : 0);
+	filter_mask = (lua_Unsigned)luaL_optinteger(L, 3, 0x0FF);
+	luaL_argcheck(L, (filter_mask & 0x0FF)==filter_mask, 3, "bad mask!");
+	lua_pushinteger(L, m ? sync_fetch_and_reset(L, obj, m, 2, (uint8_t)filter_mask) : 0);
 	return 1;
 }
 
@@ -706,8 +725,11 @@ static int cobjref_call(lua_State* L) {
 static int cobjref_sync(lua_State* L) {
 	PussCObjRef* ref = cobjref_check(L, 1);
 	PussCSyncModule* m = ref->obj->sync_module;
+	lua_Unsigned filter_mask;
 	luaL_checktype(L, 2, LUA_TTABLE);
-	lua_pushinteger(L, m ? sync_fetch_and_clear(L, ref->obj, m, 2) : 0);
+	filter_mask = (lua_Unsigned)luaL_optinteger(L, 3, 0x0FF);
+	luaL_argcheck(L, (filter_mask & 0x0FF)==filter_mask, 3, "bad mask!");
+	lua_pushinteger(L, m ? sync_fetch_and_reset(L, ref->obj, m, 2, (uint8_t)filter_mask) : 0);
 	return 1;
 }
 
@@ -1397,6 +1419,29 @@ size_t puss_cobject_sync_fetch_and_clear(lua_State* L, const PussCObject* obj, u
 			res[i] = map[res[i]];
 		}
 		ret = n;
+	}
+	return ret;
+}
+
+size_t puss_cobject_sync_fetch_and_reset(lua_State* L, const PussCObject* obj, uint16_t* res, size_t len, uint8_t filter_mask) {
+	size_t ret = 0;
+	if( obj && obj->sync_module && res && (len >= obj->schema->sync_field_count) ) {
+		const PussCSchema* schema = obj->schema;
+		const uint8_t* masks = schema->sync_field_mask;
+		const uint16_t* map = schema->sync_idx_to_field;
+		uint16_t num = schema->sync_field_count;
+		uint16_t* arr = obj->sync_module->dirty;
+		uint16_t pos, field;
+		PUSS_BITSETLIST_ITER(num, arr, pos) {
+			if( PUSS_BITSETLIST_TEST(num, arr, pos) ) {
+				field = map[pos];
+				if( (masks[field] & filter_mask)==filter_mask ) {
+					PUSS_BITSETLIST_RESET(num, arr, pos);
+					res[ret++] = field;
+				}
+			}
+		}
+		assert( ret <= len );
 	}
 	return ret;
 }

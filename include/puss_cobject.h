@@ -105,6 +105,7 @@ struct _PussCObject {
 
 	void   puss_cobject_sync_fetch_infos(lua_State* L, int creator, PussCSyncInfo* info);
 	size_t puss_cobject_sync_fetch_and_clear(lua_State* L, const PussCObject* obj, uint16_t* res, size_t len);	// len MUST >= PussCSyncInfo.sync_count
+	size_t puss_cobject_sync_fetch_and_reset(lua_State* L, const PussCObject* obj, uint16_t* res, size_t len, uint8_t filter_mask);	// len MUST >= PussCSyncInfo.sync_count
 #endif
 
 #endif//_PUSS_LUA_INC_COBJECT_H_
