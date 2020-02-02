@@ -56,7 +56,6 @@ static PussInterface puss_interface =
 	, puss_cobject_test
 	, puss_cobject_get
 	, puss_cobject_set
-	, puss_cobject_batch_call
 	, puss_cschema_formular_reset
 	, puss_cschema_changed_reset
 	};

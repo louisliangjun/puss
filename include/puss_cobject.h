@@ -9,7 +9,8 @@
 #define	PUSS_COBJECT_MEMALIGN_SIZE(size)	( ((size) + (sizeof(void*)-1)) & (~(sizeof(void*)-1)) )
 
 #define PUSS_COBJECT_IDMASK_SUPPORT_REF		0x80000000	// object ref & cache support
-#define PUSS_COBJECT_IDMASK_SUPPORT_PROPS	0x40000000	// property support: formula, change notify, dirty notify
+#define PUSS_COBJECT_IDMASK_SUPPORT_PROP	0x40000000	// property support: formula, change notify, dirty notify
+#define PUSS_COBJECT_IDMASK_SUPPORT_SYNC	0x20000000	// sync support
 
 #define	PUSS_CVTYPE_CUSTOM	0
 #define	PUSS_CVTYPE_BOOL	1
@@ -38,7 +39,8 @@ typedef lua_Integer	PussCInt;
 typedef lua_Number	PussCNum;
 typedef lua_Integer	PussCLua;
 
-typedef struct _PussCPropsModule	PussCPropsModule;
+typedef struct _PussCPropModule	PussCPropModule;
+typedef struct _PussCSyncModule	PussCSyncModule;
 
 // lua stack: 1:object -1:new-value
 typedef int  (*PussCObjectFormula)(lua_State* L, const PussCObject* obj, lua_Integer field);	// [-0, +1, e] push new value, return succeed
@@ -62,32 +64,47 @@ union _PussCValue {
 
 struct _PussCObject {
 	const PussCSchema*	schema;
-	PussCPropsModule*	props_module;
+	PussCPropModule*	prop_module;
+	PussCSyncModule*	sync_module;
 	PussCValue			values[1];	// values[0] no use!
 };
 
+// puss-toolkit & plugin both used intrfaces
+// 
 #ifdef _PUSS_IMPLEMENT
-	const PussCObject*	puss_cobject_check(lua_State* L, int arg, lua_Unsigned struct_id_mask);
-	const PussCObject*	puss_cobject_test(lua_State* L, int arg, lua_Unsigned struct_id_mask);
+	const PussCObject*	puss_cobject_check(lua_State* L, int arg, lua_Unsigned id_mask);
+	const PussCObject*	puss_cobject_test(lua_State* L, int arg, lua_Unsigned id_mask);
 
 	int   puss_cobject_get(lua_State* L, int obj, lua_Integer field);	// [-0, +1, e] return typeof value
 	int   puss_cobject_set(lua_State* L, int obj, lua_Integer field);	// [-1, +0, e] pop new-value from stack, return set succeed
 
-	void  puss_cobject_batch_call(lua_State* L, int obj, int nargs, int nresults);	// [-(1+nargs), +(nresults), e]
-
 	void  puss_cschema_formular_reset(lua_State* L, int creator, lua_Integer field, PussCObjectFormula formular);	// [-1, +0, e] pop module ref from stack
 	void  puss_cschema_changed_reset(lua_State* L, int creator, const char* name, PussCObjectChanged handle);		// [-0|-1, +0, e] pop module ref from stack if handle!=NULL
 #else
-	#define puss_cobject_check(L, arg, struct_id_mask)		(*(__puss_iface__->cobject_check))((L),(arg),(struct_id_mask))
-	#define puss_cobject_test(L, arg, struct_id_mask)		(*(__puss_iface__->cobject_test))((L),(arg),(struct_id_mask))
+	#define puss_cobject_check(L, arg, id_mask)		(*(__puss_iface__->cobject_check))((L),(arg),(id_mask))
+	#define puss_cobject_test(L, arg, id_mask)		(*(__puss_iface__->cobject_test))((L),(arg),(id_mask))
 
-	#define puss_cobject_get(L, obj, field)					(*(__puss_iface__->cobject_get))((L),(obj),(field))
-	#define puss_cobject_set(L, obj, field)					(*(__puss_iface__->cobject_set))((L),(obj),(field))
+	#define puss_cobject_get(L, obj, field)			(*(__puss_iface__->cobject_get))((L),(obj),(field))
+	#define puss_cobject_set(L, obj, field)			(*(__puss_iface__->cobject_set))((L),(obj),(field))
 
-	#define puss_cobject_batch_call(L, obj, nargs, nret)	(*(__puss_iface__->cobject_batch_call))((L),(obj),(nargs),(nret))
+	#define puss_cschema_formular_reset(L,c,i,f)	(*(__puss_iface__->cschema_formular_reset))((L),(c),(i),(f))
+	#define puss_cschema_changed_reset(L,c,n,h)		(*(__puss_iface__->cschema_changed_reset))((L),(c),(n),(h))
+#endif
 
-	#define puss_cschema_formular_reset(L,c,i,f)			(*(__puss_iface__->cschema_formular_reset))((L),(c),(i),(f))
-	#define puss_cschema_changed_reset(L,c,n,h)				(*(__puss_iface__->cschema_changed_reset))((L),(c),(n),(h))
+// puss-toolkit interfaces, can not used in plugin
+// 
+#ifdef _PUSS_IMPLEMENT
+	void  puss_cobject_batch_call(lua_State* L, int obj, int nargs, int nresults);	// [-(1+nargs), +(nresults), e]
+
+	typedef struct _PussCSyncInfo {
+		lua_Unsigned	id_mask;
+		size_t			field_count;
+		size_t			sync_count;
+		const uint8_t*	field_masks;	// array[1+field_count]
+	} PussCSyncInfo;
+
+	void   puss_cobject_sync_fetch_infos(lua_State* L, int creator, PussCSyncInfo* info);
+	size_t puss_cobject_sync_fetch_and_clear(lua_State* L, const PussCObject* obj, uint16_t* res, size_t len);	// len MUST >= PussCSyncInfo.sync_count
 #endif
 
 #endif//_PUSS_LUA_INC_COBJECT_H_

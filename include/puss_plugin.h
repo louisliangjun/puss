@@ -32,11 +32,10 @@ struct _PussInterface {
 	void  (*push_consts_table)(lua_State* L);
 
 	// cobject
-	const PussCObject*	(*cobject_check)(lua_State* L, int arg, lua_Unsigned struct_id_mask);
-	const PussCObject*	(*cobject_test)(lua_State* L, int arg, lua_Unsigned struct_id_mask);
+	const PussCObject*	(*cobject_check)(lua_State* L, int arg, lua_Unsigned id_mask);
+	const PussCObject*	(*cobject_test)(lua_State* L, int arg, lua_Unsigned id_mask);
 	int   (*cobject_get)(lua_State* L, int obj, lua_Integer field);
 	int   (*cobject_set)(lua_State* L, int obj, lua_Integer field);
-	void  (*cobject_batch_call)(lua_State* L, int obj, int nargs, int nresults);
 	void  (*cschema_formular_reset)(lua_State* L, int creator, lua_Integer field, PussCObjectFormula formular);
 	void  (*cschema_changed_reset)(lua_State* L, int creator, const char* name, PussCObjectChanged handle);
 };
