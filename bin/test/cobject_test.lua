@@ -4,7 +4,7 @@ local COBJECT_SUPPORT_REF = 0x80000000
 local COBJECT_SUPPORT_PROP = 0x40000000
 local COBJECT_SUPPORT_SYNC = 0x20000000
 
-local DemoObjectIDMask = 0x00000001 | COBJECT_SUPPORT_REF | COBJECT_SUPPORT_PROP | COBJECT_SUPPORT_SYNC
+local DemoObjectIDMask = 0x00000001 | COBJECT_SUPPORT_REF | COBJECT_SUPPORT_PROP -- | COBJECT_SUPPORT_SYNC
 
 local fields =
 	{ {name='a', type='int', sync=0x01, deps={}}
@@ -70,11 +70,13 @@ local function test()
 	end)
 
 	trace('load plguin ...')
+	local plugin
 	if puss.load_plugin_mpe then
-		puss.load_plugin_mpe('cobject_demo')(DemoObject)
+		plugin = puss.load_plugin_mpe('cobject_demo')
 	else
-		puss.load_plugin('cobject_demo')(DemoObject)
+		plugin = puss.load_plugin('cobject_demo')
 	end
+	plugin.reg(DemoObject)
 
 	trace('create object ...', DemoObject)
 	_G.t1 = DemoObject()
@@ -111,7 +113,20 @@ local function test()
 	local count = 100000
 	perf({}, count, 'table')
 	perf(t1, count, 'cobject')
+	t1(function(t1) perf(t1, count, 'cobject-batch') end)
 	perf(t2, count, 'lobject')
+	do
+		local ts = puss.timestamp(true)
+		plugin.test(t1, count)
+		local te = puss.timestamp(true)
+		trace('tcc', te-ts)
+	end
+	do
+		local ts = puss.timestamp(true)
+		t1(plugin.test, count)
+		local te = puss.timestamp(true)
+		trace('tcc-batch', te-ts)
+	end
 	_G.print = trace
 end
 

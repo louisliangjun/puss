@@ -899,7 +899,7 @@ static int _puss_lua_plugin_load_mpe(lua_State* L) {
 
 	old = puss_iface->lua_proxy;
 	ud->luaproxy = &old;
-	state = lua_pcall(L, 0, LUA_MULTRET, 0);
+	state = lua_pcall(L, 0, 1, 0);
 	puss_iface->lua_proxy = old;
 	ud->luaproxy = NULL;
 
@@ -908,7 +908,7 @@ static int _puss_lua_plugin_load_mpe(lua_State* L) {
 
 	// puss_plugin_loaded[name] = <last return value> or true
 	// 
-	if( lua_gettop(L) < 2 )
+	if( lua_isnil(L, -1) )
 		lua_pushboolean(L, 1);
 	lua_pushvalue(L, -1);
 	lua_setfield(L, lua_upvalueindex(1), name);

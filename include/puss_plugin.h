@@ -34,8 +34,9 @@ struct _PussInterface {
 	// cobject
 	const PussCObject*	(*cobject_check)(lua_State* L, int arg, lua_Unsigned id_mask);
 	const PussCObject*	(*cobject_test)(lua_State* L, int arg, lua_Unsigned id_mask);
-	int   (*cobject_get)(lua_State* L, int obj, lua_Integer field);
-	int   (*cobject_set)(lua_State* L, int obj, lua_Integer field);
+	int   (*cobject_get)(lua_State* L, const PussCObject* obj, lua_Integer field);
+	int   (*cobject_set)(lua_State* L, const PussCObject* obj, lua_Integer field);
+	int   (*cobject_set_int)(lua_State* L, const PussCObject* obj, lua_Integer field, lua_Integer nv);
 	void  (*cschema_formular_reset)(lua_State* L, int creator, lua_Integer field, PussCObjectFormula formular);
 	void  (*cschema_changed_reset)(lua_State* L, int creator, const char* name, PussCObjectChanged handle);
 };
