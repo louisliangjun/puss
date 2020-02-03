@@ -17,9 +17,6 @@
 #define PUSS_COBJECT_MT	"PussCObject"
 #define PUSS_COBJREF_MT	"PussCObjRef"
 
-#define PESUDO_FORMULAR_FIELD_CHANGED_HANDLE	((void*)1)
-#define PESUDO_FORMULAR_FIELD_SYNC_IDX_TO_FILED	((void*)2)
-
 typedef struct _PussCProperty {
 	const char*			name;			// property name
 	PussCObjectFormula	formular;		// formular
@@ -47,6 +44,7 @@ struct _PussCSchema {
 	lua_Integer			prop_dirty_notify_max_loop_times;	// may modify object in changed event, so need loop notify dirty, default loop 3 times
 	int					change_notify_script;	// properties has notify & script notify handle registed
 	int					change_notify_mode;		// 0-module first other-property first
+	int					change_handle_ref;
 
 	// property sync module
 	uint16_t			sync_field_count;
@@ -141,7 +139,7 @@ static void sync_on_changed(lua_State* L, const PussCObject* obj, lua_Integer fi
 
 // values
 
-static PussCString _cvalue_null_str = {0, {0}};
+static PussCStr _cvalue_null_str = {0, {0}};
 
 static void vstr_free(PussCValue* v) {
 	if( v->s && v->s->len ) {
@@ -186,7 +184,7 @@ static int cobj_seti_vstr(lua_State* L, const PussCObject* obj, PussCValue* v) {
 				return TRUE;
 			}
 		} else if( n != v->s->len ) {
-			PussCString* vs = (PussCString*)malloc(sizeof(PussCString) + n);
+			PussCStr* vs = (PussCStr*)malloc(sizeof(PussCStr) + n);
 			if( !vs )
 				luaL_error(L, "str new failed!");
 			vs->len = n;
@@ -327,14 +325,14 @@ static int lua_formular_wrap(lua_State* L, const PussCObject* obj, lua_Integer f
 	assert( lua_isfunction(L, -1) );
 	lua_pushvalue(L, 1);	// object
 	lua_pushvalue(L, -3);	// value
-	if( lua_pcall(L, 2, LUA_MULTRET, 0) ) {
+	if( lua_pcall(L, 2, 1, 0) ) {
 		lua_pop(L, 1);
 		return 0;
 	}
 	return 1;
 }
 
-static void props_do_notify_module_first(lua_State* L, const PussCObject* obj, const PussCProperty* props, const PussCObjectChanged* changes, int notify_script, uint16_t* updates, uint16_t n, int formulars) {
+static void props_do_notify_module_first(lua_State* L, const PussCObject* obj, const PussCProperty* props, const PussCObjectChanged* changes, int notify_script, uint16_t* updates, uint16_t n, int top) {
 	PussCObjectChanged h;
 	uint16_t i;
 
@@ -344,18 +342,18 @@ static void props_do_notify_module_first(lua_State* L, const PussCObject* obj, c
 			h = *changes;
 			for( i=0; i<n; ++i ) {
 				assert( updates[i] );
-				assert( lua_gettop(L) == formulars );
+				assert( lua_gettop(L) == top );
 				// notify prop changed, changes 
 				(*h)(L, obj, updates[i]);
-				assert( lua_gettop(L) >= formulars );
-				lua_settop(L, formulars);
+				assert( lua_gettop(L) >= top );
+				lua_settop(L, top);
 			}
 		}
 	}
 
-	// notify lua changed handle, use formulars[PESUDO_FORMULAR_FIELD_CHANGED_HANDLE] as changed handle
+	// notify lua changed handle
 	if( notify_script ) {
-		if( lua_rawgetp(L, formulars, PESUDO_FORMULAR_FIELD_CHANGED_HANDLE)==LUA_TFUNCTION ) {
+		if( lua_rawgeti(L, LUA_REGISTRYINDEX, obj->schema->change_handle_ref)==LUA_TFUNCTION ) {
 			for( i=0; i<n; ++i ) {
 				if( props[updates[i]].notify ) {
 					lua_pushvalue(L, -1);
@@ -366,11 +364,11 @@ static void props_do_notify_module_first(lua_State* L, const PussCObject* obj, c
 				}
 			}
 		}
-		lua_settop(L, formulars);
+		lua_settop(L, top);
 	}
 }
 
-static void props_do_notify_property_first(lua_State* L, const PussCObject* obj, const PussCProperty* props, const PussCObjectChanged* changes, int notify_script, uint16_t* updates, uint16_t n, int formulars) {
+static void props_do_notify_property_first(lua_State* L, const PussCObject* obj, const PussCProperty* props, const PussCObjectChanged* changes, int notify_script, uint16_t* updates, uint16_t n, int top) {
 	const PussCObjectChanged* p;
 	PussCObjectChanged h;
 	uint16_t pos, i;
@@ -382,26 +380,25 @@ static void props_do_notify_property_first(lua_State* L, const PussCObject* obj,
 		if( (p = changes) != NULL ) {
 			for( ; *p; ++p ) {
 				h = *p;
-				assert( lua_gettop(L) == formulars );
+				assert( lua_gettop(L) == top );
 				// notify prop changed, changes 
 				(*h)(L, obj, pos);
-				assert( lua_gettop(L) >= formulars );
-				lua_settop(L, formulars);
+				assert( lua_gettop(L) >= top );
+				lua_settop(L, top);
 			}
 		}
 		if( notify_script && props[updates[i]].notify ) {
-			if( lua_rawgetp(L, formulars, PESUDO_FORMULAR_FIELD_CHANGED_HANDLE)==LUA_TFUNCTION ) {
-				lua_pushvalue(L, 1);
-				lua_pushinteger(L, pos);
-				if( lua_pcall(L, 2, 0, 0) )
-					lua_pop(L, 1);
-			}
-			assert( lua_gettop(L) == formulars );
+			lua_rawgeti(L, LUA_REGISTRYINDEX, obj->schema->change_handle_ref);
+			lua_pushvalue(L, 1);
+			lua_pushinteger(L, pos);
+			if( lua_pcall(L, 2, 0, 0) )
+				lua_pop(L, 1);
+			assert( lua_gettop(L) == top );
 		}
 	}
 }
 
-static void props_apply_formular_and_notify_once(lua_State* L, const PussCObject* obj, uint16_t num, uint16_t* arr, uint16_t n, int formulars) {
+static void props_apply_formular_and_notify_once(lua_State* L, const PussCObject* obj, uint16_t num, uint16_t* arr, uint16_t n, int top) {
 	const PussCProperty* props = obj->schema->properties;
 	const PussCObjectChanged* changes = obj->schema->change_handles;
 	PussCPropModule* m = (PussCPropModule*)(obj->prop_module);
@@ -432,8 +429,7 @@ static void props_apply_formular_and_notify_once(lua_State* L, const PussCObject
 				updates[i] = 0;
 			} else {
 				cobj_geti(L, obj, pos);
-				if( (*formular)(L, obj, pos) && (*cobj_seti)(L, obj, pos) )
-				{
+				if( (*formular)(L, obj, pos) && (*cobj_seti)(L, obj, pos) ) {
 					prop_dirtys_set((PussCObject*)obj, pos);
 				} else {
 					assert( !PUSS_BITSETLIST_TEST(num, arr, pos) );
@@ -441,7 +437,7 @@ static void props_apply_formular_and_notify_once(lua_State* L, const PussCObject
 				}
 				// assert formular modify self only!
 				assert( n==_dirtys_count(num, arr) );
-				lua_settop(L, formulars);
+				lua_settop(L, top);
 			}
 		}
 	}
@@ -464,9 +460,9 @@ static void props_apply_formular_and_notify_once(lua_State* L, const PussCObject
 		n = i;
 		if( n > 0 ) {
 			if( obj->schema->change_notify_mode==0 ) {
-				props_do_notify_module_first(L, obj, props, changes, notify_script, updates, n, formulars);
+				props_do_notify_module_first(L, obj, props, changes, notify_script, updates, n, top);
 			} else {
-				props_do_notify_property_first(L, obj, props, changes, notify_script, updates, n, formulars);
+				props_do_notify_property_first(L, obj, props, changes, notify_script, updates, n, top);
 			}
 		}
 	}
@@ -477,16 +473,26 @@ static void props_changes_notify(lua_State* L, const PussCObject* obj) {
 	uint16_t* arr;
 	uint16_t dirty_num;
 	lua_Integer loop_count = obj->schema->prop_dirty_notify_max_loop_times;
-	int formulars;
-	lua_rawgeti(L, LUA_REGISTRYINDEX, obj->schema->formulars_ref);
-	formulars = lua_gettop(L);
+	int top = lua_gettop(L);
 	assert( obj->prop_module && obj->prop_module->lock );
 	arr = obj->prop_module->dirty;
 
 	while( ((--loop_count) >= 0) && ((dirty_num = _dirtys_count(num, arr)) > 0) ) {
-		props_apply_formular_and_notify_once(L, obj, num, arr, dirty_num, formulars);
+		props_apply_formular_and_notify_once(L, obj, num, arr, dirty_num, top);
 	}
-	lua_settop(L, formulars-1);
+	lua_settop(L, top);
+}
+
+static inline void props_mark_dirty_and_notify(lua_State* L, const PussCObject* obj, lua_Integer field) {
+	PussCPropModule* m = obj->prop_module;
+	if( m ) {
+		prop_dirtys_set((PussCObject*)obj, (uint16_t)field);
+		if( !(m->lock) ) {
+			m->lock = TRUE;
+			props_changes_notify(L, obj);
+			m->lock = FALSE;
+		}
+	}
 }
 
 static PussCObject* cobject_check(lua_State* L, int arg) {
@@ -540,19 +546,12 @@ static int cobject_set(lua_State* L) {
 	PussCObject* obj = cobject_check(L, 1);
 	lua_Integer field = luaL_checkinteger(L, 2);
 	PussCObjectFormula formular;
-	PussCPropModule* m;
 	luaL_argcheck(L, (field>0 && field<=obj->schema->field_count), 2, "out of range");
 	if( (formular = obj->schema->properties[field].formular)!=NULL && (!((*formular)(L, obj, field))) ) {
 		lua_pushboolean(L, FALSE);
-	} else if( !cobj_seti(L, obj, field) ) {
-		lua_pushboolean(L, TRUE);
-	} else if( (m = obj->prop_module)!=NULL ) {
-		prop_dirtys_set((PussCObject*)obj, (uint16_t)field);
-		if( !(m->lock) ) {
-			m->lock = TRUE;
-			props_changes_notify(L, obj);
-			m->lock = FALSE;
-		}
+	} else {
+		if( cobj_seti(L, obj, field) )
+			props_mark_dirty_and_notify(L, obj, field);
 		lua_pushboolean(L, TRUE);
 	}
 	return 1;
@@ -693,21 +692,14 @@ static int cobjref_set(lua_State* L) {
 	lua_Integer field = luaL_checkinteger(L, 2);
 	PussCObjectFormula formular;
 	PussCObject* obj = ref->obj;
-	PussCPropModule* m;
 	if( !obj )
 		luaL_argerror(L, 1, "already freed");
 	luaL_argcheck(L, (field>0 && field<=ref->obj->schema->field_count), 2, "out of range");
 	if( (formular = obj->schema->properties[field].formular)!=NULL && (!((*formular)(L, obj, field))) ) {
 		lua_pushboolean(L, FALSE);
-	} else if( !cobj_seti(L, obj, field) ) {
-		lua_pushboolean(L, TRUE);
-	} else if( (m = obj->prop_module)!=NULL ) {
-		prop_dirtys_set((PussCObject*)obj, (uint16_t)field);
-		if( !(m->lock) ) {
-			m->lock = TRUE;
-			props_changes_notify(L, obj);
-			m->lock = FALSE;
-		}
+	} else {
+		if( cobj_seti(L, obj, field) )
+			props_mark_dirty_and_notify(L, obj, field);
 		lua_pushboolean(L, TRUE);
 	}
 	return 1;
@@ -813,7 +805,7 @@ const PussCObject* puss_cobject_test(lua_State* L, int arg, lua_Unsigned id_mask
 	return obj;
 }
 
-int puss_cobject_get(lua_State* L, const PussCObject* obj, lua_Integer field) {
+int puss_cobject_stack_get(lua_State* L, const PussCObject* obj, lua_Integer field) {
 	if( !(field > 0) && (field <= obj->schema->field_count) ) {
 		lua_pushnil(L);
 		return PUSS_CVTYPE_CUSTOM;
@@ -821,55 +813,140 @@ int puss_cobject_get(lua_State* L, const PussCObject* obj, lua_Integer field) {
 	return cobj_geti(L, obj, field);
 }
 
-int puss_cobject_set(lua_State* L, const PussCObject* obj, lua_Integer field) {
-	PussCPropModule* m;
+int puss_cobject_stack_set(lua_State* L, const PussCObject* obj, lua_Integer field) {
 	PussCObjectFormula formular;
 	int top = lua_gettop(L);
 	int ret = FALSE;
 	assert( top > 0 );
 	if( (field > 0) && (field <= obj->schema->field_count) ) {
 		if( (formular = obj->schema->properties[field].formular)==NULL || ((*formular)(L, obj, field)) ) {
+			if( cobj_seti(L, obj, field) )
+				props_mark_dirty_and_notify(L, obj, field);
 			ret = TRUE;
-			if( cobj_seti(L, obj, field) && (m = obj->prop_module)!=NULL ) {
-				prop_dirtys_set((PussCObject*)obj, (uint16_t)field);
-				if( !(m->lock) ) {
-					m->lock = TRUE;
-					props_changes_notify(L, obj);
-					m->lock = FALSE;
-				}
-			}
 		}
 	}
 	lua_settop(L, top - 1);
-	return TRUE;
+	return ret;
 }
 
-int puss_cobject_set_int(lua_State* L, const PussCObject* obj, lua_Integer field, lua_Integer nv) {
-	PussCPropModule* m;
-	PussCObjectFormula formular;
+int puss_cobject_set_bool(lua_State* L, const PussCObject* obj, lua_Integer field, PussCBool nv) {
+	int ret = FALSE;
+	int top;
 	PussCValue* v;
-	lua_Integer ov;
-	if( !(field > 0) && (field <= obj->schema->field_count) )
-		return FALSE;
-	if( obj->schema->types[field]!=PUSS_CVTYPE_INT )
-		return FALSE;
-	assert( lua_gettop(L) > 0 );
-	if( (formular = obj->schema->properties[field].formular)!=NULL && (!((*formular)(L, obj, field))) )
-		return FALSE;
-	v = (PussCValue*)&(obj->values[field]);
-	ov = v->i;
-	if( nv == ov )
-		return TRUE;
-	v->i = nv;
-	if( (m = obj->prop_module)!=NULL ) {
-		prop_dirtys_set((PussCObject*)obj, (uint16_t)field);
-		if( !(m->lock) ) {
-			m->lock = TRUE;
-			props_changes_notify(L, obj);
-			m->lock = FALSE;
+	PussCObjectFormula formular;
+	if( (field > 0) && (field <= obj->schema->field_count) && obj->schema->types[field]==PUSS_CVTYPE_BOOL ) {
+		if( (formular = obj->schema->properties[field].formular)==NULL ) {
+			nv = (nv != 0);
+			ret = TRUE;
+		} else {
+			top = lua_gettop(L);
+			lua_pushboolean(L, (nv != 0));
+			if( ((*formular)(L, obj, field)) ) {
+				nv = lua_toboolean(L, -1);
+				ret = TRUE;
+			}
+			lua_settop(L, top);
+		}
+		if( ret && ((v=(PussCValue*)&(obj->values[field]))->b != nv) ) {
+			v->b = nv;
+			props_mark_dirty_and_notify(L, obj, field);
 		}
 	}
-	return TRUE;
+	return ret;
+}
+
+int puss_cobject_set_int(lua_State* L, const PussCObject* obj, lua_Integer field, PussCInt nv) {
+	int ret = FALSE;
+	int top;
+	PussCValue* v;
+	PussCObjectFormula formular;
+	if( (field > 0) && (field <= obj->schema->field_count) && obj->schema->types[field]==PUSS_CVTYPE_INT ) {
+		if( (formular = obj->schema->properties[field].formular)==NULL ) {
+			ret = TRUE;
+		} else {
+			top = lua_gettop(L);
+			lua_pushinteger(L, nv);
+			if( ((*formular)(L, obj, field)) ) {
+				nv = luaL_checkinteger(L, -1);
+				ret = TRUE;
+			}
+			lua_settop(L, top);
+		}
+		if( ret && ((v=(PussCValue*)&(obj->values[field]))->i != nv) ) {
+			v->i = nv;
+			props_mark_dirty_and_notify(L, obj, field);
+		}
+	}
+	return ret;
+}
+
+int puss_cobject_set_num(lua_State* L, const PussCObject* obj, lua_Integer field, PussCNum nv) {
+	int ret = FALSE;
+	int top;
+	PussCValue* v;
+	PussCObjectFormula formular;
+	if( (field > 0) && (field <= obj->schema->field_count) && obj->schema->types[field]==PUSS_CVTYPE_NUM ) {
+		if( (formular = obj->schema->properties[field].formular)==NULL ) {
+			ret = TRUE;
+		} else {
+			top = lua_gettop(L);
+			lua_pushnumber(L, nv);
+			if( ((*formular)(L, obj, field)) ) {
+				nv = luaL_checknumber(L, -1);
+				ret = TRUE;
+			}
+			lua_settop(L, top);
+		}
+		if( ret && ((v=(PussCValue*)&(obj->values[field]))->n != nv) ) {
+			v->n = nv;
+			props_mark_dirty_and_notify(L, obj, field);
+		}
+	}
+	return ret;
+}
+
+int puss_cobject_set_str(lua_State* L, const PussCObject* obj, lua_Integer field, const char* str, size_t len) {
+	int ret = FALSE;
+	int top = -1;
+	PussCStr* nv;
+	PussCValue* v;
+	PussCObjectFormula formular;
+	if( (field > 0) && (field <= obj->schema->field_count) && obj->schema->types[field]==PUSS_CVTYPE_STR ) {
+		if( !str ) { str = _cvalue_null_str.buf; len = _cvalue_null_str.len; }
+		if( (formular = obj->schema->properties[field].formular)==NULL ) {
+			ret = TRUE;
+		} else {
+			top = lua_gettop(L);
+			lua_pushlstring(L, str, len);
+			if( ((*formular)(L, obj, field)) ) {
+				str = luaL_checklstring(L, -1, &len);
+				ret = TRUE;
+			}
+		}
+		if( ret ) {
+			v = (PussCValue*)&(obj->values[field]);
+			if( (v->s->len != len) || (memcmp(v->s->buf, str, len)!=0) ) {
+				if( !len ) {
+					vstr_free(v);
+				} else if( v->s->len==len ) {
+					memcpy(v->s->buf, str, len);
+				} else if( (nv = (PussCStr*)malloc(sizeof(PussCStr) + len))==NULL ) {
+					ret = FALSE;
+				} else {
+					nv->len = len;
+					memcpy(nv->buf, str, len);
+					nv->buf[len] = '\0';
+					vstr_free(v);
+					v->s = nv;
+				}
+			}
+		}
+		if( top >= 0 )
+			lua_settop(L, top);
+		if( ret )
+			props_mark_dirty_and_notify(L, obj, field);
+	}
+	return ret;
 }
 
 void puss_cobject_batch_call(lua_State* L, int obj, int nargs, int nresults) {
@@ -893,6 +970,7 @@ static int cschema_gc(lua_State* L) {
 	PussCSchema* schema = (PussCSchema*)lua_touserdata(L, 1);
 	int values_ref = schema->values_ref;
 	int formulars_ref = schema->formulars_ref;
+	int change_handle_ref = schema->change_handle_ref;
 	lua_Integer n = schema->field_count;
 	lua_Integer i;
 	for( i=0; i<=n; ++i ) {
@@ -906,8 +984,10 @@ static int cschema_gc(lua_State* L) {
 	}
 	schema->values_ref = LUA_NOREF;
 	schema->formulars_ref = LUA_NOREF;
+	schema->change_handle_ref = LUA_NOREF;
 	luaL_unref(L, LUA_REGISTRYINDEX, values_ref);
 	luaL_unref(L, LUA_REGISTRYINDEX, formulars_ref);
+	luaL_unref(L, LUA_REGISTRYINDEX, change_handle_ref);
 	return 0;
 }
 
@@ -969,7 +1049,7 @@ static int cschema_prop_deps_parse(lua_State* L) {
 	return 0;
 }
 
-static void cschema_prop_reset_props(lua_State* L, PussCSchema* raw, int descs, int formulars) {
+static void cschema_prop_reset_props(lua_State* L, PussCSchema* raw, int descs) {
 	const char* types = raw->types;
 	PussCProperty* raw_props = (PussCProperty*)(raw->properties);
 	PussCProperty* prop;
@@ -1058,12 +1138,7 @@ static void cschema_prop_reset_props(lua_State* L, PussCSchema* raw, int descs, 
 		props[i] = tmp;
 	}
 
-	if( enable_change_notify ) {
-		// use formulars[PESUDO_FORMULAR_FIELD_CHANGED_HANDLE] as changed handle
-		enable_change_notify = (lua_rawgetp(L, formulars, PESUDO_FORMULAR_FIELD_CHANGED_HANDLE)==LUA_TFUNCTION);
-		lua_pop(L, 1);
-	}
-	raw->change_notify_script = enable_change_notify;
+	raw->change_notify_script = enable_change_notify && (schema->change_handle_ref != LUA_NOREF);
 }
 
 static int cschema_create(lua_State* L) {
@@ -1115,6 +1190,7 @@ static int cschema_create(lua_State* L) {
 	schema->defs = defs;
 	schema->values_ref = LUA_NOREF;
 	schema->formulars_ref = LUA_NOREF;
+	schema->change_handle_ref = LUA_NOREF;
 	schema->prop_dirty_notify_max_loop_times = DEFAULT_DIRTY_NOTIFY_MAX_LOOP_TIMES;
 	schema->properties = props;
 	schema->sync_field_mask = sync_field_mask;
@@ -1182,6 +1258,10 @@ static int cschema_create(lua_State* L) {
 		lua_rawseti(L, idxof_values, i);
 		lua_settop(L, idxof_elem);
 
+		// init formulars table
+		lua_pushboolean(L, 0);
+		lua_rawseti(L, idxof_formulars, i);
+
 		if( id_mask & PUSS_COBJECT_IDMASK_SUPPORT_SYNC ) {
 			// desc.sync
 			if( lua_getfield(L, idxof_elem, "sync")!=LUA_TNIL ) {
@@ -1200,12 +1280,12 @@ static int cschema_create(lua_State* L) {
 	}
 #undef idxof_elem
 
-	cschema_prop_reset_props(L, schema, 2, idxof_formulars);
+	cschema_prop_reset_props(L, schema, idxof_descs);
 	lua_settop(L, idxof_names);
 
 	if( sync_num > 0 ) {
 		uint16_t* map = (uint16_t*)lua_newuserdata(L, sizeof(uint16_t) * (1 + sync_num));
-		lua_rawsetp(L, idxof_formulars, PESUDO_FORMULAR_FIELD_SYNC_IDX_TO_FILED);
+		lua_setfield(L, idxof_formulars, "@mem_of_sync_file_idx_map");
 		schema->sync_field_count = sync_num;
 		map[0] = 0;
 		for( i=1; i<=n; ++i ) {
@@ -1298,17 +1378,15 @@ static int cschema_refresh(lua_State* L) {
 	if( (n = schema->field_count) != luaL_len(L, 2) )
 		luaL_error(L, "cschema property num not matched!");
 	lua_settop(L, 2);
-	if( !(lua_getupvalue(L, 1, 4) && lua_type(L, -1)==LUA_TTABLE) )
-		luaL_error(L, "fetch formulars table failed!");
 
 	lua_pushcfunction(L, cschema_prop_deps_parse);
 	lua_pushvalue(L, 2);
 	lua_call(L, 1, 0);
 
-	// now stack 1:creator 2:descs 3:formulars
+	// now stack 1:creator 2:descs
 	for( i=1; i<=n; ++i ) {
 		PussCProperty* prop = &(schema->properties[i]);
-		const int desc = 4;
+		const int desc = 3;
 		const char* name;
 		lua_settop(L, 3);
 		if( lua_geti(L, 2, i) != LUA_TTABLE )	// property desc
@@ -1327,7 +1405,7 @@ static int cschema_refresh(lua_State* L) {
 		lua_settop(L, desc);
 	}
 
-	cschema_prop_reset_props(L, schema, 2, 3);
+	cschema_prop_reset_props(L, schema, 2);
 	return 0;
 }
 
@@ -1395,14 +1473,16 @@ static int cschema_changed_notify_handle_reset(lua_State* L) {
 	if( !clear )
 		luaL_checktype(L, 2, LUA_TFUNCTION);
 	schema = cschema_check_fetch(L, 1);
-	if( !(lua_getupvalue(L, 1, 4) && lua_type(L, -1)==LUA_TTABLE) )
-		luaL_error(L, "fetch formular table failed!");
 	if( clear ) {
-		lua_pushboolean(L, 0);
-		lua_rawsetp(L, -2, PESUDO_FORMULAR_FIELD_CHANGED_HANDLE);	// use formulars[PESUDO_FORMULAR_FIELD_CHANGED_HANDLE] as changed handle
+		luaL_unref(L, LUA_REGISTRYINDEX, schema->change_handle_ref);
+		schema->change_handle_ref = LUA_NOREF;
 	} else {
 		lua_pushvalue(L, 2);
-		lua_rawsetp(L, -2, PESUDO_FORMULAR_FIELD_CHANGED_HANDLE);	// use formulars[PESUDO_FORMULAR_FIELD_CHANGED_HANDLE] as changed handle
+		if( schema->change_handle_ref!=LUA_NOREF ) {
+			lua_rawseti(L, LUA_REGISTRYINDEX, schema->change_handle_ref);
+		} else {
+			schema->change_handle_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+		}
 		for( i=1; i<=schema->field_count; ++i ) {
 			if( schema->properties[i].notify ) {
 				change_notify = 1;
@@ -1435,7 +1515,7 @@ void puss_cschema_formular_reset(lua_State* L, int creator, lua_Integer field, P
 		luaL_error(L, "cschema formular ref MUST module ref, can NOT none or nil!");
 	if( !(lua_getupvalue(L, creator, 4) && lua_type(L, -1)==LUA_TTABLE) )
 		luaL_error(L, "fetch formular table failed!");
-	lua_insert(L, -2);
+	lua_pushvalue(L, -2);
 	lua_rawseti(L, -2, field);
 	lua_pop(L, 1);
 	schema->properties[field].formular = formular;
@@ -1528,20 +1608,20 @@ void puss_cschema_changed_reset(lua_State* L, int creator, const char* name, Pus
 	lua_pop(L, 1);
 	if( !(name && *name) )
 		luaL_error(L, "event handle name MUST exist & not empty string");
-	if( handle && lua_isnoneornil(L, -1) )
+	if( handle && lua_isnoneornil(L, -1) )	// module ref
 		luaL_error(L, "cschema changed ref MUST module ref, can NOT none or nil!");
 
-	if( luaL_loadstring(L, CSCHEMA_CHANGES_RESET_SCRIPT) )
+	if( luaL_loadstring(L, CSCHEMA_CHANGES_RESET_SCRIPT) )	// +1
 		luaL_error(L, "build changes reset script error: %s", lua_tostring(L, -1));
-	if( !(lua_getupvalue(L, absidx, 5) && lua_type(L, -1)==LUA_TTABLE) )
-		luaL_error(L, "cschema fetch changed events hanele table failed!");	// use formular table as events handle table
-	lua_pushcfunction(L, change_handle_add);
-	arr = (PussCObjectChanged*)lua_newuserdata(L, sizeof(PussCObjectChanged) * (luaL_len(L, -2) + 2));
+	if( !(lua_getupvalue(L, absidx, 5) && lua_type(L, -1)==LUA_TTABLE) )	// +2
+		luaL_error(L, "cschema fetch changed events hanele table failed!");
+	lua_pushcfunction(L, change_handle_add);	// +3
+	arr = (PussCObjectChanged*)lua_newuserdata(L, sizeof(PussCObjectChanged) * (luaL_len(L, -2) + 2));	// +4
 	arr[0] = NULL;
-	lua_pushstring(L, name);
-	lua_pushlightuserdata(L, handle);
+	lua_pushstring(L, name);	// +5
+	lua_pushlightuserdata(L, handle);	// +6
 	if( handle ) {
-		lua_rotate(L, -7, 6);
+		lua_pushvalue(L, -7);	// +7
 	} else {
 		lua_pushnil(L);
 	}

@@ -33,7 +33,7 @@ typedef struct _PussCSchema	PussCSchema;
 typedef struct _PussCObject	PussCObject;
 typedef union  _PussCValue	PussCValue;
 
-typedef struct _PussCString	PussCString;
+typedef struct _PussCStr	PussCStr;
 typedef lua_Integer	PussCBool;
 typedef lua_Integer	PussCInt;
 typedef lua_Number	PussCNum;
@@ -47,18 +47,18 @@ typedef int  (*PussCObjectFormula)(lua_State* L, const PussCObject* obj, lua_Int
 
 typedef void (*PussCObjectChanged)(lua_State* L, const PussCObject* obj, lua_Integer field);
 
-struct _PussCString {
-	size_t				len;
-	char				buf[1];
+struct _PussCStr {
+	size_t		len;
+	char		buf[1];
 };
 
 union _PussCValue {
-	void*				p;
-	PussCBool			b;
-	PussCInt			i;
-	PussCNum			n;
-	PussCString*		s;
-	PussCLua			o;
+	void*		p;
+	PussCBool	b;
+	PussCInt	i;
+	PussCNum	n;
+	PussCStr*	s;
+	PussCLua	o;
 };
 
 struct _PussCObject {
@@ -74,19 +74,26 @@ struct _PussCObject {
 	const PussCObject*	puss_cobject_check(lua_State* L, int arg, lua_Unsigned id_mask);
 	const PussCObject*	puss_cobject_test(lua_State* L, int arg, lua_Unsigned id_mask);
 
-	int   puss_cobject_get(lua_State* L, const PussCObject* obj, lua_Integer field);	// [-0, +1, e] return PUSS_CVTYPE_ type
-	int   puss_cobject_set(lua_State* L, const PussCObject* obj, lua_Integer field);	// [-1, +0, e] pop new-value from stack, return set succeed
-	int   puss_cobject_set_int(lua_State* L, const PussCObject* obj, lua_Integer field, lua_Integer nv);	// return set succeed
+	int   puss_cobject_stack_get(lua_State* L, const PussCObject* obj, lua_Integer field);	// [-0, +1, e] return PUSS_CVTYPE_ type
+	int   puss_cobject_stack_set(lua_State* L, const PussCObject* obj, lua_Integer field);	// [-1, +0, e] pop new-value from stack, return set succeed
 
-	void  puss_cschema_formular_reset(lua_State* L, int creator, lua_Integer field, PussCObjectFormula formular);	// [-1, +0, e] pop module ref from stack
-	void  puss_cschema_changed_reset(lua_State* L, int creator, const char* name, PussCObjectChanged handle);		// [-0|-1, +0, e] pop module ref from stack if handle!=NULL
+	int   puss_cobject_set_bool(lua_State* L, const PussCObject* obj, lua_Integer field, PussCBool nv);	// return set succeed
+	int   puss_cobject_set_int(lua_State* L, const PussCObject* obj, lua_Integer field, PussCInt nv);	// return set succeed
+	int   puss_cobject_set_num(lua_State* L, const PussCObject* obj, lua_Integer field, PussCNum nv);	// return set succeed
+	int   puss_cobject_set_str(lua_State* L, const PussCObject* obj, lua_Integer field, const char* str, size_t len);	// return set succeed
+
+	void  puss_cschema_formular_reset(lua_State* L, int creator, lua_Integer field, PussCObjectFormula formular);	// top of stack used as module ref
+	void  puss_cschema_changed_reset(lua_State* L, int creator, const char* name, PussCObjectChanged handle);		// top of stack used as module ref
 #else
 	#define puss_cobject_check(L, arg, id_mask)		(*(__puss_iface__->cobject_check))((L),(arg),(id_mask))
 	#define puss_cobject_test(L, arg, id_mask)		(*(__puss_iface__->cobject_test))((L),(arg),(id_mask))
 
-	#define puss_cobject_get(L, obj, field)			(*(__puss_iface__->cobject_get))((L),(obj),(field))
-	#define puss_cobject_set(L, obj, field)			(*(__puss_iface__->cobject_set))((L),(obj),(field))
+	#define puss_cobject_stack_get(L, obj, field)	(*(__puss_iface__->cobject_stack_get))((L),(obj),(field))
+	#define puss_cobject_stack_set(L, obj, field)	(*(__puss_iface__->cobject_stack_set))((L),(obj),(field))
+	#define puss_cobject_set_bool(L,o,f,v)			(*(__puss_iface__->cobject_set_bool))((L),(o),(f),(v))
 	#define puss_cobject_set_int(L,o,f,v)			(*(__puss_iface__->cobject_set_int))((L),(o),(f),(v))
+	#define puss_cobject_set_num(L,o,f,v)			(*(__puss_iface__->cobject_set_num))((L),(o),(f),(v))
+	#define puss_cobject_set_str(L,o,f,s,n)			(*(__puss_iface__->cobject_set_str))((L),(o),(f),(s),(n))
 
 	#define puss_cschema_formular_reset(L,c,i,f)	(*(__puss_iface__->cschema_formular_reset))((L),(c),(i),(f))
 	#define puss_cschema_changed_reset(L,c,n,h)		(*(__puss_iface__->cschema_changed_reset))((L),(c),(n),(h))

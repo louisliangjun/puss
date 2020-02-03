@@ -54,9 +54,12 @@ static PussInterface puss_interface =
 
 	, puss_cobject_check
 	, puss_cobject_test
-	, puss_cobject_get
-	, puss_cobject_set
+	, puss_cobject_stack_get
+	, puss_cobject_stack_set
+	, puss_cobject_set_bool
 	, puss_cobject_set_int
+	, puss_cobject_set_num
+	, puss_cobject_set_str
 	, puss_cschema_formular_reset
 	, puss_cschema_changed_reset
 	};

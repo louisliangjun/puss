@@ -76,7 +76,7 @@ local function test()
 	else
 		plugin = puss.load_plugin('cobject_demo')
 	end
-	plugin.reg(DemoObject)
+	plugin.reg(DemoObject, plugin)
 
 	trace('create object ...', DemoObject)
 	_G.t1 = DemoObject()
