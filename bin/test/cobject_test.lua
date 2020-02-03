@@ -4,7 +4,7 @@ local COBJECT_SUPPORT_REF = 0x80000000
 local COBJECT_SUPPORT_PROP = 0x40000000
 local COBJECT_SUPPORT_SYNC = 0x20000000
 
-local DemoObjectIDMask = 0x00000001 | COBJECT_SUPPORT_REF | COBJECT_SUPPORT_PROP -- | COBJECT_SUPPORT_SYNC
+local DemoObjectIDMask = 0x0001 | COBJECT_SUPPORT_REF | COBJECT_SUPPORT_PROP | COBJECT_SUPPORT_SYNC
 
 local fields =
 	{ {name='a', type='int', sync=0x01, deps={}}
@@ -54,7 +54,7 @@ end
 local function test()
 	local puss_cobject = puss.import('core.cobject')
 
-	puss_cobject.build_cobject(puss._path..'/test/cobject_demo.h', 'DemoObject', DemoObjectIDMask, fields)
+	puss_cobject.build_cobject(puss._path..'/test/cobject_demo.h', 'DemoObject', DemoObjectIDMask, fields, true)
 
 	trace('compile plugin ...')
 	os.execute('cd /d '..puss._path..'/../ && tinycc\\win32\\tcc -shared -Iinclude -o bin\\plugins\\cobject_demo'..puss._plugin_suffix..' bin\\test\\cobject_demo.c 2>&1')
@@ -64,10 +64,7 @@ local function test()
 	puss.cschema_changed_notify_handle_reset(DemoObject, on_changed)
 	puss.cschema_changed_notify_mode_reset(DemoObject, 0)	-- 0-module first 1-property first
 
-	puss.cschema_formular_reset(DemoObject, 1, function(obj, val)
-		print('a changed formular')
-		return val //  10
-	end)
+	puss.cschema_formular_reset(DemoObject, 1, function(obj, val) print('a changed formular'); return val //  10; end)
 
 	trace('load plguin ...')
 	local plugin

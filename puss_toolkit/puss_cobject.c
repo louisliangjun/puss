@@ -618,7 +618,7 @@ static int cobject_create(lua_State* L) {
 	return 1;
 }
 
-static PussCObjRef* cobjref_check(lua_State* L, int arg) {
+static inline PussCObjRef* cobjref_check(lua_State* L, int arg) {
 	PussCObjRef* ref = (PussCObjRef*)lua_touserdata(L, arg);
 	if( !ref )
 		luaL_argerror(L, arg, "cobject ref check failed!");
@@ -1345,7 +1345,7 @@ static int cschema_create(lua_State* L) {
 		int top = lua_gettop(L);
 		lua_pushboolean(L, 1);
 		puss_cschema_changed_reset(L, -2, "@builtin_sync_module", sync_on_changed);
-		assert( lua_gettop(L)==top );
+		lua_settop(L, top);
 		if( !lua_isfunction(L, -1) )
 			luaL_error(L, "sync module reg bad logic!");
 	}

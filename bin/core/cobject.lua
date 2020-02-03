@@ -2,7 +2,6 @@
 
 __exports.build_cobject = function(filename, name, id, fields, not_gen_field_id)
 	local gen_field_enums = (not not_gen_field_id)
-	print('gen_field_enums', gen_field_enums)
 	local sname = name:gsub('(%l)(%u)', function(a,b) return a..'_'..b end):lower()
 	local strfmt = string.format
 	local ctypemap =
@@ -18,8 +17,8 @@ __exports.build_cobject = function(filename, name, id, fields, not_gen_field_id)
 	write('// cobject '..name)
 	write('// ')
 	write(strfmt('#define PUSS_COBJECT_ID_%s'..' 0x%X', name:upper(), id))
-	write(strfmt('#define %s_check(L, idx)  (%s*)puss_cobject_check((L), (idx), PUSS_COBJECT_ID_%s)', sname, name, name:upper()))
-	write(strfmt('#define %s_test(L, idx)   (%s*)puss_cobject_test((L), (idx), PUSS_COBJECT_ID_%s)', sname, name, name:upper()))
+	write(strfmt('#define %s_check(L, arg)  (%s*)puss_cobject_check((L), (arg), PUSS_COBJECT_ID_%s)', sname, name, name:upper()))
+	write(strfmt('#define %s_test(L, arg)   (%s*)puss_cobject_test((L), (arg), PUSS_COBJECT_ID_%s)', sname, name, name:upper()))
 	if gen_field_enums then
 		write(strfmt('#define %s_field(prop)    %s_ ## prop', sname, sname:upper()))
 	else
@@ -50,15 +49,15 @@ __exports.build_cobject = function(filename, name, id, fields, not_gen_field_id)
 	for i,v in ipairs(fields) do
 		local field = sname..'_field('..v.name..')'
 		if v.type=='bool' or v.type=='int' or v.type=='num' then
-			write('#define '..sname..'_set_'..v.name..'(L, obj, val)  puss_cobject_set_'..v.type..'((L), &(obj->__parent__), ('..field..'), (val))')
+			write('#define '..sname..'_set_'..v.name..'(L__,o__,v__)     puss_cobject_set_'..v.type..'((L__), &((o__)->__parent__), ('..field..'), (v__))')
 		elseif v.type=='str' then
-			write('#define '..sname..'_set_'..v.name..'(L, obj, str, len)  puss_cobject_set_str((L), &(obj->__parent__), ('..field..'), (str), (len))')
+			write('#define '..sname..'_set_'..v.name..'(L__,o__,s__,n__) puss_cobject_set_str((L__), &((o__)->__parent__), ('..field..'), (s__), (n__))')
 		elseif v.type=='lua' then
-			write('#define '..sname..'_set_'..v.name..'(L, obj)  puss_cobject_stack_set((L), &(obj->__parent__), ('..field..'))')
+			write('#define '..sname..'_set_'..v.name..'(L__,o__)         puss_cobject_stack_set((L__), &((o__)->__parent__), ('..field..'))')
 		end
 	end
 	write('')
-	write('#define '..sname..'_set(L, obj, prop, val)  '..sname..'_set_ ## prop((L), (obj), (val))')
+	write('#define '..sname..'_set(L__, o__, prop, v__)  '..sname..'_set_ ## prop((L__), (o__), (v__))')
 	write('')
 
 	local f = io.open(filename, 'w')
