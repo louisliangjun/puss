@@ -165,6 +165,15 @@ static void reg_builtins(lua_State* L, luaL_Reg* builtins) {
 	}
 }
 
+// puss builtin modules declare
+
+int	puss_reg_puss_utils(lua_State* L);
+int	puss_reg_simple_pickle(lua_State* L);
+int	puss_reg_simple_luastate(lua_State* L);
+int	puss_reg_async_service(lua_State* L);
+int	puss_reg_thread_service(lua_State* L);
+int	puss_reg_cobject(lua_State* L);
+
 static int luaopen_puss(lua_State* L) {
 	// check consts table
 	if( puss_lua_get(L, PUSS_KEY_CONST_TABLE)!=LUA_TTABLE ) {

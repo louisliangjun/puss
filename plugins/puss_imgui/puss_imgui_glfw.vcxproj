@@ -295,7 +295,6 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <AdditionalIncludeDirectories>$(ProjectDir)\glfw\include\;$(ProjectDir)gl3w\;$(ProjectDir)scintilla3\include\;$(ProjectDir)scintilla3\src\;$(ProjectDir)scintilla3\lexlib\;$(ProjectDir)imgui\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>PUSS_IMGUI_USE_GLFW;SCI_LEXER;_SCL_SECURE_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <SDLCheck>true</SDLCheck>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

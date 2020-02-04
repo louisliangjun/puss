@@ -10,6 +10,7 @@
 #include <assert.h>
 
 #include "puss_bitset.h"
+#include "puss_toolkit.h"
 
 #define DEFAULT_DIRTY_NOTIFY_MAX_LOOP_TIMES		3
 
@@ -294,7 +295,8 @@ static int lua_formular_wrap(const PussCStackObject* stobj, lua_Integer field, P
 	assert( (field > 0) && (field <= obj->schema->field_count) );
 	lua_rawgeti(L, LUA_REGISTRYINDEX, obj->schema->formulars_ref);
 	lua_rawgeti(L, -1, field);	// formular
-	lua_replace(L, -2);
+	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
+	lua_replace(L, -3);
 	assert( lua_isfunction(L, -1) );
 	assert( stobj->arg > 0 );
 	assert( puss_cobject_testudata(L, stobj->arg, obj->schema->id_mask)==obj );
@@ -302,30 +304,26 @@ static int lua_formular_wrap(const PussCStackObject* stobj, lua_Integer field, P
 	lua_pushvalue(L, stobj->arg );	// object
 
 	switch( tp ) {
-	case PUSS_CVTYPE_BOOL:
-		lua_pushboolean(L, nv->b!=0);
-		if( (state = lua_pcall(L,2,1,0))==LUA_OK )
-			nv->b = lua_toboolean(L, -1);
-		break;
-	case PUSS_CVTYPE_INT:
-		lua_pushinteger(L, nv->i);
-		if( (state = lua_pcall(L,2,1,0))==LUA_OK )
-			nv->i = lua_isinteger(L, -1) ? lua_tointeger(L, -1) : (lua_Integer)luaL_checknumber(L, -1);
-		break;
-	case PUSS_CVTYPE_NUM:
-		lua_pushnumber(L, nv->n);
-		if( (state = lua_pcall(L,2,1,0))==LUA_OK )
-			nv->n = luaL_checknumber(L, -1);
-		break;
+	case PUSS_CVTYPE_BOOL:	lua_pushboolean(L, nv->b!=0);	break;
+	case PUSS_CVTYPE_INT:	lua_pushinteger(L, nv->i);	break;
+	case PUSS_CVTYPE_NUM:	lua_pushnumber(L, nv->n);	break;
 	case PUSS_CVTYPE_LUA:
 		assert( top > stobj->arg );
-		assert( lua_gettop(L)==top+2 );
-		lua_rotate(L, top, 2);
-		if( (state = lua_pcall(L,2,1,0))==LUA_OK ) {
+		assert( lua_gettop(L)==top+3 );
+		lua_rotate(L, top, 3);
+		--top;	// pop value from stack
+		break;
+	}
+
+	if( (state = lua_pcall(L,2,1,top+1))==LUA_OK ) {
+		switch( tp ) {
+		case PUSS_CVTYPE_BOOL:	nv->b = lua_toboolean(L, -1);	break;
+		case PUSS_CVTYPE_INT:	nv->i = lua_isinteger(L, -1) ? lua_tointeger(L, -1) : (lua_Integer)luaL_checknumber(L, -1);	break;
+		case PUSS_CVTYPE_NUM:	nv->n = luaL_checknumber(L, -1);	break;
+		case PUSS_CVTYPE_LUA:
+			lua_replace(L, ++top);	// push new value onto stack
 			assert( lua_gettop(L)==top );
-		} else {
-			assert( lua_gettop(L)==top );
-			--top;
+			break;
 		}
 	}
 	lua_settop(L, top);
@@ -355,15 +353,15 @@ static void props_do_notify_module_first(const PussCStackObject* stobj, const Pu
 
 	// notify lua changed handle
 	if( notify_script ) {
-		if( lua_rawgeti(L, LUA_REGISTRYINDEX, obj->schema->change_handle_ref)==LUA_TFUNCTION ) {
-			for( i=0; i<n; ++i ) {
-				if( props[updates[i]].notify ) {
-					lua_pushvalue(L, -1);
-					lua_pushvalue(L, 1);
-					lua_pushinteger(L, updates[i]);
-					if( lua_pcall(L, 2, 0, 0) )
-						lua_pop(L, 1);
-				}
+		puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
+		lua_rawgeti(L, LUA_REGISTRYINDEX, obj->schema->change_handle_ref);
+		for( i=0; i<n; ++i ) {
+			if( props[updates[i]].notify ) {
+				lua_pushvalue(L, -1);
+				lua_pushvalue(L, 1);
+				lua_pushinteger(L, updates[i]);
+				if( lua_pcall(L, 2, 0, top+1) )
+					lua_pop(L, 1);
 			}
 		}
 		lua_settop(L, top);
@@ -392,12 +390,14 @@ static void props_do_notify_property_first(const PussCStackObject* stobj, const 
 			}
 		}
 		if( notify_script && props[updates[i]].notify ) {
+			puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
 			lua_rawgeti(L, LUA_REGISTRYINDEX, obj->schema->change_handle_ref);
 			lua_pushvalue(L, 1);
 			lua_pushinteger(L, pos);
-			if( lua_pcall(L, 2, 0, 0) )
+			if( lua_pcall(L, 2, 0, top+1) )
 				lua_pop(L, 1);
-			assert( lua_gettop(L) == top );
+			assert( lua_gettop(L) == (top+1) );
+			lua_settop(L, top);
 		}
 	}
 }
@@ -590,12 +590,14 @@ static int cobject_call(lua_State* L) {
 		return lua_gettop(L);
 	}
 	lua_insert(L, 3);
+	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
+	lua_insert(L, 2);	// can not replace 1 whith used by stobj
 	m->lock = TRUE;
-	if( lua_pcall(L, lua_gettop(L) - 2, LUA_MULTRET, 0) )
+	if( lua_pcall(L, lua_gettop(L)-3, 0, 2) )
 		lua_pop(L, 1);
 	props_changes_notify(&stobj);
 	m->lock = FALSE;
-	return lua_gettop(L) - 1;
+	return 0;
 }
 
 static int cobject_sync(lua_State* L) {
@@ -738,12 +740,14 @@ static int cobjref_call(lua_State* L) {
 		return lua_gettop(L);
 	}
 	lua_insert(L, 3);
+	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
+	lua_insert(L, 2);
 	m->lock = TRUE;
-	if( lua_pcall(L, lua_gettop(L) - 2, LUA_MULTRET, 0) )
+	if( lua_pcall(L, lua_gettop(L)-3, 0, 2) )
 		lua_pop(L, 1);
 	props_changes_notify(&stobj);
 	m->lock = FALSE;
-	return lua_gettop(L) - 1;
+	return 0;
 }
 
 static int cobjref_sync(lua_State* L) {
