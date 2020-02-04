@@ -32,14 +32,15 @@ struct _PussInterface {
 	void  (*push_consts_table)(lua_State* L);
 
 	// cobject
-	const PussCObject*	(*cobject_check)(lua_State* L, int arg, lua_Unsigned id_mask);
-	const PussCObject*	(*cobject_test)(lua_State* L, int arg, lua_Unsigned id_mask);
-	int   (*cobject_stack_get)(lua_State* L, const PussCObject* obj, lua_Integer field);
-	int   (*cobject_stack_set)(lua_State* L, const PussCObject* obj, lua_Integer field);
-	int   (*cobject_set_bool)(lua_State* L, const PussCObject* obj, lua_Integer field, PussCBool nv);
-	int   (*cobject_set_int)(lua_State* L, const PussCObject* obj, lua_Integer field, PussCInt nv);
-	int   (*cobject_set_num)(lua_State* L, const PussCObject* obj, lua_Integer field, PussCNum nv);
-	int   (*cobject_set_str)(lua_State* L, const PussCObject* obj, lua_Integer field, const char* str, size_t len);
+	const PussCObject*	(*cobject_checkudata)(lua_State* L, int arg, lua_Unsigned id_mask);
+	const PussCObject*	(*cobject_testudata)(lua_State* L, int arg, lua_Unsigned id_mask);
+	const PussCObject*	(*cobject_check)(const PussCStackObject* stobj, lua_Unsigned id_mask);
+	const PussCObject*	(*cobject_test)(const PussCStackObject* stobj, lua_Unsigned id_mask);
+	int   (*cobject_stack_get)(const PussCStackObject* stobj, lua_Integer field);
+	int   (*cobject_stack_set)(const PussCStackObject* stobj, lua_Integer field);
+	int   (*cobject_set_bool)(const PussCStackObject* stobj, lua_Integer field, PussCBool nv);
+	int   (*cobject_set_int)(const PussCStackObject* stobj, lua_Integer field, PussCInt nv);
+	int   (*cobject_set_num)(const PussCStackObject* stobj, lua_Integer field, PussCNum nv);
 	void  (*cschema_formular_reset)(lua_State* L, int creator, lua_Integer field, PussCObjectFormula formular);
 	void  (*cschema_changed_reset)(lua_State* L, int creator, const char* name, PussCObjectChanged handle);
 };

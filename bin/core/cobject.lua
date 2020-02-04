@@ -17,12 +17,14 @@ __exports.build_cobject = function(filename, name, id, fields, not_gen_field_id)
 	write('// cobject '..name)
 	write('// ')
 	write(strfmt('#define PUSS_COBJECT_ID_%s'..' 0x%X', name:upper(), id))
-	write(strfmt('#define %s_check(L, arg)  (%s*)puss_cobject_check((L), (arg), PUSS_COBJECT_ID_%s)', sname, name, name:upper()))
-	write(strfmt('#define %s_test(L, arg)   (%s*)puss_cobject_test((L), (arg), PUSS_COBJECT_ID_%s)', sname, name, name:upper()))
+	write(strfmt('#define %s_checkudata(L,a) (%s*)puss_cobject_checkudata((L),(a), PUSS_COBJECT_ID_%s)', sname, name, name:upper()))
+	write(strfmt('#define %s_testudata(L,a)  (%s*)puss_cobject_testudata((L),(a), PUSS_COBJECT_ID_%s)', sname, name, name:upper()))
+	write(strfmt('#define %s_check(stobj)    (%s*)puss_cobject_check((stobj), PUSS_COBJECT_ID_%s)', sname, name, name:upper()))
+	write(strfmt('#define %s_test(stobj)     (%s*)puss_cobject_test((stobj), PUSS_COBJECT_ID_%s)', sname, name, name:upper()))
 	if gen_field_enums then
-		write(strfmt('#define %s_field(prop)    %s_ ## prop', sname, sname:upper()))
+		write(strfmt('#define %s_field(prop)     %s_ ## prop', sname, sname:upper()))
 	else
-		write(strfmt('#define %s_field(prop)    (lua_Integer)( (PussCValue*)(&(((const %s*)0)->prop)) - (((const %s*)0)->__parent__.values) )', sname, name, name))
+		write(strfmt('#define %s_field(prop)     (lua_Integer)( (PussCValue*)(&(((const %s*)0)->prop)) - (((const %s*)0)->__parent__.values) )', sname, name, name))
 	end
 	write('')
 
@@ -49,19 +51,26 @@ __exports.build_cobject = function(filename, name, id, fields, not_gen_field_id)
 	for i,v in ipairs(fields) do
 		local field = sname..'_field('..v.name..')'
 		if v.type=='bool' or v.type=='int' or v.type=='num' then
-			write('#define '..sname..'_set_'..v.name..'(L__,o__,v__)     puss_cobject_set_'..v.type..'((L__), &((o__)->__parent__), ('..field..'), (v__))')
+			write('#define '..sname..'_set_'..v.name..'(stobj__,v__)     puss_cobject_set_'..v.type..'((stobj__), ('..field..'), (v__))')
 		elseif v.type=='str' then
-			write('#define '..sname..'_set_'..v.name..'(L__,o__,s__,n__) puss_cobject_set_str((L__), &((o__)->__parent__), ('..field..'), (s__), (n__))')
+			write('#define '..sname..'_set_'..v.name..'(stobj__,s__,n__) puss_cobject_set_str((stobj__), ('..field..'), (s__), (n__))')
 		elseif v.type=='lua' then
-			write('#define '..sname..'_set_'..v.name..'(L__,o__)         puss_cobject_stack_set((L__), &((o__)->__parent__), ('..field..'))')
+			write('#define '..sname..'_set_'..v.name..'(stobj__)         puss_cobject_stack_set((stobj__), ('..field..'))')
 		end
 	end
 	write('')
-	write('#define '..sname..'_set(L__, o__, prop, v__)  '..sname..'_set_ ## prop((L__), (o__), (v__))')
+	write('#define '..sname..'_set(stobj__, prop, v__)  '..sname..'_set_ ## prop((stobj__), (v__))')
 	write('')
 
-	local f = io.open(filename, 'w')
+	ctx = table.concat(ctx, '\n')
+	local f = io.open(filename, 'r')
+	if f then
+		local same = f:read(#ctx + 1)==ctx
+		f:close()
+		if same then return true end
+	end
+	f = io.open(filename, 'w')
 	if not f then return false end
-	f:write(table.concat(ctx, '\n'))
+	f:write(ctx)
 	f:close()
 end

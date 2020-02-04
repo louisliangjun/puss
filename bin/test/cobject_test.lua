@@ -21,12 +21,13 @@ local fields =
 	, {name='l', type='int', deps={}}
 	, {name='m', type='int', sync=0x01}
 	, {name='n', type='int', deps={'l', 'm'}}
-	, {name='o', type='int', deps={}}
+	, {name='o', type='lua', sync=0x10, deps={}}
 	}
 
 local getmetatable = getmetatable
-
 local trace = print
+
+for i,v in ipairs(fields) do fields[v.name] = i end
 
 local function perf(t, n, name)
 	local m = 8
@@ -64,7 +65,8 @@ local function test()
 	puss.cschema_changed_notify_handle_reset(DemoObject, on_changed)
 	puss.cschema_changed_notify_mode_reset(DemoObject, 0)	-- 0-module first 1-property first
 
-	puss.cschema_formular_reset(DemoObject, 1, function(obj, val) print('a changed formular'); return val //  10; end)
+	puss.cschema_formular_reset(DemoObject, fields.a, function(obj, val) print('a changed formular', obj, val); return val //  10; end)
+	puss.cschema_formular_reset(DemoObject, fields.o, function(obj, val) print('o changed formular', obj, val); return 'xxx'; end)
 
 	trace('load plguin ...')
 	local plugin
@@ -79,16 +81,21 @@ local function test()
 	_G.t1 = DemoObject()
 
 	trace('set a')
-	t1[1] = 100
-	trace(table.unpack(t1, 1, 10))
+	t1[fields.a] = 100
+	trace(table.unpack(t1, 1, #fields))
 	trace('set b')
-	t1[2] = 3
-	trace(table.unpack(t1, 1, 10))
+	t1[fields.b] = 3
+	trace(table.unpack(t1, 1, #fields))
 	trace_sync(t1)
 
 	trace('set b, e')
-	t1(function(t) t[2]=4; t[5]=4; end)
-	trace(table.unpack(t1, 1, 10))
+	t1(function(t) t[fields.b]=4; t[fields.e]=4; end)
+	trace(table.unpack(t1, 1, #fields))
+	trace_sync(t1)
+
+	trace('set o')
+	t1(function(t) t[fields.o] = 'aa' end)
+	trace(table.unpack(t1, 1, #fields))
 	trace_sync(t1)
 
 	local function notify(obj, k)
