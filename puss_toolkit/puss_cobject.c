@@ -205,7 +205,7 @@ static int cobj_seti(const PussCStackObject* stobj, lua_Integer field) {
 	// fill nv
 	switch( tp ) {
 	case PUSS_CVTYPE_BOOL: nv.b = lua_toboolean(L, -1); break;
-	case PUSS_CVTYPE_INT:  nv.i = luaL_checkinteger(L, -1); break;
+	case PUSS_CVTYPE_INT:  nv.i = lua_isinteger(L, -1) ? lua_tointeger(L, -1) : (lua_Integer)luaL_checknumber(L, -1); break;
 	case PUSS_CVTYPE_NUM:  nv.n = luaL_checknumber(L, -1); break;
 	case PUSS_CVTYPE_LUA:  break;
 	}
@@ -310,7 +310,7 @@ static int lua_formular_wrap(const PussCStackObject* stobj, lua_Integer field, P
 	case PUSS_CVTYPE_INT:
 		lua_pushinteger(L, nv->i);
 		if( (state = lua_pcall(L,2,1,0))==LUA_OK )
-			nv->i = luaL_checkinteger(L, -1);
+			nv->i = lua_isinteger(L, -1) ? lua_tointeger(L, -1) : (lua_Integer)luaL_checknumber(L, -1);
 		break;
 	case PUSS_CVTYPE_NUM:
 		lua_pushnumber(L, nv->n);
