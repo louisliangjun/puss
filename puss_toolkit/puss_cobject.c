@@ -1274,23 +1274,25 @@ static int cschema_create(lua_State* L) {
 	}
 
 	luaL_newmetatable(L, PUSS_COBJECT_MT);	lua_setmetatable(L, idxof_obj_mt);
-	lua_pushfstring(L, "PussC_%I", (lua_Integer)id_mask);	lua_setfield(L, idxof_obj_mt, "__name");
+	lua_pushfstring(L, "PussCObject_%I", (lua_Integer)id_mask);	lua_setfield(L, idxof_obj_mt, "__name");
 	lua_pushvalue(L, idxof_names); lua_pushcclosure(L, cobject_gc, 1); lua_setfield(L, idxof_obj_mt, "__gc");
-	lua_pushcfunction(L, cobject_get); lua_setfield(L, idxof_obj_mt, "__index");
-	lua_pushcfunction(L, cobject_set); lua_setfield(L, idxof_obj_mt, "__newindex");
+	lua_pushvalue(L, idxof_obj_mt); lua_setfield(L, idxof_obj_mt, "__index");
 	lua_pushcfunction(L, cobject_call); lua_setfield(L, idxof_obj_mt, "__call");
-	lua_pushcfunction(L, cobject_sync); lua_setfield(L, idxof_obj_mt, "__sync");
-	lua_pushcfunction(L, cobject_clear); lua_setfield(L, idxof_obj_mt, "__clear");
+	lua_pushcfunction(L, cobject_get); lua_setfield(L, idxof_obj_mt, "get");
+	lua_pushcfunction(L, cobject_set); lua_setfield(L, idxof_obj_mt, "set");
+	lua_pushcfunction(L, cobject_sync); lua_setfield(L, idxof_obj_mt, "sync");
+	lua_pushcfunction(L, cobject_clear); lua_setfield(L, idxof_obj_mt, "clear");
 
 	luaL_newmetatable(L, PUSS_COBJREF_MT);	lua_setmetatable(L, idxof_ref_mt);
 	lua_pushfstring(L, "PussCObjRef_%I", (lua_Integer)id_mask); lua_setfield(L, idxof_ref_mt, "__name");
-	lua_pushcfunction(L, cobjref_get); lua_setfield(L, idxof_ref_mt, "__index");
-	lua_pushcfunction(L, cobjref_set); lua_setfield(L, idxof_ref_mt, "__newindex");
+	lua_pushvalue(L, idxof_ref_mt); lua_setfield(L, idxof_ref_mt, "__index");
 	lua_pushcfunction(L, cobjref_call); lua_setfield(L, idxof_ref_mt, "__call");
-	lua_pushcfunction(L, cobjref_sync); lua_setfield(L, idxof_ref_mt, "__sync");
-	lua_pushcfunction(L, cobjref_clear); lua_setfield(L, idxof_ref_mt, "__clear");
-	lua_pushcfunction(L, cobjref_unref); lua_setfield(L, idxof_ref_mt, "__unref");
-	lua_pushcfunction(L, cobjref_stat);	lua_setfield(L, idxof_ref_mt, "__stat");
+	lua_pushcfunction(L, cobjref_get); lua_setfield(L, idxof_ref_mt, "get");
+	lua_pushcfunction(L, cobjref_set); lua_setfield(L, idxof_ref_mt, "set");
+	lua_pushcfunction(L, cobjref_sync); lua_setfield(L, idxof_ref_mt, "sync");
+	lua_pushcfunction(L, cobjref_clear); lua_setfield(L, idxof_ref_mt, "clear");
+	lua_pushcfunction(L, cobjref_unref); lua_setfield(L, idxof_ref_mt, "unref");
+	lua_pushcfunction(L, cobjref_stat);	lua_setfield(L, idxof_ref_mt, "stat");
 
 	lua_settop(L, idxof_changes);
 	lua_pushcclosure(L, cobject_create, 5);	// 4(ObjMT) 5(Schema) 6(Values) 7(Formulars) 8(Changes)

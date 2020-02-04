@@ -29,12 +29,35 @@ local trace = print
 
 for i,v in ipairs(fields) do fields[v.name] = i end
 
-local function perf(t, n, name)
+local function perft(t, n, name)
 	local m = 8
 	for i=1,m do t[i] = i end
 	local ts = puss.timestamp(true)
 	for j=1,n or 10 do
 		for i=1,m do t[i] = t[i] + 1 end
+	end
+	local te = puss.timestamp(true)
+	trace(name, te-ts)
+end
+
+local function perf1(t, n, name)
+	local m = 8
+	for i=1,m do t:set(i, i) end
+	local ts = puss.timestamp(true)
+	for j=1,n or 10 do
+		for i=1,m do t:set(i, t:get(i)+1) end
+	end
+	local te = puss.timestamp(true)
+	trace(name, te-ts)
+end
+
+local function perf2(t, n, name)
+	local m = 8
+	for i=1,m do t:set(i, i) end
+	local get, set = t.get, t.set
+	local ts = puss.timestamp(true)
+	for j=1,n or 10 do
+		for i=1,m do set(t, i, get(t, i)+1) end
 	end
 	local te = puss.timestamp(true)
 	trace(name, te-ts)
@@ -46,7 +69,7 @@ end
 
 local function trace_sync(t)
 	local r = {}
-	local n = t:__sync(r)
+	local n = t:sync(r)
 	for i=1,n*3,3 do
 		trace('sync', string.format('%d %02x %s', r[i], r[i+1], r[i+2]))
 	end
@@ -65,7 +88,7 @@ local function test()
 	puss.cschema_changed_notify_handle_reset(DemoObject, on_changed)
 	puss.cschema_changed_notify_mode_reset(DemoObject, 0)	-- 0-module first 1-property first
 
-	puss.cschema_formular_reset(DemoObject, fields.a, function(obj, val) print('a changed formular', obj, val); return val //  10; end)
+	puss.cschema_formular_reset(DemoObject, fields.a, function(obj, val) print('a changed formular', obj, val); return val /  10.3; end)
 	puss.cschema_formular_reset(DemoObject, fields.o, function(obj, val) print('o changed formular', obj, val); return 'xxx'; end)
 
 	trace('load plguin ...')
@@ -79,23 +102,33 @@ local function test()
 
 	trace('create object ...', DemoObject)
 	_G.t1 = DemoObject()
+	local function tracet1()
+		local tt = {}
+		for i,v in ipairs(fields) do
+			tt[#tt+1] = v.name
+			tt[#tt+1] = ':'
+			tt[#tt+1] = tostring(t1:get(i))
+			tt[#tt+1] = '  '
+		end
+		trace(table.concat(tt))
+	end
 
 	trace('set a')
-	t1[fields.a] = 100
-	trace(table.unpack(t1, 1, #fields))
+	t1:set(fields.a, 100)
+	tracet1()
 	trace('set b')
-	t1[fields.b] = 3
-	trace(table.unpack(t1, 1, #fields))
+	t1:set(fields.b, 3)
+	tracet1()
 	trace_sync(t1)
 
 	trace('set b, e')
-	t1(function(t) t[fields.b]=4; t[fields.e]=4; end)
-	trace(table.unpack(t1, 1, #fields))
+	t1(function(t) t:set(fields.b, 4); t:set(fields.e, 4); end)
+	tracet1()
 	trace_sync(t1)
 
 	trace('set o')
-	t1(function(t) t[fields.o] = 'aa' end)
-	trace(table.unpack(t1, 1, #fields))
+	t1(function(t) t:set(fields.o, 'aa') end)
+	tracet1()
 	trace_sync(t1)
 
 	local function notify(obj, k)
@@ -104,8 +137,9 @@ local function test()
 	end
 
 	local mt = {}
-	mt.__index = function(t,k) return t._v[k] end
-	mt.__newindex = function(t,k,v)
+	mt.__index = mt
+	mt.get = function(t,k) return t._v[k] end
+	mt.set = function(t,k,v)
 		local changed = (t._v[k] ~= v)
 		t._v[k] = v
 		if changed then notify(t,k) end
@@ -114,11 +148,12 @@ local function test()
 	local t2 = setmetatable({_v={}},mt)
 
 	_G.print = function() end
-	local count = 100000
-	perf({}, count, 'table')
-	perf(t1, count, 'cobject')
-	t1(function(t1) perf(t1, count, 'cobject-batch') end)
-	perf(t2, count, 'lobject')
+	local count = 1000000
+	perft({}, count, 'table')
+	perf1(t1, count, 'cobject')
+	perf2(t1, count, 'cobj222')
+	t1(function(t1) perf1(t1, count, 'cbatch') end)
+	perf1(t2, count, 'lobject')
 	do
 		local ts = puss.timestamp(true)
 		plugin.test(t1, count)
@@ -129,7 +164,7 @@ local function test()
 		local ts = puss.timestamp(true)
 		t1(plugin.test, count)
 		local te = puss.timestamp(true)
-		trace('tcc-batch', te-ts)
+		trace('tcbatch', te-ts)
 	end
 	_G.print = trace
 end
