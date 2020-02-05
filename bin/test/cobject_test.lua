@@ -87,7 +87,7 @@ local function test()
 	local DemoObject = puss.cschema_create(DemoObjectIDMask, fields)
 	trace('create', DemoObject)
 	puss.cschema_monitor_reset(DemoObject, on_changed)
-	puss.cschema_changed_notify_mode_reset(DemoObject, 0)	-- 0-module first 1-property first
+	puss.cschema_notify_mode_reset(DemoObject, 0)	-- 0-module first 1-property first
 
 	puss.cschema_formular_reset(DemoObject, fields.a, function(obj, val) print('a changed cformular', obj, val); return val /  10.3; end)
 	puss.cschema_formular_reset(DemoObject, fields.o, function(obj, val) print('o changed cformular', obj, val); return 'xxx'; end)

@@ -1489,7 +1489,7 @@ static int cschema_monitor_reset(lua_State* L) {
 	return 0;
 }
 
-static int cschema_changed_notify_mode_reset(lua_State* L) {
+static int cschema_notify_mode_reset(lua_State* L) {
 	PussCSchema* schema;
 	int notify_mode = (int)luaL_optinteger(L, 2, -1);
 	schema = cschema_check_fetch(L, 1);
@@ -1646,7 +1646,7 @@ static luaL_Reg cobject_lib_methods[] =
 	, {"cschema_refresh", cschema_refresh}
 	, {"cschema_formular_reset", cschema_formular_reset}
 	, {"cschema_monitor_reset", cschema_monitor_reset}
-	, {"cschema_changed_notify_mode_reset", cschema_changed_notify_mode_reset}
+	, {"cschema_notify_mode_reset", cschema_notify_mode_reset}
 	, {"cschema_dirty_loop_reset", cschema_dirty_loop_reset}
 	, {"cobject_metatable", cobject_metatable}
 	, {"cobject_cache", cobject_cache}
