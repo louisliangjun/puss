@@ -233,7 +233,8 @@ static void cobj_do_clear(lua_State* L, const PussCSchema* schema, const PussCOb
 		if( (vt==PUSS_CVTYPE_LUA) && (v->o > 0) ) {
 			v->o = -i;
 			lua_rawgeti(L, -1, i);
-			lua_rawsetp(L, -1, obj);
+			lua_pushnil(L);
+			lua_rawsetp(L, -2, obj);
 			lua_pop(L, 1);
 		} else {
 			*v = defs[i];
