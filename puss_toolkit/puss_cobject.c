@@ -251,7 +251,7 @@ static lua_Integer sync_fetch_and_reset(lua_State* L, PussCObject* obj, PussCSyn
 	uint16_t pos;
 	lua_Integer i = 0;
 	lua_Integer field;
-	if( filter_mask==0xFF ) {
+	if( filter_mask==0 ) {
 		PUSS_BITSETLIST_ITER(num, arr, pos) {
 			assert( (pos > 0) && (pos <= num) );
 			field = map[pos];
@@ -606,7 +606,7 @@ static int cobject_sync(lua_State* L) {
 	PussCSyncModule* m = obj->sync_module;
 	lua_Unsigned filter_mask;
 	luaL_checktype(L, 2, LUA_TTABLE);
-	filter_mask = (lua_Unsigned)luaL_optinteger(L, 3, 0x0FF);
+	filter_mask = (lua_Unsigned)luaL_optinteger(L, 3, 0);
 	luaL_argcheck(L, (filter_mask & 0x0FF)==filter_mask, 3, "bad mask!");
 	lua_pushinteger(L, m ? sync_fetch_and_reset(L, obj, m, 2, (uint8_t)filter_mask) : 0);
 	return 1;
@@ -756,7 +756,7 @@ static int cobjref_sync(lua_State* L) {
 	PussCSyncModule* m = ref->obj->sync_module;
 	lua_Unsigned filter_mask;
 	luaL_checktype(L, 2, LUA_TTABLE);
-	filter_mask = (lua_Unsigned)luaL_optinteger(L, 3, 0x0FF);
+	filter_mask = (lua_Unsigned)luaL_optinteger(L, 3, 0);
 	luaL_argcheck(L, (filter_mask & 0x0FF)==filter_mask, 3, "bad mask!");
 	lua_pushinteger(L, m ? sync_fetch_and_reset(L, ref->obj, m, 2, (uint8_t)filter_mask) : 0);
 	return 1;
@@ -1514,23 +1514,6 @@ void puss_cobject_sync_fetch_infos(lua_State* L, int creator, PussCSyncInfo* inf
 	}
 }
 
-size_t puss_cobject_sync_fetch_and_clear(lua_State* L, const PussCObject* obj, uint16_t* res, size_t len) {
-	size_t ret = 0;
-	if( obj && obj->sync_module && res && (len >= obj->schema->sync_field_count) ) {
-		const PussCSchema* schema = obj->schema;
-		const uint16_t* map = schema->sync_idx_to_field;
-		uint16_t* arr = obj->sync_module->dirty;
-		uint16_t i, n;
-		PUSS_BITSETLIST_MOVE(res, n, arr);
-		assert( n <= len );
-		for( i=0; i<n; ++i ) {
-			res[i] = map[res[i]];
-		}
-		ret = n;
-	}
-	return ret;
-}
-
 size_t puss_cobject_sync_fetch_and_reset(lua_State* L, const PussCObject* obj, uint16_t* res, size_t len, uint8_t filter_mask) {
 	size_t ret = 0;
 	if( obj && obj->sync_module && res && (len >= obj->schema->sync_field_count) ) {
@@ -1540,12 +1523,21 @@ size_t puss_cobject_sync_fetch_and_reset(lua_State* L, const PussCObject* obj, u
 		uint16_t num = schema->sync_field_count;
 		uint16_t* arr = obj->sync_module->dirty;
 		uint16_t pos, field;
-		PUSS_BITSETLIST_ITER(num, arr, pos) {
-			if( PUSS_BITSETLIST_TEST(num, arr, pos) ) {
-				field = map[pos];
-				if( (masks[field] & filter_mask)==filter_mask ) {
-					PUSS_BITSETLIST_RESET(num, arr, pos);
-					res[ret++] = field;
+		if( filter_mask==0 ) {
+			PUSS_BITSETLIST_MOVE(res, num, arr);
+			assert( num <= len );
+			ret = num;
+			for( pos=0; pos<num; ++pos ) {
+				res[pos] = map[res[pos]];
+			}
+		} else {
+			PUSS_BITSETLIST_ITER(num, arr, pos) {
+				if( PUSS_BITSETLIST_TEST(num, arr, pos) ) {
+					field = map[pos];
+					if( (masks[field] & filter_mask)==filter_mask ) {
+						PUSS_BITSETLIST_RESET(num, arr, pos);
+						res[ret++] = field;
+					}
 				}
 			}
 		}
