@@ -32,11 +32,10 @@ typedef struct _PussCSchema	PussCSchema;
 typedef struct _PussCObject	PussCObject;
 typedef union  _PussCValue	PussCValue;
 
-typedef lua_Integer			PussCBool;
-typedef lua_Integer			PussCInt;
-typedef lua_Number			PussCNum;
-typedef lua_Integer			PussCLua;
-typedef const char*			PussCStr;
+typedef lua_Integer	PussCBool;
+typedef lua_Integer	PussCInt;
+typedef lua_Number	PussCNum;
+typedef lua_Integer	PussCLua;
 
 typedef struct _PussCPropModule	PussCPropModule;
 typedef struct _PussCSyncModule	PussCSyncModule;
@@ -47,9 +46,11 @@ typedef struct _PussCStackObject {
 	int					arg;	// stack object absidx
 } PussCStackObject;
 
-typedef int  (*PussCObjectFormula)(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv);
+typedef void (*PussCObjectMonitor)(const PussCStackObject* stobj, lua_Integer field);
 
-typedef void (*PussCObjectChanged)(const PussCStackObject* stobj, lua_Integer field);
+typedef int  (*PussCStackFormular)(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv);
+
+typedef PussCValue  (*PussCFormular)(const PussCObject* obj, PussCValue value);
 
 union _PussCValue {
 	void*		p;
@@ -82,8 +83,9 @@ struct _PussCObject {
 	int   puss_cobject_set_int(const PussCStackObject* stobj, lua_Integer field, PussCInt nv);	// return set succeed
 	int   puss_cobject_set_num(const PussCStackObject* stobj, lua_Integer field, PussCNum nv);	// return set succeed
 
-	void  puss_cschema_formular_reset(lua_State* L, int creator, lua_Integer field, PussCObjectFormula formular);	// top of stack used as module ref
-	void  puss_cschema_changed_reset(lua_State* L, int creator, const char* name, PussCObjectChanged handle);		// top of stack used as module ref
+	void  puss_cmonitor_reset(lua_State* L, int creator, const char* name, PussCObjectMonitor monitor);	// top of stack used as module ref
+	void  puss_cstack_formular_reset(lua_State* L, int creator, lua_Integer field, PussCStackFormular formular);	// top of stack used as module ref
+	void  puss_cformular_reset(lua_State* L, int creator, lua_Integer field, PussCFormular cformular);	// top of stack used as module ref
 #else
 	#define puss_cobject_checkudata(L,arg,id_mask)	(*(__puss_iface__->cobject_checkudata))((L),(arg),(id_mask))
 	#define puss_cobject_testudata(L,arg,id_mask)	(*(__puss_iface__->cobject_testudata))((L),(arg),(id_mask))
@@ -96,8 +98,9 @@ struct _PussCObject {
 	#define puss_cobject_set_int(stobj,f,v)			(*(__puss_iface__->cobject_set_int))((stobj),(f),(v))
 	#define puss_cobject_set_num(stobj,f,v)			(*(__puss_iface__->cobject_set_num))((stobj),(f),(v))
 
-	#define puss_cschema_formular_reset(L,c,i,f)	(*(__puss_iface__->cschema_formular_reset))((L),(c),(i),(f))
-	#define puss_cschema_changed_reset(L,c,n,h)		(*(__puss_iface__->cschema_changed_reset))((L),(c),(n),(h))
+	#define puss_cmonitor_reset(L,c,n,h)			(*(__puss_iface__->cmonitor_reset))((L),(c),(n),(h))
+	#define puss_cstack_formular_reset(L,c,i,f)		(*(__puss_iface__->cstack_formular_reset))((L),(c),(i),(f))
+	#define puss_cformular_reset(L,c,i,f)			(*(__puss_iface__->cformular_reset))((L),(c),(i),(f))
 #endif
 
 // puss-toolkit interfaces, can not used in plugin

@@ -4,18 +4,22 @@
 
 #include "cobject_demo.h"
 
-// cd /d d:\github\puss && tinycc\win32\tcc -shared -Iinclude -o bin\plugins\cobject_demo.dll bin\test\cobject_demo.c
+// cd /d d:\github\puss && tinycc\win32\tcc -Werror -shared -Iinclude -o bin\plugins\cobject_demo.dll bin\test\cobject_demo.c
 
-
-static int formular_demo_object_f(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv) {
-	DemoObject* obj = demo_object_check(stobj);
-	nv->i = obj->b + obj->e;
-	return TRUE;
+static PussCInt formular_demo_object_f(const DemoObject* obj, lua_Integer field, PussCInt value) {
+	return obj->b + obj->e;
 }
 
-static int formular_demo_object_n(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv) {
-	DemoObject* obj = demo_object_check(stobj);
-	nv->i = obj->l * obj->m;
+static PussCInt formular_demo_object_n(const DemoObject* obj, lua_Integer field, PussCInt value) {
+	return obj->l * obj->m;
+}
+
+static PussCInt formular_demo_object_o(const DemoObject* obj, lua_Integer field, PussCInt value) {
+	return value;
+}
+
+static int stack_formular_demo_object_o(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv) {
+	// lua_pushvalue(stobj->L, -1);
 	return TRUE;
 }
 
@@ -31,16 +35,18 @@ static void on_changed(const PussCStackObject* stobj, lua_Integer field) {
 static int demo_module_reg(lua_State* L) {
 	// push plugin module as ref
 	if( lua_isnoneornil(L, 2) )
-		luaL_argerror(L, 2, "formular ref needed");
+		luaL_argerror(L, 2, "cformular ref needed");
 	lua_settop(L, 2);
 
-	puss_cschema_changed_reset(L, 1, "DemoModule", (PussCObjectChanged)on_changed);
-	
-#define demo_formular_reg(prop) puss_cschema_formular_reset(L, 1, demo_object_field(prop), formular_demo_object_ ## prop)
-	demo_formular_reg(f);
-	demo_formular_reg(n);
-#undef demo_formular_reg
+	puss_cmonitor_reset(L, 1, "DemoModule", (PussCObjectMonitor)on_changed);
 
+	#define demo_formular_reg(prop) puss_cformular_reset(L, 1, demo_object_field(prop), (PussCFormular)formular_demo_object_ ## prop)
+		demo_formular_reg(f);
+		demo_formular_reg(n);
+		// demo_formular_reg(o);	// lua field not support cformular
+	#undef demo_formular_reg
+
+	puss_cstack_formular_reset(L, 1, demo_object_field(o), stack_formular_demo_object_o);
 	return 0;
 }
 

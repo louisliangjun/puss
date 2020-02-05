@@ -69,7 +69,7 @@ end
 
 local function trace_sync(t)
 	local r = {}
-	local n = t:sync(r)
+	local n = t:__sync(r)
 	for i=1,n*3,3 do
 		trace('sync', string.format('%d %02x %s', r[i], r[i+1], r[i+2]))
 	end
@@ -81,15 +81,16 @@ local function test()
 	puss_cobject.build_cobject(puss._path..'/test/cobject_demo.h', 'DemoObject', DemoObjectIDMask, fields, true)
 
 	trace('compile plugin ...')
-	os.execute('cd /d '..puss._path..'/../ && tinycc\\win32\\tcc -shared -Iinclude -o bin\\plugins\\cobject_demo'..puss._plugin_suffix..' bin\\test\\cobject_demo.c 2>&1')
+	local ok, err, code = os.execute('cd /d '..puss._path..'/../ && tinycc\\win32\\tcc -Werror -shared -Iinclude -o bin\\plugins\\cobject_demo'..puss._plugin_suffix..' bin\\test\\cobject_demo.c 2>&1')
+	if not ok then return trace('compile plugin failed:', err, code) end
 
 	local DemoObject = puss.cschema_create(DemoObjectIDMask, fields)
 	trace('create', DemoObject)
-	puss.cschema_changed_notify_handle_reset(DemoObject, on_changed)
+	puss.cschema_monitor_reset(DemoObject, on_changed)
 	puss.cschema_changed_notify_mode_reset(DemoObject, 0)	-- 0-module first 1-property first
 
-	puss.cschema_formular_reset(DemoObject, fields.a, function(obj, val) print('a changed formular', obj, val); return val /  10.3; end)
-	puss.cschema_formular_reset(DemoObject, fields.o, function(obj, val) print('o changed formular', obj, val); return 'xxx'; end)
+	puss.cschema_formular_reset(DemoObject, fields.a, function(obj, val) print('a changed cformular', obj, val); return val /  10.3; end)
+	puss.cschema_formular_reset(DemoObject, fields.o, function(obj, val) print('o changed cformular', obj, val); return 'xxx'; end)
 
 	trace('load plguin ...')
 	local plugin
@@ -167,6 +168,7 @@ local function test()
 		trace('tcbatch', te-ts)
 	end
 	_G.print = trace
+	tracet1()
 end
 
 function __main__()
