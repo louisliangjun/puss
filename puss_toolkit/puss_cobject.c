@@ -23,9 +23,13 @@ typedef struct _PussCProperty {
 	PussCStackFormular	formular;		// formular
 	PussCFormular		cformular;		// C formular
 	const uint16_t*		actives;		// deps actives list, actives[0] used for num of array
-	uint16_t			level;			// dependence level
-	uint8_t				notify;			// change notify to lua
+	int					level;			// dependence level
 } PussCProperty;
+
+typedef struct _PussCMonitor {
+	PussCObjectMonitor	handle;
+	const void*			ud;
+} PussCMonitor;
 
 struct _PussCSchema {
 	// basic
@@ -42,11 +46,9 @@ struct _PussCSchema {
 
 	// property module
 	PussCProperty*		properties;				// array of properties
-	PussCObjectMonitor*	monitors;				// array of monitors, endswith NULL
+	PussCMonitor*		monitors;				// array of monitors, endswith NULL
 	lua_Integer			change_notify_loop_limit;	// may modify object in changed event, so need loop notify, default loop 2 times
-	int					change_notify_script;	// properties has notify & script notify handle registed
 	int					change_notify_mode;		// 0-module first other-property first
-	int					change_handle_ref;
 
 	// property sync module
 	uint16_t			sync_field_count;
@@ -126,7 +128,7 @@ static inline void sync_dirtys_init(PussCObject* obj) {
 	PUSS_BITSETLIST_INIT(num, arr);
 }
 
-static void sync_on_changed(const PussCStackObject* stobj, lua_Integer field) {
+static void sync_on_changed(const PussCStackObject* stobj, lua_Integer field, const void* ud) {
 	PussCObject* obj = (PussCObject*)(stobj->obj);
 	const PussCSchema* schema = obj->schema;
 	uint16_t sync_idx, num, *arr;
@@ -244,6 +246,53 @@ static void cobj_do_clear(lua_State* L, const PussCSchema* schema, const PussCOb
 	lua_pop(L, 1);
 }
 
+static int do_monitor_add(lua_State* L) {
+	PussCMonitor* arr = lua_touserdata(L, 1);
+	PussCObjectMonitor h = (PussCObjectMonitor)lua_touserdata(L, 2);
+	const void* ud = lua_topointer(L, 3);
+	while( arr->handle )
+		++arr;
+	arr[0].handle = h;
+	arr[0].ud = ud;
+	arr[1].handle = NULL;
+	arr[1].ud = NULL;
+	return 0;
+}
+
+static const char* CSCHEMA_MONITOR_RESET_SCRIPT =
+	// "print(...)\n"
+	"local tbl, monitor_add, mem, name, monitor, ref = ...\n"
+	"local idx = #tbl + 1\n"
+	"for i,v in ipairs(tbl) do\n"
+	"	if v.name==name then idx=i; break; end\n"
+	"end\n"
+	"if tbl[idx] then tbl[idx][2], tbl[idx][3] = monitor, iref, ref else tbl[idx] = {name, monitor, ref} end\n"
+	"for i,v in ipairs(tbl) do monitor_add(mem, v[2], v[3]) end\n"
+	"tbl.monitors_mem = mem	-- mem use GC\n"
+	;
+
+static void cmonitor_reset(lua_State* L, PussCSchema* schema, int creator, const char* name, PussCObjectMonitor monitor) {
+	PussCMonitor* arr = schema->monitors;
+	luaL_checkstack(L, 16, NULL);
+
+	if( monitor && lua_isnoneornil(L, -1) )	// module ref
+		luaL_error(L, "cschema monitor ref MUST module ref, can NOT none or nil!");
+
+	if( luaL_loadstring(L, CSCHEMA_MONITOR_RESET_SCRIPT) )	// +1
+		luaL_error(L, "build monitors reset script error: %s", lua_tostring(L, -1));
+	if( !(lua_getupvalue(L, creator, 5) && lua_type(L, -1)==LUA_TTABLE) )	// +2
+		luaL_error(L, "cschema fetch monitor table failed!");
+	lua_pushcfunction(L, do_monitor_add);	// +3
+	arr = (PussCMonitor*)lua_newuserdata(L, sizeof(PussCMonitor) * (luaL_len(L, -2) + 2));	// +4
+	arr[0].handle = NULL;
+	arr[0].ud = NULL;
+	lua_pushstring(L, name);	// +5
+	lua_pushlightuserdata(L, monitor);	// +6
+	lua_pushvalue(L, -7);	// +7
+	lua_call(L, 6, 0);
+	schema->monitors = arr[0].handle ? arr : NULL;
+}
+
 static lua_Integer sync_fetch_and_reset(lua_State* L, PussCObject* obj, PussCSyncModule* m, int ret, uint8_t filter_mask) {
 	const uint8_t* masks = obj->schema->sync_field_mask;
 	const uint16_t* map = obj->schema->sync_idx_to_field;
@@ -288,49 +337,28 @@ static inline uint16_t _dirtys_count(uint16_t num, uint16_t* arr) {
 	return n;
 }
 
-static void props_do_notify_module_first(const PussCStackObject* stobj, const PussCProperty* props, const PussCObjectMonitor* monitors, int notify_script, uint16_t* updates, uint16_t n, int top) {
+static void props_do_notify_module_first(const PussCStackObject* stobj, const PussCProperty* props, uint16_t* updates, uint16_t n, int top) {
 	const PussCObject* obj = stobj->obj;
 	lua_State* L = stobj->L;
-	PussCObjectMonitor h;
+	const PussCMonitor* monitors = obj->schema->monitors;	// TODO if need safe iter monitors
 	uint16_t i;
-
-	if( monitors ) {
-		assert( monitors == obj->schema->monitors );
-		for( ; *monitors; ++monitors ) {
-			h = *monitors;
-			for( i=0; i<n; ++i ) {
-				assert( updates[i] );
-				assert( lua_gettop(L) == top );
-				// notify prop changed to monitors 
-				(*h)(stobj, updates[i]);
-				assert( lua_gettop(L) >= top );
-				lua_settop(L, top);
-			}
-		}
-	}
-
-	// notify lua changed monitor
-	if( notify_script ) {
-		puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
-		lua_rawgeti(L, LUA_REGISTRYINDEX, obj->schema->change_handle_ref);
+	for( ; monitors->handle; ++monitors ) {
 		for( i=0; i<n; ++i ) {
-			if( props[updates[i]].notify ) {
-				lua_pushvalue(L, -1);
-				lua_pushvalue(L, 1);
-				lua_pushinteger(L, updates[i]);
-				if( lua_pcall(L, 2, 0, top+1) )
-					lua_pop(L, 1);
-			}
+			assert( updates[i] );
+			assert( lua_gettop(L) == top );
+			// notify prop changed to monitors 
+			(*(monitors->handle))(stobj, updates[i], monitors->ud);
+			assert( lua_gettop(L) >= top );
+			lua_settop(L, top);
 		}
-		lua_settop(L, top);
 	}
 }
 
-static void props_do_notify_property_first(const PussCStackObject* stobj, const PussCProperty* props, const PussCObjectMonitor* monitors, int notify_script, uint16_t* updates, uint16_t n, int top) {
+static void props_do_notify_property_first(const PussCStackObject* stobj, const PussCProperty* props, uint16_t* updates, uint16_t n, int top) {
 	const PussCObject* obj = stobj->obj;
 	lua_State* L = stobj->L;
-	const PussCObjectMonitor* p;
-	PussCObjectMonitor h;
+	const PussCMonitor* monitors = obj->schema->monitors;	// TODO if need safe iter monitors
+	const PussCMonitor* p;
 	uint16_t pos, i;
 	for( i=0; i<n; ++i ) {
 		pos = updates[i];
@@ -338,24 +366,13 @@ static void props_do_notify_property_first(const PussCStackObject* stobj, const 
 		assert( pos );
 		// notify prop monitors
 		if( (p = monitors) != NULL ) {
-			for( ; *p; ++p ) {
-				h = *p;
+			for( ; p->handle; ++p ) {
 				assert( lua_gettop(L) == top );
 				// notify prop changed to monitors
-				(*h)(stobj, pos);
+				(*(p->handle))(stobj, pos, p->ud);
 				assert( lua_gettop(L) >= top );
 				lua_settop(L, top);
 			}
-		}
-		if( notify_script && props[updates[i]].notify ) {
-			puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
-			lua_rawgeti(L, LUA_REGISTRYINDEX, obj->schema->change_handle_ref);
-			lua_pushvalue(L, 1);
-			lua_pushinteger(L, pos);
-			if( lua_pcall(L, 2, 0, top+1) )
-				lua_pop(L, 1);
-			assert( lua_gettop(L) == (top+1) );
-			lua_settop(L, top);
 		}
 	}
 }
@@ -365,11 +382,9 @@ static void props_apply_hook_and_notify_once(const PussCStackObject* stobj, uint
 	lua_State* L = stobj->L;
 	const char* types = obj->schema->types;
 	const PussCProperty* props = obj->schema->properties;
-	const PussCObjectMonitor* monitors = obj->schema->monitors;
 	PussCPropModule* m = (PussCPropModule*)(obj->prop_module);
 	uint16_t* updates = (uint16_t*)_alloca(sizeof(uint16_t) * n);
 	uint16_t pos, i, j;
-	int notify_script = obj->schema->change_notify_script;
 	int changed;
 	PussCStackFormular formular;
 	PussCFormular cformular;
@@ -430,24 +445,21 @@ static void props_apply_hook_and_notify_once(const PussCStackObject* stobj, uint
 	// clear dirtys
 	PUSS_BITSETLIST_CLEAR(num, arr);
 
-	if( monitors || notify_script ) {
-		notify_script = 0;
+	if( obj->schema->monitors ) {
 		i = 0;
 		for( j=i; j<n; ++j ) {
 			if( (pos = updates[j])!=0 ) {
 				if( i != j )
 					updates[i] = pos;
-				if( props[pos].notify )
-					notify_script = 1;
 				++i;
 			}
 		}
 		n = i;
 		if( n > 0 ) {
 			if( obj->schema->change_notify_mode==0 ) {
-				props_do_notify_module_first(stobj, props, monitors, notify_script, updates, n, top);
+				props_do_notify_module_first(stobj, props, updates, n, top);
 			} else {
-				props_do_notify_property_first(stobj, props, monitors, notify_script, updates, n, top);
+				props_do_notify_property_first(stobj, props, updates, n, top);
 			}
 		}
 	}
@@ -922,7 +934,6 @@ static int cschema_gc(lua_State* L) {
 	PussCSchema* schema = (PussCSchema*)lua_touserdata(L, 1);
 	int values_ref = schema->values_ref;
 	int formulars_ref = schema->formulars_ref;
-	int change_handle_ref = schema->change_handle_ref;
 	lua_Integer n = schema->field_count;
 	lua_Integer i;
 	for( i=0; i<=n; ++i ) {
@@ -936,10 +947,8 @@ static int cschema_gc(lua_State* L) {
 	}
 	schema->values_ref = LUA_NOREF;
 	schema->formulars_ref = LUA_NOREF;
-	schema->change_handle_ref = LUA_NOREF;
 	luaL_unref(L, LUA_REGISTRYINDEX, values_ref);
 	luaL_unref(L, LUA_REGISTRYINDEX, formulars_ref);
-	luaL_unref(L, LUA_REGISTRYINDEX, change_handle_ref);
 	return 0;
 }
 
@@ -1012,7 +1021,6 @@ static void cschema_prop_reset_props(lua_State* L, PussCSchema* raw, int descs) 
 	PussCSchema* schema = (PussCSchema*)lua_newuserdata(L, struct_sz);	// top
 	PussCValue* defs = (PussCValue*)(schema + 1);
 	PussCProperty* props = (PussCProperty*)(defs + 1 + n);
-	int enable_change_notify = 0;
 	int top = lua_gettop(L);
 	memset(schema, 0, struct_sz);
 	assert( (char*)props == ((char*)(schema + 1) + defs_sz) );
@@ -1049,7 +1057,7 @@ static void cschema_prop_reset_props(lua_State* L, PussCSchema* raw, int descs) 
 		lua_settop(L, desc);
 
 		lua_getfield(L, desc, "dep_level");	// desc.dep_level
-		prop->level = (uint16_t)lua_tointeger(L, -1);
+		prop->level = (int)lua_tointeger(L, -1);
 		lua_settop(L, desc);
 
 		if( (lua_getfield(L, desc, "dep_actives")==LUA_TTABLE) && ((m = luaL_len(L, -1)) > 0) ) {	// desc.dep_actives
@@ -1070,14 +1078,6 @@ static void cschema_prop_reset_props(lua_State* L, PussCSchema* raw, int descs) 
 			}
 		}
 		lua_settop(L, desc);
-
-		if( lua_getfield(L, desc, "change_notify")!=LUA_TNIL ) {	// desc.change_notify
-			if( lua_toboolean(L, -1) ) {
-				prop->notify = 1;
-				enable_change_notify = 1;
-			}
-		}
-		lua_settop(L, desc);
 	}
 
 	memcpy((void*)(raw->defs), defs, defs_sz);
@@ -1086,8 +1086,6 @@ static void cschema_prop_reset_props(lua_State* L, PussCSchema* raw, int descs) 
 		raw_props[i] = props[i];
 		props[i] = tmp;
 	}
-
-	raw->change_notify_script = enable_change_notify && (schema->change_handle_ref != LUA_NOREF);
 }
 
 static int cschema_create(lua_State* L) {
@@ -1139,7 +1137,6 @@ static int cschema_create(lua_State* L) {
 	schema->defs = defs;
 	schema->values_ref = LUA_NOREF;
 	schema->formulars_ref = LUA_NOREF;
-	schema->change_handle_ref = LUA_NOREF;
 	schema->change_notify_loop_limit = CHANGE_NOTIFY_LOOP_LIMIT_DEFAULT;
 	schema->properties = props;
 	schema->sync_field_mask = sync_field_mask;
@@ -1156,7 +1153,7 @@ static int cschema_create(lua_State* L) {
 
 	lua_createtable(L, (int)n, 0);	// values table: 6
 	lua_createtable(L, (int)n, 0);	// formulars table: 7
-	lua_createtable(L, 0, 0);		// changes table: 8
+	lua_createtable(L, 0, 0);		// monitors table: 8
 	lua_createtable(L, (int)n, 0);	// names table: 9
 
 #define idxof_descs		2
@@ -1165,7 +1162,7 @@ static int cschema_create(lua_State* L) {
 #define idxof_schema	5
 #define idxof_values	6
 #define idxof_formulars	7
-#define idxof_changes	8
+#define idxof_monitors	8
 #define idxof_names		9
 	lua_pushvalue(L, idxof_values);	schema->values_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 	lua_pushvalue(L, idxof_formulars);	schema->formulars_ref = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -1268,19 +1265,19 @@ static int cschema_create(lua_State* L) {
 	lua_pushcfunction(L, cobjref_unref); lua_setfield(L, idxof_ref_mt, "__unref");
 	lua_pushcfunction(L, cobjref_stat);	lua_setfield(L, idxof_ref_mt, "stat");
 
-	lua_settop(L, idxof_changes);
-	lua_pushcclosure(L, cobject_create, 5);	// 4(ObjMT) 5(Schema) 6(Values) 7(Formulars) 8(Changes)
+	lua_settop(L, idxof_monitors);
+	lua_pushcclosure(L, cobject_create, 5);	// 4(ObjMT) 5(Schema) 6(Values) 7(Formulars) 8(Monitors)
 	if( id_mask & PUSS_COBJECT_IDMASK_SUPPORT_REF ) {
 		lua_getupvalue(L, -1, 2);	// Schema
 		lua_getupvalue(L, -2, 3);	// Values
 		lua_getupvalue(L, -3, 4);	// Formulars
-		lua_getupvalue(L, -4, 5);	// Changes
+		lua_getupvalue(L, -4, 5);	// Monitors
 		lua_rotate(L, 4, 4);		// insert after RefMT
-		lua_pushcclosure(L, cobjref_create, 6);	// 3(RefMT) (Schema) (Values) (Formulars) (Changes) (cobject_create())
+		lua_pushcclosure(L, cobjref_create, 6);	// 3(RefMT) (Schema) (Values) (Formulars) (Monitors) (cobject_create())
 	}
 
 #undef idxof_names
-#undef idxof_changes
+#undef idxof_monitors
 #undef idxof_formulars
 #undef idxof_values
 #undef idxof_schema
@@ -1294,8 +1291,8 @@ static int cschema_create(lua_State* L) {
 
 	if( schema->sync_field_count ) {
 		int top = lua_gettop(L);
-		lua_pushboolean(L, 1);
-		puss_cmonitor_reset(L, -2, "@builtin_sync_module", sync_on_changed);
+		lua_pushlightuserdata(L, NULL);
+		cmonitor_reset(L, schema, top, "@builtin_sync_module", sync_on_changed);
 		lua_settop(L, top);
 		if( !lua_isfunction(L, -1) )
 			luaL_error(L, "sync module reg bad logic!");
@@ -1460,33 +1457,160 @@ static int cschema_formular_reset(lua_State* L) {
 	return 0;
 }
 
-static int cschema_monitor_reset(lua_State* L) {
-	PussCSchema* schema;
-	int clear = lua_isnoneornil(L, 2);
-	int change_notify = 0;
-	lua_Integer i;
-	if( !clear )
-		luaL_checktype(L, 2, LUA_TFUNCTION);
-	schema = cschema_check_fetch(L, 1);
-	if( clear ) {
-		luaL_unref(L, LUA_REGISTRYINDEX, schema->change_handle_ref);
-		schema->change_handle_ref = LUA_NOREF;
+#define LUA_MONITOR_UD_NAME		"PussCLuaMonitorUD"
+
+typedef struct _LuaMonitorUD {
+	int				handle_ref;
+	PussCSchema*	schema;
+	PussBitSet		masks[1];
+} LuaMonitorUD;
+
+static int lua_monitor_gc(lua_State* L) {
+	LuaMonitorUD* ud = luaL_checkudata(L, 1, LUA_MONITOR_UD_NAME);
+	luaL_unref(L, LUA_REGISTRYINDEX, ud->handle_ref);
+	ud->handle_ref = LUA_NOREF;
+	return 0;
+}
+
+static int lua_monitor_get(lua_State* L) {
+	LuaMonitorUD* ud = luaL_checkudata(L, 1, LUA_MONITOR_UD_NAME);
+	lua_Integer field = luaL_checkinteger(L, 2);
+	if( (field>0 && field<=ud->schema->field_count) ) {
+		lua_pushboolean(L, PUSS_BITSET_TEST(ud->masks, field)!=0);
 	} else {
-		lua_pushvalue(L, 2);
-		if( schema->change_handle_ref!=LUA_NOREF ) {
-			lua_rawseti(L, LUA_REGISTRYINDEX, schema->change_handle_ref);
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+static int lua_monitor_set(lua_State* L) {
+	LuaMonitorUD* ud = luaL_checkudata(L, 1, LUA_MONITOR_UD_NAME);
+	lua_Integer field = luaL_checkinteger(L, 2);
+	int set = lua_toboolean(L, 3);
+	if( (field>0 && field<=ud->schema->field_count) ) {
+		if( set ) {
+			PUSS_BITSET_SET(ud->masks, field);
 		} else {
-			schema->change_handle_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-		}
-		for( i=1; i<=schema->field_count; ++i ) {
-			if( schema->properties[i].notify ) {
-				change_notify = 1;
-				break;
-			}
+			PUSS_BITSET_RESET(ud->masks, field);
 		}
 	}
-	schema->change_notify_script = change_notify;
 	return 0;
+}
+
+static int lua_monitor_reset_handle(lua_State* L) {
+	LuaMonitorUD* ud = luaL_checkudata(L, 1, LUA_MONITOR_UD_NAME);
+	luaL_checktype(L, 2, LUA_TFUNCTION);
+	lua_settop(L, 2);
+	if( ud->handle_ref==LUA_NOREF ) {
+		ud->handle_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	} else {
+		lua_rawseti(L, LUA_REGISTRYINDEX, ud->handle_ref);
+	}
+	return 0;
+}
+
+static void lua_monitor_on_changed(const PussCStackObject* stobj, lua_Integer field, const void* ud) {
+	LuaMonitorUD* monitor_ud = (LuaMonitorUD*)ud;
+	assert( monitor_ud );
+	assert( monitor_ud->handle_ref != LUA_NOREF );
+	assert( stobj && stobj->obj && stobj->obj->schema );
+	assert( (field > 0) && (field <= stobj->obj->schema->field_count) );
+	if( PUSS_BITSET_TEST(monitor_ud->masks, field) ) {
+		PussCObject* obj = (PussCObject*)(stobj->obj);
+		const PussCSchema* schema = obj->schema;
+		lua_State* L = stobj->L;
+		int top = lua_gettop(L);
+		puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
+		lua_rawgeti(L, LUA_REGISTRYINDEX, monitor_ud->handle_ref);
+		lua_pushvalue(L, stobj->arg);
+		lua_pushinteger(L, field);
+		lua_pcall(L, 2, 0, top+1);
+		lua_settop(L, top);
+	}
+}
+
+static int cschema_monitor_lookup(lua_State* L) {
+	PussCSchema* schema;
+	size_t size = 0;
+	const char* name = luaL_checklstring(L, 2, &size);
+	lua_Integer i, n;
+	int top;
+	if( !((name[0]>='a' && name[0]<='z') || (name[0]>='A' && name[0]<='Z')) )
+		luaL_argerror(L, 2, "name MUST startswith A-Z or a-z");
+	if( strlen(name)!=size )
+		luaL_argerror(L, 2, "name MUST c-string");
+	schema = cschema_check_fetch(L, 1);
+	lua_pop(L, 1);
+
+	// lua monitor add prefix: !
+	lua_pushstring(L, "!");
+	lua_pushvalue(L, 2);
+	lua_concat(L, 2);
+	lua_replace(L, 2);
+	name = lua_tostring(L, 2);
+
+	if( !(lua_getupvalue(L, 1, 5) && lua_type(L, -1)==LUA_TTABLE) )
+		luaL_error(L, "cschema fetch monitor table failed!");
+
+	top = lua_gettop(L);
+	n = luaL_len(L, -1);
+	for( i=1; i<=n; ++i ) {
+		lua_settop(L, top);
+		if( lua_geti(L, top, i)==LUA_TTABLE && lua_geti(L, -1, 1)==LUA_TSTRING && lua_rawequal(L, -1, 2) ) {
+			lua_pop(L, 1);
+			lua_geti(L, -1, 3);	// get ref
+			assert( luaL_checkudata(L, -1, LUA_MONITOR_UD_NAME) );
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static int cschema_monitor_reset(lua_State* L) {
+	PussCSchema* schema;
+	size_t size = 0;
+	const char* name = luaL_checklstring(L, 2, &size);
+	int clear = lua_isnoneornil(L, 3);
+	if( !((name[0]>='a' && name[0]<='z') || (name[0]>='A' && name[0]<='Z')) )
+		luaL_argerror(L, 2, "name MUST startswith A-Z or a-z");
+	if( strlen(name)!=size )
+		luaL_argerror(L, 2, "name MUST c-string");
+	if( !clear ) {
+		luaL_checktype(L, 3, LUA_TFUNCTION);
+	}
+	schema = cschema_check_fetch(L, 1);
+	lua_pop(L, 1);
+
+	// lua monitor add prefix: !
+	lua_pushstring(L, "!");
+	lua_pushvalue(L, 2);
+	lua_concat(L, 2);
+	lua_replace(L, 2);
+	name = lua_tostring(L, 2);
+
+	if( !clear ) {
+		// notify_mask bitset used as ud
+		size_t ud_size = sizeof(LuaMonitorUD) + PUSS_BITSET_REQUIRE(schema->field_count);
+		LuaMonitorUD* monitor_ud = (LuaMonitorUD*)lua_newuserdata(L, ud_size);
+		memset(monitor_ud, 0, ud_size);
+		monitor_ud->handle_ref = LUA_NOREF;
+		lua_pushvalue(L, 1);
+		lua_setuservalue(L, -2);
+		if( luaL_newmetatable(L, LUA_MONITOR_UD_NAME) ) {
+			lua_pushcfunction(L, lua_monitor_gc);	lua_setfield(L, -2, "__gc");
+			lua_pushcfunction(L, lua_monitor_get);	lua_setfield(L, -2, "__index");
+			lua_pushcfunction(L, lua_monitor_set);	lua_setfield(L, -2, "__newindex");
+			lua_pushcfunction(L, lua_monitor_reset_handle);	lua_setfield(L, -2, "__call");
+		}
+		lua_setmetatable(L, -2);
+		lua_pushvalue(L, 3);
+		monitor_ud->handle_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+		monitor_ud->schema = schema;
+	}  else {
+		lua_pushnil(L);
+	}
+	cmonitor_reset(L, schema, 1, name, clear ? NULL : lua_monitor_on_changed);
+	return 1;
 }
 
 static int cschema_notify_mode_reset(lua_State* L) {
@@ -1590,61 +1714,22 @@ size_t puss_cobject_sync_fetch_and_reset(lua_State* L, const PussCObject* obj, u
 	return ret;
 }
 
-static int do_monitor_add(lua_State* L) {
-	PussCObjectMonitor* arr = lua_touserdata(L, 1);
-	PussCObjectMonitor h = (PussCObjectMonitor)lua_touserdata(L, 2);
-	while( *arr)
-		++arr;
-	arr[0] = h;
-	arr[1] = NULL;
-	return 0;
-}
-
-static const char* CSCHEMA_CHANGES_RESET_SCRIPT =
-	// "print(...)\n"
-	"local tbl, monitor_add, mem, name, monitor, ref = ...\n"
-	"local idx = #tbl + 1\n"
-	"for i,v in ipairs(tbl) do\n"
-	"	if v.name==name then idx=i; break; end\n"
-	"end\n"
-	"if tbl[idx] then tbl[idx][2], tbl[idx][3] = monitor, ref else tbl[idx] = {name, monitor, ref} end\n"
-	// "print(idx)\n"
-	"for i,v in ipairs(tbl) do monitor_add(mem, v[2]) end\n"
-	"tbl.monitors_mem = mem	-- mem use GC\n"
-	;
-
 void puss_cmonitor_reset(lua_State* L, int creator, const char* name, PussCObjectMonitor monitor) {
 	int absidx = lua_absindex(L, creator);
 	PussCSchema* schema = cschema_check_fetch(L, absidx);
-	PussCObjectMonitor* arr = schema->monitors;
+	PussCMonitor* arr = schema->monitors;
+	luaL_checkstack(L, 16, NULL);
 	lua_pop(L, 1);
-	if( !(name && *name) )
-		luaL_error(L, "monitor name MUST exist & not empty string");
-	if( monitor && lua_isnoneornil(L, -1) )	// module ref
-		luaL_error(L, "cschema monitor ref MUST module ref, can NOT none or nil!");
-
-	if( luaL_loadstring(L, CSCHEMA_CHANGES_RESET_SCRIPT) )	// +1
-		luaL_error(L, "build changes reset script error: %s", lua_tostring(L, -1));
-	if( !(lua_getupvalue(L, absidx, 5) && lua_type(L, -1)==LUA_TTABLE) )	// +2
-		luaL_error(L, "cschema fetch monitor table failed!");
-	lua_pushcfunction(L, do_monitor_add);	// +3
-	arr = (PussCObjectMonitor*)lua_newuserdata(L, sizeof(PussCObjectMonitor) * (luaL_len(L, -2) + 2));	// +4
-	arr[0] = NULL;
-	lua_pushstring(L, name);	// +5
-	lua_pushlightuserdata(L, monitor);	// +6
-	if( monitor ) {
-		lua_pushvalue(L, -7);	// +7
-	} else {
-		lua_pushnil(L);
-	}
-	lua_call(L, 6, 0);
-	schema->monitors = arr[0] ? arr : NULL;
+	if( !(name && ((name[0]>='a' && name[0]<='z') || (name[0]>='A' && name[0]<='Z'))) )
+		luaL_error(L, "monitor name MUST exist & startswith A-Z or a-z");
+	cmonitor_reset(L, schema, absidx, name, monitor);
 }
 
 static luaL_Reg cobject_lib_methods[] =
 	{ {"cschema_create", NULL}
 	, {"cschema_refresh", cschema_refresh}
 	, {"cschema_formular_reset", cschema_formular_reset}
+	, {"cschema_monitor_lookup", cschema_monitor_lookup}
 	, {"cschema_monitor_reset", cschema_monitor_reset}
 	, {"cschema_notify_mode_reset", cschema_notify_mode_reset}
 	, {"cschema_dirty_loop_reset", cschema_dirty_loop_reset}

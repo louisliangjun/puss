@@ -8,7 +8,7 @@ local DemoObjectIDMask = 0x0001 | COBJECT_SUPPORT_REF | COBJECT_SUPPORT_PROP | C
 
 local fields =
 	{ {name='a', type='int', sync=0x01, deps={}}
-	, {name='b', type='int', sync=0x01, change_notify=true}
+	, {name='b', type='int', sync=0x01}
 	, {name='c', type='int', sync=0x01}
 	, {name='d', type='int', sync=0x01}
 	, {name='e', type='int', sync=0x11, deps={'a'}}
@@ -64,7 +64,7 @@ local function perf2(t, n, name)
 end
 
 local function on_changed(obj, field)
-	print('changed notify', obj, field)
+	print('lua-on-changed', obj, field)
 end
 
 local function trace_sync(t)
@@ -86,7 +86,13 @@ local function test()
 
 	local DemoObject = puss.cschema_create(DemoObjectIDMask, fields)
 	trace('create', DemoObject)
-	puss.cschema_monitor_reset(DemoObject, on_changed)
+	local monitor = puss.cschema_monitor_reset(DemoObject, 'test_on_changed', print)
+	trace('monitor', monitor, puss.cschema_monitor_lookup(DemoObject, 'test_on_changed'))
+	trace(monitor[fields.b])
+	monitor[fields.b] = true
+	trace(monitor[fields.b])
+	monitor(on_changed)
+
 	puss.cschema_notify_mode_reset(DemoObject, 0)	-- 0-module first 1-property first
 
 	puss.cschema_formular_reset(DemoObject, fields.a, function(obj, val) print('a changed cformular', obj, val); return val /  10.3; end)

@@ -46,7 +46,7 @@ typedef struct _PussCStackObject {
 	int					arg;	// stack object absidx
 } PussCStackObject;
 
-typedef void (*PussCObjectMonitor)(const PussCStackObject* stobj, lua_Integer field);
+typedef void (*PussCObjectMonitor)(const PussCStackObject* stobj, lua_Integer field, const void* ud);
 
 typedef int  (*PussCStackFormular)(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv);
 

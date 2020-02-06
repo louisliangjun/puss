@@ -23,7 +23,7 @@ static int stack_formular_demo_object_o(const PussCStackObject* stobj, lua_Integ
 	return TRUE;
 }
 
-static void on_changed(const PussCStackObject* stobj, lua_Integer field) {
+static void on_changed(const PussCStackObject* stobj, lua_Integer field, const void* ud) {
 	lua_State* L = stobj->L;
 	lua_getglobal(L, "print");
 	lua_pushstring(L, "cobject-on-changed");

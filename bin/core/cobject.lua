@@ -8,7 +8,6 @@ __exports.build_cobject = function(filename, name, id, fields, not_gen_field_id)
 		{ ['bool'] = 'PussCBool'
 		, ['int'] = 'PussCInt'
 		, ['num'] = 'PussCNum'
-		, ['str'] = 'PussCStr'
 		, ['lua'] = 'PussCLua'
 		}
 
