@@ -3,6 +3,7 @@
 #define _PUSS_IMPLEMENT
 #include "puss_cobject.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -12,14 +13,13 @@
 #include "puss_bitset.h"
 #include "puss_toolkit.h"
 
-#define CHANGE_NOTIFY_LOOP_LIMIT_DEFAULT	2
+#define NOTIFY_LOOP_LIMIT_DEFAULT	2
 
 #define PUSS_CSCHEMA_MT	"PussCSchema"
 #define PUSS_COBJECT_MT	"PussCObject"
 #define PUSS_COBJREF_MT	"PussCObjRef"
 
 typedef struct _PussCProperty {
-	const char*			name;			// property name
 	PussCStackFormular	formular;		// formular
 	PussCFormular		cformular;		// C formular
 	const uint16_t*		actives;		// deps actives list, actives[0] used for num of array
@@ -35,6 +35,7 @@ struct _PussCSchema {
 	// basic
 	lua_Unsigned		id_mask;
 	lua_Integer			field_count;
+	const char**		names;
 	const char*			types;
 	const PussCValue*	defs;
 	int					values_ref;
@@ -45,16 +46,17 @@ struct _PussCSchema {
 	size_t				cache_count;
 
 	// property module
-	PussCProperty*		properties;				// array of properties
-	PussCMonitor*		monitors;				// array of monitors, endswith NULL
-	lua_Integer			change_notify_loop_limit;	// may modify object in changed event, so need loop notify, default loop 2 times
-	int					change_notify_mode;		// 0-module first other-property first
+	PussCProperty*		properties;			// array of properties
+	PussCMonitor*		monitors;			// array of monitors, endswith NULL
+	lua_Integer			notify_loop_limit;	// may modify object in changed event, so need loop notify, default loop 2 times
+	int					notify_mode;		// 0-module first other-property first
+	int					notify_lock;		// 0-not in notify other-in notify
 
 	// property sync module
 	uint16_t			sync_field_count;
-	const uint8_t*		sync_field_mask;		// array[1+field_count]
-	const uint16_t*		sync_field_idx;			// array[1+field_count]
-	const uint16_t*		sync_idx_to_field;		// array[1+sync_field_count] of sync index to field
+	const uint8_t*		sync_field_masks;	// array[1+field_count]
+	const uint16_t*		sync_field_idx;		// array[1+field_count]
+	const uint16_t*		sync_idx_to_field;	// array[1+sync_field_count] of sync index to field
 };
 
 // ref object support
@@ -272,11 +274,12 @@ static const char* CSCHEMA_MONITOR_RESET_SCRIPT =
 	;
 
 static void cmonitor_reset(lua_State* L, PussCSchema* schema, int creator, const char* name, PussCObjectMonitor monitor) {
-	PussCMonitor* arr = schema->monitors;
-	luaL_checkstack(L, 16, NULL);
-
+	PussCMonitor* arr;
 	if( monitor && lua_isnoneornil(L, -1) )	// module ref
 		luaL_error(L, "cschema monitor ref MUST module ref, can NOT none or nil!");
+
+	if( schema->notify_lock )
+		luaL_error(L, "can NOT reset monitor in monitor handle!");
 
 	if( luaL_loadstring(L, CSCHEMA_MONITOR_RESET_SCRIPT) )	// +1
 		luaL_error(L, "build monitors reset script error: %s", lua_tostring(L, -1));
@@ -294,7 +297,7 @@ static void cmonitor_reset(lua_State* L, PussCSchema* schema, int creator, const
 }
 
 static lua_Integer sync_fetch_and_reset(lua_State* L, PussCObject* obj, PussCSyncModule* m, int ret, uint8_t filter_mask) {
-	const uint8_t* masks = obj->schema->sync_field_mask;
+	const uint8_t* masks = obj->schema->sync_field_masks;
 	const uint16_t* map = obj->schema->sync_idx_to_field;
 	uint16_t num = obj->schema->sync_field_count;
 	uint16_t* arr = m->dirty;
@@ -340,7 +343,7 @@ static inline uint16_t _dirtys_count(uint16_t num, uint16_t* arr) {
 static void props_do_notify_module_first(const PussCStackObject* stobj, const PussCProperty* props, uint16_t* updates, uint16_t n, int top) {
 	const PussCObject* obj = stobj->obj;
 	lua_State* L = stobj->L;
-	const PussCMonitor* monitors = obj->schema->monitors;	// TODO if need safe iter monitors
+	const PussCMonitor* monitors = obj->schema->monitors;
 	uint16_t i;
 	for( ; monitors->handle; ++monitors ) {
 		for( i=0; i<n; ++i ) {
@@ -357,7 +360,7 @@ static void props_do_notify_module_first(const PussCStackObject* stobj, const Pu
 static void props_do_notify_property_first(const PussCStackObject* stobj, const PussCProperty* props, uint16_t* updates, uint16_t n, int top) {
 	const PussCObject* obj = stobj->obj;
 	lua_State* L = stobj->L;
-	const PussCMonitor* monitors = obj->schema->monitors;	// TODO if need safe iter monitors
+	const PussCMonitor* monitors = obj->schema->monitors;
 	const PussCMonitor* p;
 	uint16_t pos, i;
 	for( i=0; i<n; ++i ) {
@@ -379,9 +382,10 @@ static void props_do_notify_property_first(const PussCStackObject* stobj, const 
 
 static void props_apply_hook_and_notify_once(const PussCStackObject* stobj, uint16_t num, uint16_t* arr, uint16_t n, int top) {
 	PussCObject* obj = (PussCObject*)(stobj->obj);
+	PussCSchema* schema = (PussCSchema*)(obj->schema);
 	lua_State* L = stobj->L;
-	const char* types = obj->schema->types;
-	const PussCProperty* props = obj->schema->properties;
+	const char* types = schema->types;
+	const PussCProperty* props = schema->properties;
 	PussCPropModule* m = (PussCPropModule*)(obj->prop_module);
 	uint16_t* updates = (uint16_t*)_alloca(sizeof(uint16_t) * n);
 	uint16_t pos, i, j;
@@ -445,7 +449,7 @@ static void props_apply_hook_and_notify_once(const PussCStackObject* stobj, uint
 	// clear dirtys
 	PUSS_BITSETLIST_CLEAR(num, arr);
 
-	if( obj->schema->monitors ) {
+	if( schema->monitors ) {
 		i = 0;
 		for( j=i; j<n; ++j ) {
 			if( (pos = updates[j])!=0 ) {
@@ -456,11 +460,13 @@ static void props_apply_hook_and_notify_once(const PussCStackObject* stobj, uint
 		}
 		n = i;
 		if( n > 0 ) {
-			if( obj->schema->change_notify_mode==0 ) {
+			++(schema->notify_lock);
+			if( schema->notify_mode==0 ) {
 				props_do_notify_module_first(stobj, props, updates, n, top);
 			} else {
 				props_do_notify_property_first(stobj, props, updates, n, top);
 			}
+			--(schema->notify_lock);
 		}
 	}
 }
@@ -470,7 +476,7 @@ static void props_changes_notify(const PussCStackObject* stobj) {
 	uint16_t num = (uint16_t)(obj->schema->field_count);
 	uint16_t* arr;
 	uint16_t dirty_num;
-	lua_Integer loop_count = obj->schema->change_notify_loop_limit;
+	lua_Integer loop_count = obj->schema->notify_loop_limit;
 	int top = lua_gettop(stobj->L);
 	assert( obj->prop_module && obj->prop_module->lock );
 	arr = obj->prop_module->dirty;
@@ -1026,7 +1032,7 @@ static void cschema_prop_reset_props(lua_State* L, PussCSchema* raw, int descs) 
 	assert( (char*)props == ((char*)(schema + 1) + defs_sz) );
 	schema->id_mask = raw->id_mask;
 	schema->field_count = n;
-	schema->change_notify_loop_limit = raw->change_notify_loop_limit;
+	schema->notify_loop_limit = raw->notify_loop_limit;
 	schema->properties = props;
 	schema->types = types;
 	schema->defs = defs;
@@ -1069,11 +1075,11 @@ static void cschema_prop_reset_props(lua_State* L, PussCSchema* raw, int descs) 
 			actives[0] = (uint16_t)m;
 			for( j=1; j<=m; ++j ) {
 				if( lua_geti(L, -1, j)!=LUA_TNUMBER )
-					luaL_error(L, "prop(%s) actives[%d] not number!", prop->name, j);
+					luaL_error(L, "prop(%s) actives[%d] not number!", schema->names[i], j);
 				t = lua_tointeger(L, -1);
 				lua_pop(L, 1);
 				if( t<=0 || t>n )
-					luaL_error(L, "prop(%s) actives[%d] bad range!", prop->name, j);
+					luaL_error(L, "prop(%s) actives[%d] bad range!", schema->names[i], j);
 				actives[j] = (uint16_t)t;
 			}
 		}
@@ -1091,12 +1097,13 @@ static void cschema_prop_reset_props(lua_State* L, PussCSchema* raw, int descs) 
 static int cschema_create(lua_State* L) {
 	lua_Unsigned id_mask = (lua_Unsigned)luaL_checkinteger(L, 1);
 	lua_Integer i, n;
-	size_t types_sz, defs_sz, props_sz, sync_masks_sz, sync_idx_sz, struct_sz;
+	size_t names_sz, types_sz, defs_sz, props_sz, sync_masks_sz, sync_idx_sz, struct_sz;
 	PussCSchema* schema = NULL;
+	const char** names = NULL;
 	char* types = NULL;
 	PussCValue* defs = NULL;
 	PussCProperty* props = NULL;
-	uint8_t* sync_field_mask = NULL;
+	uint8_t* sync_field_masks = NULL;
 	uint16_t* sync_field_idx = NULL;
 	PussCProperty* prop;
 	const char* vt;
@@ -1117,29 +1124,32 @@ static int cschema_create(lua_State* L) {
 	if( (n = luaL_len(L, 2)) > 0x7FFE )
 		luaL_error(L, "too many fields(%d)!", n);
 
+	names_sz = sizeof(const char*) * (1 + n);
 	types_sz = PUSS_COBJECT_MEMALIGN_SIZE( sizeof(char) * (1 + n) );
-	defs_sz = PUSS_COBJECT_MEMALIGN_SIZE( sizeof(PussCValue) * (1 + n) );
+	defs_sz = sizeof(PussCValue) * (1 + n);
 	props_sz = PUSS_COBJECT_MEMALIGN_SIZE( sizeof(PussCProperty) * (1 + n) );
 	sync_masks_sz = PUSS_COBJECT_MEMALIGN_SIZE( sizeof(uint8_t) * (1 + n) );
 	sync_idx_sz = PUSS_COBJECT_MEMALIGN_SIZE( sizeof(uint16_t) * (1 + n) );
-	struct_sz = sizeof(PussCSchema) + types_sz + defs_sz + props_sz + sync_masks_sz + sync_idx_sz;
+	struct_sz = sizeof(PussCSchema) + names_sz + types_sz + defs_sz + props_sz + sync_masks_sz + sync_idx_sz;
 	schema = (PussCSchema*)lua_newuserdata(L, struct_sz);	// schema : 5
 	memset(schema, 0, struct_sz);
-	types = (char*)(schema + 1);
+	names = (const char**)(schema + 1);
+	types = (char*)(((char*)names) + names_sz);
 	defs = (PussCValue*)(((char*)types) + types_sz);
 	props =  (PussCProperty*)(((char*)defs) + defs_sz);
-	sync_field_mask = (uint8_t*)(((char*)props) + props_sz);
-	sync_field_idx = (uint16_t*)(((char*)sync_field_mask) + sync_masks_sz);
+	sync_field_masks = (uint8_t*)(((char*)props) + props_sz);
+	sync_field_idx = (uint16_t*)(((char*)sync_field_masks) + sync_masks_sz);
 	assert( (((char*)sync_field_idx) + sync_idx_sz) ==  ((char*)(schema) + struct_sz) );
 	schema->id_mask = id_mask;
 	schema->field_count = n;
+	schema->names = names;
 	schema->types = types;
 	schema->defs = defs;
 	schema->values_ref = LUA_NOREF;
 	schema->formulars_ref = LUA_NOREF;
-	schema->change_notify_loop_limit = CHANGE_NOTIFY_LOOP_LIMIT_DEFAULT;
+	schema->notify_loop_limit = NOTIFY_LOOP_LIMIT_DEFAULT;
 	schema->properties = props;
-	schema->sync_field_mask = sync_field_mask;
+	schema->sync_field_masks = sync_field_masks;
 	schema->sync_field_idx = sync_field_idx;
 	for( i=0; i<=n; ++i ) {
 		prop = &props[i];
@@ -1169,8 +1179,7 @@ static int cschema_create(lua_State* L) {
 
 #define idxof_elem		10
 	{
-		// init prop[0]
-		props[0].name = lua_pushstring(L, "");
+		names[0] = lua_pushstring(L, "");
 		lua_rawseti(L, idxof_names, i);
 	}
 	for( i=1; i<=n; ++i ) {
@@ -1182,12 +1191,12 @@ static int cschema_create(lua_State* L) {
 		// desc.name
 		if( lua_getfield(L, idxof_elem, "name")!=LUA_TSTRING)
 			luaL_error(L, "arg[2] index:%d name not string!", i);
-		prop->name = lua_tostring(L, -1);
+		names[i] = lua_tostring(L, -1);
 		lua_rawseti(L, idxof_names, i);
-		if( lua_getfield(L, idxof_names, prop->name)!=LUA_TNIL )
-			luaL_error(L, "arg[2] index:%d name(%s) dup!", i, prop->name);
+		if( lua_getfield(L, idxof_names, names[i])!=LUA_TNIL )
+			luaL_error(L, "arg[2] index:%d name(%s) dup!", i, names[i]);
 		lua_pushinteger(L, i);
-		lua_setfield(L, idxof_names, prop->name);
+		lua_setfield(L, idxof_names, names[i]);
 		lua_settop(L, idxof_elem);
 
 		// desc.type
@@ -1217,7 +1226,7 @@ static int cschema_create(lua_State* L) {
 				if( (sync_mask & 0x00FF) != sync_mask )
 					luaL_error(L, "arg[2] index:%d sync mask MUST less then 0xFF!", i);
 				if( sync_mask ) {
-					sync_field_mask[i] = (uint8_t)sync_mask;
+					sync_field_masks[i] = (uint8_t)sync_mask;
 					sync_field_idx[i] = ++sync_num;
 				}
 			}
@@ -1292,7 +1301,7 @@ static int cschema_create(lua_State* L) {
 	if( schema->sync_field_count ) {
 		int top = lua_gettop(L);
 		lua_pushlightuserdata(L, NULL);
-		cmonitor_reset(L, schema, top, "@builtin_sync_module", sync_on_changed);
+		cmonitor_reset(L, schema, top, "$builtin_sync_module", sync_on_changed);
 		lua_settop(L, top);
 		if( !lua_isfunction(L, -1) )
 			luaL_error(L, "sync module reg bad logic!");
@@ -1342,8 +1351,8 @@ static int cschema_refresh(lua_State* L) {
 
 		if( lua_getfield(L, desc, "name")!=LUA_TSTRING )
 			luaL_error(L, "arg[2] index:%d name not found!", i);
-		if( (name=lua_tostring(L, -1))!=prop->name && strcmp(name, prop->name)!=0 )
-			luaL_error(L, "arg[2] index:%d name(%s) not match(%s)!", name, prop->name);
+		if( (name=lua_tostring(L, -1))!=schema->names[i] && strcmp(name, schema->names[i])!=0 )
+			luaL_error(L, "arg[2] index:%d name(%s) not match(%s)!", name, schema->names[i]);
 		lua_settop(L, desc);
 
 		if( lua_getfield(L, desc, "type")!=LUA_TSTRING )	// desc.type
@@ -1359,10 +1368,10 @@ static int cschema_refresh(lua_State* L) {
 
 static int cschema_dirty_loop_reset(lua_State* L) {
 	PussCSchema* schema;
-	lua_Integer times = luaL_optinteger(L, 2, CHANGE_NOTIFY_LOOP_LIMIT_DEFAULT);
+	lua_Integer times = luaL_optinteger(L, 2, NOTIFY_LOOP_LIMIT_DEFAULT);
 	luaL_argcheck(L, times > 0, 2, "dirty notify max loop times MUST > 0");
 	schema = cschema_check_fetch(L, 1);
-	schema->change_notify_loop_limit = times;
+	schema->notify_loop_limit = times;
 	lua_pushinteger(L, times);
 	return 1;
 }
@@ -1581,8 +1590,8 @@ static int cschema_monitor_reset(lua_State* L) {
 	schema = cschema_check_fetch(L, 1);
 	lua_pop(L, 1);
 
-	// lua monitor add prefix: !
-	lua_pushstring(L, "!");
+	// lua monitor add prefix: @
+	lua_pushstring(L, "@");
 	lua_pushvalue(L, 2);
 	lua_concat(L, 2);
 	lua_replace(L, 2);
@@ -1618,8 +1627,8 @@ static int cschema_notify_mode_reset(lua_State* L) {
 	int notify_mode = (int)luaL_optinteger(L, 2, -1);
 	schema = cschema_check_fetch(L, 1);
 	if( notify_mode >= 0 )
-		schema->change_notify_mode = notify_mode;
-	lua_pushinteger(L, schema->change_notify_mode);
+		schema->notify_mode = notify_mode;
+	lua_pushinteger(L, schema->notify_mode);
 	return 1;
 }
 
@@ -1671,54 +1680,9 @@ void puss_cformular_reset(lua_State* L, int creator, lua_Integer field, PussCFor
 	schema->properties[field].formular = NULL; // c_formular_hook;
 }
 
-void puss_cobject_sync_fetch_infos(lua_State* L, int creator, PussCSyncInfo* info) {
-	PussCSchema* schema = cschema_check_fetch(L, creator);
-	lua_pop(L, 1);
-	if( info ) {
-		info->id_mask = schema->id_mask;
-		info->field_count = schema->field_count;
-		info->sync_count = schema->sync_field_count;
-		info->field_masks = schema->sync_field_mask;
-	}
-}
-
-size_t puss_cobject_sync_fetch_and_reset(lua_State* L, const PussCObject* obj, uint16_t* res, size_t len, uint8_t filter_mask) {
-	size_t ret = 0;
-	if( obj && obj->sync_module && res && (len >= obj->schema->sync_field_count) ) {
-		const PussCSchema* schema = obj->schema;
-		const uint8_t* masks = schema->sync_field_mask;
-		const uint16_t* map = schema->sync_idx_to_field;
-		uint16_t num = schema->sync_field_count;
-		uint16_t* arr = obj->sync_module->dirty;
-		uint16_t pos, field;
-		if( filter_mask==0 ) {
-			PUSS_BITSETLIST_MOVE(res, num, arr);
-			assert( num <= len );
-			ret = num;
-			for( pos=0; pos<num; ++pos ) {
-				res[pos] = map[res[pos]];
-			}
-		} else {
-			PUSS_BITSETLIST_ITER(num, arr, pos) {
-				if( PUSS_BITSETLIST_TEST(num, arr, pos) ) {
-					field = map[pos];
-					if( (masks[field] & filter_mask)==filter_mask ) {
-						PUSS_BITSETLIST_RESET(num, arr, pos);
-						res[ret++] = field;
-					}
-				}
-			}
-		}
-		assert( ret <= len );
-	}
-	return ret;
-}
-
 void puss_cmonitor_reset(lua_State* L, int creator, const char* name, PussCObjectMonitor monitor) {
 	int absidx = lua_absindex(L, creator);
 	PussCSchema* schema = cschema_check_fetch(L, absidx);
-	PussCMonitor* arr = schema->monitors;
-	luaL_checkstack(L, 16, NULL);
 	lua_pop(L, 1);
 	if( !(name && ((name[0]>='a' && name[0]<='z') || (name[0]>='A' && name[0]<='Z'))) )
 		luaL_error(L, "monitor name MUST exist & startswith A-Z or a-z");
@@ -1745,4 +1709,48 @@ int puss_reg_cobject(lua_State* L) {
 	lua_pushcclosure(L, cschema_create, 1);
 	lua_setfield(L, -2, "cschema_create");
 	return 0;
+}
+
+void puss_cobject_fetch_infos(lua_State* L, int creator, PussCObjectInfo* info) {
+	PussCSchema* schema = cschema_check_fetch(L, creator);
+	lua_pop(L, 1);
+	if( info ) {
+		info->id_mask = schema->id_mask;
+		info->field_count = schema->field_count;
+		info->names = schema->names;
+		info->sync_field_count = schema->sync_field_count;
+		info->sync_field_masks = schema->sync_field_masks;
+	}
+}
+
+size_t puss_cobject_sync_fetch_and_reset(lua_State* L, const PussCObject* obj, unsigned short* res, size_t len, unsigned char filter_mask) {
+	size_t ret = 0;
+	if( obj && obj->sync_module && res && (len >= obj->schema->sync_field_count) ) {
+		const PussCSchema* schema = obj->schema;
+		const uint8_t* masks = schema->sync_field_masks;
+		const uint16_t* map = schema->sync_idx_to_field;
+		uint16_t num = schema->sync_field_count;
+		uint16_t* arr = obj->sync_module->dirty;
+		uint16_t pos, field;
+		if( filter_mask==0 ) {
+			PUSS_BITSETLIST_MOVE(res, num, arr);
+			assert( num <= len );
+			ret = num;
+			for( pos=0; pos<num; ++pos ) {
+				res[pos] = map[res[pos]];
+			}
+		} else {
+			PUSS_BITSETLIST_ITER(num, arr, pos) {
+				if( PUSS_BITSETLIST_TEST(num, arr, pos) ) {
+					field = map[pos];
+					if( (masks[field] & filter_mask)==filter_mask ) {
+						PUSS_BITSETLIST_RESET(num, arr, pos);
+						res[ret++] = field;
+					}
+				}
+			}
+		}
+		assert( ret <= len );
+	}
+	return ret;
 }

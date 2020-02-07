@@ -3,7 +3,6 @@
 #ifndef _PUSS_LUA_INC_COBJECT_H_
 #define _PUSS_LUA_INC_COBJECT_H_
 
-#include <stdint.h>
 #include "puss_lua.h"
 
 #define	PUSS_COBJECT_MEMALIGN_SIZE(size)	( ((size) + (sizeof(void*)-1)) & (~(sizeof(void*)-1)) )
@@ -27,18 +26,21 @@
 	#define FALSE 0
 #endif
 
-typedef struct _PussCModule	PussCModule;
 typedef struct _PussCSchema	PussCSchema;
 typedef struct _PussCObject	PussCObject;
-typedef union  _PussCValue	PussCValue;
 
 typedef lua_Integer	PussCBool;
 typedef lua_Integer	PussCInt;
 typedef lua_Number	PussCNum;
 typedef lua_Integer	PussCLua;
 
-typedef struct _PussCPropModule	PussCPropModule;
-typedef struct _PussCSyncModule	PussCSyncModule;
+typedef union  _PussCValue {
+	void*		p;
+	PussCBool	b;
+	PussCInt	i;
+	PussCNum	n;
+	PussCLua	o;
+} PussCValue;
 
 typedef struct _PussCStackObject {
 	const PussCObject*	obj;	// object ptr, MUST NOT NULL
@@ -46,19 +48,8 @@ typedef struct _PussCStackObject {
 	int					arg;	// stack object absidx
 } PussCStackObject;
 
-typedef void (*PussCObjectMonitor)(const PussCStackObject* stobj, lua_Integer field, const void* ud);
-
-typedef int  (*PussCStackFormular)(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv);
-
-typedef PussCValue  (*PussCFormular)(const PussCObject* obj, PussCValue value);
-
-union _PussCValue {
-	void*		p;
-	PussCBool	b;
-	PussCInt	i;
-	PussCNum	n;
-	PussCLua	o;
-};
+typedef struct _PussCPropModule	PussCPropModule;
+typedef struct _PussCSyncModule	PussCSyncModule;
 
 struct _PussCObject {
 	const PussCSchema*	schema;
@@ -67,7 +58,11 @@ struct _PussCObject {
 	PussCValue			values[1];	// values[0] no use!
 };
 
-#define puss_cobject_cast(obj)	(&((obj)->__parent__))
+typedef void (*PussCObjectMonitor)(const PussCStackObject* stobj, lua_Integer field, const void* ud);
+
+typedef int  (*PussCStackFormular)(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv);
+
+typedef PussCValue  (*PussCFormular)(const PussCObject* obj, PussCValue value);
 
 // puss-toolkit & plugin both used intrfaces
 // 
@@ -103,22 +98,25 @@ struct _PussCObject {
 	#define puss_cformular_reset(L,c,i,f)			(*(__puss_iface__->cformular_reset))((L),(c),(i),(f))
 #endif
 
+#define puss_cobject_cast(obj)	(&((obj)->__parent__))
+
 // puss-toolkit interfaces, can not used in plugin
 // 
 #ifdef _PUSS_IMPLEMENT
 	void  puss_cobject_batch_call(lua_State* L, int obj, int nargs, int nresults);	// [-(1+nargs), +(nresults), e]
 
-	typedef struct _PussCSyncInfo {
-		lua_Unsigned	id_mask;
-		size_t			field_count;
-		size_t			sync_count;
-		const uint8_t*	field_masks;	// array[1+field_count]
-	} PussCSyncInfo;
+	typedef struct _PussCObjectInfo {
+		lua_Unsigned			id_mask;
+		size_t					field_count;
+		size_t					sync_field_count;
+		const char**			names;				// array[1+field_count]
+		const unsigned char*	sync_field_masks;	// array[1+field_count]
+	} PussCObjectInfo;
 
-	void   puss_cobject_sync_fetch_infos(lua_State* L, int creator, PussCSyncInfo* info);
+	void   puss_cobject_fetch_infos(lua_State* L, int creator, PussCObjectInfo* info);
 
 	// len MUST >= PussCSyncInfo.sync_count, filter_mask==0 means clear
-	size_t puss_cobject_sync_fetch_and_reset(lua_State* L, const PussCObject* obj, uint16_t* res, size_t len, uint8_t filter_mask);
+	size_t puss_cobject_sync_fetch_and_reset(lua_State* L, const PussCObject* obj, unsigned short* res, size_t len, unsigned char filter_mask);
 #endif
 
 #endif//_PUSS_LUA_INC_COBJECT_H_
