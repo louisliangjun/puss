@@ -15,8 +15,9 @@
 #define	PUSS_CVTYPE_BOOL	1
 #define	PUSS_CVTYPE_INT		2
 #define	PUSS_CVTYPE_NUM		3
-#define	PUSS_CVTYPE_LUA		4
-#define	PUSS_CVTYPE_COUNT	5
+#define	PUSS_CVTYPE_PTR		4
+#define	PUSS_CVTYPE_LUA		5
+#define	PUSS_CVTYPE_COUNT	6
 
 #ifndef TRUE
 	#define TRUE 1
@@ -29,13 +30,14 @@
 typedef struct _PussCSchema	PussCSchema;
 typedef struct _PussCObject	PussCObject;
 
+typedef const void*	PussCPtr;
 typedef lua_Integer	PussCBool;
 typedef lua_Integer	PussCInt;
 typedef lua_Number	PussCNum;
 typedef lua_Integer	PussCLua;
 
 typedef union  _PussCValue {
-	void*		p;
+	PussCPtr	p;
 	PussCBool	b;
 	PussCInt	i;
 	PussCNum	n;
@@ -60,7 +62,7 @@ struct _PussCObject {
 
 typedef void (*PussCObjectMonitor)(const PussCStackObject* stobj, lua_Integer field, const void* ud);
 
-typedef int  (*PussCStackFormular)(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv);
+typedef int  (*PussCStackFormular)(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv);	// return succeed
 
 typedef PussCValue  (*PussCFormular)(const PussCObject* obj, PussCValue value);
 

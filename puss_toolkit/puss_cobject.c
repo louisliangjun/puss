@@ -146,27 +146,48 @@ static void sync_on_changed(const PussCStackObject* stobj, lua_Integer field, co
 
 // values
 
+static int cobj_geti_vptr(lua_State* L, const PussCObject* obj, lua_Integer field, const PussCValue* v) {
+	int tp;
+	PussCStackFormular formular = obj->schema->properties->formular;
+	lua_pushlightuserdata(L, (void*)(v->p));
+	if( formular ) {
+		const PussCStackObject stobj = { obj, L, 1 };
+		PussCValue nv = *v;
+		if( !(*formular)(&stobj, field, &nv) )	// use formular result as value
+			lua_pushnil(L);
+		tp = lua_type(L, -1);
+	} else {
+		tp = LUA_TLIGHTUSERDATA;
+	}
+	return tp;
+}
+
+static int cobj_geti_vlua(lua_State* L, const PussCObject* obj, lua_Integer field, const PussCValue* v) {
+	int tp;
+	if( v->o > 0 ) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, obj->schema->values_ref);
+		lua_rawgeti(L, -1, field);
+		tp = lua_rawgetp(L, -1, obj);
+		lua_copy(L, -1, -3);
+		lua_pop(L, 2);
+		return tp;
+	} else {
+		lua_pushnil(L);
+		tp = LUA_TNIL;
+	}
+	return tp;
+}
+
 static int cobj_geti(lua_State* L, const PussCObject* obj, lua_Integer field) {
 	const PussCValue* v = &(obj->values[field]);
-	int tp = LUA_TNIL;
+	int tp;
 	switch( obj->schema->types[field] ) {
-	case PUSS_CVTYPE_BOOL: lua_pushboolean(L, v->b!=0); tp = LUA_TBOOLEAN; break;
-	case PUSS_CVTYPE_INT:  lua_pushinteger(L, v->i); tp = LUA_TNUMBER; break;
-	case PUSS_CVTYPE_NUM:  lua_pushnumber(L, v->n); tp = LUA_TNUMBER; break;
-	case PUSS_CVTYPE_LUA:
-		if( v->o > 0 ) {
-			lua_rawgeti(L, LUA_REGISTRYINDEX, obj->schema->values_ref);
-			lua_rawgeti(L, -1, v->o);
-			tp = lua_rawgetp(L, -1, obj);
-			lua_copy(L, -1, -3);
-			lua_pop(L, 2);
-		} else {
-			lua_pushnil(L);
-		}
-		break;
-	default:
-		lua_pushnil(L);
-		break;
+	case PUSS_CVTYPE_BOOL:	lua_pushboolean(L, v->b!=0); tp = LUA_TBOOLEAN; break;
+	case PUSS_CVTYPE_INT:	lua_pushinteger(L, v->i); tp = LUA_TNUMBER; break;
+	case PUSS_CVTYPE_NUM:	lua_pushnumber(L, v->n); tp = LUA_TNUMBER; break;
+	case PUSS_CVTYPE_PTR:	tp = cobj_geti_vptr(L, obj, field, v); break;
+	case PUSS_CVTYPE_LUA:	tp = cobj_geti_vlua(L, obj, field, v); break;
+	default:				lua_pushnil(L); tp = LUA_TNIL; break;
 	}
 	return tp;
 }
@@ -210,19 +231,19 @@ static int cobj_seti(const PussCStackObject* stobj, lua_Integer field) {
 
 	// fill nv
 	switch( tp ) {
-	case PUSS_CVTYPE_BOOL: nv.b = lua_toboolean(L, -1); break;
-	case PUSS_CVTYPE_INT:  nv.i = lua_isinteger(L, -1) ? lua_tointeger(L, -1) : (lua_Integer)luaL_checknumber(L, -1); break;
-	case PUSS_CVTYPE_NUM:  nv.n = luaL_checknumber(L, -1); break;
-	case PUSS_CVTYPE_LUA:  break;
+	case PUSS_CVTYPE_BOOL:	nv.b = lua_toboolean(L, -1); break;
+	case PUSS_CVTYPE_INT:	nv.i = lua_isinteger(L, -1) ? lua_tointeger(L, -1) : (lua_Integer)luaL_checknumber(L, -1); break;
+	case PUSS_CVTYPE_NUM:	nv.n = luaL_checknumber(L, -1); break;
+	case PUSS_CVTYPE_PTR:	nv.p = lua_islightuserdata(L, -1) ? lua_touserdata(L, -1) : v->p; break;
 	}
 
 	if( formular && (!(*formular)(stobj, field, &nv)) ) {
 		st = -1;
 	} else if( tp==PUSS_CVTYPE_LUA ) {
 		st = cobj_seti_vlua(stobj, field, v);
-	} else if( v->p != nv.p ) {
+	} else {
+		st = (tp==PUSS_CVTYPE_PTR) ? 1 : (v->p != nv.p);
 		*v = nv;
-		st = 1;
 	}
 	return st;
 }
@@ -965,6 +986,8 @@ static char vtype_cast(const char* vt) {
 		return PUSS_CVTYPE_INT;
 	} else if( strcmp(vt, "num")==0 ) {
 		return PUSS_CVTYPE_NUM;
+	} else if( strcmp(vt, "ptr")==0 ) {
+		return PUSS_CVTYPE_PTR;
 	} else if( strcmp(vt, "lua")==0 ) {
 		return PUSS_CVTYPE_LUA;
 	}
@@ -1400,7 +1423,7 @@ static int cobject_cache(lua_State* L) {
 	return 2;
 }
 
-static int lua_formular_hook(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv) {
+static int lua_formular_wrap(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv) {
 	const PussCObject* obj = stobj->obj;
 	lua_State* L = stobj->L;
 	int top = lua_gettop(L);
@@ -1421,6 +1444,7 @@ static int lua_formular_hook(const PussCStackObject* stobj, lua_Integer field, P
 	case PUSS_CVTYPE_BOOL:	lua_pushboolean(L, nv->b!=0);	break;
 	case PUSS_CVTYPE_INT:	lua_pushinteger(L, nv->i);	break;
 	case PUSS_CVTYPE_NUM:	lua_pushnumber(L, nv->n);	break;
+	case PUSS_CVTYPE_PTR:	lua_pushlightuserdata(L, nv->p);	break;
 	case PUSS_CVTYPE_LUA:
 		assert( top > stobj->arg );
 		assert( lua_gettop(L)==top+3 );
@@ -1434,6 +1458,12 @@ static int lua_formular_hook(const PussCStackObject* stobj, lua_Integer field, P
 		case PUSS_CVTYPE_BOOL:	nv->b = lua_toboolean(L, -1);	break;
 		case PUSS_CVTYPE_INT:	nv->i = lua_isinteger(L, -1) ? lua_tointeger(L, -1) : (lua_Integer)luaL_checknumber(L, -1);	break;
 		case PUSS_CVTYPE_NUM:	nv->n = luaL_checknumber(L, -1);	break;
+		case PUSS_CVTYPE_PTR:
+			if( lua_islightuserdata(L, -1) )
+				nv->p = lua_islightuserdata(L, -1);	// mark dirty
+			else
+				state = LUA_ERRERR;	// bad return type
+			break;
 		case PUSS_CVTYPE_LUA:
 			lua_replace(L, ++top);	// push new value onto stack
 			assert( lua_gettop(L)==top );
@@ -1461,7 +1491,7 @@ static int cschema_formular_reset(lua_State* L) {
 	} else {
 		lua_pushvalue(L, 3);
 		lua_rawseti(L, -2, field);
-		schema->properties[field].formular = lua_formular_hook;
+		schema->properties[field].formular = lua_formular_wrap;
 	}
 	return 0;
 }
