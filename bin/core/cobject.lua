@@ -9,6 +9,7 @@ __exports.build_cobject = function(filename, name, id, fields, not_gen_field_id)
 		, ['int'] = 'PussCInt'
 		, ['num'] = 'PussCNum'
 		, ['lua'] = 'PussCLua'
+		, ['ptr'] = 'PussCPtr'
 		}
 
 	local ctx = {}
@@ -40,6 +41,7 @@ __exports.build_cobject = function(filename, name, id, fields, not_gen_field_id)
 	write('	PussCObject	__parent__;')
 	for i,v in ipairs(fields) do
 		local ctp = ctypemap[v.type]
+		if not ctp then error('not support type: '..tostring(v.type)) end
 		local cdv = (v.type=='bool' and v.def) and 'TRUE' or v.def
 		cdv = cdv and strfmt('	// default: %s', cdv) or ''
 		write(strfmt('	%s	%s;%s', ctp, v.name, cdv))

@@ -22,6 +22,7 @@ local fields =
 	, {name='m', type='int', sync=0x01}
 	, {name='n', type='int', deps={'l', 'm'}}
 	, {name='o', type='lua', sync=0x10, deps={}}
+	, {name='p', type='ptr', sync=0x10, deps={}}
 	}
 
 local getmetatable = getmetatable
@@ -135,6 +136,11 @@ local function test()
 
 	trace('set o')
 	t1(function(t) t:set(fields.o, 'aa') end)
+	tracet1()
+	trace_sync(t1)
+
+	trace('set p')
+	t1(function(t) t:set(fields.p, 'bb') end)
 	tracet1()
 	trace_sync(t1)
 

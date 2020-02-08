@@ -23,6 +23,12 @@ static int stack_formular_demo_object_o(const PussCStackObject* stobj, lua_Integ
 	return TRUE;
 }
 
+static int stack_formular_demo_object_p(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv) {
+	// lua_pushvalue(stobj->L, -1);
+	lua_pushstring(stobj->L, "custom ptr");
+	return TRUE;
+}
+
 static void on_changed(const PussCStackObject* stobj, lua_Integer field, const void* ud) {
 	lua_State* L = stobj->L;
 	lua_getglobal(L, "print");
@@ -47,6 +53,7 @@ static int demo_module_reg(lua_State* L) {
 	#undef demo_formular_reg
 
 	puss_cstack_formular_reset(L, 1, demo_object_field(o), stack_formular_demo_object_o);
+	puss_cstack_formular_reset(L, 1, demo_object_field(p), stack_formular_demo_object_p);
 	return 0;
 }
 

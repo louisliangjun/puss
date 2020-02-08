@@ -15,8 +15,8 @@
 #define	PUSS_CVTYPE_BOOL	1
 #define	PUSS_CVTYPE_INT		2
 #define	PUSS_CVTYPE_NUM		3
-#define	PUSS_CVTYPE_PTR		4
-#define	PUSS_CVTYPE_LUA		5
+#define	PUSS_CVTYPE_PTR		4	// used for C custom field only
+#define	PUSS_CVTYPE_LUA		5	// used for Lua custom field
 #define	PUSS_CVTYPE_COUNT	6
 
 #ifndef TRUE
@@ -62,7 +62,11 @@ struct _PussCObject {
 
 typedef void (*PussCObjectMonitor)(const PussCStackObject* stobj, lua_Integer field, const void* ud);
 
-typedef int  (*PussCStackFormular)(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv);	// return succeed
+// return succeed
+// when PUSS_CVTYPE_PTR, it's used for lua get value
+// otherwise it's used for set value hook or dependence changed, refresh formular
+// 
+typedef int  (*PussCStackFormular)(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv);
 
 typedef PussCValue  (*PussCFormular)(const PussCObject* obj, PussCValue value);
 

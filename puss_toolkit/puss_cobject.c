@@ -148,7 +148,7 @@ static void sync_on_changed(const PussCStackObject* stobj, lua_Integer field, co
 
 static int cobj_geti_vptr(lua_State* L, const PussCObject* obj, lua_Integer field, const PussCValue* v) {
 	int tp;
-	PussCStackFormular formular = obj->schema->properties->formular;
+	PussCStackFormular formular = obj->schema->properties[field].formular;
 	lua_pushlightuserdata(L, (void*)(v->p));
 	if( formular ) {
 		const PussCStackObject stobj = { obj, L, 1 };
@@ -234,15 +234,15 @@ static int cobj_seti(const PussCStackObject* stobj, lua_Integer field) {
 	case PUSS_CVTYPE_BOOL:	nv.b = lua_toboolean(L, -1); break;
 	case PUSS_CVTYPE_INT:	nv.i = lua_isinteger(L, -1) ? lua_tointeger(L, -1) : (lua_Integer)luaL_checknumber(L, -1); break;
 	case PUSS_CVTYPE_NUM:	nv.n = luaL_checknumber(L, -1); break;
-	case PUSS_CVTYPE_PTR:	nv.p = lua_islightuserdata(L, -1) ? lua_touserdata(L, -1) : v->p; break;
+	case PUSS_CVTYPE_PTR:	return 1; break;	// ptr type set used for notify changed
 	}
 
 	if( formular && (!(*formular)(stobj, field, &nv)) ) {
 		st = -1;
 	} else if( tp==PUSS_CVTYPE_LUA ) {
 		st = cobj_seti_vlua(stobj, field, v);
-	} else {
-		st = (tp==PUSS_CVTYPE_PTR) ? 1 : (v->p != nv.p);
+	} else if( v->p != nv.p )  {
+		st = 1;
 		*v = nv;
 	}
 	return st;
@@ -438,15 +438,20 @@ static void props_apply_hook_and_notify_once(const PussCStackObject* stobj, uint
 			v = (PussCValue*)(&obj->values[pos]);
 			if( (formular = props[pos].formular) != NULL ) {
 				nv = *v;
-				if( types[pos]!=PUSS_CVTYPE_LUA ) {
+				switch( types[pos] ) {
+				case PUSS_CVTYPE_PTR:
+					cobj_geti(L, obj, pos);
+					if( (*formular)(stobj, pos, &nv) )
+						changed = cobj_seti_vlua(stobj, pos, v);
+					break;
+				case PUSS_CVTYPE_LUA:
+					changed = TRUE;	// formular used for get only!
+				default:
 					if( (*formular)(stobj, pos, &nv) && (nv.p != v->p) ) {
 						changed = TRUE;
 						*v = nv;
 					}
-				} else {
-					cobj_geti(L, obj, pos);
-					if( (*formular)(stobj, pos, &nv) )
-						changed = cobj_seti_vlua(stobj, pos, v);
+					break;
 				}
 			} else if( (cformular = props[pos].cformular) != NULL ) {
 				assert( types[pos] != PUSS_CVTYPE_LUA );
@@ -1430,6 +1435,7 @@ static int lua_formular_wrap(const PussCStackObject* stobj, lua_Integer field, P
 	int tp = obj->schema->types[field];
 	int state = LUA_OK;
 	assert( (field > 0) && (field <= obj->schema->field_count) );
+	assert( tp != PUSS_CVTYPE_PTR );
 	lua_rawgeti(L, LUA_REGISTRYINDEX, obj->schema->formulars_ref);
 	lua_rawgeti(L, -1, field);	// cformular
 	puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
@@ -1444,7 +1450,6 @@ static int lua_formular_wrap(const PussCStackObject* stobj, lua_Integer field, P
 	case PUSS_CVTYPE_BOOL:	lua_pushboolean(L, nv->b!=0);	break;
 	case PUSS_CVTYPE_INT:	lua_pushinteger(L, nv->i);	break;
 	case PUSS_CVTYPE_NUM:	lua_pushnumber(L, nv->n);	break;
-	case PUSS_CVTYPE_PTR:	lua_pushlightuserdata(L, nv->p);	break;
 	case PUSS_CVTYPE_LUA:
 		assert( top > stobj->arg );
 		assert( lua_gettop(L)==top+3 );
@@ -1458,12 +1463,6 @@ static int lua_formular_wrap(const PussCStackObject* stobj, lua_Integer field, P
 		case PUSS_CVTYPE_BOOL:	nv->b = lua_toboolean(L, -1);	break;
 		case PUSS_CVTYPE_INT:	nv->i = lua_isinteger(L, -1) ? lua_tointeger(L, -1) : (lua_Integer)luaL_checknumber(L, -1);	break;
 		case PUSS_CVTYPE_NUM:	nv->n = luaL_checknumber(L, -1);	break;
-		case PUSS_CVTYPE_PTR:
-			if( lua_islightuserdata(L, -1) )
-				nv->p = lua_islightuserdata(L, -1);	// mark dirty
-			else
-				state = LUA_ERRERR;	// bad return type
-			break;
 		case PUSS_CVTYPE_LUA:
 			lua_replace(L, ++top);	// push new value onto stack
 			assert( lua_gettop(L)==top );
@@ -1484,6 +1483,8 @@ static int cschema_formular_reset(lua_State* L) {
 	luaL_argcheck(L, (field>0 && field<=schema->field_count), 2, "out of range");
 	if( !(lua_getupvalue(L, 1, 4) && lua_type(L, -1)==LUA_TTABLE) )
 		luaL_error(L, "fetch formulars table failed!");
+	if( schema->types[field]==PUSS_CVTYPE_PTR )
+		luaL_argerror(L, 2, "ptr type use for C only!");
 	if( clear ) {
 		lua_pushboolean(L, 0);
 		lua_rawseti(L, -2, field);
