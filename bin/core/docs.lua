@@ -325,7 +325,7 @@ end
 function tabs_page_draw(page, active_page)
 	if (not page.saving) and shotcuts.is_pressed('docs/save') then do_save_page(page) end
 	if shotcuts.is_pressed('docs/close') then page.open = false end
-	puss.trace_pcall(hook, 'docs_page_before_draw', page)
+	puss.trace_pcall(hook, 'docs_page_before_draw', page, active_page)
 	if page.saving then draw_saving_bar(page) end
 
 	if active_page then
@@ -474,7 +474,7 @@ __exports.open = function(file, line, search_text)
 
 	local function page_after_load(ctx, file_skey)
 		if not ctx then return end
-		page = pages.lookup(filepath)
+		page = pages.lookup(label)
 		if page then
 			pages.active(label)
 		else
@@ -494,6 +494,31 @@ __exports.open = function(file, line, search_text)
 	end
 
 	puss.trace_pcall(hook, 'docs_page_on_load', page_after_load, filepath)
+end
+
+__exports.reload = function(file)
+	local function page_after_load(ctx, file_skey)
+		if not ctx then return end
+		local filepath, name, label, page = lookup_page(file)
+		local page = pages.lookup(label)
+		if not page then return end
+		if page.saving or page.unsaved then return end
+
+		local sv = page.sv
+		local line = page.sv:LineFromPosition(sv:GetCurrentPos())
+		if ctx:find('\r\n') then
+			sv:SetEOLMode(SC_EOL_CRLF)
+		elseif ctx:find('\n') then
+			sv:SetEOLMode(SC_EOL_LF)
+		end
+		sv:SetText(ctx)
+		-- sv:ConvertEOLs(sv:GetEOLMode())
+		sv:EmptyUndoBuffer()
+		page.file_skey = file_skey
+		page.scroll_to_line = line
+	end
+
+	puss.trace_pcall(hook, 'docs_page_on_load', page_after_load, file)
 end
 
 local function on_margin_set(sv, filepath, line, value)

@@ -95,6 +95,19 @@ function docs_page_on_save(page_after_save, filepath, ctx, file_skey)
 	return page_after_save(ok, file_skey_fetch(filepath))
 end
 
+function docs_page_before_draw(page, active_page)
+	local filepath, file_skey = page.filepath, page.file_skey
+	if not (filepath or file_skey) then return end
+	if page.saving then return end
+	if page.unsaved then return end	-- TODO: now ignore modified file
+	local now = puss.timestamp()
+	if (not active_page) and (math.abs(now - (page.file_skey_check_time or 0)) < 1000) then return end
+	page.file_skey_check_time = now
+	local skey = file_skey_fetch(filepath)
+	if skey==file_skey then return end
+	docs.reload(filepath)
+end
+
 docs.setup(function(event, ...)
 	local f = _ENV[event]
 	if f then return f(...) end
