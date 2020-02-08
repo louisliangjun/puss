@@ -299,7 +299,8 @@ dialog_modes['docs/replace'] = function(page, active)
 		imgui.BeginGroup()
 		search = find_input_text(page)
 
-		imgui.InputText('##ReplaceText', rebuf)
+		-- TODO: replace
+		-- imgui.InputText('##ReplaceText', rebuf)
 
 		imgui.EndGroup()
 		imgui.EndPopup()

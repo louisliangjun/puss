@@ -35,7 +35,7 @@ STYLE_COLOR_MAP.light =
 
 STYLE_COLOR_MAP.dark =
 	{ ['bg'] = RGB('#202020')
-	, ['sel'] = RGB('#84B68B')
+	, ['sel'] = RGB('#304030')
 	, ['caret_line'] = RGB('#404060')
 	, ['thumnail_marker'] = RGB('#ff8000')
 	, ['thumnail_bar'] = RGB('#303030')
