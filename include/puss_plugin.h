@@ -41,6 +41,7 @@ struct _PussInterface {
 	int   (*cobject_set_bool)(const PussCStackObject* stobj, lua_Integer field, PussCBool nv);
 	int   (*cobject_set_int)(const PussCStackObject* stobj, lua_Integer field, PussCInt nv);
 	int   (*cobject_set_num)(const PussCStackObject* stobj, lua_Integer field, PussCNum nv);
+	int   (*cobject_set_ptr)(const PussCStackObject* stobj, lua_Integer field, PussCPtr nv);
 	void  (*cmonitor_reset)(lua_State* L, int creator, const char* name, PussCObjectMonitor handle);
 	void  (*cstack_formular_reset)(lua_State* L, int creator, lua_Integer field, PussCStackFormular formular);
 	void  (*cformular_reset)(lua_State* L, int creator, lua_Integer field, PussCFormular cformular);

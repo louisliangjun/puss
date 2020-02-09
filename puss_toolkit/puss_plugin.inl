@@ -61,6 +61,7 @@ static PussInterface puss_interface =
 	, puss_cobject_set_bool
 	, puss_cobject_set_int
 	, puss_cobject_set_num
+	, puss_cobject_set_ptr
 	, puss_cmonitor_reset
 	, puss_cstack_formular_reset
 	, puss_cformular_reset

@@ -234,7 +234,7 @@ static int cobj_seti(const PussCStackObject* stobj, lua_Integer field) {
 	case PUSS_CVTYPE_BOOL:	nv.b = lua_toboolean(L, -1); break;
 	case PUSS_CVTYPE_INT:	nv.i = lua_isinteger(L, -1) ? lua_tointeger(L, -1) : (lua_Integer)luaL_checknumber(L, -1); break;
 	case PUSS_CVTYPE_NUM:	nv.n = luaL_checknumber(L, -1); break;
-	case PUSS_CVTYPE_PTR:	return 1; break;	// ptr type set used for notify changed
+	case PUSS_CVTYPE_PTR:	return 1; break;	// ptr type set used for notify changed only
 	}
 
 	if( formular && (!(*formular)(stobj, field, &nv)) ) {
@@ -439,13 +439,14 @@ static void props_apply_hook_and_notify_once(const PussCStackObject* stobj, uint
 			if( (formular = props[pos].formular) != NULL ) {
 				nv = *v;
 				switch( types[pos] ) {
-				case PUSS_CVTYPE_PTR:
+				case PUSS_CVTYPE_LUA:
 					cobj_geti(L, obj, pos);
 					if( (*formular)(stobj, pos, &nv) )
 						changed = cobj_seti_vlua(stobj, pos, v);
 					break;
-				case PUSS_CVTYPE_LUA:
+				case PUSS_CVTYPE_PTR:
 					changed = TRUE;	// formular used for get only!
+					break;
 				default:
 					if( (*formular)(stobj, pos, &nv) && (nv.p != v->p) ) {
 						changed = TRUE;
@@ -972,6 +973,21 @@ int puss_cobject_set_num(const PussCStackObject* stobj, lua_Integer field, PussC
 	}
 	if( ret && ((v=(PussCValue*)&(obj->values[field]))->n != nv) ) {
 		v->n = nv;
+		props_mark_dirty_and_notify(stobj, field);
+	}
+	return ret;
+}
+
+int puss_cobject_set_ptr(const PussCStackObject* stobj, lua_Integer field, PussCPtr nv) {
+	const PussCObject* obj = stobj->obj;
+	int ret = TRUE;
+	assert( sizeof(PussCValue)==sizeof(nv) );
+	assert( stobj->arg > 0 );
+	assert( lua_gettop(stobj->L) >= stobj->arg );
+	if( !( (field > 0) && (field <= obj->schema->field_count) && (obj->schema->types[field]==PUSS_CVTYPE_PTR) ) ) {
+		ret = FALSE;
+	} else {
+		((PussCValue*)(&(obj->values[field])))->p = nv;	// ptr type set used for notify changed only
 		props_mark_dirty_and_notify(stobj, field);
 	}
 	return ret;

@@ -83,6 +83,7 @@ typedef PussCValue  (*PussCFormular)(const PussCObject* obj, PussCValue value);
 	int   puss_cobject_set_bool(const PussCStackObject* stobj, lua_Integer field, PussCBool nv);	// return set succeed
 	int   puss_cobject_set_int(const PussCStackObject* stobj, lua_Integer field, PussCInt nv);	// return set succeed
 	int   puss_cobject_set_num(const PussCStackObject* stobj, lua_Integer field, PussCNum nv);	// return set succeed
+	int   puss_cobject_set_ptr(const PussCStackObject* stobj, lua_Integer field, PussCPtr nv);	// return set succeed
 
 	void  puss_cmonitor_reset(lua_State* L, int creator, const char* name, PussCObjectMonitor monitor);	// top of stack used as module ref
 	void  puss_cstack_formular_reset(lua_State* L, int creator, lua_Integer field, PussCStackFormular formular);	// top of stack used as module ref
@@ -98,6 +99,7 @@ typedef PussCValue  (*PussCFormular)(const PussCObject* obj, PussCValue value);
 	#define puss_cobject_set_bool(stobj,f,v)		(*(__puss_iface__->cobject_set_bool))((stobj),(f),(v))
 	#define puss_cobject_set_int(stobj,f,v)			(*(__puss_iface__->cobject_set_int))((stobj),(f),(v))
 	#define puss_cobject_set_num(stobj,f,v)			(*(__puss_iface__->cobject_set_num))((stobj),(f),(v))
+	#define puss_cobject_set_ptr(stobj,f,v)			(*(__puss_iface__->cobject_set_ptr))((stobj),(f),(v))
 
 	#define puss_cmonitor_reset(L,c,n,h)			(*(__puss_iface__->cmonitor_reset))((L),(c),(n),(h))
 	#define puss_cstack_formular_reset(L,c,i,f)		(*(__puss_iface__->cstack_formular_reset))((L),(c),(i),(f))
@@ -121,7 +123,7 @@ typedef PussCValue  (*PussCFormular)(const PussCObject* obj, PussCValue value);
 
 	void   puss_cobject_fetch_infos(lua_State* L, int creator, PussCObjectInfo* info);
 
-	// len MUST >= PussCSyncInfo.sync_count, filter_mask==0 means clear
+	// len MUST >= PussCSyncInfo.sync_field_count, filter_mask==0 means clear
 	size_t puss_cobject_sync_fetch_and_reset(lua_State* L, const PussCObject* obj, unsigned short* res, size_t len, unsigned char filter_mask);
 #endif
 
