@@ -130,12 +130,12 @@ local function test()
 	trace_sync(t1)
 
 	trace('set b, e')
-	t1(function(t) t:set(fields.b, 4); t:set(fields.e, 4); end)
+	t1(function(t) t:set_by_name('b', 4); t:set(fields.e, 4); end)
 	tracet1()
 	trace_sync(t1)
 
 	trace('set o')
-	t1(function(t) t:set(fields.o, 'aa') end)
+	t1(function(t) t:set_by_name('o', 'aa') end)
 	tracet1()
 	trace_sync(t1)
 

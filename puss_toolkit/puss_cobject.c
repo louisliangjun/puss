@@ -561,30 +561,46 @@ static int cobject_clear(lua_State* L) {
 
 static int cobject_get(lua_State* L) {
 	PussCObject* obj = cobject_check(L, 1);
-	if( lua_type(L, 2)==LUA_TSTRING ) {
-		lua_getmetatable(L, 1);
-		lua_pushvalue(L, 2);
-		lua_gettable(L, -2);
-	} else {
-		lua_Integer field = luaL_checkinteger(L, 2);
-		luaL_argcheck(L, (field>0 && field<=obj->schema->field_count), 2, "out of range");
-		cobj_geti(L, obj, field);
-	}
+	lua_Integer field = luaL_checkinteger(L, 2);
+	luaL_argcheck(L, (field>0 && field<=obj->schema->field_count), 2, "out of range");
+	cobj_geti(L, obj, field);
 	return 1;
 }
 
 static int cobject_set(lua_State* L) {
 	PussCStackObject stobj = { cobject_check(L, 1), L, 1 };
 	lua_Integer field = luaL_checkinteger(L, 2);
+	int st;
 	luaL_checkany(L, 3);
-	int st = cobj_seti(&stobj, field);
-	if( st > 0 ) {
+	if( (st = cobj_seti(&stobj, field)) > 0 ) {
 		props_mark_dirty_and_notify(&stobj, field);
 		lua_pushboolean(L, TRUE);
 	} else {
 		lua_pushboolean(L, st==0 );
 	}
 	return 1;
+}
+
+static int cobject_get_by_name(lua_State* L) {
+	if( lua_type(L, 2)==LUA_TSTRING ) {
+		lua_pushvalue(L, 2);
+		if( lua_rawget(L, lua_upvalueindex(1))==LUA_TNUMBER ) {
+			lua_replace(L, 2);
+			return cobject_get(L);
+		}
+	}
+	return 0;
+}
+
+static int cobject_set_by_name(lua_State* L) {
+	if( lua_type(L, 2)==LUA_TSTRING ) {
+		lua_pushvalue(L, 2);
+		if( lua_rawget(L, lua_upvalueindex(1))==LUA_TNUMBER ) {
+			lua_replace(L, 2);
+			return cobject_set(L);
+		}
+	}
+	return 0;
 }
 
 static int cobject_call(lua_State* L) {
@@ -704,18 +720,11 @@ static int cobjref_clear(lua_State* L) {
 
 static int cobjref_get(lua_State* L) {
 	PussCObjRef* ref = cobjref_check(L, 1);
+	lua_Integer field = luaL_checkinteger(L, 2);
 	if( !ref->obj )
 		luaL_argerror(L, 1, "already freed");
-
-	if( lua_type(L, 2)==LUA_TSTRING ) {
-		lua_getmetatable(L, 1);
-		lua_pushvalue(L, 2);
-		lua_gettable(L, -2);
-	} else {
-		lua_Integer field = luaL_checkinteger(L, 2);
-		luaL_argcheck(L, (field>0 && field<=ref->obj->schema->field_count), 2, "out of range");
-		cobj_geti(L, ref->obj, field);
-	}
+	luaL_argcheck(L, (field>0 && field<=ref->obj->schema->field_count), 2, "out of range");
+	cobj_geti(L, ref->obj, field);
 	return 1;
 }
 
@@ -723,8 +732,9 @@ static int cobjref_set(lua_State* L) {
 	PussCObjRef* ref = cobjref_check(L, 1);
 	PussCStackObject stobj = { ref->obj, L, 1 };
 	lua_Integer field = luaL_checkinteger(L, 2);
+	int st;
 	luaL_checkany(L, 3);
-	int st = stobj.obj ? cobj_seti(&stobj, field) : -1;
+	st = stobj.obj ? cobj_seti(&stobj, field) : -1;
 	if( st > 0 ) {
 		props_mark_dirty_and_notify(&stobj, field);
 		lua_pushboolean(L, TRUE);
@@ -732,6 +742,28 @@ static int cobjref_set(lua_State* L) {
 		lua_pushboolean(L, st==0 );
 	}
 	return 1;
+}
+
+static int cobjref_get_by_name(lua_State* L) {
+	if( lua_type(L, 2)==LUA_TSTRING ) {
+		lua_pushvalue(L, 2);
+		if( lua_rawget(L, lua_upvalueindex(1))==LUA_TNUMBER ) {
+			lua_replace(L, 2);
+			return cobjref_get(L);
+		}
+	}
+	return 0;
+}
+
+static int cobjref_set_by_name(lua_State* L) {
+	if( lua_type(L, 2)==LUA_TSTRING ) {
+		lua_pushvalue(L, 2);
+		if( lua_rawget(L, lua_upvalueindex(1))==LUA_TNUMBER ) {
+			lua_replace(L, 2);
+			return cobjref_set(L);
+		}
+	}
+	return 0;
 }
 
 static int cobjref_call(lua_State* L) {
@@ -1283,11 +1315,13 @@ static int cschema_create(lua_State* L) {
 
 	luaL_newmetatable(L, PUSS_COBJECT_MT);	lua_setmetatable(L, idxof_obj_mt);
 	lua_pushfstring(L, "PussCObject_%I", (lua_Integer)id_mask);	lua_setfield(L, idxof_obj_mt, "__name");
-	lua_pushvalue(L, idxof_names); lua_pushcclosure(L, cobject_gc, 1); lua_setfield(L, idxof_obj_mt, "__gc");
+	lua_pushvalue(L, idxof_names); lua_pushcclosure(L, cobject_gc, 1); lua_setfield(L, idxof_obj_mt, "__gc");	// keep ref idxof_names
 	lua_pushvalue(L, idxof_obj_mt); lua_setfield(L, idxof_obj_mt, "__index");
 	lua_pushcfunction(L, cobject_call); lua_setfield(L, idxof_obj_mt, "__call");
 	lua_pushcfunction(L, cobject_get); lua_setfield(L, idxof_obj_mt, "get");
 	lua_pushcfunction(L, cobject_set); lua_setfield(L, idxof_obj_mt, "set");
+	lua_pushvalue(L, idxof_names); lua_pushcclosure(L, cobject_get_by_name, 1); lua_setfield(L, idxof_obj_mt, "get_by_name");
+	lua_pushvalue(L, idxof_names); lua_pushcclosure(L, cobject_set_by_name, 1); lua_setfield(L, idxof_obj_mt, "set_by_name");
 	lua_pushcfunction(L, cobject_sync); lua_setfield(L, idxof_obj_mt, "__sync");
 	lua_pushcfunction(L, cobject_clear); lua_setfield(L, idxof_obj_mt, "__clear");
 
@@ -1297,6 +1331,8 @@ static int cschema_create(lua_State* L) {
 	lua_pushcfunction(L, cobjref_call); lua_setfield(L, idxof_ref_mt, "__call");
 	lua_pushcfunction(L, cobjref_get); lua_setfield(L, idxof_ref_mt, "get");
 	lua_pushcfunction(L, cobjref_set); lua_setfield(L, idxof_ref_mt, "set");
+	lua_pushvalue(L, idxof_names); lua_pushcclosure(L, cobjref_get_by_name, 1); lua_setfield(L, idxof_ref_mt, "get_by_name");
+	lua_pushvalue(L, idxof_names); lua_pushcclosure(L, cobjref_set_by_name, 1); lua_setfield(L, idxof_ref_mt, "set_by_name");
 	lua_pushcfunction(L, cobjref_sync); lua_setfield(L, idxof_ref_mt, "__sync");
 	lua_pushcfunction(L, cobjref_clear); lua_setfield(L, idxof_ref_mt, "__clear");
 	lua_pushcfunction(L, cobjref_unref); lua_setfield(L, idxof_ref_mt, "__unref");
