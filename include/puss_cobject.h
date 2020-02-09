@@ -62,12 +62,15 @@ struct _PussCObject {
 
 typedef void (*PussCObjectMonitor)(const PussCStackObject* stobj, lua_Integer field, const void* ud);
 
-// return succeed
+// return succeed, NOT support exception!
 // when PUSS_CVTYPE_PTR, it's used for lua get value
 // otherwise it's used for set value hook or dependence changed, refresh formular
 // 
 typedef int  (*PussCStackFormular)(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv);
 
+// return succeed, NOT support exception!
+// it's used for set value hook or dependence changed, refresh formular
+// 
 typedef PussCValue  (*PussCFormular)(const PussCObject* obj, PussCValue value);
 
 // puss-toolkit & plugin both used intrfaces

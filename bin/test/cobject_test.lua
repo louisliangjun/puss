@@ -179,6 +179,12 @@ local function test()
 		local te = puss.timestamp(true)
 		trace('tcbatch', te-ts)
 	end
+	do
+		local ts = puss.timestamp(true)
+		t1(plugin.test2, count)
+		local te = puss.timestamp(true)
+		trace('tcc_raw', te-ts)
+	end
 	_G.print = trace
 	tracet1()
 end

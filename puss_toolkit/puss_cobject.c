@@ -401,20 +401,77 @@ static void props_do_notify_property_first(const PussCStackObject* stobj, const 
 	}
 }
 
-static void props_apply_hook_and_notify_once(const PussCStackObject* stobj, uint16_t num, uint16_t* arr, uint16_t n, int top) {
+static inline int do_formular_refresh(const PussCStackObject* stobj, lua_Integer field) {
 	PussCObject* obj = (PussCObject*)(stobj->obj);
-	PussCSchema* schema = (PussCSchema*)(obj->schema);
-	lua_State* L = stobj->L;
-	const char* types = schema->types;
-	const PussCProperty* props = schema->properties;
-	PussCPropModule* m = (PussCPropModule*)(obj->prop_module);
-	uint16_t* updates = (uint16_t*)_alloca(sizeof(uint16_t) * n);
-	uint16_t pos, i, j;
-	int changed;
+	const char* types = obj->schema->types;
+	const PussCProperty* props = obj->schema->properties;
 	PussCStackFormular formular;
 	PussCFormular cformular;
-	PussCValue* v;
+	PussCValue* v = (PussCValue*)(&obj->values[field]);
 	PussCValue nv;
+	if( (formular = props[field].formular) != NULL ) {
+		nv = *v;
+		switch( types[field] ) {
+		case PUSS_CVTYPE_LUA:
+			cobj_geti(stobj->L, obj, field);
+			if( (*formular)(stobj, field, &nv) )
+				return cobj_seti_vlua(stobj, field, v);
+			break;
+		case PUSS_CVTYPE_PTR:
+			return TRUE;	// formular used for get only!
+			break;
+		default:
+			if( (*formular)(stobj, field, &nv) && (nv.p != v->p) ) {
+				*v = nv;
+				return TRUE;
+			}
+			break;
+		}
+	} else if( (cformular = props[field].cformular) != NULL ) {
+		assert( types[field] != PUSS_CVTYPE_LUA );
+		if( (nv = (*cformular)(obj, *v)).p != v->p ) {
+			*v = nv;
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+// #define PCALL_FORMULAR_REFRESH
+
+#ifdef PCALL_FORMULAR_REFRESH
+	typedef struct _FormularRefreshUD {
+		const PussCObject* obj;
+		lua_Integer field;
+		int changed;
+	} FormularRefreshUD;
+
+	static int formular_refresh_wrap(lua_State* L) {
+		FormularRefreshUD* ud = (FormularRefreshUD*)lua_touserdata(L, 2);
+		PussCStackObject stobj = { ud->obj, L, 1 };
+		ud->changed = do_formular_refresh(&stobj, ud->field);
+		return 0;
+	}
+
+	static inline int formular_refresh(const PussCStackObject* stobj, lua_Integer field) {
+		lua_State* L = stobj->L;
+		FormularRefreshUD ud = { stobj->obj, field, FALSE };
+		lua_pushcfunction(L, formular_refresh_wrap);
+		lua_pushvalue(L, stobj->arg);
+		lua_pushlightuserdata(L, &ud);
+		if( lua_pcall(L, 2, 0, 0) )
+			lua_pop(L, 1);
+		return ud.changed;
+	}
+#else
+	#define formular_refresh	do_formular_refresh
+#endif
+
+static void props_apply_hook_and_notify_once(const PussCStackObject* stobj, uint16_t num, uint16_t* arr, uint16_t n, int top) {
+	PussCSchema* schema = (PussCSchema*)(stobj->obj->schema);
+	const PussCProperty* props = schema->properties;
+	uint16_t* updates = (uint16_t*)_alloca(sizeof(uint16_t) * n);
+	uint16_t pos, i, j;
 
 	// sort insert to updates
 	updates[0] = pos = arr[0] & PUSS_BITSETLIST_MASK_POS;
@@ -433,44 +490,18 @@ static void props_apply_hook_and_notify_once(const PussCStackObject* stobj, uint
 	for( i=0; i<n; ++i ) {
 		pos = updates[i];
 		// not dirty & in active list, need use formular update values
-		if( (!PUSS_BITSETLIST_TEST(num, arr, pos)) ) {
-			changed = FALSE;
-			v = (PussCValue*)(&obj->values[pos]);
-			if( (formular = props[pos].formular) != NULL ) {
-				nv = *v;
-				switch( types[pos] ) {
-				case PUSS_CVTYPE_LUA:
-					cobj_geti(L, obj, pos);
-					if( (*formular)(stobj, pos, &nv) )
-						changed = cobj_seti_vlua(stobj, pos, v);
-					break;
-				case PUSS_CVTYPE_PTR:
-					changed = TRUE;	// formular used for get only!
-					break;
-				default:
-					if( (*formular)(stobj, pos, &nv) && (nv.p != v->p) ) {
-						changed = TRUE;
-						*v = nv;
-					}
-					break;
-				}
-			} else if( (cformular = props[pos].cformular) != NULL ) {
-				assert( types[pos] != PUSS_CVTYPE_LUA );
-				if( (nv = (*cformular)(obj, *v)).p != v->p ) {
-					changed = TRUE;
-					*v = nv;
-				}
-			}
-			if( changed ) {
-				prop_dirtys_set((PussCObject*)obj, pos);
-			} else {
-				assert( !PUSS_BITSETLIST_TEST(num, arr, pos) );
-				updates[i] = 0;
-			}
-			// assert formular modify self only!
-			assert( n==_dirtys_count(num, arr) );
-			lua_settop(L, top);
+		if( PUSS_BITSETLIST_TEST(num, arr, pos) )
+			continue;
+
+		if( formular_refresh(stobj, pos) ) {
+			prop_dirtys_set((PussCObject*)(stobj->obj), pos);
+		} else {
+			assert( !PUSS_BITSETLIST_TEST(num, arr, pos) );
+			updates[i] = 0;
 		}
+		// assert formular modify self only!
+		assert( n==_dirtys_count(num, arr) );
+		lua_settop(stobj->L, top);
 	}
 
 	// clear dirtys

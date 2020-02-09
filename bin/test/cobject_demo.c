@@ -89,6 +89,24 @@ static int demo_module_test(lua_State* L) {
 	return 0;
 }
 
+static int demo_module_test2(lua_State* L) {
+	DemoObject* obj = (DemoObject*)demo_object_checkudata(L, 1);
+	lua_Integer n = luaL_optinteger(L, 2, 10);
+	lua_Integer i;
+
+	for( i=0; i<n; ++i ) {
+		obj->a = obj->a - i;
+		obj->b = obj->b - i;
+		obj->c = obj->c - i;
+		obj->d = obj->d - i;
+		obj->e = obj->e - i;
+		obj->f = obj->f - i;
+		obj->g = obj->g - i;
+		obj->h = obj->h - i;
+	}
+	return 0;
+}
+
 PussInterface* __puss_iface__ = NULL;
 
 PUSS_PLUGIN_EXPORT int __puss_plugin_init__(lua_State* L, PussInterface* puss) {
@@ -96,6 +114,7 @@ PUSS_PLUGIN_EXPORT int __puss_plugin_init__(lua_State* L, PussInterface* puss) {
 	lua_newtable(L);
 	lua_pushcfunction(L, demo_module_reg);	lua_setfield(L, -2, "reg");
 	lua_pushcfunction(L, demo_module_test);	lua_setfield(L, -2, "test");
+	lua_pushcfunction(L, demo_module_test2);	lua_setfield(L, -2, "test2");
 	return 1;
 }
 
