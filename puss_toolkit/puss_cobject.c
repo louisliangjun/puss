@@ -106,18 +106,6 @@ static inline void prop_dirtys_set(PussCObject* obj, uint16_t pos) {
 	}
 }
 
-static inline void prop_dirtys_reset(PussCObject* obj, uint16_t pos) {
-	uint16_t num = (uint16_t)(obj->schema->field_count);
-	uint16_t* arr = obj->prop_module->dirty;
-	PUSS_BITSETLIST_RESET(num, arr, pos);
-}
-
-static inline void prop_dirtys_clear(PussCObject* obj) {
-	uint16_t num = (uint16_t)(obj->schema->field_count);
-	uint16_t* arr = obj->prop_module->dirty;
-	PUSS_BITSETLIST_CLEAR(num, arr);
-}
-
 // sync module
 
 struct _PussCSyncModule {
@@ -683,22 +671,27 @@ static int cobject_create(lua_State* L) {
 	ud->sync_module = NULL;
 	memcpy(ud->values, schema->defs, sizeof(PussCValue) * (1 + schema->field_count));
 	if( prop_module_sz ) {
-		const char* types = schema->types;
-		const PussCProperty* props = schema->properties;
-		uint16_t n = (uint16_t)(schema->field_count);
-		uint16_t i;
 		ud->prop_module = (PussCPropModule*)((char*)(ud + 1) + values_sz);
 		assert( ud->prop_module == (PussCPropModule*)(((char*)ud) + sizeof(PussCObject) + values_sz) );
 		prop_dirtys_init(ud);
-		for( i=1; i<=n; ++i ) {
-			if( (props[i].formular || props[i].cformular) && (types[i]!=PUSS_CVTYPE_PTR) )
-				prop_dirtys_set(ud, i);
-		}
 	}
 	if( sync_module_sz ) {
 		ud->sync_module = (PussCSyncModule*)((char*)(ud + 1) + values_sz + prop_module_sz);
 		assert( ud->sync_module == (PussCSyncModule*)(((char*)ud) + sizeof(PussCObject) + values_sz + prop_module_sz) );
 		sync_dirtys_init(ud);
+	}
+	if( ud->prop_module ) {
+		const char* types = schema->types;
+		const PussCProperty* props = schema->properties;
+		uint16_t num = (uint16_t)(schema->field_count);
+		uint16_t* arr = ud->prop_module->dirty;
+		uint16_t pos;
+		for( pos=1; pos<=num; ++pos ) {
+			if( (props[pos].formular || props[pos].cformular) && (types[pos]!=PUSS_CVTYPE_PTR) ) {
+				PUSS_BITSETLIST_SET(num, arr, pos);
+				PUSS_BITSETLIST_RESET(num, arr, pos);
+			}
+		}
 	}
 	lua_pushvalue(L, lua_upvalueindex(1));	// MT
 	lua_setmetatable(L, -2);
