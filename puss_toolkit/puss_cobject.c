@@ -467,7 +467,7 @@ static inline int do_formular_refresh(const PussCStackObject* stobj, lua_Integer
 	#define formular_refresh	do_formular_refresh
 #endif
 
-static void props_apply_hook_and_notify_once(const PussCStackObject* stobj, uint16_t num, uint16_t* arr, uint16_t n, int top) {
+static void props_refresh_and_notify_once(const PussCStackObject* stobj, uint16_t num, uint16_t* arr, uint16_t n, int top) {
 	PussCSchema* schema = (PussCSchema*)(stobj->obj->schema);
 	const PussCProperty* props = schema->properties;
 	uint16_t* updates = (uint16_t*)_alloca(sizeof(uint16_t) * n);
@@ -540,7 +540,7 @@ static void props_changes_notify(const PussCStackObject* stobj) {
 	arr = obj->prop_module->dirty;
 
 	while( ((--loop_count) >= 0) && ((dirty_num = _dirtys_count(num, arr)) > 0) ) {
-		props_apply_hook_and_notify_once(stobj, num, arr, dirty_num, top);
+		props_refresh_and_notify_once(stobj, num, arr, dirty_num, top);
 	}
 	lua_settop(stobj->L, top);
 }
@@ -1764,7 +1764,7 @@ void puss_cstack_formular_reset(lua_State* L, int creator, lua_Integer field, Pu
 }
 
 #if 0
-static int c_formular_hook(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv) {
+static int cstack_formular_wrap(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv) {
 	PussCFormular cformular = stobj->obj->schema->properties[field].cformular;
 	assert( stobj->obj->schema->types[field] != PUSS_CVTYPE_LUA );
 	assert( cformular );
@@ -1791,7 +1791,7 @@ void puss_cformular_reset(lua_State* L, int creator, lua_Integer field, PussCFor
 	lua_pop(L, 1);
 
 	schema->properties[field].cformular = cformular;
-	schema->properties[field].formular = NULL; // c_formular_hook;
+	schema->properties[field].formular = NULL; // cstack_formular_wrap;
 }
 
 void puss_cmonitor_reset(lua_State* L, int creator, const char* name, PussCObjectMonitor monitor) {
