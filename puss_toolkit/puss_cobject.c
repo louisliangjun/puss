@@ -683,9 +683,17 @@ static int cobject_create(lua_State* L) {
 	ud->sync_module = NULL;
 	memcpy(ud->values, schema->defs, sizeof(PussCValue) * (1 + schema->field_count));
 	if( prop_module_sz ) {
+		const char* types = schema->types;
+		const PussCProperty* props = schema->properties;
+		uint16_t n = (uint16_t)(schema->field_count);
+		uint16_t i;
 		ud->prop_module = (PussCPropModule*)((char*)(ud + 1) + values_sz);
 		assert( ud->prop_module == (PussCPropModule*)(((char*)ud) + sizeof(PussCObject) + values_sz) );
 		prop_dirtys_init(ud);
+		for( i=1; i<=n; ++i ) {
+			if( (props[i].formular || props[i].cformular) && (types[i]!=PUSS_CVTYPE_PTR) )
+				prop_dirtys_set(ud, i);
+		}
 	}
 	if( sync_module_sz ) {
 		ud->sync_module = (PussCSyncModule*)((char*)(ud + 1) + values_sz + prop_module_sz);
