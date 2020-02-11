@@ -293,9 +293,9 @@ static const char* CSCHEMA_MONITOR_RESET_SCRIPT =
 	"local tbl, monitor_add, mem, name, monitor, ref = ...\n"
 	"local idx = #tbl + 1\n"
 	"for i,v in ipairs(tbl) do\n"
-	"	if v.name==name then idx=i; break; end\n"
+	"	if v[1]==name then idx=i; break; end\n"
 	"end\n"
-	"if tbl[idx] then tbl[idx][2], tbl[idx][3] = monitor, iref, ref else tbl[idx] = {name, monitor, ref} end\n"
+	"if tbl[idx] then tbl[idx][2], tbl[idx][3] = monitor, ref else tbl[idx] = {name, monitor, ref} end\n"
 	"for i,v in ipairs(tbl) do monitor_add(mem, v[2], v[3]) end\n"
 	"tbl.monitors_mem = mem	-- mem use GC\n"
 	;
