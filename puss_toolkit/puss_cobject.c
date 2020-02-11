@@ -725,11 +725,11 @@ static int cobjref_unref(lua_State* L) {
 			PussCSchema* schema = (PussCSchema*)(ref->obj->schema);
 			lua_Integer num = schema->cache_count + 1;
 			assert( num > 0 );
-			if( lua_getuservalue(L, lua_upvalueindex(2))!=LUA_TTABLE ) {	// caches: schema.uv
+			if( lua_getuservalue(L, lua_upvalueindex(1))!=LUA_TTABLE ) {	// caches: schema.uv
 				lua_pop(L, 1);
 				lua_createtable(L, 1, 0);
 				lua_pushvalue(L, -1);
-				lua_setuservalue(L, lua_upvalueindex(2));
+				lua_setuservalue(L, lua_upvalueindex(1));
 			}
 			lua_getuservalue(L, 1);		// raw obj
 			lua_rawseti(L, -2, num);
@@ -767,7 +767,10 @@ static int cobjref_set(lua_State* L) {
 	lua_Integer field = luaL_checkinteger(L, 2);
 	int st;
 	luaL_checkany(L, 3);
-	st = stobj.obj ? cobj_seti(&stobj, field) : -1;
+	luaL_checkany(L, 3);
+	if( !ref->obj )
+		luaL_argerror(L, 1, "already freed");
+	st = cobj_seti(&stobj, field);
 	if( st > 0 ) {
 		props_mark_dirty_and_notify(&stobj, field);
 		lua_pushboolean(L, TRUE);
@@ -1383,7 +1386,7 @@ static int cschema_create(lua_State* L) {
 	lua_pushvalue(L, idxof_names); lua_pushcclosure(L, cobjref_set_by_name, 1); lua_setfield(L, idxof_ref_mt, "set_by_name");
 	lua_pushcfunction(L, cobjref_sync); lua_setfield(L, idxof_ref_mt, "__sync");
 	lua_pushcfunction(L, cobjref_clear); lua_setfield(L, idxof_ref_mt, "__clear");
-	lua_pushcfunction(L, cobjref_unref); lua_setfield(L, idxof_ref_mt, "__unref");
+	lua_pushvalue(L, idxof_schema); lua_pushcclosure(L, cobjref_unref, 1); lua_setfield(L, idxof_ref_mt, "__unref");
 	lua_pushcfunction(L, cobjref_stat);	lua_setfield(L, idxof_ref_mt, "stat");
 
 	lua_settop(L, idxof_monitors);
