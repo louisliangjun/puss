@@ -15,6 +15,8 @@
 
 #define NOTIFY_LOOP_LIMIT_DEFAULT	2
 
+#define PUSS_CMONITOR_LUA_PREFIX	"@"
+
 #define PUSS_CSCHEMA_MT	"PussCSchema"
 #define PUSS_COBJECT_MT	"PussCObject"
 #define PUSS_COBJREF_MT	"PussCObjRef"
@@ -1658,8 +1660,8 @@ static int cschema_monitor_lookup(lua_State* L) {
 	schema = cschema_check_fetch(L, 1);
 	lua_pop(L, 1);
 
-	// lua monitor add prefix: !
-	lua_pushstring(L, "!");
+	// lua monitor add prefix
+	lua_pushstring(L, PUSS_CMONITOR_LUA_PREFIX);
 	lua_pushvalue(L, 2);
 	lua_concat(L, 2);
 	lua_replace(L, 2);
@@ -1697,8 +1699,8 @@ static int cschema_monitor_reset(lua_State* L) {
 	schema = cschema_check_fetch(L, 1);
 	lua_pop(L, 1);
 
-	// lua monitor add prefix: @
-	lua_pushstring(L, "@");
+	// lua monitor add prefix
+	lua_pushstring(L, PUSS_CMONITOR_LUA_PREFIX);
 	lua_pushvalue(L, 2);
 	lua_concat(L, 2);
 	lua_replace(L, 2);
