@@ -257,6 +257,24 @@ static void cobj_do_clear(lua_State* L, const PussCSchema* schema, const PussCOb
 	lua_pop(L, 1);
 }
 
+static void cobj_do_dirty_formular_props(PussCObject* obj) {
+	if( obj->prop_module ) {
+		const PussCSchema* schema = obj->schema;
+		const char* types = schema->types;
+		const PussCProperty* props = schema->properties;
+		uint16_t num = (uint16_t)(schema->field_count);
+		uint16_t* arr = obj->prop_module->dirty;
+		uint16_t pos;
+		PUSS_BITSETLIST_CLEAR(num, arr);
+		for( pos=1; pos<=num; ++pos ) {
+			if( (props[pos].formular || props[pos].cformular) && (types[pos]!=PUSS_CVTYPE_PTR) ) {
+				PUSS_BITSETLIST_SET(num, arr, pos);
+				PUSS_BITSETLIST_RESET(num, arr, pos);
+			}
+		}
+	}
+}
+
 static int do_monitor_add(lua_State* L) {
 	PussCMonitor* arr = lua_touserdata(L, 1);
 	PussCObjectMonitor h = (PussCObjectMonitor)lua_touserdata(L, 2);
@@ -572,13 +590,6 @@ static int cobject_gc(lua_State* L) {
 	return 0;
 }
 
-static int cobject_clear(lua_State* L) {
-	PussCObject* obj = cobject_check(L, 1);
-	cobj_do_clear(L, obj->schema, obj);
-	lua_settop(L, 1);
-	return 1;
-}
-
 static int cobject_get(lua_State* L) {
 	PussCObject* obj = cobject_check(L, 1);
 	lua_Integer field = luaL_checkinteger(L, 2);
@@ -680,19 +691,7 @@ static int cobject_create(lua_State* L) {
 		assert( ud->sync_module == (PussCSyncModule*)(((char*)ud) + sizeof(PussCObject) + values_sz + prop_module_sz) );
 		sync_dirtys_init(ud);
 	}
-	if( ud->prop_module ) {
-		const char* types = schema->types;
-		const PussCProperty* props = schema->properties;
-		uint16_t num = (uint16_t)(schema->field_count);
-		uint16_t* arr = ud->prop_module->dirty;
-		uint16_t pos;
-		for( pos=1; pos<=num; ++pos ) {
-			if( (props[pos].formular || props[pos].cformular) && (types[pos]!=PUSS_CVTYPE_PTR) ) {
-				PUSS_BITSETLIST_SET(num, arr, pos);
-				PUSS_BITSETLIST_RESET(num, arr, pos);
-			}
-		}
-	}
+	cobj_do_dirty_formular_props(ud);
 	lua_pushvalue(L, lua_upvalueindex(1));	// MT
 	lua_setmetatable(L, -2);
 	schema->total_count++;
@@ -740,15 +739,6 @@ static int cobjref_unref(lua_State* L) {
 		lua_setuservalue(L, 1);
 	}
 	return 0;
-}
-
-static int cobjref_clear(lua_State* L) {
-	PussCObjRef* ref = cobjref_check(L, 1);
-	if( ref->obj ) {
-		cobj_do_clear(L, ref->obj->schema, ref->obj);
-	}
-	lua_pushvalue(L, 1);
-	return 1;
 }
 
 static int cobjref_get(lua_State* L) {
@@ -862,6 +852,7 @@ static int cobjref_create(lua_State* L) {
 				custom_init = 0;	// reset not call init
 			} else {
 				cobj_do_clear(L, schema, obj);	// values
+				cobj_do_dirty_formular_props(obj);
 			}
 		}
 	}
@@ -1374,7 +1365,6 @@ static int cschema_create(lua_State* L) {
 	lua_pushvalue(L, idxof_names); lua_pushcclosure(L, cobject_get_by_name, 1); lua_setfield(L, idxof_obj_mt, "get_by_name");
 	lua_pushvalue(L, idxof_names); lua_pushcclosure(L, cobject_set_by_name, 1); lua_setfield(L, idxof_obj_mt, "set_by_name");
 	lua_pushcfunction(L, cobject_sync); lua_setfield(L, idxof_obj_mt, "__sync");
-	lua_pushcfunction(L, cobject_clear); lua_setfield(L, idxof_obj_mt, "__clear");
 
 	luaL_newmetatable(L, PUSS_COBJREF_MT);	lua_setmetatable(L, idxof_ref_mt);
 	lua_pushfstring(L, "PussCObjRef_%I", (lua_Integer)id_mask); lua_setfield(L, idxof_ref_mt, "__name");
@@ -1385,7 +1375,6 @@ static int cschema_create(lua_State* L) {
 	lua_pushvalue(L, idxof_names); lua_pushcclosure(L, cobjref_get_by_name, 1); lua_setfield(L, idxof_ref_mt, "get_by_name");
 	lua_pushvalue(L, idxof_names); lua_pushcclosure(L, cobjref_set_by_name, 1); lua_setfield(L, idxof_ref_mt, "set_by_name");
 	lua_pushcfunction(L, cobjref_sync); lua_setfield(L, idxof_ref_mt, "__sync");
-	lua_pushcfunction(L, cobjref_clear); lua_setfield(L, idxof_ref_mt, "__clear");
 	lua_pushvalue(L, idxof_schema); lua_pushcclosure(L, cobjref_unref, 1); lua_setfield(L, idxof_ref_mt, "__unref");
 	lua_pushcfunction(L, cobjref_stat);	lua_setfield(L, idxof_ref_mt, "stat");
 
