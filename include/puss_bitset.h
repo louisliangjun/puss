@@ -42,10 +42,10 @@ typedef unsigned	PussBitSet;
 		} while(0)
 
 #define _PUSS_BITSETLIST_TEST(pfx, num, arr, pos) \
-			(assert(num < _PUSS_BITSETLIST_MASK_POS(pfx)), assert(pos > 0), assert(pos <= num), !(arr[pos] & _PUSS_BITSETLIST_MASK_RST(pfx)))
+			(assert(num < _PUSS_BITSETLIST_MASK_POS(pfx)), assert(pos > 0), assert(pos <= num), (void)num, !(arr[pos] & _PUSS_BITSETLIST_MASK_RST(pfx)))
 
 #define _PUSS_BITSETLIST_SET(pfx, num, arr, pos) do { \
-			assert(num < _PUSS_BITSETLIST_MASK_POS(pfx)); assert(pos > 0); assert(pos <= num); \
+			assert(num < _PUSS_BITSETLIST_MASK_POS(pfx)); assert(pos > 0); assert(pos <= num); (void)num; \
 			if( arr[pos] == _PUSS_BITSETLIST_EMPTY(pfx) ) { \
 				arr[pos] = (arr[0]==_PUSS_BITSETLIST_EMPTY(pfx)) ? 0 : arr[0] ; \
 				arr[0] = pos; \
@@ -55,12 +55,12 @@ typedef unsigned	PussBitSet;
 		} while(0)
 
 #define _PUSS_BITSETLIST_RESET(pfx, num, arr, pos) do { \
-			assert(num < _PUSS_BITSETLIST_MASK_POS(pfx)); assert(pos > 0); assert(pos <= num); \
+			assert(num < _PUSS_BITSETLIST_MASK_POS(pfx)); assert(pos > 0); assert(pos <= num); (void)num; \
 			arr[pos] |= _PUSS_BITSETLIST_MASK_RST(pfx); \
 		} while(0) \
 
 #define _PUSS_BITSETLIST_CLEAR(pfx, num, arr) do { \
-			_PUSS_BITSETLIST_INT_TYPE(pfx) pos; \
+			_PUSS_BITSETLIST_INT_TYPE(pfx) pos; (void)num; \
 			assert(num < _PUSS_BITSETLIST_MASK_POS(pfx)); \
 			while( (pos = arr[0]) != _PUSS_BITSETLIST_EMPTY(pfx) ) { \
 				pos &= _PUSS_BITSETLIST_MASK_POS(pfx); \

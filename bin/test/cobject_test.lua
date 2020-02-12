@@ -134,6 +134,11 @@ local function test()
 	tracet1()
 	trace_sync(t1)
 
+	trace('set f')
+	t1:set_by_name('f', 10)
+	tracet1()
+	trace_sync(t1)
+
 	trace('set o')
 	t1(function(t) t:set_by_name('o', 'aa') end)
 	tracet1()

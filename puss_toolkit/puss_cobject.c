@@ -211,10 +211,10 @@ static int cobj_seti_vlua(const PussCStackObject* stobj, lua_Integer field, Puss
 static int cobj_seti(const PussCStackObject* stobj, lua_Integer field) {
 	PussCObject* obj = (PussCObject*)(stobj->obj);
 	lua_State* L = stobj->L;
-	PussCStackFormular formular = obj->schema->properties[field].formular;
 	PussCValue* v = (PussCValue*)&(obj->values[field]);
 	char tp = obj->schema->types[field];
 	int st = 0;	// -1: failed 0: nochange 1:changed
+	PussCStackFormular formular;
 	PussCValue nv;
 	if( (field <= 0) || (field > obj->schema->field_count) )
 		return -1;	// failed
@@ -227,7 +227,7 @@ static int cobj_seti(const PussCStackObject* stobj, lua_Integer field) {
 	case PUSS_CVTYPE_PTR:	return 1; break;	// ptr type set used for notify changed only
 	}
 
-	if( formular && (!(*formular)(stobj, field, &nv)) ) {
+	if( (formular = obj->schema->properties[field].formular)!=NULL && (!(*formular)(stobj, field, &nv)) ) {
 		st = -1;
 	} else if( tp==PUSS_CVTYPE_LUA ) {
 		st = cobj_seti_vlua(stobj, field, v);
@@ -411,36 +411,26 @@ static void props_do_notify_property_first(const PussCStackObject* stobj, const 
 
 static inline int do_formular_refresh(const PussCStackObject* stobj, lua_Integer field) {
 	PussCObject* obj = (PussCObject*)(stobj->obj);
-	const char* types = obj->schema->types;
 	const PussCProperty* props = obj->schema->properties;
-	PussCStackFormular formular;
-	PussCFormular cformular;
-	PussCValue* v = (PussCValue*)(&obj->values[field]);
+	PussCStackFormular formular = props[field].formular;
+	PussCValue* v;
 	PussCValue nv;
-	if( (formular = props[field].formular) != NULL ) {
-		nv = *v;
-		switch( types[field] ) {
-		case PUSS_CVTYPE_LUA:
-			cobj_geti(stobj->L, obj, field);
-			if( (*formular)(stobj, field, &nv) )
-				return cobj_seti_vlua(stobj, field, v);
-			break;
-		case PUSS_CVTYPE_PTR:
-			return TRUE;	// formular used for get only!
-			break;
-		default:
-			if( (*formular)(stobj, field, &nv) && (nv.p != v->p) ) {
-				*v = nv;
-				return TRUE;
-			}
-			break;
-		}
-	} else if( (cformular = props[field].cformular) != NULL ) {
-		assert( types[field] != PUSS_CVTYPE_LUA );
-		if( (nv = (*cformular)(obj, *v)).p != v->p ) {
+	if( !formular )
+		return FALSE;
+	v = (PussCValue*)(&obj->values[field]);
+	nv = *v;
+	switch( obj->schema->types[field] ) {
+	case PUSS_CVTYPE_LUA:
+		cobj_geti(stobj->L, obj, field);
+		return (*formular)(stobj, field, &nv) ? cobj_seti_vlua(stobj, field, v) : FALSE;
+	case PUSS_CVTYPE_PTR:
+		return TRUE;	// formular used for get only!
+	default:
+		if( (*formular)(stobj, field, &nv) && (nv.p != v->p) ) {
 			*v = nv;
 			return TRUE;
 		}
+		break;
 	}
 	return FALSE;
 }
@@ -940,7 +930,6 @@ int puss_cobject_set_bool(const PussCStackObject* stobj, lua_Integer field, Puss
 	int ret = TRUE;
 	PussCValue* v;
 	PussCStackFormular formular;
-	PussCFormular cformular;
 	assert( stobj->arg > 0 );
 	assert( lua_gettop(stobj->L) >= stobj->arg );
 	assert( sizeof(PussCValue)==sizeof(nv) );
@@ -948,8 +937,6 @@ int puss_cobject_set_bool(const PussCStackObject* stobj, lua_Integer field, Puss
 		ret = FALSE;
 	} else if( (formular = obj->schema->properties[field].formular) != NULL ) {
 		ret = (*formular)(stobj, field, (PussCValue*)(&nv));
-	} else if( (cformular = obj->schema->properties[field].cformular) != NULL ) {
-		nv = ((*cformular)(obj, *((PussCValue*)&nv))).b != 0;
 	} else {
 		nv = (nv != 0);
 	}
@@ -965,7 +952,6 @@ int puss_cobject_set_int(const PussCStackObject* stobj, lua_Integer field, PussC
 	int ret = TRUE;
 	PussCValue* v;
 	PussCStackFormular formular;
-	PussCFormular cformular;
 	assert( sizeof(PussCValue)==sizeof(nv) );
 	assert( stobj->arg > 0 );
 	assert( lua_gettop(stobj->L) >= stobj->arg );
@@ -973,8 +959,6 @@ int puss_cobject_set_int(const PussCStackObject* stobj, lua_Integer field, PussC
 		ret = FALSE;
 	} else if( (formular = obj->schema->properties[field].formular) != NULL ) {
 		ret = (*formular)(stobj, field, (PussCValue*)(&nv));
-	} else if( (cformular = obj->schema->properties[field].cformular) != NULL ) {
-		nv = ((*cformular)(obj, *((PussCValue*)&nv))).i;
 	}
 	if( ret && ((v=(PussCValue*)&(obj->values[field]))->i != nv) ) {
 		v->i = nv;
@@ -988,7 +972,6 @@ int puss_cobject_set_num(const PussCStackObject* stobj, lua_Integer field, PussC
 	int ret = TRUE;
 	PussCValue* v;
 	PussCStackFormular formular;
-	PussCFormular cformular;
 	assert( sizeof(PussCValue)==sizeof(nv) );
 	assert( stobj->arg > 0 );
 	assert( lua_gettop(stobj->L) >= stobj->arg );
@@ -996,8 +979,6 @@ int puss_cobject_set_num(const PussCStackObject* stobj, lua_Integer field, PussC
 		ret = FALSE;
 	} else if( (formular = obj->schema->properties[field].formular) != NULL ) {
 		ret = (*formular)(stobj, field, (PussCValue*)(&nv));
-	} else if( (cformular = obj->schema->properties[field].cformular) != NULL ) {
-		nv = ((*cformular)(obj, *((PussCValue*)&nv))).n;
 	}
 	if( ret && ((v=(PussCValue*)&(obj->values[field]))->n != nv) ) {
 		v->n = nv;
@@ -1448,7 +1429,6 @@ static int cschema_refresh(lua_State* L) {
 
 	// now stack 1:creator 2:descs
 	for( i=1; i<=n; ++i ) {
-		PussCProperty* prop = &(schema->properties[i]);
 		const int desc = 3;
 		const char* name;
 		lua_settop(L, 3);
@@ -1634,8 +1614,6 @@ static void lua_monitor_on_changed(const PussCStackObject* stobj, lua_Integer fi
 	assert( stobj && stobj->obj && stobj->obj->schema );
 	assert( (field > 0) && (field <= stobj->obj->schema->field_count) );
 	if( PUSS_BITSET_TEST(monitor_ud->masks, field) ) {
-		PussCObject* obj = (PussCObject*)(stobj->obj);
-		const PussCSchema* schema = obj->schema;
 		lua_State* L = stobj->L;
 		int top = lua_gettop(L);
 		puss_lua_get(L, PUSS_KEY_ERROR_HANDLE);
@@ -1648,7 +1626,6 @@ static void lua_monitor_on_changed(const PussCStackObject* stobj, lua_Integer fi
 }
 
 static int cschema_monitor_lookup(lua_State* L) {
-	PussCSchema* schema;
 	size_t size = 0;
 	const char* name = luaL_checklstring(L, 2, &size);
 	lua_Integer i, n;
@@ -1657,7 +1634,7 @@ static int cschema_monitor_lookup(lua_State* L) {
 		luaL_argerror(L, 2, "name MUST startswith A-Z or a-z");
 	if( strlen(name)!=size )
 		luaL_argerror(L, 2, "name MUST c-string");
-	schema = cschema_check_fetch(L, 1);
+	cschema_check_fetch(L, 1);
 	lua_pop(L, 1);
 
 	// lua monitor add prefix
@@ -1758,7 +1735,6 @@ void puss_cstack_formular_reset(lua_State* L, int creator, lua_Integer field, Pu
 	schema->properties[field].formular = formular;
 }
 
-#if 0
 static int cstack_formular_wrap(const PussCStackObject* stobj, lua_Integer field, PussCValue* nv) {
 	PussCFormular cformular = stobj->obj->schema->properties[field].cformular;
 	assert( stobj->obj->schema->types[field] != PUSS_CVTYPE_LUA );
@@ -1766,7 +1742,6 @@ static int cstack_formular_wrap(const PussCStackObject* stobj, lua_Integer field
 	*nv = (*cformular)(stobj->obj, *nv);
 	return TRUE;
 }
-#endif
 
 void puss_cformular_reset(lua_State* L, int creator, lua_Integer field, PussCFormular cformular) {
 	PussCSchema* schema = cschema_check_fetch(L, creator);
@@ -1786,7 +1761,7 @@ void puss_cformular_reset(lua_State* L, int creator, lua_Integer field, PussCFor
 	lua_pop(L, 1);
 
 	schema->properties[field].cformular = cformular;
-	schema->properties[field].formular = NULL; // cstack_formular_wrap;
+	schema->properties[field].formular = cstack_formular_wrap;
 }
 
 void puss_cmonitor_reset(lua_State* L, int creator, const char* name, PussCObjectMonitor monitor) {
