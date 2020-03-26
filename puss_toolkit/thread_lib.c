@@ -46,6 +46,7 @@ struct _TQueue {
 	HANDLE			ev;
 #else
 	pthread_cond_t	cond;
+	TQueue*			waits[MAX_WAIT_THREAD_NUM];
 #endif
 	TMsg*			head;
 	TMsg*			tail;

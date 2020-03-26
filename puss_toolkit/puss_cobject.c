@@ -468,7 +468,11 @@ static inline int do_formular_refresh(const PussCStackObject* stobj, lua_Integer
 static void props_refresh_and_notify_once(const PussCStackObject* stobj, uint16_t num, uint16_t* arr, uint16_t n, int top) {
 	PussCSchema* schema = (PussCSchema*)(stobj->obj->schema);
 	const PussCProperty* props = schema->properties;
+#ifdef _WIN32
 	uint16_t* updates = (uint16_t*)_alloca(sizeof(uint16_t) * n);
+#else
+	uint16_t updates[n];
+#endif
 	uint16_t pos, i, j;
 
 	// sort insert to updates

@@ -109,10 +109,8 @@ static int _puss_lua_plugin_load(lua_State* L) {
 	return 1;
 }
 
-#ifdef _WIN32
-  #ifdef _PUSS_PLUGIN_BASIC_PROTECT
+#ifdef _PUSS_PLUGIN_BASIC_PROTECT
 	#include "plugin_protect.inl"
-  #endif
 #endif
 
 #ifdef _PUSS_PLUGIN_USE_MEMORY_PE

@@ -1,5 +1,6 @@
 // plugin_protect.inl
 
+// #include <setjmp.h>
 // #include "lstate.h"
 
 #ifndef _PUSS_PPCALL_BEGIN
@@ -163,7 +164,7 @@ static void puss_protect_ensure(void) {
 #ifndef _WIN32
 	struct sigaction act;
 	memset(&act, 0, sizeof(act));
-	act.sa_sigaction = __puss_tcc_sig_handle;
+	act.sa_sigaction = __puss_ppp_sig_handle;
 	act.sa_flags = SA_NODEFER | SA_NOMASK | SA_SIGINFO;
 	sigaction(SIGFPE, &act, NULL);
 	sigaction(SIGBUS, &act, NULL);

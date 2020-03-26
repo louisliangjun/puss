@@ -9,6 +9,8 @@
 	#include <winternl.h>
 	#include <conio.h>
 	#include <io.h>
+#else
+	#include <setjmp.h>
 #endif
 
 #include <stdio.h>
@@ -22,7 +24,9 @@
 #include "puss_toolkit.h"
 
 #define _PUSS_PLUGIN_BASIC_PROTECT
-#define _PUSS_PLUGIN_USE_MEMORY_PE
+#ifdef _WIN32
+	#define _PUSS_PLUGIN_USE_MEMORY_PE
+#endif
 #include "puss_debug.inl"
 #include "puss_plugin.inl"
 
