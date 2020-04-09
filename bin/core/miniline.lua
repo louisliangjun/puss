@@ -14,7 +14,12 @@ local results = {}
 shotcuts.register('miniline/open', 'Open Miniline', 'P', true, false, false, false)
 
 __exports.on_search_result = function(ok, key, res)
-	if ok and key then results = res or {} end
+	if ok and key then
+		results = res or {}
+		if cursor > #results then
+			cursor = 1
+		end
+	end
 end
 
 local MINILINE_FLAGS = ( ImGuiWindowFlags_NoMove
