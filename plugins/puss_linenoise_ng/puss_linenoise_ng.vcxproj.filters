@@ -10,4 +10,7 @@
     <ClInclude Include="linenoise.h" />
     <ClInclude Include="ConvertUTF.h" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\..\..\Program Files (x86)\MSBuild\Microsoft.Cpp\v4.0\V120\Microsoft.Cpp.Platform.targets" />
+  </ItemGroup>
 </Project>
