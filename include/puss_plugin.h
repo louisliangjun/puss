@@ -4,7 +4,6 @@
 #define _INC_PUSS_LUA_PLUGIN_H_
 
 #include "puss_lua.h"
-#include "puss_cobject.h"
 
 typedef struct _PussInterface	PussInterface;
 
@@ -30,21 +29,6 @@ struct _PussInterface {
 	void* (*interface_check)(lua_State* L, const char* name);
 	void  (*interface_register)(lua_State* L, const char* name, void* iface);
 	void  (*push_consts_table)(lua_State* L);
-
-	// cobject
-	const PussCObject*	(*cobject_checkudata)(lua_State* L, int arg, lua_Unsigned id_mask);
-	const PussCObject*	(*cobject_testudata)(lua_State* L, int arg, lua_Unsigned id_mask);
-	const PussCObject*	(*cobject_check)(const PussCStackObject* stobj, lua_Unsigned id_mask);
-	const PussCObject*	(*cobject_test)(const PussCStackObject* stobj, lua_Unsigned id_mask);
-	int   (*cobject_stack_get)(const PussCStackObject* stobj, lua_Integer field);
-	int   (*cobject_stack_set)(const PussCStackObject* stobj, lua_Integer field);
-	int   (*cobject_set_bool)(const PussCStackObject* stobj, lua_Integer field, PussCBool nv);
-	int   (*cobject_set_int)(const PussCStackObject* stobj, lua_Integer field, PussCInt nv);
-	int   (*cobject_set_num)(const PussCStackObject* stobj, lua_Integer field, PussCNum nv);
-	int   (*cobject_set_ptr)(const PussCStackObject* stobj, lua_Integer field, PussCPtr nv);
-	void  (*cmonitor_reset)(lua_State* L, int creator, const char* name, PussCObjectMonitor handle);
-	void  (*cstack_formular_reset)(lua_State* L, int creator, lua_Integer field, PussCStackFormular formular);
-	void  (*cformular_reset)(lua_State* L, int creator, lua_Integer field, PussCFormular cformular);
 };
 
 #ifdef _WIN32

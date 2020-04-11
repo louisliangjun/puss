@@ -172,7 +172,6 @@ int	puss_reg_simple_pickle(lua_State* L);
 int	puss_reg_simple_luastate(lua_State* L);
 int	puss_reg_async_service(lua_State* L);
 int	puss_reg_thread_service(lua_State* L);
-int	puss_reg_cobject(lua_State* L);
 
 static int luaopen_puss(lua_State* L) {
 	// check consts table
@@ -223,7 +222,6 @@ static int luaopen_puss(lua_State* L) {
 			, {"simple_luastate", puss_reg_simple_luastate}
 			, {"async_service", puss_reg_async_service}
 			, {"thread_service", puss_reg_thread_service}
-			, {"cobject", puss_reg_cobject}
 			, {"plugin_loader", __puss_config__.plugin_loader_reg}
 			, {NULL, NULL}
 			};

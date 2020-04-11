@@ -13,8 +13,6 @@
     <ClInclude Include="..\include\puss_lua.h" />
     <ClInclude Include="..\include\puss_macros.h" />
     <ClInclude Include="..\include\puss_plugin.h" />
-    <ClInclude Include="..\include\puss_cobject.h" />
-    <ClInclude Include="..\include\puss_bitset.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="rbx_tree.c" />
@@ -24,6 +22,5 @@
     <ClCompile Include="async_service.c" />
     <ClCompile Include="puss_core.c" />
     <ClCompile Include="thread_lib.c" />
-    <ClCompile Include="puss_cobject.c" />
   </ItemGroup>
 </Project>

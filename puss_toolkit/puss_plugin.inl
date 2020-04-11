@@ -51,21 +51,7 @@ static PussInterface puss_interface =
 	, puss_interface_check
 	, puss_interface_register
 	, puss_push_consts_table
-
-	, puss_cobject_checkudata
-	, puss_cobject_testudata
-	, puss_cobject_check
-	, puss_cobject_test
-	, puss_cobject_stack_get
-	, puss_cobject_stack_set
-	, puss_cobject_set_bool
-	, puss_cobject_set_int
-	, puss_cobject_set_num
-	, puss_cobject_set_ptr
-	, puss_cmonitor_reset
-	, puss_cstack_formular_reset
-	, puss_cformular_reset
-};
+	};
 
 static void _push_plugin_filename(lua_State* L) {
 	lua_pushvalue(L, lua_upvalueindex(3));	// prefix
