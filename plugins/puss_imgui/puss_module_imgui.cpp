@@ -747,11 +747,10 @@ static void ImGui_Puss_KeyCallback(GLFWwindow* win, int key, int scancode, int a
 		puss_imgui_key_set(io, key, false);
 	}
 
-	(void)mods; // Modifiers are not reliable across systems
-	io.KeyCtrl = io.KeysDown[PUSS_IMGUI_KEY_LEFT_CONTROL] || io.KeysDown[PUSS_IMGUI_KEY_RIGHT_CONTROL];
-	io.KeyShift = io.KeysDown[PUSS_IMGUI_KEY_LEFT_SHIFT] || io.KeysDown[PUSS_IMGUI_KEY_RIGHT_SHIFT];
-	io.KeyAlt = io.KeysDown[PUSS_IMGUI_KEY_LEFT_ALT] || io.KeysDown[PUSS_IMGUI_KEY_RIGHT_ALT];
-	io.KeySuper = io.KeysDown[PUSS_IMGUI_KEY_LEFT_SUPER] || io.KeysDown[PUSS_IMGUI_KEY_RIGHT_SUPER];
+	io.KeyCtrl = mods & GLFW_MOD_CONTROL;
+	io.KeyShift = mods & GLFW_MOD_SHIFT;
+	io.KeyAlt = mods & GLFW_MOD_ALT;
+	io.KeySuper = mods & GLFW_MOD_SUPER;
 }
 
 static void ImGui_Puss_DropCallback(GLFWwindow* w, int count, const char** files) {
