@@ -740,17 +740,16 @@ static void ImGui_Puss_WindowCloseCallback(GLFWwindow* window) {
 }
 
 static void ImGui_Puss_KeyCallback(GLFWwindow* win, int key, int scancode, int action, int mods) {
-	ImGuiIO& io = ImGui::GetIO();
-	if (action == GLFW_PRESS) {
-		puss_imgui_key_set(io, key, true);
-	} else if (action == GLFW_RELEASE) {
-		puss_imgui_key_set(io, key, false);
-	}
+    ImGuiIO& io = ImGui::GetIO();
+    if (action == GLFW_PRESS)
+        puss_imgui_key_set(io, key, true);
+    if (action == GLFW_RELEASE)
+        puss_imgui_key_set(io, key, false);
 
-	io.KeyCtrl = mods & GLFW_MOD_CONTROL;
-	io.KeyShift = mods & GLFW_MOD_SHIFT;
-	io.KeyAlt = mods & GLFW_MOD_ALT;
-	io.KeySuper = mods & GLFW_MOD_SUPER;
+    io.KeyCtrl = io.KeysDown[PUSS_IMGUI_KEY_LEFT_CONTROL] || io.KeysDown[PUSS_IMGUI_KEY_RIGHT_CONTROL];
+    io.KeyShift = io.KeysDown[PUSS_IMGUI_KEY_LEFT_SHIFT] || io.KeysDown[PUSS_IMGUI_KEY_RIGHT_SHIFT];
+    io.KeyAlt = io.KeysDown[PUSS_IMGUI_KEY_LEFT_ALT] || io.KeysDown[PUSS_IMGUI_KEY_RIGHT_ALT];
+    io.KeySuper = io.KeysDown[PUSS_IMGUI_KEY_LEFT_SUPER] || io.KeysDown[PUSS_IMGUI_KEY_RIGHT_SUPER];
 }
 
 static void ImGui_Puss_DropCallback(GLFWwindow* w, int count, const char** files) {
