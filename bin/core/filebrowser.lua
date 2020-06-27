@@ -26,7 +26,7 @@ _root_version = _root_version or 0
 _root_folders = _root_folders or {}
 local root_folders = _root_folders
 
-local ftbuf = imgui.CreateByteArray(1024, 'lua c h inl cpp hpp cxx hxx')
+local ftbuf = imgui.CreateByteArray(1024, 'lua c h inl cpp hpp cxx hxx md')
 local ptbuf = imgui.CreateByteArray(1024, puss._path)
 local suffix_filter = {}
 
