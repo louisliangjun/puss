@@ -76,6 +76,8 @@
     <None Include="mempe_lua.inl" />
     <None Include="plugin_protect.inl" />
     <None Include="puss_debug.inl" />
+    <None Include="puss_debug_disasm_53.inl" />
+    <None Include="puss_debug_disasm_54.inl" />
     <None Include="puss_plugin.inl" />
     <None Include="thread_utils.h" />
   </ItemGroup>

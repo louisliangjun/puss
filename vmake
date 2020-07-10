@@ -21,7 +21,7 @@ PUSS_INCLUDE_PATH = 'include'
 GEN_INCLUDE_PATH = path_concat('objs', 'gen')
 INCLUDES = { PUSS_INCLUDE_PATH, GEN_INCLUDE_PATH }
 
-LUA_SRC_PATH = path_concat('3rd', 'lua-5.3.5', 'src')
+LUA_SRC_PATH = path_concat('3rd', 'lua-5.4.0', 'src')
 
 -- debug && asan
 do

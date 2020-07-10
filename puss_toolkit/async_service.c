@@ -190,23 +190,36 @@ static AsyncTask* async_service_create_co(lua_State* L, AsyncTaskService* svs) {
 	task->skey = ++(svs->skey_last);
 	async_task_append_to(svs, task, &(svs->dummy_free_task));
 	svs->count++;
+#if (LUA_VERSION_NUM < 504)
 	lua_resume(task->co, L, 0);
 	assert( lua_status(task->co)==LUA_YIELD );
+#else
+	{
+		int nres = 0;
+		lua_resume(task->co, L, 0, &nres);
+		assert( lua_status(task->co)==LUA_YIELD );
+		if( nres > 0 )	lua_pop(task->co, nres);
+	}
+#endif
 	return task;
 }
 
 static void async_service_destroy_co(lua_State* L, AsyncTaskService* svs, AsyncTask* task) {
+	lua_State* co;
 	if( timer_qnode_is_attached(task) ) {
 		timer_queue_remove(svs, task);
 	}
 	grp_list_reset(task, NULL);
 
 	assert( lua_istable(L, TASK_MAP_INDEX) );
-	if( task->co ) {
-		lua_pushnil(L);
-		lua_rawsetp(L, TASK_MAP_INDEX, task->co);
+	if( (co = task->co) != NULL ) {
 		task->co = NULL;
 		svs->count--;
+		lua_pushnil(L);
+		lua_rawsetp(L, TASK_MAP_INDEX, co);
+#if (LUA_VERSION_NUM >= 504)
+		lua_resetthread(L);
+#endif
 	}
 }
 
@@ -223,8 +236,15 @@ static void async_task_reset_work(AsyncTaskService* svs, AsyncTask* task) {
 
 static int async_task_resume(lua_State* L, AsyncTaskService* svs, AsyncTask* task, int narg) {
 	async_task_reset_work(svs, task);
-
-	if( lua_resume(task->co, L, narg)==LUA_YIELD ) {
+	
+#if (LUA_VERSION_NUM < 504)
+	if( lua_resume(task->co, L, narg)==LUA_YIELD )
+#else
+	int nres = 0;
+	if( lua_resume(task->co, L, narg, &nres)==LUA_YIELD )
+#endif
+	{
+		if( nres > 0 )	lua_pop(task->co, nres);
 		if( task->timeout==TIMEOUT_WORK ) {
 			async_task_delay(svs, task, 1);	// direct yield(), active next update
 		}

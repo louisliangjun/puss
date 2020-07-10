@@ -1,40 +1,26 @@
 -- luaproxy.lua
 
 local function pasre_header(gen, fname)
-	local s = ''
-	for line in io.lines(fname) do
-		local decl
-		if s:len() > 0 then
-			line = line:match('^%s*(.-)%s*$')
-			decl = s .. ' ' .. line
-		else
-			decl = line:match('^%s*LUA%w*_API%s+(.-)%s*$')
-		end
+	local f = io.open(fname)
+	local ctx = f:read('*a')
+	f:close()
 
-		if decl then
-			local ret, name, args = decl:match('^%s*(.-)%s*%(%s*(.-)%)%s*%((.-)%)%s*;')
-			local vaargs = nil
-			if ret then
-				s = ''
-				local anames = {}
-				if args~='void' then
-					local ass = args .. ','
-					for av in ass:gmatch('%s*(.-)%s*,') do
-						if av=='...' then
-							vaargs = true
-						else
-							local aname = av:match('^.-([%w_]+)[%s%[%]]*$')
-							if aname then table.insert(anames, aname) end
-						end
-					end
+	for ret, name, args in ctx:gmatch('LUA%w*_API%s+([_%w%s%*]-)%s*(%b())%s*(%b())%s*;') do
+		name, args = name:sub(2,-2), args:sub(2,-2)
+		local vaargs = nil
+		local anames = {}
+		if args~='void' then
+			local ass = args .. ','
+			for av in ass:gmatch('%s*(.-)%s*,') do
+				if av=='...' then
+					vaargs = true
+				else
+					local aname = av:match('^.-([%w_]+)[%s%[%]]*$')
+					if aname then table.insert(anames, aname) end
 				end
-				gen(ret, name, args, anames, vaargs)
-			else
-				s = decl	-- need more
 			end
-		else
-			s = ''
 		end
+		gen(ret, name, args, anames, vaargs)
 	end
 end
 
