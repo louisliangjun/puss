@@ -1,0 +1,50 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "build-debug",
+            "command": "${env:ProgramFiles(x86)}\\Microsoft Visual Studio\\2017\\BuildTools\\MSBuild\\15.0\\Bin\\MSBuild.exe",
+            "args": [
+                "${workspaceFolder}\\puss.sln",
+                // Ask msbuild to generate full paths for file names.
+                "/p:Configuration=Debug",
+                "/p:Platform=x64",
+                "/p:GenerateFullPaths=true",
+                "/t:build"
+            ],
+            "group": "build",
+            "presentation": {
+                // Reveal the output only if unrecognized errors occur.
+                "reveal": "silent"
+            },
+            // Use the standard MS compiler pattern to detect errors, warnings and infos
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "type": "shell",
+            "label": "build",
+            "command": "${env:ProgramFiles(x86)}\\Microsoft Visual Studio\\2017\\BuildTools\\MSBuild\\15.0\\Bin\\MSBuild.exe",
+            "args": [
+                "${workspaceFolder}\\puss.sln",
+                // Ask msbuild to generate full paths for file names.
+                "/p:Configuration=Release",
+                "/p:Platform=x64",
+                "/p:GenerateFullPaths=true",
+                "/t:build"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                // Reveal the output only if unrecognized errors occur.
+                "reveal": "silent"
+            },
+            // Use the standard MS compiler pattern to detect errors, warnings and infos
+            "problemMatcher": "$msCompile"
+        }
+    ]
+}
