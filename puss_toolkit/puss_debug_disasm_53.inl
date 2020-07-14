@@ -44,24 +44,6 @@ static void _PrintString(printf_decls const TString* ts) {
 	}
 	printf("%c", '"');
 }
-	
-#define PrintType(f,i)	_PrintType(printf_usage (f), (i))
-static void _PrintType(printf_decls const Proto* f, int i) {
-	const TValue* o = &f->k[i];
-	switch (ttypetag(o)) {
-	case LUA_VNIL:		printf("N");		break;
-	case LUA_VFALSE:
-	case LUA_VTRUE:		printf("B");		break;
-	case LUA_VNUMFLT:	printf("F");		break;
-	case LUA_VNUMINT:	printf("I");		break;
-	case LUA_VSHRSTR:
-	case LUA_VLNGSTR:	printf("S");		break;
-	default:				/* cannot happen */
-		printf("?%d", ttypetag(o));
-		break;
-	}
-	printf("\t");
-}
 
 #define PrintConstant(f,i)	_PrintConstant(printf_usage (f),(i))
 static void _PrintConstant(printf_decls const Proto* f, int i)
