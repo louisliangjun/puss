@@ -218,7 +218,7 @@ static void async_service_destroy_co(lua_State* L, AsyncTaskService* svs, AsyncT
 		lua_pushnil(L);
 		lua_rawsetp(L, TASK_MAP_INDEX, co);
 #if (LUA_VERSION_NUM >= 504)
-		lua_resetthread(L);
+		lua_resetthread(co);
 #endif
 	}
 }
