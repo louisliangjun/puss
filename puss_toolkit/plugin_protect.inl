@@ -3,9 +3,15 @@
 // #include <setjmp.h>
 // #include "lstate.h"
 
+#if (LUA_VERSION_NUM < 504)
+#define NCCALLS_TYPE	unsigned short
+#else
+#define NCCALLS_TYPE	l_uint32
+#endif
+
 #ifndef _PUSS_PPCALL_BEGIN
   #define _PUSS_PPCALL_BEGIN(L) \
-	unsigned short oldnCcalls = (L)->nCcalls; \
+	NCCALLS_TYPE oldnCcalls = (L)->nCcalls; \
 	struct lua_longjmp *previous = (L)->errorJmp;
 #endif
 
