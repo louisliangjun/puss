@@ -235,12 +235,12 @@ static void async_task_reset_work(AsyncTaskService* svs, AsyncTask* task) {
 }
 
 static int async_task_resume(lua_State* L, AsyncTaskService* svs, AsyncTask* task, int narg) {
+	int nres = 0;
 	async_task_reset_work(svs, task);
 	
 #if (LUA_VERSION_NUM < 504)
 	if( lua_resume(task->co, L, narg)==LUA_YIELD )
 #else
-	int nres = 0;
 	if( lua_resume(task->co, L, narg, &nres)==LUA_YIELD )
 #endif
 	{
