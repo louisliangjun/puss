@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="puss_module_luaparser.c" />
+    <ClCompile Include="llex.c" />
+    <ClCompile Include="lparser.c" />
+    <ClCompile Include="lzio.c" />
+    <ClCompile Include="lctype.c" />
+    <ClCompile Include="lmem.c" />
+    <ClCompile Include="lobject.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="llex.h" />
+    <ClInclude Include="lparser.h" />
+    <ClInclude Include="llimits.h" />
+    <ClInclude Include="lzio.h" />
+    <ClInclude Include="lctype.h" />
+    <ClInclude Include="lprefix.h" />
+    <ClInclude Include="lobject.h" />
+    <ClInclude Include="lmem.h" />
+  </ItemGroup>
+</Project>

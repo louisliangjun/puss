@@ -1,0 +1,141 @@
+// puss_module_system.c
+
+#include "puss_plugin.h"
+
+#include "lctype.h"
+#include "lmem.h"
+#include "llex.h"
+#include "lparser.h"
+#include "lzio.h"
+
+#define PUSS_LUAPARSER_LIB_NAME	"[PussLuaParserLib]"
+
+/*
+** Execute a protected parser.
+*/
+struct SParser {  /* data to 'f_parser' */
+  ZIO *z;
+  Mbuffer buff;  /* dynamic structure used by the scanner */
+  Dyndata dyd;  /* dynamic structures used by the parser */
+  const char *name;
+  Block* chunk;
+};
+
+
+static int f_parser (lua_State *L) {
+  struct SParser *p = cast(struct SParser *, lua_touserdata(L, lua_upvalueindex(3)));
+  int c = zgetc(p->z);  /* read first character */
+  p->chunk = luaY_parser(L, p->z, &p->buff, &p->dyd, p->name, c);
+  lua_assert(cl->nupvalues == cl->p->sizeupvalues);
+  return 0;
+}
+
+
+typedef struct LoadS {
+  const char *s;
+  size_t size;
+} LoadS;
+
+
+static const char *getS (lua_State *L, void *ud, size_t *size) {
+  LoadS *ls = (LoadS *)ud;
+  (void)L;  /* not used */
+  if (ls->size == 0) return NULL;
+  *size = ls->size;
+  ls->size = 0;
+  return ls->s;
+}
+
+
+typedef struct LuaChunk {
+  Block* block;
+} LuaChunk;
+
+#define PCHUNK_NAME	"PussLuaPChunk"
+
+static int chunk_gc(lua_State *L) {
+  LuaChunk* ud = luaL_checkudata(L, 1, PCHUNK_NAME);
+  Block* block = ud->block;
+  if (block) {
+    ud->block = NULL;
+    luaM_free(L, block);
+  }
+  lua_pushnil(L);
+  lua_setuservalue(L, 1);
+  return 0;
+}
+
+static int chunk_iter(lua_State *L) {
+  LuaChunk* ud = luaL_checkudata(L, 1, PCHUNK_NAME);
+  Block* block = ud->block;
+  luaL_checktype(L, 2, LUA_TFUNCTION);
+  if (!block)
+    return 0;
+  // TODO : iter
+  return 0;
+}
+
+static luaL_Reg chunk_mt[] =
+	{ {"__index", NULL}
+	, {"__gc", chunk_gc}
+	, {"iter", chunk_iter}
+	, {NULL, NULL}
+	};
+
+static int parse(lua_State* L) {
+  int status;
+  ZIO z;
+  LoadS ls;
+  struct SParser p;
+  LuaChunk *ud;
+  const char* chunkname = luaL_checkstring(L, 1);
+  ls.s = luaL_checklstring(L, 2, &ls.size);
+  ud = (LuaChunk*)lua_newuserdata(L, sizeof(LuaChunk));
+  ud->block = NULL;
+  if (luaL_newmetatable(L, PCHUNK_NAME)) {
+    luaL_setfuncs(L, chunk_mt, 0);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+  }
+  lua_setmetatable(L, -2);
+  lua_newtable(L);	/* lua_upvalueindex(1) == temp strs */
+  lua_pushvalue(L, -1); lua_setuservalue(L, -3); /* chunk.<uv> = temp strs */
+  luaZ_init(L, &z, getS, &ls);
+  p.z = &z; p.name = chunkname;
+  p.dyd.actvar.arr = NULL; p.dyd.actvar.size = 0;
+  p.dyd.gt.arr = NULL; p.dyd.gt.size = 0;
+  p.dyd.label.arr = NULL; p.dyd.label.size = 0;
+  p.chunk = NULL;
+  luaZ_initbuffer(L, &p.buff);
+  lua_pushvalue(L, lua_upvalueindex(1)); /* RESERVED */
+  lua_pushlightuserdata(L, &p);
+  lua_pushcclosure(L, f_parser, 3);
+  status = lua_pcall(L, 0, 0, 0);
+  luaZ_freebuffer(L, &p.buff);
+  luaM_freearray(L, p.dyd.actvar.arr, p.dyd.actvar.size);
+  luaM_freearray(L, p.dyd.gt.arr, p.dyd.gt.size);
+  luaM_freearray(L, p.dyd.label.arr, p.dyd.label.size);
+  ud->block = p.chunk;
+  return status ? 0 : 1;
+}
+
+
+PussInterface* __puss_iface__ = NULL;
+
+PUSS_PLUGIN_EXPORT int __puss_plugin_init__(lua_State* L, PussInterface* puss) {
+	__puss_iface__ = puss;
+	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_LUAPARSER_LIB_NAME)==LUA_TTABLE ) {
+		return 1;
+	}
+	lua_pop(L, 1);
+
+	lua_newtable(L);
+	lua_pushvalue(L, -1);
+	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_LUAPARSER_LIB_NAME);
+
+	lua_newtable(L); /* RESERVED */
+	luaX_init(L);
+	lua_pushcclosure(L, parse, 1);	lua_setfield(L, -2, "parse");
+	return 1;
+}
+
