@@ -12,7 +12,8 @@
 #include <stdarg.h>
 
 
-#define UTF8BUFFSZ	8
+typedef struct AstNode AstNode;
+typedef struct AstBlock AstBlock;
 
 
 /*
@@ -25,11 +26,9 @@ typedef const char	TString;
 ** Union of all Lua values
 */
 typedef union Value {
-  struct GCObject *gc;    /* collectable objects */
-  void *p;         /* light userdata */
-  lua_CFunction f; /* light C functions */
   lua_Integer i;   /* integer numbers */
   lua_Number n;    /* float numbers */
+  TString s;    /* string */
 } Value;
 
 
@@ -37,12 +36,21 @@ typedef union Value {
 ** Tagged Values. This is the basic representation of values in Lua:
 ** an actual value plus a tag with its type.
 */
-
-#define TValuefields	Value value_; lu_byte tt_
-
 typedef struct TValue {
-  TValuefields;
+  union {
+    Value value_;
+    lua_Integer i;   /* integer numbers */
+    lua_Number n;    /* float numbers */
+    TString s;    /* string */
+  };
+  char tt_;
 } TValue;
+
+#define setfltvalue(obj,x) \
+  { TValue *io=(obj); io->n=(x); io->tt_ = 'n'; }
+
+#define setivalue(obj,x) \
+  { TValue *io=(obj); io->i=(x); io->tt_ = 'i'; }
 
 
 /*
@@ -103,16 +111,16 @@ typedef struct Proto {
   AbsLineInfo *abslineinfo;  /* idem */
   LocVar *locvars;  /* information about local variables (debug information) */
   TString  *source;  /* used for debug information */
+  AstBlock *block;
 } Proto;
 
 
-/*
-** Block
-*/
-typedef struct Block {
-  Proto *f;  /* functions defined inside the function */
-  size_t stats;
-} Block;
+/* size of buffer for 'luaO_utf8esc' function */
+#define UTF8BUFFSZ	8
+
+LUAI_FUNC int luaO_utf8esc (char *buff, unsigned long x);
+LUAI_FUNC size_t luaO_str2num (const char *s, TValue *o);
+LUAI_FUNC int luaO_hexavalue (int c);
 
 #endif
 

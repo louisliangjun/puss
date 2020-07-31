@@ -11,6 +11,34 @@
 #include "lzio.h"
 #include "lobject.h"
 
+typedef struct AstNode {
+  struct AstNode* _freelist;
+  const Token* ts;
+  const Token* te;
+} AstNode;
+
+typedef struct AstExpr {
+  AstNode parent;
+} AstExpr;
+
+typedef struct AstBlock {
+  AstNode parent;
+  size_t stats;
+} AstBlock;
+
+typedef struct IfClause {
+  AstNode parent;
+  struct IfClause* next;
+  AstExpr* cond;
+  AstBlock body;
+} IfClause;
+
+typedef struct IfStat {
+  AstNode parent;
+  IfClause* clauses;
+} IfStat;
+
+
 // see static int parse(lua_State* L);
 // 
 #define UPVAL_IDX_STRMAP	lua_upvalueindex(1)
@@ -169,7 +197,7 @@ typedef struct FuncState {
 } FuncState;
 
 
-LUAI_FUNC Block *luaY_parser (lua_State *L, ZIO *z, Mbuffer *buff,
+LUAI_FUNC AstBlock *luaY_parser (lua_State *L, ZIO *z, Mbuffer *buff,
                                  Dyndata *dyd, const char *name, int firstchar);
 
 

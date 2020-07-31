@@ -47,6 +47,7 @@ typedef struct BlockCnt {
   lu_byte upval;  /* true if some variable in the block is an upvalue */
   lu_byte isloop;  /* true if 'block' is a loop */
   lu_byte insidetbc;  /* true if inside the scope of a to-be-closed var. */
+  AstBlock *block;
 } BlockCnt;
 
 
@@ -528,14 +529,6 @@ static void adjust_assign (LexState *ls, int nvars, int nexps, expdesc *e) {
   else  /* adding 'needed' is actually a subtraction */
     fs->freereg += needed;  /* remove extra values */
 }
-
-
-/*
-** Macros to limit the maximum recursion depth while parsing
-*/
-#define enterlevel(ls)	luaE_enterCcall((ls)->L)
-
-#define leavelevel(ls)	luaE_exitCcall((ls)->L)
 
 
 /*
@@ -1315,7 +1308,6 @@ static const struct {
 static BinOpr subexpr (LexState *ls, expdesc *v, int limit) {
   BinOpr op;
   UnOpr uop;
-  enterlevel(ls);
   uop = getunopr(ls->t.token);
   if (uop != OPR_NOUNOPR) {  /* prefix (unary) operator? */
     int line = ls->linenumber;
@@ -1337,7 +1329,6 @@ static BinOpr subexpr (LexState *ls, expdesc *v, int limit) {
     luaK_posfix(ls->fs, op, v, &v2, line);
     op = nextop;
   }
-  leavelevel(ls);
   return op;  /* return first untreated operator */
 }
 
@@ -1437,9 +1428,7 @@ static void restassign (LexState *ls, struct LHS_assign *lh, int nvars) {
     suffixedexp(ls, &nv.v);
     if (!vkisindexed(nv.v.k))
       check_conflict(ls, lh, &nv.v);
-    enterlevel(ls);  /* control recursion depth */
     restassign(ls, &nv, nvars+1);
-    leavelevel(ls);
   }
   else {  /* restassign -> '=' explist */
     int nexps;
@@ -1765,6 +1754,7 @@ static void test_then_block (LexState *ls, int *escapelist) {
 }
 
 
+
 static void ifstat (LexState *ls, int line) {
   /* ifstat -> IF cond THEN block {ELSEIF cond THEN block} [ELSE block] END */
   FuncState *fs = ls->fs;
@@ -1939,7 +1929,6 @@ static void retstat (LexState *ls) {
 
 static void statement (LexState *ls) {
   int line = ls->linenumber;  /* may be needed for error messages */
-  enterlevel(ls);
   switch (ls->t.token) {
     case ';': {  /* stat -> ';' (empty statement) */
       luaX_next(ls);  /* skip ';' */
@@ -2006,7 +1995,6 @@ static void statement (LexState *ls) {
   lua_assert(ls->fs->f->maxstacksize >= ls->fs->freereg &&
              ls->fs->freereg >= luaY_nvarstack(ls->fs));
   ls->fs->freereg = luaY_nvarstack(ls->fs);  /* free registers */
-  leavelevel(ls);
 }
 
 /* }====================================================================== */
@@ -2034,19 +2022,17 @@ static void mainfunc (LexState *ls, FuncState *fs) {
 }
 
 
-Block *luaY_parser (lua_State *L, ZIO *z, Mbuffer *buff,
+AstBlock *luaY_parser (lua_State *L, ZIO *z, Mbuffer *buff,
                        Dyndata *dyd, const char *name, int firstchar) {
   LexState lexstate;
   FuncState funcstate;
-  // LClosure *cl = luaF_newLclosure(L, 1);  /* create main closure */
-  Block *b = luaM_new(L, Block);
-  funcstate.f = b->f = luaM_new(L, Proto);
-  funcstate.f->source = luaS_new(L, name);  /* create and anchor TString */
-  luaC_objbarrier(L, funcstate.f, funcstate.f->source);
+  AstBlock *b = luaM_new(L, AstBlock);
+  funcstate.f = luaM_new(L, Proto);
   lexstate.buff = buff;
   lexstate.dyd = dyd;
   dyd->actvar.n = dyd->gt.n = dyd->label.n = 0;
   luaX_setinput(L, &lexstate, z, funcstate.f->source, firstchar);
+  freelist_attach(&lexstate, b);
   mainfunc(&lexstate, &funcstate);
   lua_assert(!funcstate.prev && funcstate.nups == 1 && !lexstate.fs);
   /* all scopes should be correctly finished */

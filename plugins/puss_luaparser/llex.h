@@ -32,7 +32,8 @@ enum RESERVED {
   TK_IDIV, TK_CONCAT, TK_DOTS, TK_EQ, TK_GE, TK_LE, TK_NE,
   TK_SHL, TK_SHR,
   TK_DBCOLON, TK_EOS,
-  TK_FLT, TK_INT, TK_NAME, TK_STRING
+  TK_FLT, TK_INT, TK_NAME, TK_STRING,
+  TK_COMMENT, TK_ERROR
 };
 
 /* number of reserved words */
@@ -64,6 +65,9 @@ typedef struct LexState {
   unsigned int uni; /* unicode - current */
   int lpos; /* unicode - line pos */
   int cpos; /* unicode - charactor pos */
+  Token* current_token;
+  const char* current_except;
+  AstNode* freelist;
 
   int current;  /* current character (charint) */
   int linenumber;  /* input line counter */
@@ -81,11 +85,17 @@ typedef struct LexState {
 } LexState;
 
 
+#define freelist_attach(ls, newastnode) do { \
+    AstNode* node = &((newastnode)->parent); \
+    node->_freelist = (ls)->freelist; \
+    (ls)->freelist = node; \
+  } while (0)
+
 LUAI_FUNC void luaX_init (lua_State *L);
 LUAI_FUNC void luaX_setinput (lua_State *L, LexState *ls, ZIO *z,
                               TString *source, int firstchar);
-#define luaX_newstring(ls, str, l)	luaX_newstringtk((ls), (str), (l), NULL)
-LUAI_FUNC TString *luaX_newstringtk (LexState *ls, const char *str, size_t l);
+#define luaX_newstring(ls, str, l)	luaX_newstringreversed((ls), (str), (l), NULL)
+LUAI_FUNC TString *luaX_newstringreversed (LexState *ls, const char *str, size_t l, int *reversed);
 LUAI_FUNC void luaX_next (LexState *ls);
 LUAI_FUNC int luaX_lookahead (LexState *ls);
 LUAI_FUNC const char *luaX_token2str (LexState *ls, int token);

@@ -18,7 +18,7 @@ struct SParser {  /* data to 'f_parser' */
   Mbuffer buff;  /* dynamic structure used by the scanner */
   Dyndata dyd;  /* dynamic structures used by the parser */
   const char *name;
-  Block* chunk;
+  AstBlock* chunk;
 };
 
 
@@ -48,14 +48,14 @@ static const char *getS (lua_State *L, void *ud, size_t *size) {
 
 
 typedef struct LuaChunk {
-  Block* block;
+  AstBlock* block;
 } LuaChunk;
 
 #define PCHUNK_NAME	"PussLuaPChunk"
 
 static int chunk_gc(lua_State *L) {
   LuaChunk* ud = luaL_checkudata(L, 1, PCHUNK_NAME);
-  Block* block = ud->block;
+  AstBlock* block = ud->block;
   if (block) {
     ud->block = NULL;
     luaM_free(L, block);
@@ -67,7 +67,7 @@ static int chunk_gc(lua_State *L) {
 
 static int chunk_iter(lua_State *L) {
   LuaChunk* ud = luaL_checkudata(L, 1, PCHUNK_NAME);
-  Block* block = ud->block;
+  AstBlock* block = ud->block;
   luaL_checktype(L, 2, LUA_TFUNCTION);
   if (!block)
     return 0;
