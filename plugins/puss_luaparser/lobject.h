@@ -12,14 +12,20 @@
 #include <stdarg.h>
 
 
-typedef struct AstNode AstNode;
-typedef struct AstBlock AstBlock;
+#ifdef _MSC_VER
+#ifndef inline
+#define inline __forceinline
+#endif
+#endif
 
-
-/*
-* use const char * as TString * 
-*/
 typedef const char	TString;
+
+typedef struct LuaChunk {
+  int ntokens;
+  struct Token* tokens;
+  struct AstBlockStat* block;
+} LuaChunk;
+
 
 
 /*
@@ -111,7 +117,6 @@ typedef struct Proto {
   AbsLineInfo *abslineinfo;  /* idem */
   LocVar *locvars;  /* information about local variables (debug information) */
   TString  *source;  /* used for debug information */
-  AstBlock *block;
 } Proto;
 
 

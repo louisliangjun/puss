@@ -11,32 +11,95 @@
 #include "lzio.h"
 #include "lobject.h"
 
-typedef struct AstNode {
-  struct AstNode* _freelist;
-  const Token* ts;
-  const Token* te;
-} AstNode;
+#define AST_MASK_STAT	0x1000
+#define AST_MASK_EXPR	0x2000
 
-typedef struct AstExpr {
-  AstNode parent;
-} AstExpr;
+typedef enum
+  { AST_explist = 0x01
+  , AST_vtype
+  , AST_block = AST_MASK_STAT | 0x01
+  , AST_empty
+  , AST_error
+  , AST_retstat
+  , AST_forlist
+  , AST_localfunc
+  , AST_exprstat
+  , AST_vnil = AST_MASK_EXPR | 0x01
+  , AST_vbool
+  , AST_vint
+  , AST_vflt
+  , AST_vstr
+  , AST_vararg
+  , AST_unary
+  , AST_bin
+  , AST_var
+  , AST_func
+} AstNodeType;
 
-typedef struct AstBlock {
-  AstNode parent;
-  size_t stats;
-} AstBlock;
+typedef struct AstNode	AstNode;
 
-typedef struct IfClause {
-  AstNode parent;
-  struct IfClause* next;
-  AstExpr* cond;
-  AstBlock body;
-} IfClause;
+struct AstNode {
+  // node base
+  AstNodeType type;
+  const Token *ts; // range start token
+  const Token *te; // range end token
+  AstNode *_freelist;
+  AstNode *_next; // [stat|exp|vtype] next
+ union {
+  struct {
+    TString *msg;
+  } error; // <error-message>
+  struct {
+    AstNode *stats;
+    AstNode *stats_tail;
+  } block;
+  struct {
+    AstNode *exprs;
+    AstNode *exprs_tail;
+  } explist;
+  struct {
+    AstNode *expr;
+  } retstat; // stat -> RETURN [explist] [';'] 
+  struct {
+    AstNode *vars;
+    AstNode *vars_tail;
+    const Token *_in;
+    AstNode *explist;
+    const Token *_do;
+    AstNode *body;
+  } forlist; // forlist -> NAME {,NAME} IN explist forbody 
+  struct {
+    AstNode *cond;
+    AstNode *body;
+  } caluse; // [if|elseif|else] <cond> then <body>
+  struct {
+    AstNode *caluses;
+  } ifstat; // if cond then ... elseif cond then ... else ... end
+  struct {
+    AstNode *expr;
+  } exprstat; // a = b or func()
 
-typedef struct IfStat {
-  AstNode parent;
-  IfClause* clauses;
-} IfStat;
+  // value expr
+  struct {
+    AstNode *expr;
+  } unary;
+  struct {
+    const Token *op;
+    AstNode *l;
+    AstNode *r;
+  } bin;
+  struct {
+    AstNode *vtype;
+  } var;
+  struct {
+    AstNode *params;
+    AstNode *params_tail;
+    AstNode *vtypes;
+    AstNode *vtypes_tail;
+    AstNode *body;
+  } func; // function() end
+ };
+};
 
 
 // see static int parse(lua_State* L);
@@ -117,6 +180,7 @@ typedef struct expdesc {
   } u;
   int t;  /* patch list of 'exit when true' */
   int f;  /* patch list of 'exit when false' */
+  AstNode *expr;
 } expdesc;
 
 
@@ -197,7 +261,7 @@ typedef struct FuncState {
 } FuncState;
 
 
-LUAI_FUNC AstBlock *luaY_parser (lua_State *L, ZIO *z, Mbuffer *buff,
+LUAI_FUNC void luaY_parser (lua_State *L, LuaChunk *chunk, ZIO *z, Mbuffer *buff,
                                  Dyndata *dyd, const char *name, int firstchar);
 
 

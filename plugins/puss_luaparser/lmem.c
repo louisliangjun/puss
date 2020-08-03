@@ -94,6 +94,8 @@ void *luaM_realloc_ (lua_State *L, void *block, size_t osize, size_t nsize) {
   }
   if (!(newblock = realloc(block, nsize)))
     return NULL;
+  if (nsize > osize)
+    memset(((char*)block)+osize, 0, nsize-osize);
   return newblock;
 }
 
@@ -108,9 +110,10 @@ void *luaM_saferealloc_ (lua_State *L, void *block, size_t osize,
 
 
 void *luaM_malloc_ (lua_State *L, size_t size, int tag) {
+  void *p;
   if (size == 0)
     return NULL;  /* that's all */
-  else {
-    return realloc(NULL, size);
-  }
+  if ((p = realloc(NULL, size))!=NULL)
+    memset(p, 0, size);
+  return p;
 }

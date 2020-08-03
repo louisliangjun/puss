@@ -138,37 +138,6 @@ static void inclinenumber (LexState *ls) {
 }
 
 
-void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source,
-                    int firstchar) {
-  ls->uni = 0;
-  ls->lpos = 0;
-  ls->cpos = 0;
-  ls->current_except = NULL;
-  ls->current_token = &(ls->t);
-  ls->freelist = NULL;
-
-  ls->t.token = 0;
-  ls->L = L;
-  ls->current = firstchar;
-  ls->lookahead.token = TK_EOS;  /* no look-ahead token */
-  ls->z = z;
-  ls->fs = NULL;
-  ls->linenumber = 1;
-  ls->lastline = 1;
-  ls->source = source;
-  ls->envn = luaX_newliteral(ls, LUA_ENV);  /* get env name */
-  luaZ_resizebuffer(ls->L, ls->buff, LUA_MINBUFFER);  /* initialize buffer */
-}
-
-
-#define savetkpos(ls) do { \
-    Token* tk = (ls)->current_token; \
-    tk->eline = ls->linenumber; \
-    tk->elpos = ls->lpos; \
-    tk->epos = ls->cpos; \
-  } while(0)
-
-
 /*
 ** =======================================================
 ** LEXICAL ANALYZER
@@ -230,7 +199,7 @@ static int read_numeral (LexState *ls, SemInfo *seminfo) {
   if (lislalpha(ls->current))  /* is numeral touching a letter? */
     save_and_next(ls);  /* force an error */
   save(ls, '\0');
-  ls->current_token->epos = ls->cpos;
+  ls->tokens[ls->t].epos = ls->cpos;
   if (luaO_str2num(luaZ_buffer(ls->buff), &obj) == 0) {  /* format error? */
     seminfo->ts = luaX_newstring(ls, luaZ_buffer(ls->buff), luaZ_bufflen(ls->buff) - 1);
 	return TK_ERROR;
@@ -268,14 +237,16 @@ static size_t skip_sep (LexState *ls) {
 
 
 static void read_long_string (LexState *ls, SemInfo *seminfo, size_t sep, int isstr) {
-  int line = ls->linenumber;  /* initial line (for error message) */
   save_and_next(ls);  /* skip 2nd '[' */
   if (currIsNewline(ls))  /* string starts with a newline? */
     inclinenumber(ls);  /* skip it */
   for (;;) {
     switch (ls->current) {
       case EOZ: {  /* error */
-        savetkpos(ls);
+        Token* ctk = ls->tokens + ls->ntokens - 1;
+        ctk->eline = ls->linenumber;
+        ctk->elpos = ls->lpos;
+        ctk->epos = ls->cpos;
         seminfo->ts = isstr ? luaX_newliteral(ls, "unfinished long string") : luaX_newliteral(ls, "unfinished long comment");
         break;  /* to avoid warnings */
       }
@@ -307,8 +278,8 @@ static int esccheck (LexState *ls, int c, const char *msg) {
   if (!c) {
     if (ls->current != EOZ)
       save_and_next(ls);  /* add current to buffer for error message */
-    if (ls->current_except == NULL)
-      ls->current_except = msg;
+    if (ls->currentexcept == NULL)
+      ls->currentexcept = msg;
     return 0;
   }
   return 1;
@@ -371,14 +342,14 @@ static int readdecesc (LexState *ls) {
 
 
 static int read_string (LexState *ls, int del, SemInfo *seminfo) {
-  ls->current_except = NULL;
+  ls->currentexcept = NULL;
   save_and_next(ls);  /* keep delimiter (for error messages) */
   while (ls->current != del) {
     switch (ls->current) {
       case EOZ:
       case '\n':
       case '\r':
-        ls->current_token->epos = ls->cpos - 1;
+        ls->tokens[ls->t].epos = ls->cpos - 1;
         seminfo->ts = luaX_newliteral(ls, "unfinished string");
         return TK_ERROR;
       case '\\': {  /* escape sequences */
@@ -428,9 +399,9 @@ static int read_string (LexState *ls, int del, SemInfo *seminfo) {
     }
   }
   save_and_next(ls);  /* skip delimiter */
-  ls->current_token->epos = ls->cpos;
-  if (ls->current_except) {
-    seminfo->ts = luaX_newstring(ls, ls->current_except, strlen(ls->current_except));
+  ls->tokens[ls->t].epos = ls->cpos;
+  if (ls->currentexcept) {
+    seminfo->ts = luaX_newstring(ls, ls->currentexcept, strlen(ls->currentexcept));
     return TK_ERROR;
   }
   seminfo->ts = luaX_newstring(ls, luaZ_buffer(ls->buff) + 1,
@@ -440,7 +411,7 @@ static int read_string (LexState *ls, int del, SemInfo *seminfo) {
 
 
 static int llex (LexState *ls, SemInfo *seminfo) {
-  Token* ctk = (ls)->current_token;
+  Token* ctk = ls->tokens + ls->ntokens - 1;
   luaZ_resetbuffer(ls->buff);
   for (;;) {
     switch (ls->current) {
@@ -484,12 +455,16 @@ static int llex (LexState *ls, SemInfo *seminfo) {
         size_t sep = skip_sep(ls);
         if (sep >= 2) {
           read_long_string(ls, seminfo, sep, 1);
-          savetkpos(ls);
+          ctk->eline = ls->linenumber;
+          ctk->elpos = ls->lpos;
+          ctk->epos = ls->cpos;
           return TK_STRING;
         }
         else if (sep == 0) {  /* '[=...' missing second bracket? */
           seminfo->ts = luaX_newliteral(ls, "invalid long string delimiter");
-          savetkpos(ls);
+          ctk->eline = ls->linenumber;
+          ctk->elpos = ls->lpos;
+          ctk->epos = ls->cpos;
           return TK_ERROR;
         }
         return '[';
@@ -579,21 +554,47 @@ static int llex (LexState *ls, SemInfo *seminfo) {
 }
 
 
-void luaX_next (LexState *ls) {
-  ls->lastline = ls->linenumber;
-  if (ls->lookahead.token != TK_EOS) {  /* is there a look-ahead token? */
-    ls->t = ls->lookahead;  /* use this one */
-    ls->lookahead.token = TK_EOS;  /* and discharge it */
-  }
-  else {
-    ls->t.token = llex(ls, &ls->t.seminfo);  /* read next token */
-  }
-}
+void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source,
+                    int firstchar) {
+  Token* tk;
+  
+  ls->t = 0;
+  ls->fs = NULL;
+  ls->L = L;
+  ls->sizetokens = 0;
+  ls->ntokens = 256;
+  ls->tokens = luaM_newvector(L, ls->ntokens, Token);
+  ls->freelist = NULL;
+  ls->source = source;
+  ls->envn = luaX_newliteral(ls, LUA_ENV);  /* get env name */
 
+  ls->z = z;
+  ls->uni = 0;
+  ls->lpos = 0;
+  ls->cpos = 0;
+  ls->currentexcept = NULL;
+  ls->current = firstchar;
+  ls->linenumber = 1;
+  ls->lastline = 1;
+  luaZ_resizebuffer(L, ls->buff, LUA_MINBUFFER);  /* initialize buffer */
 
-int luaX_lookahead (LexState *ls) {
-  lua_assert(ls->lookahead.token == TK_EOS);
-  ls->lookahead.token = llex(ls, &ls->lookahead.seminfo);
-  return ls->lookahead.token;
+  do {
+    luaM_growvector(L, ls->tokens, ls->ntokens, ls->sizetokens, Token, INT_MAX, "tokens");
+    tk = ls->tokens + ls->sizetokens;
+    ls->lastline = ls->linenumber;
+    tk->token = llex(ls, &tk->seminfo);  /* read next token */
+  } while (tk->token != TK_EOS);
+  luaM_shrinkvector(L, ls->tokens, ls->sizetokens, ls->ntokens, Token);
+
+  // never use them, use tokens[i] replace them
+  ls->uni = -1;
+  ls->lpos = -1;
+  ls->cpos = -1;
+  ls->currentexcept = NULL;
+  ls->current = '\0';
+  ls->linenumber = -1;
+  ls->lastline = -1;
+  luaZ_freebuffer(L, ls->buff);
+  ls->buff = NULL;
 }
 

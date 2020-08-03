@@ -62,43 +62,45 @@ typedef struct Token {
 /* state of the lexer plus state of the parser when shared by all
    functions */
 typedef struct LexState {
+  int t;  /* current token */
+  struct FuncState *fs;  /* current function (parser) */
+  struct lua_State *L;
+  int sizetokens;
+  int ntokens;
+  Token* tokens;
+  struct AstNode* freelist;
+  TString *source;  /* current source name */
+  TString *envn;  /* environment variable name */
+  struct Dyndata *dyd;  /* dynamic structures used by the parser */
+
+  // only use in lex
+  ZIO *z;  /* input stream */
   unsigned int uni; /* unicode - current */
   int lpos; /* unicode - line pos */
   int cpos; /* unicode - charactor pos */
-  Token* current_token;
-  const char* current_except;
-  AstNode* freelist;
-
+  const char* currentexcept;
   int current;  /* current character (charint) */
   int linenumber;  /* input line counter */
   int lastline;  /* line of last token 'consumed' */
-  Token t;  /* current token */
-  Token lookahead;  /* look ahead token */
-  struct FuncState *fs;  /* current function (parser) */
-  struct lua_State *L;
-  ZIO *z;  /* input stream */
   Mbuffer *buff;  /* buffer for tokens */
-  // TODO : save parser object, Table *h;  /* to avoid collection/reuse strings */
-  struct Dyndata *dyd;  /* dynamic structures used by the parser */
-  TString *source;  /* current source name */
-  TString *envn;  /* environment variable name */
 } LexState;
 
-
-#define freelist_attach(ls, newastnode) do { \
-    AstNode* node = &((newastnode)->parent); \
-    node->_freelist = (ls)->freelist; \
-    (ls)->freelist = node; \
-  } while (0)
 
 LUAI_FUNC void luaX_init (lua_State *L);
 LUAI_FUNC void luaX_setinput (lua_State *L, LexState *ls, ZIO *z,
                               TString *source, int firstchar);
 #define luaX_newstring(ls, str, l)	luaX_newstringreversed((ls), (str), (l), NULL)
 LUAI_FUNC TString *luaX_newstringreversed (LexState *ls, const char *str, size_t l, int *reversed);
-LUAI_FUNC void luaX_next (LexState *ls);
-LUAI_FUNC int luaX_lookahead (LexState *ls);
-LUAI_FUNC const char *luaX_token2str (LexState *ls, int token);
 
+static inline void luaX_next (LexState *ls) {
+  int lookahead = ls->t + 1;
+  if (lookahead < ls->ntokens)
+    ls->t = lookahead;
+}
+
+static inline int luaX_lookahead (LexState *ls) {
+  size_t lookahead = ls->t + 1;
+  return (lookahead < ls->ntokens) ? ls->tokens[lookahead].token : TK_EOS;
+}
 
 #endif
