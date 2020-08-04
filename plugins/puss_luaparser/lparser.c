@@ -21,7 +21,6 @@
 #include "llex.h"
 #include "lparser.h"
 
-#define RTK(n)   ls->tokens[ls->t+(n)]
 #define CTK      ls->tokens[ls->t]
 
 #define MAXUPVAL	255
@@ -40,6 +39,9 @@
 #define eqstr(a,b)	((a) == (b))
 
 
+#define getstr(s)	(s)
+
+
 static AstNode *ast_node_create(LexState *ls, AstNodeType tp, const Token *ts, const Token *te) {
   AstNode *node = luaM_new(ls->L, AstNode);
   if (!node) luaL_error(ls->L, "memory error");
@@ -51,45 +53,18 @@ static AstNode *ast_node_create(LexState *ls, AstNodeType tp, const Token *ts, c
   return node;
 }
 
-static inline void ast_stats_append(AstNode *block, AstNode *stat) {
-  assert( block->type==AST_block );
-  assert( stat->type & AST_MASK_STAT );
-  if (block->block.stats)
-    block->block.stats_tail->_next = stat;
+
+static inline void ast_nodelist_append(AstNodeList* list, AstNode *node) {
+  if (list->head)
+    list->tail->_next = node;
   else
-    block->block.stats = stat;
-  block->block.stats_tail = stat;
+    list->head = node;
+  list->tail = node;
 }
 
-static inline void ast_explist_append(AstNode *explist, AstNode *exp) {
-  assert( explist->type==AST_explist );
-  assert( exp->type & AST_MASK_STAT );
-  if (explist->explist.exprs)
-    explist->explist.exprs_tail->_next = exp;
-  else
-    explist->explist.exprs = exp;
-  explist->explist.exprs_tail = exp;
-}
 
-static inline void ast_vtypes_append(AstNode *func, AstNode *vtype) {
-  assert( func->type==AST_func );
-  assert( vtype->type==AST_vtype );
-  if (func->func.vtypes)
-    func->func.vtypes_tail->_next = vtype;
-  else
-    func->func.vtypes = vtype;
-  func->func.vtypes_tail = vtype;
-}
+#define stats_append(ls, stat)  ast_nodelist_append(&((ls)->fs->bl->block->stats), (stat))
 
-static inline void ast_forlist_append(AstNode *forlist, AstNode *var) {
-  assert( forlist->type==AST_forlist );
-  assert( var->type==AST_var );
-  if (forlist->forlist.vars)
-    forlist->forlist.vars_tail->_next = var;
-  else
-    forlist->forlist.vars = var;
-  forlist->forlist.vars_tail = var;
-}
 
 /*
 ** nodes for block list (list of active blocks)
@@ -102,7 +77,7 @@ typedef struct BlockCnt {
   lu_byte upval;  /* true if some variable in the block is an upvalue */
   lu_byte isloop;  /* true if 'block' is a loop */
   lu_byte insidetbc;  /* true if inside the scope of a to-be-closed var. */
-  AstNode *block;
+  Block *block;
 } BlockCnt;
 
 
@@ -230,19 +205,19 @@ static void skip_vartype (LexState *ls) {
 }
 
 
-static void test_funtype (LexState *ls, expdesc *e) {
+static void test_funtype (LexState *ls, FuncDecl *e) {
   AstNode *vtype;
   if (!testnext(ls, ':'))
     return;
   vtype = ast_node_create(ls, AST_vtype, &CTK, &CTK);
   skip_vartype(ls);
   vtype->te = &CTK;
-  ast_vtypes_append(e->expr, vtype);
+  ast_nodelist_append(&(e->vtypes), vtype);
   while (testnext(ls, ',')) {
     vtype = ast_node_create(ls, AST_vtype, &CTK, &CTK);
     skip_vartype(ls);
     vtype->te = &CTK;
-	ast_vtypes_append(e->expr, vtype);
+	ast_nodelist_append(&(e->vtypes), vtype);
   }
 }
 
@@ -395,9 +370,9 @@ static void check_readonly (LexState *ls, expdesc *e) {
       return;  /* other cases cannot be read-only */
   }
   if (varname) {
-    const char *msg = luaO_pushfstring(ls->L,
-       "attempt to assign to const variable '%s'", getstr(varname));
-    luaK_semerror(ls, msg);  /* error */
+    AstNode *err = ast_node_create(ls, AST_error, e->expr->ts, e->expr->te);
+    err->error.msg = luaX_newliteral(ls, "attempt to assign to const variable");
+    stats_append(ls, err);
   }
 }
 
@@ -474,7 +449,6 @@ static int newupvalue (FuncState *fs, TString *name, expdesc *v) {
     lua_assert(eqstr(name, prev->f->upvalues[v->u.info].name));
   }
   up->name = name;
-  luaC_objbarrier(fs->ls->L, fs->f, name);
   return fs->nups - 1;
 }
 
@@ -549,177 +523,22 @@ static void singlevaraux (FuncState *fs, TString *n, expdesc *var, int base) {
 static void singlevar (LexState *ls, expdesc *var) {
   TString *varname = str_checkname(ls);
   FuncState *fs = ls->fs;
+  AstNode *v = ast_node_create(ls, AST_var, &CTK, &CTK);
   singlevaraux(fs, varname, var, 1);
   if (var->k == VVOID) {  /* global name? */
-    expdesc key;
+    // expdesc key;
     singlevaraux(fs, ls->envn, var, 1);  /* get environment variable */
     lua_assert(var->k != VVOID);  /* this one must exist */
-    codestring(&key, varname);  /* key is variable name */
-    luaK_indexed(fs, var, &key);  /* env[varname] */
+    // codestring(&key, varname);  /* key is variable name */
+    // luaK_indexed(fs, var, &key);  /* env[varname] */
   }
+  var->expr = v;
 }
 
 
-/*
-** Adjust the number of results from an expression list 'e' with 'nexps'
-** expressions to 'nvars' values.
-*/
-static void adjust_assign (LexState *ls, int nvars, int nexps, expdesc *e) {
-  FuncState *fs = ls->fs;
-  int needed = nvars - nexps;  /* extra values needed */
-  if (hasmultret(e->k)) {  /* last expression has multiple returns? */
-    int extra = needed + 1;  /* discount last expression itself */
-    if (extra < 0)
-      extra = 0;
-    luaK_setreturns(fs, e, extra);  /* last exp. provides the difference */
-  }
-  else {
-    if (e->k != VVOID)  /* at least one expression? */
-      luaK_exp2nextreg(fs, e);  /* close last expression */
-    if (needed > 0)  /* missing values? */
-      luaK_nil(fs, fs->freereg, needed);  /* complete with nils */
-  }
-  if (needed > 0)
-    luaK_reserveregs(fs, needed);  /* registers for extra values */
-  else  /* adding 'needed' is actually a subtraction */
-    fs->freereg += needed;  /* remove extra values */
-}
-
-
-/*
-** Generates an error that a goto jumps into the scope of some
-** local variable.
-*/
-static l_noret jumpscopeerror (LexState *ls, Labeldesc *gt) {
-  const char *varname = getstr(getlocalvardesc(ls->fs, gt->nactvar)->vd.name);
-  const char *msg = "<goto %s> at line %d jumps into the scope of local '%s'";
-  msg = luaO_pushfstring(ls->L, msg, getstr(gt->name), gt->line, varname);
-  luaK_semerror(ls, msg);  /* raise the error */
-}
-
-
-/*
-** Solves the goto at index 'g' to given 'label' and removes it
-** from the list of pending goto's.
-** If it jumps into the scope of some variable, raises an error.
-*/
-static void solvegoto (LexState *ls, int g, Labeldesc *label) {
-  int i;
-  Labellist *gl = &ls->dyd->gt;  /* list of goto's */
-  Labeldesc *gt = &gl->arr[g];  /* goto to be resolved */
-  lua_assert(eqstr(gt->name, label->name));
-  if (unlikely(gt->nactvar < label->nactvar))  /* enter some scope? */
-    jumpscopeerror(ls, gt);
-  luaK_patchlist(ls->fs, gt->pc, label->pc);
-  for (i = g; i < gl->n - 1; i++)  /* remove goto from pending list */
-    gl->arr[i] = gl->arr[i + 1];
-  gl->n--;
-}
-
-
-/*
-** Search for an active label with the given name.
-*/
-static Labeldesc *findlabel (LexState *ls, TString *name) {
-  int i;
-  Dyndata *dyd = ls->dyd;
-  /* check labels in current function for a match */
-  for (i = ls->fs->firstlabel; i < dyd->label.n; i++) {
-    Labeldesc *lb = &dyd->label.arr[i];
-    if (eqstr(lb->name, name))  /* correct label? */
-      return lb;
-  }
-  return NULL;  /* label not found */
-}
-
-
-/*
-** Adds a new label/goto in the corresponding list.
-*/
-static int newlabelentry (LexState *ls, Labellist *l, TString *name,
-                          int line, int pc) {
-  int n = l->n;
-  luaM_growvector(ls->L, l->arr, n, l->size,
-                  Labeldesc, SHRT_MAX, "labels/gotos");
-  l->arr[n].name = name;
-  l->arr[n].line = line;
-  l->arr[n].nactvar = ls->fs->nactvar;
-  l->arr[n].close = 0;
-  l->arr[n].pc = pc;
-  l->n = n + 1;
-  return n;
-}
-
-
-static int newgotoentry (LexState *ls, TString *name, int line, int pc) {
-  return newlabelentry(ls, &ls->dyd->gt, name, line, pc);
-}
-
-
-/*
-** Solves forward jumps. Check whether new label 'lb' matches any
-** pending gotos in current block and solves them. Return true
-** if any of the goto's need to close upvalues.
-*/
-static int solvegotos (LexState *ls, Labeldesc *lb) {
-  Labellist *gl = &ls->dyd->gt;
-  int i = ls->fs->bl->firstgoto;
-  int needsclose = 0;
-  while (i < gl->n) {
-    if (eqstr(gl->arr[i].name, lb->name)) {
-      needsclose |= gl->arr[i].close;
-      solvegoto(ls, i, lb);  /* will remove 'i' from the list */
-    }
-    else
-      i++;
-  }
-  return needsclose;
-}
-
-
-/*
-** Create a new label with the given 'name' at the given 'line'.
-** 'last' tells whether label is the last non-op statement in its
-** block. Solves all pending goto's to this new label and adds
-** a close instruction if necessary.
-** Returns true iff it added a close instruction.
-*/
-static int createlabel (LexState *ls, TString *name, int line,
-                        int last) {
-  FuncState *fs = ls->fs;
-  Labellist *ll = &ls->dyd->label;
-  int l = newlabelentry(ls, ll, name, line, luaK_getlabel(fs));
-  if (last) {  /* label is last no-op statement in the block? */
-    /* assume that locals are already out of scope */
-    ll->arr[l].nactvar = fs->bl->nactvar;
-  }
-  if (solvegotos(ls, &ll->arr[l])) {  /* need close? */
-    // luaK_codeABC(fs, OP_CLOSE, luaY_nvarstack(fs), 0, 0);
-    return 1;
-  }
-  return 0;
-}
-
-
-/*
-** Adjust pending gotos to outer level of a block.
-*/
-static void movegotosout (FuncState *fs, BlockCnt *bl) {
-  int i;
-  Labellist *gl = &fs->ls->dyd->gt;
-  /* correct pending gotos to current block */
-  for (i = bl->firstgoto; i < gl->n; i++) {  /* for each pending goto */
-    Labeldesc *gt = &gl->arr[i];
-    /* leaving a variable scope? */
-    if (stacklevel(fs, gt->nactvar) > stacklevel(fs, bl->nactvar))
-      gt->close |= bl->upval;  /* jump may need a close */
-    gt->nactvar = bl->nactvar;  /* update goto level */
-  }
-}
-
-
-static void enterblock (FuncState *fs, BlockCnt *bl, lu_byte isloop) {
+static void enterblock (FuncState *fs, BlockCnt *bl, lu_byte isloop, Block *b) {
   LexState *ls = fs->ls;
+  b->isloop = isloop;
   bl->isloop = isloop;
   bl->nactvar = fs->nactvar;
   bl->firstlabel = fs->ls->dyd->label.n;
@@ -727,26 +546,9 @@ static void enterblock (FuncState *fs, BlockCnt *bl, lu_byte isloop) {
   bl->upval = 0;
   bl->insidetbc = (fs->bl != NULL && fs->bl->insidetbc);
   bl->previous = fs->bl;
-  bl->block = ast_node_create(ls, AST_block, &CTK, &CTK);
+  bl->block = b;
   fs->bl = bl;
   lua_assert(fs->freereg == luaY_nvarstack(fs));
-}
-
-
-/*
-** generates an error for an undefined 'goto'.
-*/
-static l_noret undefgoto (LexState *ls, Labeldesc *gt) {
-  const char *msg;
-  if (eqstr(gt->name, luaS_newliteral(ls->L, "break"))) {
-    msg = "break outside loop at line %d";
-    msg = luaO_pushfstring(ls->L, msg, gt->line);
-  }
-  else {
-    msg = "no visible label '%s' for <goto> at line %d";
-    msg = luaO_pushfstring(ls->L, msg, getstr(gt->name), gt->line);
-  }
-  luaK_semerror(ls, msg);
 }
 
 
@@ -755,21 +557,7 @@ static void leaveblock (FuncState *fs) {
   LexState *ls = fs->ls;
   int hasclose = 0;
   int stklevel = stacklevel(fs, bl->nactvar);  /* level outside the block */
-  if (bl->isloop)  /* fix pending breaks? */
-    hasclose = createlabel(ls, luaS_newliteral(ls->L, "break"), 0, 0);
-  if (!hasclose && bl->previous && bl->upval)
-    ; // luaK_codeABC(fs, OP_CLOSE, stklevel, 0, 0);
   fs->bl = bl->previous;
-  removevars(fs, bl->nactvar);
-  lua_assert(bl->nactvar == fs->nactvar);
-  fs->freereg = stklevel;  /* free registers */
-  ls->dyd->label.n = bl->firstlabel;  /* remove local labels */
-  if (bl->previous)  /* inner block? */
-    movegotosout(fs, bl);  /* update pending gotos to outer block */
-  else {
-    if (bl->firstgoto < ls->dyd->gt.n)  /* pending gotos in outer block? */
-      undefgoto(ls, &ls->dyd->gt.arr[bl->firstgoto]);  /* error */
-  }
 }
 
 
@@ -793,21 +581,7 @@ static Proto *addprototype (LexState *ls) {
 }
 
 
-/*
-** codes instruction to create new closure in parent function.
-** The OP_CLOSURE instruction uses the last available register,
-** so that, if it invokes the GC, the GC knows which registers
-** are in use at that time.
-
-*/
-static void codeclosure (LexState *ls, expdesc *v) {
-  FuncState *fs = ls->fs->prev;
-  init_exp(v, VRELOC, fs->pc++);	// luaK_codeABx(fs, OP_CLOSURE, 0, fs->np - 1));
-  luaK_exp2nextreg(fs, v);  /* fix it at the last register */
-}
-
-
-static void open_func (LexState *ls, FuncState *fs, BlockCnt *bl) {
+static void open_func (LexState *ls, FuncState *fs, BlockCnt *bl, Block *b) {
   Proto *f = fs->f;
   fs->prev = ls->fs;  /* linked list of funcstates */
   fs->ls = ls;
@@ -829,7 +603,7 @@ static void open_func (LexState *ls, FuncState *fs, BlockCnt *bl) {
   fs->bl = NULL;
   f->source = ls->source;
   f->maxstacksize = 2;  /* registers 0/1 are always valid */
-  enterblock(fs, bl, 0);
+  enterblock(fs, bl, 0, b);
 }
 
 
@@ -1035,7 +809,7 @@ static void setvararg (FuncState *fs, int nparams) {
 }
 
 
-static void parlist (LexState *ls) {
+static void parlist (LexState *ls, FuncDecl *e) {
   /* parlist -> [ param { ',' param } ] */
   FuncState *fs = ls->fs;
   Proto *f = fs->f;
@@ -1049,21 +823,24 @@ static void parlist (LexState *ls) {
           param = ast_node_create(ls, AST_var, &CTK, &CTK);
           new_localvar(ls, str_checkname(ls));
           if (testnext(ls, ':')) {
-            param->var.vtype = ast_node_create(ls, AST_vtype, &CTK, &CTK);
             skip_vartype(ls);
-            param->var.vtype->te = &CTK;
+            param->te = &CTK;
           }
           nparams++;
+          ast_nodelist_append(&(e->params), param);
           break;
         }
         case TK_DOTS: {  /* param -> '...' */
           param = ast_node_create(ls, AST_var, &CTK, &CTK);
           luaX_next(ls);
           isvararg = 1;
+          ast_nodelist_append(&(e->params), param);
           break;
         }
         default: {
-          luaX_syntaxerror(ls, "<name> or '...' expected");
+          AstNode *err = ast_node_create(ls, AST_error, &CTK, &CTK);
+          err->error.msg = luaX_newliteral(ls, "<name> or '...' expected");
+          stats_append(ls, err);
         }
       }
     } while (!isvararg && testnext(ls, ','));
@@ -1076,44 +853,43 @@ static void parlist (LexState *ls) {
 }
 
 
-static void body (LexState *ls, expdesc *e, int ismethod, int line) {
+static void body (LexState *ls, FuncDecl *e, int ismethod, int line) {
   /* body ->  '(' parlist ')' block END */
   FuncState new_fs;
   BlockCnt bl;
   new_fs.f = addprototype(ls);
   new_fs.f->linedefined = line;
-  open_func(ls, &new_fs, &bl);
+  open_func(ls, &new_fs, &bl, &(e->body));
   checknext(ls, '(');
   if (ismethod) {
     new_localvarliteral(ls, "self");  /* create 'self' parameter */
     adjustlocalvars(ls, 1);
   }
-  parlist(ls);
+  parlist(ls, e);
   checknext(ls, ')');
   test_funtype(ls, e);
   statlist(ls);
   check_match(ls, TK_END, TK_FUNCTION, line);
-  codeclosure(ls, e);
   close_func(ls);
 }
 
 
-static int explist (LexState *ls, expdesc *v) {
+static int explist (LexState *ls, expdesc *v, AstNodeList *list) {
   /* explist -> expr { ',' expr } */
   int n = 1;  /* at least one expression */
-  AstNode *explist = ast_node_create(ls, AST_explist, &CTK, &CTK);
   expr(ls, v);
+  ast_nodelist_append(list, v->expr);
   while (testnext(ls, ',')) {
     luaK_exp2nextreg(ls->fs, v);
-    expr(ls, v);
+    expr(ls, v, list);
+    ast_nodelist_append(list, v->expr);
     n++;
   }
-  explist->te = &CTK;
   return n;
 }
 
 
-static void funcargs (LexState *ls, expdesc *f, int line) {
+static void funcargs (LexState *ls, expdesc *f, int line, AstNode *call) {
   FuncState *fs = ls->fs;
   expdesc args;
   int base, nparams;
@@ -1123,7 +899,7 @@ static void funcargs (LexState *ls, expdesc *f, int line) {
       if (CTK.token == ')')  /* arg list is empty? */
         args.k = VVOID;
       else {
-        explist(ls, &args);
+        explist(ls, &args, &(call->call.params));
         if (hasmultret(args.k))
           luaK_setmultret(fs, &args);
       }
@@ -1176,7 +952,6 @@ static void primaryexp (LexState *ls, expdesc *v) {
       luaX_next(ls);
       expr(ls, v);
       check_match(ls, ')', '(', line);
-      luaK_dischargevars(ls->fs, v);
       return;
     }
     case TK_NAME: {
@@ -1184,9 +959,9 @@ static void primaryexp (LexState *ls, expdesc *v) {
       return;
     }
     default: {
-      AstNode *stat = ast_node_create(ls, AST_error, &CTK, &CTK);
-      stat->error.msg = luaS_newliteral(ls, "unexpected symbol");
-      ast_stats_append(ls->fs->bl->block, stat);
+      AstNode *err = ast_node_create(ls, AST_error, &CTK, &CTK);
+      err->error.msg = luaX_newliteral(ls, "unexpected symbol");
+      stats_append(ls, err);
     }
   }
 }
@@ -1213,15 +988,21 @@ static void suffixedexp (LexState *ls, expdesc *v) {
       }
       case ':': {  /* ':' NAME funcargs */
         expdesc key;
+        AstNode *exp = ast_node_create(ls, AST_call, &CTK, &CTK);
+        exp->call.obj = v->expr;
+        exp->call.indexer = &CTK;
         luaX_next(ls);
-        codename(ls, &key);
-        luaK_self(fs, v, &key);
-        funcargs(ls, v, line);
+		if (check(ls, TK_NAME)) {
+          exp->call.name = ast_node_create(ls, AST_vname, &CTK, &CTK);
+          luaX_next(ls);
+        }
+        funcargs(ls, v, line, exp);
         break;
       }
       case '(': case TK_STRING: case '{': {  /* funcargs */
-        luaK_exp2nextreg(fs, v);
-        funcargs(ls, v, line);
+        AstNode *exp = ast_node_create(ls, AST_call, &CTK, &CTK);
+        exp->call.name = v->expr;
+        funcargs(ls, v, line, exp);
         break;
       }
       default: return;
@@ -1281,7 +1062,7 @@ static void simpleexp (LexState *ls, expdesc *v) {
     case TK_FUNCTION: {
       v->expr = ast_node_create(ls, AST_func, &CTK, &CTK);
       luaX_next(ls);
-      body(ls, v, 0, ls->linenumber);
+      body(ls, &(v->expr->func), 0, ls->linenumber);
       v->expr->te = &CTK;
       return;
     }
@@ -1429,11 +1210,11 @@ static void expr (LexState *ls, expdesc *v) {
 */
 
 
-static void block (LexState *ls) {
+static void block (LexState *ls, Block *b) {
   /* block -> statlist */
   FuncState *fs = ls->fs;
   BlockCnt bl;
-  enterblock(fs, &bl, 0);
+  enterblock(fs, &bl, 0, b);
   statlist(ls);
   leaveblock(fs);
 }
@@ -1499,61 +1280,35 @@ static void check_conflict (LexState *ls, struct LHS_assign *lh, expdesc *v) {
 ** assignment -> suffixedexp restassign
 ** restassign -> ',' suffixedexp restassign | '=' explist
 */
-static void restassign (LexState *ls, struct LHS_assign *lh, int nvars) {
+static void restassign (LexState *ls, struct LHS_assign *lh, int nvars, AstNode *stat) {
   expdesc e;
+  assert( stat->type==AST_assign );
   check_condition(ls, vkisvar(lh->v.k), "syntax error");
   check_readonly(ls, &lh->v);
   if (testnext(ls, ',')) {  /* restassign -> ',' suffixedexp restassign */
     struct LHS_assign nv;
+    const Token *ts = &CTK;
     nv.prev = lh;
     suffixedexp(ls, &nv.v);
+    ast_nodelist_append(&(stat->assign.vars), nv.v.expr);
     if (!vkisindexed(nv.v.k))
       check_conflict(ls, lh, &nv.v);
-    restassign(ls, &nv, nvars+1);
+    restassign(ls, &nv, nvars+1, stat);
   }
   else {  /* restassign -> '=' explist */
     int nexps;
     checknext(ls, '=');
-    nexps = explist(ls, &e);
-    if (nexps != nvars)
-      adjust_assign(ls, nvars, nexps, &e);
-    else {
-      luaK_setoneret(ls->fs, &e);  /* close last expression */
-      luaK_storevar(ls->fs, &lh->v, &e);
-      return;  /* avoid default */
-    }
+    nexps = explist(ls, &e, &(stat->assign.explist));
   }
-  init_exp(&e, VNONRELOC, ls->fs->freereg-1);  /* default assignment */
-  luaK_storevar(ls->fs, &lh->v, &e);
 }
 
 
-static int cond (LexState *ls) {
-  /* cond -> exp */
-  expdesc v;
-  expr(ls, &v);  /* read condition */
-  if (v.k == VNIL) v.k = VFALSE;  /* 'falses' are all equal here */
-  luaK_goiftrue(ls->fs, &v);
-  return v.f;
-}
-
-
-static void gotostat (LexState *ls) {
+static void gotostat (LexState *ls, const Token *tk) {
   FuncState *fs = ls->fs;
   int line = ls->linenumber;
+  AstNode *stat = ast_node_create(ls, AST_gotostat, tk, &CTK);
   TString *name = str_checkname(ls);  /* label's name */
-  Labeldesc *lb = findlabel(ls, name);
-  if (lb == NULL)  /* no label? */
-    /* forward jump; will be resolved when the label is declared */
-    newgotoentry(ls, name, line, luaK_jump(fs));
-  else {  /* found a label */
-    /* backward jump; will be resolved here */
-    int lblevel = stacklevel(fs, lb->nactvar);  /* label level */
-    if (luaY_nvarstack(fs) > lblevel)  /* leaving the scope of a variable? */
-      fs->pc++; // luaK_codeABC(fs, OP_CLOSE, lblevel, 0, 0);
-    /* create jump and link it to the label */
-    luaK_patchlist(fs, luaK_jump(fs), lb->pc);
-  }
+  stats_append(ls, stat);
 }
 
 
@@ -1561,32 +1316,19 @@ static void gotostat (LexState *ls) {
 ** Break statement. Semantically equivalent to "goto break".
 */
 static void breakstat (LexState *ls) {
-  int line = ls->linenumber;
+  stats_append(ls, ast_node_create(ls, AST_breakstat, &CTK, &CTK));
   luaX_next(ls);  /* skip break */
-  newgotoentry(ls, luaS_newliteral(ls->L, "break"), line, luaK_jump(ls->fs));
 }
 
 
-/*
-** Check whether there is already a label with the given 'name'.
-*/
-static void checkrepeated (LexState *ls, TString *name) {
-  Labeldesc *lb = findlabel(ls, name);
-  if (unlikely(lb != NULL)) {  /* already defined? */
-    const char *msg = "label '%s' already defined on line %d";
-    msg = luaO_pushfstring(ls->L, msg, getstr(name), lb->line);
-    luaK_semerror(ls, msg);  /* error */
-  }
-}
-
-
-static void labelstat (LexState *ls, TString *name, int line) {
+static void labelstat (LexState *ls, TString *name, int line, const Token *tk) {
+  AstNode *stat;
   /* label -> '::' NAME '::' */
+  stat = ast_node_create(ls, AST_labelstat, tk, &CTK);
+  stats_append(ls, stat);
   checknext(ls, TK_DBCOLON);  /* skip double colon */
-  while (CTK.token == ';' || CTK.token == TK_DBCOLON)
-    statement(ls);  /* skip other no-op statements */
-  checkrepeated(ls, name);  /* check for repeated labels */
-  createlabel(ls, name, line, block_follow(ls, 0));
+  // while (CTK.token == ';' || CTK.token == TK_DBCOLON)
+  //   statement(ls);  /* skip other no-op statements */
 }
 
 
@@ -1594,42 +1336,42 @@ static void whilestat (LexState *ls, int line) {
   /* whilestat -> WHILE cond DO block END */
   FuncState *fs = ls->fs;
   int whileinit;
-  int condexit;
   BlockCnt bl;
+  AstNode *stat = ast_node_create(ls, AST_whilestat, &CTK, &CTK);
+  expdesc v;
   luaX_next(ls);  /* skip WHILE */
   whileinit = luaK_getlabel(fs);
-  condexit = cond(ls);
-  enterblock(fs, &bl, 1);
+  expr(ls, &v);  /* read condition */
+  if (v.k == VNIL) v.k = VFALSE;  /* 'falses' are all equal here */
+  stat->whilestat.cond = v.expr;
+  enterblock(fs, &bl, 1, &(stat->whilestat.body));
   checknext(ls, TK_DO);
-  block(ls);
+  block(ls, &(stat->whilestat.body));
   luaK_jumpto(fs, whileinit);
   check_match(ls, TK_END, TK_WHILE, line);
   leaveblock(fs);
-  luaK_patchtohere(fs, condexit);  /* false conditions finish the loop */
 }
 
 
 static void repeatstat (LexState *ls, int line) {
   /* repeatstat -> REPEAT block UNTIL cond */
-  int condexit;
   FuncState *fs = ls->fs;
   int repeat_init = luaK_getlabel(fs);
+  AstNode *stat = ast_node_create(ls, AST_repeatstat, &CTK, &CTK);
   BlockCnt bl1, bl2;
-  enterblock(fs, &bl1, 1);  /* loop block */
-  enterblock(fs, &bl2, 0);  /* scope block */
+  expdesc v;
+  enterblock(fs, &bl1, 1, &(stat->repeatstat.body));  /* loop block */
+  enterblock(fs, &bl2, 0, &(stat->repeatstat.body));  /* scope block */
   luaX_next(ls);  /* skip REPEAT */
   statlist(ls);
   check_match(ls, TK_UNTIL, TK_REPEAT, line);
-  condexit = cond(ls);  /* read condition (inside scope block) */
+  expr(ls, &v);  /* read condition (inside scope block) */
+  if (v.k == VNIL) v.k = VFALSE;  /* 'falses' are all equal here */
+  stat->repeatstat.cond = v.expr;
   leaveblock(fs);  /* finish scope */
   if (bl2.upval) {  /* upvalues? */
-    int exit = luaK_jump(fs);  /* normal exit must jump over fix */
-    luaK_patchtohere(fs, condexit);  /* repetition must close upvalues */
     fs->pc++; // luaK_codeABC(fs, OP_CLOSE, stacklevel(fs, bl2.nactvar), 0, 0);
-    condexit = luaK_jump(fs);  /* repeat after closing upvalues */
-    luaK_patchtohere(fs, exit);  /* normal exit comes to here */
   }
-  luaK_patchlist(fs, condexit, repeat_init);  /* close the loop */
   leaveblock(fs);  /* finish loop */
 }
 
@@ -1666,7 +1408,7 @@ static void fixforjump (FuncState *fs, int pc, int dest, int back) {
 /*
 ** Generate code for a 'for' loop.
 */
-static void forbody (LexState *ls, int base, int line, int nvars, int isgen) {
+static void forbody (LexState *ls, int base, int line, int nvars, int isgen, Block *body) {
   /* forbody -> DO block */
   // static const OpCode forprep[2] = {OP_FORPREP, OP_TFORPREP};
   // static const OpCode forloop[2] = {OP_FORLOOP, OP_TFORLOOP};
@@ -1675,10 +1417,10 @@ static void forbody (LexState *ls, int base, int line, int nvars, int isgen) {
   int prep, endfor;
   checknext(ls, TK_DO);
   prep = fs->pc++; // luaK_codeABx(fs, forprep[isgen], base, 0);
-  enterblock(fs, &bl, 0);  /* scope for declared variables */
+  enterblock(fs, &bl, 0, body);  /* scope for declared variables */
   adjustlocalvars(ls, nvars);
   luaK_reserveregs(fs, nvars);
-  block(ls);
+  block(ls, body);
   leaveblock(fs);  /* end of scope for declared variables */
   fixforjump(fs, prep, luaK_getlabel(fs), 0);
   if (isgen) {  /* generic for? */
@@ -1691,38 +1433,41 @@ static void forbody (LexState *ls, int base, int line, int nvars, int isgen) {
 }
 
 
-static void fornum (LexState *ls, TString *varname, AstNode *vtype, int line) {
+static void fornum (LexState *ls, TString *varname, AstNode *var, int line) {
   /* fornum -> NAME = exp,exp[,exp] forbody */
   FuncState *fs = ls->fs;
   int base = fs->freereg;
+  AstNode *stat = ast_node_create(ls, AST_fornum, var->ts-1, &CTK);
+  expdesc e;
+  stat->fornum.var = var;
   new_localvarliteral(ls, "(for state)");
   new_localvarliteral(ls, "(for state)");
   new_localvarliteral(ls, "(for state)");
   new_localvar(ls, varname);
   checknext(ls, '=');
-  exp1(ls);  /* initial value */
+  expr(ls, &e); /* initial value */
+  stat->fornum.from = e.expr;
   checknext(ls, ',');
-  exp1(ls);  /* limit */
-  if (testnext(ls, ','))
-    exp1(ls);  /* optional step */
-  else {  /* default step = 1 */
-    luaK_int(fs, fs->freereg, 1);
-    luaK_reserveregs(fs, 1);
+  expr(ls, &e);   /* limit */
+  stat->fornum.to = e.expr;
+  if (testnext(ls, ',')) {
+    expr(ls, &e);  /* optional step */
+    stat->fornum.step = e.expr;
   }
   adjustlocalvars(ls, 3);  /* control variables */
-  forbody(ls, base, line, 1, 0);
+  forbody(ls, base, line, 1, 0, &(stat->fornum.body));
+  stat->te = &CTK;
 }
 
 
-static void forlist (LexState *ls, TString *indexname, AstNode *vtype) {
+static void forlist (LexState *ls, TString *indexname, AstNode *var, const Token *tk) {
   /* forlist -> NAME {,NAME} IN explist forbody */
   FuncState *fs = ls->fs;
   expdesc e;
   int nvars = 5;  /* gen, state, control, toclose, 'indexname' */
   int line;
   int base = fs->freereg;
-  AstNode *stat = ast_node_create(ls, AST_forlist, &RTK(-1), &CTK);
-  AstNode *var;
+  AstNode *stat = ast_node_create(ls, AST_forlist, tk, &CTK);
   /* create control variables */
   new_localvarliteral(ls, "(for state)");
   new_localvarliteral(ls, "(for state)");
@@ -1730,18 +1475,14 @@ static void forlist (LexState *ls, TString *indexname, AstNode *vtype) {
   new_localvarliteral(ls, "(for state)");
   /* create declared variables */
   new_localvar(ls, indexname);
-  var = ast_node_create(ls, AST_var, &CTK, &CTK);
-  var->var.vtype = vtype;
-  ast_forlist_append(stat, var);
+  ast_nodelist_append(&(stat->forlist.vars), var);
   while (testnext(ls, ',')) {
     new_localvar(ls, str_checkname(ls, &e));
     var = ast_node_create(ls, AST_var, &CTK, &CTK);
     if (testnext(ls, ':')) {
-      vtype = ast_node_create(ls, AST_vtype, &CTK, &CTK);
       skip_vartype(ls);
-      vtype->te = &CTK;
-      var->var.vtype = vtype;
-      ast_forlist_append(stat, var);
+      var->te = &CTK;
+      ast_nodelist_append(&(stat->forlist.vars), var);
     }
     nvars++;
   }
@@ -1749,33 +1490,37 @@ static void forlist (LexState *ls, TString *indexname, AstNode *vtype) {
   checknext(ls, TK_IN);
 
   line = ls->linenumber;
-  adjust_assign(ls, 4, explist(ls, &e), &e);
-  adjustlocalvars(ls, 4);  /* control variables */
-  markupval(fs, fs->nactvar);  /* last control var. must be closed */
-  luaK_checkstack(fs, 3);  /* extra space to call generator */
-  forbody(ls, base, line, nvars - 4, 1);
+  explist(ls, &e, &(stat->forlist.iters));
+  forbody(ls, base, line, nvars - 4, 1, &(stat->forlist.body));
   stat->te = &CTK;
 }
 
 
-static void forstat (LexState *ls, int line) {
+static void forstat (LexState *ls, int line, const Token *tk) {
   /* forstat -> FOR (fornum | forlist) END */
   FuncState *fs = ls->fs;
   TString *varname;
-  AstNode *vtype = NULL;
+  AstNode *var = NULL;
   BlockCnt bl;
-  enterblock(fs, &bl, 1);  /* scope for loop and control variables */
+  const Token *ts = &CTK;
+  enterblock(fs, &bl, 1, ls->fs->bl->block);  /* scope for loop and control variables */
   luaX_next(ls);  /* skip 'for' */
   varname = str_checkname(ls);  /* first variable name */
+  var = ast_node_create(ls, AST_var, &CTK, &CTK);
   if (testnext(ls, ':')) {
-    vtype = ast_node_create(ls, AST_vtype, &CTK, &CTK);
     skip_vartype(ls);
-    vtype->te = &CTK;
+    var->te = &CTK;
   }
   switch (CTK.token) {
-    case '=': fornum(ls, varname, vtype, line); break;
-    case ',': case TK_IN: forlist(ls, varname, vtype); break;
-    default: luaX_syntaxerror(ls, "'=' or 'in' expected");
+    case '=':
+      fornum(ls, varname, var, line, tk);
+      break;
+    case ',': case TK_IN:
+      forlist(ls, varname, var, tk);
+      break;
+    default:
+      luaX_syntaxerror(ls, "'=' or 'in' expected");
+      break;
   }
   check_match(ls, TK_END, TK_FOR, line);
   leaveblock(fs);  /* loop scope ('break' jumps to this point) */
@@ -1815,7 +1560,7 @@ static int issinglejump (LexState *ls, TString **label, int *target) {
 }
 
 
-static void test_then_block (LexState *ls, int *escapelist) {
+static void test_then_block (LexState *ls, int *escapelist, AstNodeList *caluses) {
   /* test_then_block -> [IF | ELSEIF] cond THEN block */
   BlockCnt bl;
   int line;
@@ -1824,13 +1569,17 @@ static void test_then_block (LexState *ls, int *escapelist) {
   int target = NO_JUMP;
   expdesc v;
   int jf;  /* instruction to skip 'then' code (if condition is false) */
+  AstNode *exp = ast_node_create(ls, AST_caluse, &CTK, &CTK);
+  ast_nodelist_append(caluses, exp);
   luaX_next(ls);  /* skip IF or ELSEIF */
   expr(ls, &v);  /* read condition */
+  exp->caluse.cond = v.expr;
   checknext(ls, TK_THEN);
   line = ls->linenumber;
   if (issinglejump(ls, &jlb, &target)) {  /* 'if x then goto' ? */
     luaK_goiffalse(ls->fs, &v);  /* will jump to label if condition is true */
-    enterblock(fs, &bl, 0);  /* must enter block before 'goto' */
+    // TODO : bl.block = ifstat->block ;
+    enterblock(fs, &bl, 0, &(exp->caluse.body));  /* must enter block before 'goto' */
     if (jlb != NULL)  /* forward jump? */
       newgotoentry(ls, jlb, line, v.t);  /* will be resolved later */
     else  /* backward jump */
@@ -1845,120 +1594,80 @@ static void test_then_block (LexState *ls, int *escapelist) {
   }
   else {  /* regular case (not a jump) */
     luaK_goiftrue(ls->fs, &v);  /* skip over block if condition is false */
-    enterblock(fs, &bl, 0);
+    enterblock(fs, &bl, 0, &(exp->caluse.body));
     jf = v.f;
   }
   statlist(ls);  /* 'then' part */
   leaveblock(fs);
-  if (CTK.token == TK_ELSE ||
-      CTK.token == TK_ELSEIF)  /* followed by 'else'/'elseif'? */
-    luaK_concat(fs, escapelist, luaK_jump(fs));  /* must jump over it */
-  luaK_patchtohere(fs, jf);
 }
-
 
 
 static void ifstat (LexState *ls, int line) {
   /* ifstat -> IF cond THEN block {ELSEIF cond THEN block} [ELSE block] END */
   FuncState *fs = ls->fs;
   int escapelist = NO_JUMP;  /* exit list for finished parts */
-  test_then_block(ls, &escapelist);  /* IF cond THEN block */
+  AstNode *stat = ast_node_create(ls, AST_ifstat, &CTK, &CTK);
+  test_then_block(ls, &escapelist, &(stat->ifstat.caluses));  /* IF cond THEN block */
   while (CTK.token == TK_ELSEIF)
-    test_then_block(ls, &escapelist);  /* ELSEIF cond THEN block */
-  if (testnext(ls, TK_ELSE))
-    block(ls);  /* 'else' part */
+    test_then_block(ls, &escapelist, &(stat->ifstat.caluses));  /* ELSEIF cond THEN block */
+  if (testnext(ls, TK_ELSE)) {
+    AstNode *exp = ast_node_create(ls, AST_caluse, &CTK, &CTK);
+    ast_nodelist_append(&(stat->ifstat.caluses), exp);
+    block(ls, &(exp->caluse.body));  /* 'else' part */
+    exp->te = &CTK;
+  }
   check_match(ls, TK_END, TK_IF, line);
   luaK_patchtohere(fs, escapelist);  /* patch escape list to 'if' end */
-}
-
-
-static void localfunc (LexState *ls) {
-  expdesc b;
-  FuncState *fs = ls->fs;
-  int fvar = fs->nactvar;  /* function's variable index */
-  AstNode *stat;
-  new_localvar(ls, str_checkname(ls));  /* new local variable */
-  stat = ast_node_create(ls, AST_localfunc, &RTK(-3), &CTK);
-  adjustlocalvars(ls, 1);  /* enter its scope */
-  ast_stats_append(ls->fs->bl->block, stat);
-  body(ls, &stat, 0, ls->linenumber);  /* function created in next register */
   stat->te = &CTK;
 }
 
 
-static int getlocalattribute (LexState *ls) {
+static void localfunc (LexState *ls, const Token *tk) {
+  FuncState *fs = ls->fs;
+  int fvar = fs->nactvar;  /* function's variable index */
+  AstNode *stat;
+  new_localvar(ls, str_checkname(ls));  /* new local variable */
+  stat = ast_node_create(ls, AST_localfunc, tk, &CTK);
+  adjustlocalvars(ls, 1);  /* enter its scope */
+  stats_append(ls, stat);
+  body(ls, &(stat->localfunc.func), 0, ls->linenumber);  /* function created in next register */
+  stat->te = &CTK;
+}
+
+
+static void getlocalattribute (LexState *ls, AstNode *v) {
   /* ATTRIB -> ['<' Name '>'] */
   if (testnext(ls, '<')) {
-    const char *attr = getstr(str_checkname(ls));
+    const char *attr;
+    v->var.attr = &CTK;
+    attr = getstr(str_checkname(ls));
     checknext(ls, '>');
     if (strcmp(attr, "const") == 0)
-      return RDKCONST;  /* read-only variable */
-    else if (strcmp(attr, "close") == 0)
-      return RDKTOCLOSE;  /* to-be-closed variable */
-    else
-      luaK_semerror(ls,
-        luaO_pushfstring(ls->L, "unknown attribute '%s'", attr));
-  }
-  return VDKREG;  /* regular variable */
-}
-
-
-static void checktoclose (LexState *ls, int level) {
-  if (level != -1) {  /* is there a to-be-closed variable? */
-    FuncState *fs = ls->fs;
-    markupval(fs, level + 1);
-    fs->bl->insidetbc = 1;  /* in the scope of a to-be-closed variable */
-    fs->pc++; // luaK_codeABC(fs, OP_TBC, stacklevel(fs, level), 0, 0);
+      v->var.isconst = 1;  /* read-only variable */
   }
 }
 
 
-static void localstat (LexState *ls) {
+static void localstat (LexState *ls, const Token *tk) {
   /* stat -> LOCAL ATTRIB NAME {',' ATTRIB NAME} ['=' explist] */
   FuncState *fs = ls->fs;
   int toclose = -1;  /* index of to-be-closed variable (if any) */
-  Vardesc *var;  /* last variable */
   int vidx, kind;  /* index and kind of last variable */
-  int nvars = 0;
-  int nexps;
   expdesc e;
   AstNode *v;
+  AstNode *stat = ast_node_create(ls, AST_localstat, tk, &CTK);
   do {
     vidx = new_localvar(ls, str_checkname(ls));
 	v = ast_node_create(ls, AST_var, &CTK, &CTK);
     if (testnext(ls, ':')) {
-      v->var.vtype = ast_node_create(ls, AST_vtype, &CTK, &CTK);
       skip_vartype(ls);
-      v->var.vtype->te = &CTK;
+      v->te = &CTK;
     }
-    kind = getlocalattribute(ls);
-    getlocalvardesc(fs, vidx)->vd.kind = kind;
-    if (kind == RDKTOCLOSE) {  /* to-be-closed? */
-      if (toclose != -1)  /* one already present? */
-        luaK_semerror(ls, "multiple to-be-closed variables in local list");
-      toclose = fs->nactvar + nvars;
-    }
-    nvars++;
+    ast_nodelist_append(&(stat->localstat.vars), v);
+    getlocalattribute(ls, v);
   } while (testnext(ls, ','));
   if (testnext(ls, '='))
-    nexps = explist(ls, &e);
-  else {
-    e.k = VVOID;
-    nexps = 0;
-  }
-  var = getlocalvardesc(fs, vidx);  /* get last variable */
-  if (nvars == nexps &&  /* no adjustments? */
-      var->vd.kind == RDKCONST &&  /* last variable is const? */
-      0 // luaK_exp2const(fs, &e, &var->k)
-      ) {  /* compile-time constant? */
-    var->vd.kind = RDKCTC;  /* variable is a compile-time constant */
-    adjustlocalvars(ls, nvars - 1);  /* exclude last variable */
-    fs->nactvar++;  /* but count it */
-  }
-  else {
-    adjust_assign(ls, nvars, nexps, &e);
-    adjustlocalvars(ls, nvars);
-  }
+    explist(ls, &e, &(stat->localstat.explist));
   checktoclose(ls, toclose);
 }
 
@@ -1980,12 +1689,12 @@ static int funcname (LexState *ls, expdesc *v) {
 static void funcstat (LexState *ls, int line) {
   /* funcstat -> FUNCTION funcname body */
   int ismethod;
-  expdesc v, b;
+  expdesc v;
+  AstNode *f = ast_node_create(ls, AST_func, &CTK, &CTK);
   luaX_next(ls);  /* skip FUNCTION */
   ismethod = funcname(ls, &v);
-  body(ls, &b, ismethod, line);
-  luaK_storevar(ls->fs, &v, &b);
-  luaK_fixline(ls->fs, line);  /* definition "happens" in the first line */
+  f->func.name = v.expr;
+  body(ls, &(f->func), ismethod, line);
 }
 
 
@@ -1993,69 +1702,54 @@ static void exprstat (LexState *ls) {
   /* stat -> func | assignment */
   FuncState *fs = ls->fs;
   struct LHS_assign v;
-  AstNode *stat = ast_node_create(ls, AST_exprstat, &CTK, &CTK);
+  const Token *ts = &CTK;
   suffixedexp(ls, &v.v);
-  stat->te = &CTK;
-  stat->exprstat.expr = v.v.expr;
   if (CTK.token == '=' || CTK.token == ',') { /* stat -> assignment ? */
+    AstNode *stat = ast_node_create(ls, AST_assign, ts, &CTK);
+    stat->exprstat.expr = v.v.expr;
     v.prev = NULL;
-    restassign(ls, &v, 1);
+    restassign(ls, &v, 1, stat);
+    stat->te = &CTK;
   }
   else {  /* stat -> func */
-    if (v.v.k != VCALL) {
-      AstNode *err = ast_node_create(ls, AST_error, stat->ts, stat->te);
-      err->error.msg = luaS_newliteral(ls, "syntax error");
-      ast_stats_append(ls->fs->bl->block, err);
+    if (v.v.k == VCALL) {
+      AstNode *stat = ast_node_create(ls, AST_exprstat, ts, &CTK);
+      stat->exprstat.expr = v.v.expr;
+      stats_append(ls, stat);
+    } else {
+      AstNode *err = ast_node_create(ls, AST_error, ts, &CTK);
+      err->error.msg = luaX_newliteral(ls, "syntax error");
+      stats_append(ls, err);
     }
   }
 }
 
 
-static void retstat (LexState *ls) {
+static void retstat (LexState *ls, const Token *tk) {
   /* stat -> RETURN [explist] [';'] */
   FuncState *fs = ls->fs;
   expdesc e;
-  int nret;  /* number of values being returned */
-  int first = luaY_nvarstack(fs);  /* first slot to be returned */
-  AstNode *stat = ast_node_create(ls, AST_retstat, &RTK(-1), &RTK(-1));
+  AstNode *stat = ast_node_create(ls, AST_retstat, tk, tk);
   if (block_follow(ls, 1)) {
-    nret = 0;  /* return no values */
+    /* return no values */
   }
   else if (CTK.token == ';') {
-    nret = 0;  /* return no values */
+    /* return no values */
     stat->te = &CTK;
   }
   else {
-    nret = explist(ls, &e);  /* optional return values */
-    if (hasmultret(e.k)) {
-      luaK_setmultret(fs, &e);
-      if (e.k == VCALL && nret == 1 && !fs->bl->insidetbc) {  /* tail call? */
-        // SET_OPCODE(getinstruction(fs,&e), OP_TAILCALL);
-        // lua_assert(GETARG_A(getinstruction(fs,&e)) == luaY_nvarstack(fs));
-      }
-      nret = LUA_MULTRET;  /* return all values */
-    }
-    else {
-      if (nret == 1)  /* only one single value? */
-        first = luaK_exp2anyreg(fs, &e);  /* can use original slot */
-      else {  /* values must go to the top of the stack */
-        luaK_exp2nextreg(fs, &e);
-        lua_assert(nret == fs->freereg - first);
-      }
-    }
+    explist(ls, &e, &(stat->retstat.explist));  /* optional return values */
   }
-  luaK_ret(fs, first, nret);
   testnext(ls, ';');  /* skip optional semicolon */
 }
 
 
 static void statement (LexState *ls) {
-  AstNode *stat;
+  const Token *tk = &CTK;
   int line = ls->linenumber;  /* may be needed for error messages */
-  switch (ls->tokens[ls->t].token) {
+  switch (tk->token) {
     case ';': {  /* stat -> ';' (empty statement) */
-      stat = ast_node_create(ls, AST_empty, &CTK, &CTK);
-      ast_stats_append(ls->fs->bl->block, stat);
+      stats_append(ls, ast_node_create(ls, AST_empty, tk, tk));
       luaX_next(ls);  /* skip ';' */
       break;
     }
@@ -2068,13 +1762,14 @@ static void statement (LexState *ls) {
       break;
     }
     case TK_DO: {  /* stat -> DO block END */
+      AstNode *stat = ast_node_create(ls, AST_dostat, tk, tk);
       luaX_next(ls);  /* skip DO */
-      block(ls);
+      block(ls, &(stat->dostat.body));
       check_match(ls, TK_END, TK_DO, line);
       break;
     }
     case TK_FOR: {  /* stat -> forstat */
-      forstat(ls, line);
+      forstat(ls, line, tk);
       break;
     }
     case TK_REPEAT: {  /* stat -> repeatstat */
@@ -2082,25 +1777,25 @@ static void statement (LexState *ls) {
       break;
     }
     case TK_FUNCTION: {  /* stat -> funcstat */
-      funcstat(ls, line);
+      funcstat(ls, line, tk);
       break;
     }
     case TK_LOCAL: {  /* stat -> localstat */
       luaX_next(ls);  /* skip LOCAL */
       if (testnext(ls, TK_FUNCTION)) /* local function? */
-        localfunc(ls);
+        localfunc(ls, tk);
 	  else
-        localstat(ls);
+        localstat(ls, tk);
       break;
     }
     case TK_DBCOLON: {  /* stat -> label */
       luaX_next(ls);  /* skip double colon */
-      labelstat(ls, str_checkname(ls), line);
+      labelstat(ls, str_checkname(ls), line, tk);
       break;
     }
     case TK_RETURN: {  /* stat -> retstat */
       luaX_next(ls);  /* skip RETURN */
-      retstat(ls);
+      retstat(ls, tk);
       break;
     }
     case TK_BREAK: {  /* stat -> breakstat */
@@ -2109,7 +1804,7 @@ static void statement (LexState *ls) {
     }
     case TK_GOTO: {  /* stat -> 'goto' NAME */
       luaX_next(ls);  /* skip 'goto' */
-      gotostat(ls);
+      gotostat(ls, tk);
       break;
     }
     default: {  /* stat -> func | assignment */
@@ -2129,24 +1824,26 @@ static void statement (LexState *ls) {
 ** compiles the main function, which is a regular vararg function with an
 ** upvalue named LUA_ENV
 */
-static AstNode * mainfunc (LexState *ls, FuncState *fs) {
+static void mainfunc (LexState *ls, FuncState *fs, Block* block) {
   BlockCnt bl;
   Upvaldesc *env;
-  open_func(ls, fs, &bl);
+  open_func(ls, fs, &bl, block);
   setvararg(fs, 0);  /* main function is always declared vararg */
   env = allocupvalue(fs);  /* ...set environment upvalue */
   env->instack = 1;
   env->idx = 0;
   env->kind = VDKREG;
   env->name = ls->envn;
+  luaX_next(ls);
   for (;;) {
     statlist(ls);  /* parse main body */
     if (!check(ls, TK_EOS)) {
-      ast_stats_append(bl.block, ast_node_create(ls, AST_error, &CTK, &CTK));
+      AstNode *err = ast_node_create(ls, AST_error, &CTK, &CTK);
+      err->error.msg = luaX_newliteral(ls, "unfinished block");
+      stats_append(ls, err);
     }
   }
   close_func(ls);
-  return bl.block;
 }
 
 
@@ -2160,7 +1857,7 @@ void luaY_parser (lua_State *L, LuaChunk *chunk, ZIO *z, Mbuffer *buff,
   lexstate.dyd = dyd;
   dyd->actvar.n = dyd->gt.n = dyd->label.n = 0;
   luaX_setinput(L, &lexstate, z, funcstate.f->source, firstchar);
-  chunk->block = mainfunc(&lexstate, &funcstate);
+  mainfunc(&lexstate, &funcstate, &(chunk->block));
   chunk->ntokens = lexstate.ntokens;
   chunk->tokens = lexstate.tokens;
   lua_assert(!funcstate.prev && funcstate.nups == 1 && !lexstate.fs);

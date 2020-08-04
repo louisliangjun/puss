@@ -63,6 +63,7 @@ typedef struct Token {
    functions */
 typedef struct LexState {
   int t;  /* current token */
+  int lookahead;  /* lookahead token */
   struct FuncState *fs;  /* current function (parser) */
   struct lua_State *L;
   int sizetokens;
@@ -89,18 +90,10 @@ typedef struct LexState {
 LUAI_FUNC void luaX_init (lua_State *L);
 LUAI_FUNC void luaX_setinput (lua_State *L, LexState *ls, ZIO *z,
                               TString *source, int firstchar);
+#define luaX_newliteral(ls, s)		luaX_newstringreversed(ls, s, (sizeof(s)/sizeof(char))-1, NULL)
 #define luaX_newstring(ls, str, l)	luaX_newstringreversed((ls), (str), (l), NULL)
 LUAI_FUNC TString *luaX_newstringreversed (LexState *ls, const char *str, size_t l, int *reversed);
-
-static inline void luaX_next (LexState *ls) {
-  int lookahead = ls->t + 1;
-  if (lookahead < ls->ntokens)
-    ls->t = lookahead;
-}
-
-static inline int luaX_lookahead (LexState *ls) {
-  size_t lookahead = ls->t + 1;
-  return (lookahead < ls->ntokens) ? ls->tokens[lookahead].token : TK_EOS;
-}
+LUAI_FUNC int luaX_lookahead (LexState *ls);
+LUAI_FUNC void luaX_next (LexState *ls);
 
 #endif

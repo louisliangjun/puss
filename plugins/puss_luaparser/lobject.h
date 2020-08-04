@@ -20,13 +20,6 @@
 
 typedef const char	TString;
 
-typedef struct LuaChunk {
-  int ntokens;
-  struct Token* tokens;
-  struct AstBlockStat* block;
-} LuaChunk;
-
-
 
 /*
 ** Union of all Lua values

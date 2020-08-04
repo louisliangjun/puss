@@ -15,28 +15,58 @@
 #define AST_MASK_EXPR	0x2000
 
 typedef enum
-  { AST_explist = 0x01
-  , AST_vtype
-  , AST_block = AST_MASK_STAT | 0x01
+  { AST_block = AST_MASK_STAT | 0x01
   , AST_empty
   , AST_error
-  , AST_retstat
+  , AST_caluse
+  , AST_ifstat
+  , AST_whilestat
+  , AST_dostat
+  , AST_fornum
   , AST_forlist
+  , AST_repeatstat
+  , AST_funcstat
   , AST_localfunc
+  , AST_localstat
+  , AST_labelstat
+  , AST_retstat
+  , AST_breakstat
+  , AST_gotostat
   , AST_exprstat
+  , AST_assign
   , AST_vnil = AST_MASK_EXPR | 0x01
   , AST_vbool
   , AST_vint
   , AST_vflt
   , AST_vstr
+  , AST_vname
   , AST_vararg
   , AST_unary
   , AST_bin
   , AST_var
+  , AST_vtype
+  , AST_call
   , AST_func
 } AstNodeType;
 
 typedef struct AstNode	AstNode;
+
+typedef struct AstNodeList {
+  AstNode *head;
+  AstNode *tail;
+} AstNodeList;
+
+typedef struct Block {
+  AstNodeList stats;
+  lu_byte isloop;
+} Block;
+
+typedef struct FuncDecl {
+  AstNodeList params;
+  AstNodeList vtypes;
+  AstNode *name;
+  Block body;
+} FuncDecl;
 
 struct AstNode {
   // node base
@@ -50,36 +80,63 @@ struct AstNode {
     TString *msg;
   } error; // <error-message>
   struct {
-    AstNode *stats;
-    AstNode *stats_tail;
-  } block;
+    AstNode *cond;
+    Block body;
+  } caluse; // [if|elseif|else] <cond> then <body>
   struct {
-    AstNode *exprs;
-    AstNode *exprs_tail;
-  } explist;
+    AstNodeList caluses;
+  } ifstat; // if cond then ... elseif cond then ... else ... end
   struct {
-    AstNode *expr;
-  } retstat; // stat -> RETURN [explist] [';'] 
+    AstNode *cond;
+    Block body;
+  } whilestat;
   struct {
-    AstNode *vars;
-    AstNode *vars_tail;
-    const Token *_in;
-    AstNode *explist;
+    Block body;
+  } dostat;
+  struct {
+    AstNode *var;
+    AstNode *from;
+    AstNode *to;
+    AstNode *step;
     const Token *_do;
-    AstNode *body;
+    Block body;
+  } fornum;
+  struct {
+    AstNodeList vars;
+    const Token *_in;
+    AstNodeList iters;
+    const Token *_do;
+    Block body;
   } forlist; // forlist -> NAME {,NAME} IN explist forbody 
   struct {
     AstNode *cond;
-    AstNode *body;
-  } caluse; // [if|elseif|else] <cond> then <body>
+    Block body;
+  } repeatstat;
   struct {
-    AstNode *caluses;
-  } ifstat; // if cond then ... elseif cond then ... else ... end
+    FuncDecl func;
+  } localfunc;
   struct {
     AstNode *expr;
   } exprstat; // a = b or func()
+  struct {
+    AstNodeList vars;
+    const Token *_assign;
+    AstNodeList explist;
+  } localstat; // local k1,k2,k3 = v1,v2,v3
+  struct {
+    AstNodeList vars;
+    const Token *_assign;
+    AstNodeList explist;
+  } assign; // k1,k2,k3 = v1,v2,v3
+  struct {
+    AstNodeList explist;
+  } retstat; // stat -> RETURN [explist] [';'] 
 
   // value expr
+  struct {
+    const Token *attr;
+    lu_byte isconst;
+  } var;
   struct {
     AstNode *expr;
   } unary;
@@ -89,18 +146,20 @@ struct AstNode {
     AstNode *r;
   } bin;
   struct {
-    AstNode *vtype;
-  } var;
-  struct {
-    AstNode *params;
-    AstNode *params_tail;
-    AstNode *vtypes;
-    AstNode *vtypes_tail;
-    AstNode *body;
-  } func; // function() end
+    AstNode *obj;
+    const Token *indexer;
+    AstNode *name;
+    AstNodeList params;
+  } call;
+  FuncDecl func;
  };
 };
 
+typedef struct LuaChunk {
+  int ntokens;
+  Token* tokens;
+  Block block;
+} LuaChunk;
 
 // see static int parse(lua_State* L);
 // 

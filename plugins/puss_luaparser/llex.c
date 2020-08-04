@@ -21,9 +21,6 @@
 #include "lzio.h"
 
 
-#define luaX_newliteral(ls, s)	luaX_newstringreversed(ls, s, (sizeof(s)/sizeof(char))-1, NULL)
-
-
 // #define next(ls)	(ls->current = zgetc(ls->z))
 
 static void next(LexState* ls) {
@@ -559,13 +556,14 @@ void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source,
   Token* tk;
   
   ls->t = 0;
+  ls->lookahead = 0;
   ls->fs = NULL;
   ls->L = L;
   ls->sizetokens = 0;
   ls->ntokens = 256;
   ls->tokens = luaM_newvector(L, ls->ntokens, Token);
   ls->freelist = NULL;
-  ls->source = source;
+  ls->source = luaX_newstring(ls, source, strlen(source));
   ls->envn = luaX_newliteral(ls, LUA_ENV);  /* get env name */
 
   ls->z = z;
@@ -578,12 +576,24 @@ void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source,
   ls->lastline = 1;
   luaZ_resizebuffer(L, ls->buff, LUA_MINBUFFER);  /* initialize buffer */
 
+  // pesudo tokens[0] = -- source
+  luaM_growvector(L, ls->tokens, ls->ntokens, ls->sizetokens, Token, INT_MAX, "tokens");
+  tk = ls->tokens + ls->sizetokens;
+  tk->token = TK_COMMENT;
+  tk->seminfo.ts = ls->source;
+
   do {
     luaM_growvector(L, ls->tokens, ls->ntokens, ls->sizetokens, Token, INT_MAX, "tokens");
     tk = ls->tokens + ls->sizetokens;
     ls->lastline = ls->linenumber;
     tk->token = llex(ls, &tk->seminfo);  /* read next token */
   } while (tk->token != TK_EOS);
+
+  luaM_growvector(L, ls->tokens, ls->ntokens, ls->sizetokens, Token, INT_MAX, "tokens");
+  tk = ls->tokens + ls->sizetokens;
+  tk->token = TK_EOS;
+  tk->seminfo.ts = ls->source;
+
   luaM_shrinkvector(L, ls->tokens, ls->sizetokens, ls->ntokens, Token);
 
   // never use them, use tokens[i] replace them
@@ -596,5 +606,27 @@ void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source,
   ls->lastline = -1;
   luaZ_freebuffer(L, ls->buff);
   ls->buff = NULL;
+}
+
+int luaX_lookahead (LexState *ls) {
+  int lookahead = ls->t + 1;
+  while (lookahead < ls->ntokens) {
+    if (ls->tokens[lookahead].token != TK_COMMENT) {
+      ls->lookahead = lookahead;
+      return ls->tokens[lookahead].token;
+    }
+    ++lookahead;
+  }
+  return TK_EOS;
+}
+
+void luaX_next (LexState *ls) {
+  if (ls->lookahead <= ls->t) {
+    luaX_lookahead(ls);
+    if (ls->lookahead==0)
+      return;
+  }
+  ls->t = ls->lookahead;
+  ls->lookahead = 0;
 }
 
