@@ -72,8 +72,6 @@ typedef struct LexState {
   Token* tokens;
   struct AstNode* freelist;
   TString *source;  /* current source name */
-  TString *envn;  /* environment variable name */
-  struct Dyndata *dyd;  /* dynamic structures used by the parser */
 
   // only use in lex
   ZIO *z;  /* input stream */
@@ -83,7 +81,6 @@ typedef struct LexState {
   const char* currentexcept;
   int current;  /* current character (charint) */
   int linenumber;  /* input line counter */
-  int lastline;  /* line of last token 'consumed' */
   Mbuffer *buff;  /* buffer for tokens */
 } LexState;
 

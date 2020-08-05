@@ -559,12 +559,10 @@ void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source,
   ls->sizetokens = 256;
   ls->tokens = luaM_newvector(L, ls->sizetokens, Token);
   ls->source = luaX_newstring(ls, source, strlen(source));
-  ls->envn = luaX_newliteral(ls, LUA_ENV);  /* get env name */
 
   ls->z = z;
   ls->current = firstchar;
   ls->linenumber = 1;
-  ls->lastline = 1;
   luaZ_resizebuffer(L, ls->buff, LUA_MINBUFFER);  /* initialize buffer */
 
   // pesudo tokens[0] = -- source
@@ -578,7 +576,6 @@ void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source,
     luaM_growvector(L, ls->tokens, ls->ntokens, ls->sizetokens, Token, INT_MAX, "tokens");
     tk = ls->tokens + ls->ntokens;
     ls->ntokens++;
-    ls->lastline = ls->linenumber;
     tk->token = llex(ls, &tk->seminfo);  /* read next token */
   } while (tk->token != TK_EOS);
 
@@ -600,7 +597,6 @@ void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source,
   ls->currentexcept = NULL;
   ls->current = '\0';
   ls->linenumber = -1;
-  ls->lastline = -1;
   luaZ_freebuffer(L, ls->buff);
   ls->buff = NULL;
 }

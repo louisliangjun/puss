@@ -61,7 +61,7 @@ static inline void ast_nodelist_append(AstNodeList* list, AstNode *node) {
 ** prototypes for recursive non-terminal functions
 */
 static void statement (LexState *ls);
-static void expr (LexState *ls, expdesc *v);
+static void expr (LexState *ls, AstNode **v);
 
 
 /*
@@ -188,19 +188,18 @@ static void statlist (LexState *ls) {
 }
 
 
-static void fieldsel (LexState *ls, expdesc *v) {
+static void fieldsel (LexState *ls, AstNode **v) {
   /* fieldsel -> ['.' | ':'] NAME */
   AstNode *exp;
   luaX_next(ls);  /* skip the dot or colon */
   exp = ast_node_new(ls, AST_vname, CTK, CTK);
-  exp->vname.parent = v->expr;
-  v->expr = exp;
-  if (check(ls, TK_NAME))
-    luaX_next(ls);
+  exp->vname.parent = *v;
+  *v = exp;
+  checknext(ls, TK_NAME);
 }
 
 
-static void yindex (LexState *ls, expdesc *v) {
+static void yindex (LexState *ls, AstNode **v) {
   /* index -> '[' expr ']' */
   luaX_next(ls);  /* skip the '[' */
   expr(ls, v);
@@ -216,7 +215,6 @@ static void yindex (LexState *ls, expdesc *v) {
 
 static void recfield (LexState *ls, AstNodeList *fields) {
   /* recfield -> (NAME | '['exp']') = exp */
-  expdesc key, val;
   AstNode *stat = ast_node_new(ls, AST_field, CTK, CTK);
   if (ls->t.token == TK_NAME) {
     stat->field.k = ast_node_new(ls, AST_var, CTK, CTK);
@@ -226,20 +224,18 @@ static void recfield (LexState *ls, AstNodeList *fields) {
     }
   }
   else { /* ls->t.token == '[' */
-    yindex(ls, &key);
-    stat->field.k = key.expr;
+    yindex(ls, &(stat->field.k));
   }
   checknext(ls, '=');
-  expr(ls, &val);
-  stat->field.v = val.expr;
+  expr(ls, &(stat->field.v));
 }
 
 
 static void listfield (LexState *ls, AstNodeList *fields) {
   /* listfield -> exp */
-  expdesc v;
+  AstNode *v = NULL;
   expr(ls, &v);
-  ast_nodelist_append(fields, v.expr);
+  ast_nodelist_append(fields, v);
 }
 
 
@@ -265,15 +261,14 @@ static void field (LexState *ls, AstNodeList *fields) {
 }
 
 
-static void constructor (LexState *ls, expdesc *t) {
+static void constructor (LexState *ls, AstNode **t) {
   /* constructor -> '{' [ field { sep field } [sep] ] '}'
      sep -> ',' | ';' */
-  AstNode *tb = ast_node_new(ls, AST_constructor, CTK, CTK);
-  t->expr = tb;
+  *t = ast_node_new(ls, AST_constructor, CTK, CTK);
   checknext(ls, '{');
   do {
     if (ls->t.token == '}') break;
-    field(ls, &(tb->constructor.fields));
+    field(ls, &((*t)->constructor.fields));
   } while (testnext(ls, ',') || testnext(ls, ';'));
   if (!testnext(ls, '}')) {
     stats_append(ls, ast_error_newliteral(ls, "match {} failed", CTK, CTK));
@@ -334,12 +329,12 @@ static void body (LexState *ls, FuncDecl *e, int ismethod, int line) {
 
 static void explist (LexState *ls, AstNodeList *list) {
   /* explist -> expr { ',' expr } */
-  expdesc v;
+  AstNode *v = NULL;
   expr(ls, &v);
-  ast_nodelist_append(list, v.expr);
+  ast_nodelist_append(list, v);
   while (testnext(ls, ',')) {
     expr(ls, &v);
-    ast_nodelist_append(list, v.expr);
+    ast_nodelist_append(list, v);
   }
 }
 
@@ -355,9 +350,9 @@ static int funcargs (LexState *ls, AstNodeList *params) {
       break;
     }
     case '{': {  /* funcargs -> constructor */
-      expdesc e;
-      constructor(ls, &e);
-      ast_nodelist_append(params, e.expr);
+      AstNode *v = NULL;
+      constructor(ls, &v);
+      ast_nodelist_append(params, v);
       break;
     }
     case TK_STRING: {  /* funcargs -> STRING */
@@ -382,7 +377,7 @@ static int funcargs (LexState *ls, AstNodeList *params) {
 */
 
 
-static void primaryexp (LexState *ls, expdesc *v) {
+static void primaryexp (LexState *ls, AstNode **v) {
   /* primaryexp -> NAME | '(' expr ')' */
   switch (ls->t.token) {
     case '(': {
@@ -390,22 +385,23 @@ static void primaryexp (LexState *ls, expdesc *v) {
       expr(ls, v);
       if (!testnext(ls, ')'))
         stats_append(ls, ast_error_newliteral(ls, "match () failed", CTK, CTK));
-      return;
+      break;
     }
     case TK_NAME: {
-      v->expr = ast_node_new(ls, AST_vname, CTK, CTK);
+      *v = ast_node_new(ls, AST_vname, CTK, CTK);
       luaX_next(ls);
-      return;
+      break;
     }
     default: {
-      v->expr = NULL;
-      stats_append(ls, ast_error_newliteral(ls, "unexpected symbol", CTK, CTK));
+      *v = ast_error_newliteral(ls, "unexpected symbol", CTK, CTK);
+      luaX_next(ls);
+      break;
     }
   }
 }
 
 
-static void suffixedexp (LexState *ls, expdesc *v) {
+static void suffixedexp (LexState *ls, AstNode **v) {
   /* suffixedexp ->
        primaryexp { '.' NAME | '[' exp ']' | ':' NAME funcargs | funcargs } */
   primaryexp(ls, v);
@@ -416,8 +412,7 @@ static void suffixedexp (LexState *ls, expdesc *v) {
         break;
       }
       case '[': {  /* '[' exp ']' */
-        expdesc key;
-        yindex(ls, &key);
+        yindex(ls, v);
         break;
       }
       case ':': {  /* ':' NAME funcargs */
@@ -425,8 +420,8 @@ static void suffixedexp (LexState *ls, expdesc *v) {
         exp->call.indexer = CTK;
         luaX_next(ls);
         exp->call.name = ast_node_new(ls, AST_vname, CTK, CTK);
-		exp->call.name->vname.parent = v->expr;
-		v->expr = exp;
+		exp->call.name->vname.parent = *v;
+		*v = exp;
 		if (check(ls, TK_NAME))
           luaX_next(ls);
         funcargs(ls, &(exp->call.params));
@@ -434,8 +429,8 @@ static void suffixedexp (LexState *ls, expdesc *v) {
       }
       case '(': case TK_STRING: case '{': {  /* funcargs */
         AstNode *exp = ast_node_new(ls, AST_call, CTK, CTK);
-        exp->call.name = v->expr;
-		v->expr = exp;
+        exp->call.name = *v;
+		*v = exp;
         funcargs(ls, &(exp->call.params));
         break;
       }
@@ -445,36 +440,36 @@ static void suffixedexp (LexState *ls, expdesc *v) {
 }
 
 
-static void simpleexp (LexState *ls, expdesc *v) {
+static void simpleexp (LexState *ls, AstNode **v) {
   /* simpleexp -> FLT | INT | STRING | NIL | TRUE | FALSE | ... |
                   constructor | FUNCTION body | suffixedexp */
   switch (ls->t.token) {
     case TK_FLT: {
-      v->expr = ast_node_new(ls, AST_vflt, CTK, CTK);
+      *v = ast_node_new(ls, AST_vflt, CTK, CTK);
       break;
     }
     case TK_INT: {
-      v->expr = ast_node_new(ls, AST_vint, CTK, CTK);
+      *v = ast_node_new(ls, AST_vint, CTK, CTK);
       break;
     }
     case TK_STRING: {
-      v->expr = ast_node_new(ls, AST_vstr, CTK, CTK);
+      *v = ast_node_new(ls, AST_vstr, CTK, CTK);
       break;
     }
     case TK_NIL: {
-      v->expr = ast_node_new(ls, AST_vnil, CTK, CTK);
+      *v = ast_node_new(ls, AST_vnil, CTK, CTK);
       break;
     }
     case TK_TRUE: {
-      v->expr = ast_node_new(ls, AST_vbool, CTK, CTK);
+      *v = ast_node_new(ls, AST_vbool, CTK, CTK);
       break;
     }
     case TK_FALSE: {
-      v->expr = ast_node_new(ls, AST_vbool, CTK, CTK);
+      *v = ast_node_new(ls, AST_vbool, CTK, CTK);
       break;
     }
     case TK_DOTS: {  /* vararg */
-      v->expr = ast_node_new(ls, AST_vararg, CTK, CTK);
+      *v = ast_node_new(ls, AST_vararg, CTK, CTK);
       break;
     }
     case '{': {  /* constructor */
@@ -483,9 +478,9 @@ static void simpleexp (LexState *ls, expdesc *v) {
     }
     case TK_FUNCTION: {
       AstNode *exp = ast_node_new(ls, AST_func, CTK, CTK);
-      v->expr = exp;
+      *v = exp;
       luaX_next(ls);
-      body(ls, &(v->expr->func), 0, ls->linenumber);
+      body(ls, &((*v)->func), 0, ls->linenumber);
       exp->te = CTK;
       return;
     }
@@ -587,38 +582,35 @@ static const struct {
 ** subexpr -> (simpleexp | unop subexpr) { binop subexpr }
 ** where 'binop' is any binary operator with a priority higher than 'limit'
 */
-static BinOpr subexpr (LexState *ls, expdesc *v, int limit) {
+static BinOpr subexpr (LexState *ls, AstNode **v, int limit) {
   BinOpr op;
   UnOpr uop;
   uop = getunopr(ls->t.token);
   if (uop != OPR_NOUNOPR) {  /* prefix (unary) operator? */
     AstNode *exp = ast_node_new(ls, AST_unary, CTK, CTK);
     luaX_next(ls);  /* skip operator */
-    subexpr(ls, v, UNARY_PRIORITY);
-	exp->unary.expr = v->expr;
-	v->expr = exp;
+    subexpr(ls, &(exp->unary.expr), UNARY_PRIORITY);
+    *v = exp;
   }
   else simpleexp(ls, v);
   /* expand while operators have priorities higher than 'limit' */
   op = getbinopr(ls->t.token);
   while (op != OPR_NOBINOPR && priority[op].left > limit) {
-    AstNode *exp = ast_node_new(ls, AST_bin, v->expr->ts, CTK);
-	expdesc v2;
+    AstNode *exp = ast_node_new(ls, AST_bin, (*v)->ts, CTK);
     BinOpr nextop;
 	exp->bin.op = CTK;
-	exp->bin.l = v->expr;
+	exp->bin.l = *v;
     luaX_next(ls);  /* skip operator */
     // luaK_infix(ls->fs, op, v);
     /* read sub-expression with higher priority */
-    nextop = subexpr(ls, &v2, priority[op].right);
-	exp->bin.r = v2.expr;
+    nextop = subexpr(ls, &(exp->bin.r), priority[op].right);
     op = nextop;
   }
   return op;  /* return first untreated operator */
 }
 
 
-static void expr (LexState *ls, expdesc *v) {
+static void expr (LexState *ls, AstNode **v) {
   subexpr(ls, v, 0);
 }
 
@@ -648,7 +640,7 @@ static void block (LexState *ls, Block *b) {
 */
 struct LHS_assign {
   struct LHS_assign *prev;
-  expdesc v;  /* variable (global, local, upvalue, or indexed) */
+  AstNode *v;  /* variable (global, local, upvalue, or indexed) */
 };
 
 
@@ -665,7 +657,7 @@ static void restassign (LexState *ls, struct LHS_assign *lh, int nvars, AstNode 
     struct LHS_assign nv;
     nv.prev = lh;
     suffixedexp(ls, &nv.v);
-    ast_nodelist_append(&(stat->assign.vars), nv.v.expr);
+    ast_nodelist_append(&(stat->assign.vars), nv.v);
     restassign(ls, &nv, nvars+1, stat);
   }
   else {  /* restassign -> '=' explist */
@@ -712,10 +704,8 @@ static void whilestat (LexState *ls, int line) {
   /* whilestat -> WHILE cond DO block END */
   FuncState *fs = ls->fs;
   AstNode *stat = ast_node_new(ls, AST_whilestat, CTK, CTK);
-  expdesc v;
   luaX_next(ls);  /* skip WHILE */
-  expr(ls, &v);  /* read condition */
-  stat->whilestat.cond = v.expr;
+  expr(ls, &(stat->whilestat.cond));  /* read condition */
   enterblock(fs, &(stat->whilestat.body), 1);
   checknext(ls, TK_DO);
   statlist(ls);
@@ -729,15 +719,12 @@ static void repeatstat (LexState *ls, int line) {
   /* repeatstat -> REPEAT block UNTIL cond */
   FuncState *fs = ls->fs;
   AstNode *stat = ast_node_new(ls, AST_repeatstat, CTK, CTK);
-  expdesc v;
   enterblock(fs, &(stat->repeatstat.body), 1);
   luaX_next(ls);  /* skip REPEAT */
   statlist(ls);
   if (!testnext(ls, TK_UNTIL))
     stats_append(ls, ast_error_newliteral(ls, "match REPEAT UNTIL failed", CTK, CTK));
-  expr(ls, &v);  /* read condition (inside scope block) */
-  if (v.k == VNIL) v.k = VFALSE;  /* 'falses' are all equal here */
-  stat->repeatstat.cond = v.expr;
+  expr(ls, &(stat->repeatstat.cond));  /* read condition (inside scope block) */
   leaveblock(fs);  /* finish loop */
 }
 
@@ -758,18 +745,13 @@ static void forbody (LexState *ls, Block *body) {
 static void fornum (LexState *ls, AstNode *var, int line, const Token *tk) {
   /* fornum -> NAME = exp,exp[,exp] forbody */
   AstNode *stat = ast_node_new(ls, AST_fornum, tk, CTK);
-  expdesc e;
   stat->fornum.var = var;
   checknext(ls, '=');
-  expr(ls, &e); /* initial value */
-  stat->fornum.from = e.expr;
+  expr(ls, &(stat->fornum.from)); /* initial value */
   checknext(ls, ',');
-  expr(ls, &e);   /* limit */
-  stat->fornum.to = e.expr;
-  if (testnext(ls, ',')) {
-    expr(ls, &e);  /* optional step */
-    stat->fornum.step = e.expr;
-  }
+  expr(ls, &(stat->fornum.to));   /* limit */
+  if (testnext(ls, ','))
+    expr(ls, &(stat->fornum.step));  /* optional step */
   forbody(ls, &(stat->fornum.body));
   stat->te = CTK;
 }
@@ -834,15 +816,13 @@ static void forstat (LexState *ls, int line, const Token *tk) {
 }
 
 
-static void test_then_block (LexState *ls, int *escapelist, AstNodeList *caluses) {
+static void test_then_block (LexState *ls, AstNodeList *caluses) {
   /* test_then_block -> [IF | ELSEIF] cond THEN block */
   FuncState *fs = ls->fs;
-  expdesc v;
   AstNode *exp = ast_node_new(ls, AST_caluse, CTK, CTK);
   ast_nodelist_append(caluses, exp);
   luaX_next(ls);  /* skip IF or ELSEIF */
-  expr(ls, &v);  /* read condition */
-  exp->caluse.cond = v.expr;
+  expr(ls, &(exp->caluse.cond));  /* read condition */
   checknext(ls, TK_THEN);
   enterblock(fs, &(exp->caluse.body), 0);
   statlist(ls);  /* 'then' part */
@@ -852,11 +832,10 @@ static void test_then_block (LexState *ls, int *escapelist, AstNodeList *caluses
 
 static void ifstat (LexState *ls, int line) {
   /* ifstat -> IF cond THEN block {ELSEIF cond THEN block} [ELSE block] END */
-  int escapelist = NO_JUMP;  /* exit list for finished parts */
   AstNode *stat = ast_node_new(ls, AST_ifstat, CTK, CTK);
-  test_then_block(ls, &escapelist, &(stat->ifstat.caluses));  /* IF cond THEN block */
+  test_then_block(ls, &(stat->ifstat.caluses));  /* IF cond THEN block */
   while (ls->t.token == TK_ELSEIF)
-    test_then_block(ls, &escapelist, &(stat->ifstat.caluses));  /* ELSEIF cond THEN block */
+    test_then_block(ls, &(stat->ifstat.caluses));  /* ELSEIF cond THEN block */
   if (testnext(ls, TK_ELSE)) {
     AstNode *exp = ast_node_new(ls, AST_caluse, CTK, CTK);
     ast_nodelist_append(&(stat->ifstat.caluses), exp);
@@ -917,11 +896,11 @@ static void localstat (LexState *ls, const Token *tk) {
 }
 
 
-static int funcname (LexState *ls, expdesc *v, const Token *tk) {
+static int funcname (LexState *ls, AstNode **v, const Token *tk) {
   /* funcname -> NAME {fieldsel} [':' NAME] */
   int ismethod = 0;
   if (check(ls, TK_NAME)) {
-    v->expr = ast_node_new(ls, AST_var, tk, CTK);
+    *v = ast_node_new(ls, AST_var, tk, CTK);
     luaX_next(ls);
   }
   else {
@@ -942,11 +921,9 @@ static int funcname (LexState *ls, expdesc *v, const Token *tk) {
 static void funcstat (LexState *ls, int line, const Token *tk) {
   /* funcstat -> FUNCTION funcname body */
   int ismethod;
-  expdesc v;
   AstNode *f = ast_node_new(ls, AST_func, CTK, CTK);
   luaX_next(ls);  /* skip FUNCTION */
-  ismethod = funcname(ls, &v, tk);
-  f->func.name = v.expr;
+  ismethod = funcname(ls, &(f->func.name), tk);
   body(ls, &(f->func), ismethod, line);
 }
 
@@ -958,15 +935,15 @@ static void exprstat (LexState *ls) {
   suffixedexp(ls, &v.v);
   if (ls->t.token == '=' || ls->t.token == ',') { /* stat -> assignment ? */
     AstNode *stat = ast_node_new(ls, AST_assign, ts, CTK);
-    stat->exprstat.expr = v.v.expr;
+    stat->exprstat.expr = v.v;
     v.prev = NULL;
     restassign(ls, &v, 1, stat);
     stat->te = CTK;
   }
   else {  /* stat -> func */
-    if (v.v.expr && v.v.expr->type == AST_call) {
+    if (v.v && v.v->type == AST_call) {
       AstNode *stat = ast_node_new(ls, AST_exprstat, ts, CTK);
-      stat->exprstat.expr = v.v.expr;
+      stat->exprstat.expr = v.v;
       stats_append(ls, stat);
     } else {
       stats_append(ls, ast_error_newliteral(ls, "syntax error", CTK, CTK));
