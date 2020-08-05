@@ -11,11 +11,8 @@
 #include "lzio.h"
 #include "lobject.h"
 
-#define AST_MASK_STAT	0x1000
-#define AST_MASK_EXPR	0x2000
-
 typedef enum
-  { AST_block = AST_MASK_STAT | 0x01
+  { AST_block
   , AST_empty
   , AST_error
   , AST_caluse
@@ -34,7 +31,8 @@ typedef enum
   , AST_gotostat
   , AST_exprstat
   , AST_assign
-  , AST_vnil = AST_MASK_EXPR | 0x01
+  , AST_constructor
+  , AST_vnil
   , AST_vbool
   , AST_vint
   , AST_vflt
@@ -47,6 +45,7 @@ typedef enum
   , AST_vtype
   , AST_call
   , AST_func
+  , AST_field
 } AstNodeType;
 
 typedef struct AstNode	AstNode;
@@ -57,6 +56,7 @@ typedef struct AstNodeList {
 } AstNodeList;
 
 typedef struct Block {
+  struct Block *previous;
   AstNodeList stats;
   lu_byte isloop;
 } Block;
@@ -65,6 +65,7 @@ typedef struct FuncDecl {
   AstNodeList params;
   AstNodeList vtypes;
   AstNode *name;
+  int ismethod;
   Block body;
 } FuncDecl;
 
@@ -131,12 +132,21 @@ struct AstNode {
   struct {
     AstNodeList explist;
   } retstat; // stat -> RETURN [explist] [';'] 
+  struct {
+    AstNodeList fields;
+  } constructor;
 
   // value expr
   struct {
+    AstNode *parent;
+  } vname;
+  struct {
     const Token *attr;
-    lu_byte isconst;
   } var;
+  struct {
+    AstNode *k;
+    AstNode *v;
+  } field;
   struct {
     AstNode *expr;
   } unary;
@@ -146,7 +156,6 @@ struct AstNode {
     AstNode *r;
   } bin;
   struct {
-    AstNode *obj;
     const Token *indexer;
     AstNode *name;
     AstNodeList params;
@@ -293,35 +302,16 @@ typedef struct Dyndata {
 } Dyndata;
 
 
-/* control of blocks */
-struct BlockCnt;  /* defined in lparser.c */
-
-
 /* state needed to generate code for a given function */
 typedef struct FuncState {
-  Proto *f;  /* current function header */
   struct FuncState *prev;  /* enclosing function */
   struct LexState *ls;  /* lexical state */
-  struct BlockCnt *bl;  /* chain of current blocks */
-  int pc;  /* next position to code (equivalent to 'ncode') */
-  int lasttarget;   /* 'label' of last 'jump label' */
-  int previousline;  /* last line that was saved in 'lineinfo' */
-  int nk;  /* number of elements in 'k' */
-  int np;  /* number of elements in 'p' */
-  int nabslineinfo;  /* number of elements in 'abslineinfo' */
-  int firstlocal;  /* index of first local var (in Dyndata array) */
-  int firstlabel;  /* index of first label (in 'dyd->label->arr') */
-  short ndebugvars;  /* number of elements in 'f->locvars' */
-  lu_byte nactvar;  /* number of active local variables */
-  lu_byte nups;  /* number of upvalues */
-  lu_byte freereg;  /* first free register */
-  lu_byte iwthabs;  /* instructions issued since last absolute line info */
-  lu_byte needclose;  /* function needs to close upvalues when returning */
+  Block *bl;
 } FuncState;
 
 
 LUAI_FUNC void luaY_parser (lua_State *L, LuaChunk *chunk, ZIO *z, Mbuffer *buff,
-                                 Dyndata *dyd, const char *name, int firstchar);
+                                 const char *name, int firstchar);
 
 
 

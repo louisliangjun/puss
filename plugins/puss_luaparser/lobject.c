@@ -9,7 +9,6 @@
 
 #include "lprefix.h"
 
-
 #include <locale.h>
 #include <math.h>
 #include <stdarg.h>
@@ -17,7 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "lua.h"
+#include "puss_plugin.h"
 
 #include "lctype.h"
 #include "lmem.h"

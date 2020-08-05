@@ -12,7 +12,7 @@
 
 #include <string.h>
 
-#include "lua.h"
+#include "puss_plugin.h"
 
 #include "llimits.h"
 #include "lzio.h"

@@ -10,8 +10,7 @@
 
 #include <string.h>
 
-#include "lua.h"
-#include "lauxlib.h"
+#include "puss_plugin.h"
 
 #include "lctype.h"
 #include "lmem.h"
@@ -196,7 +195,7 @@ static int read_numeral (LexState *ls, SemInfo *seminfo) {
   if (lislalpha(ls->current))  /* is numeral touching a letter? */
     save_and_next(ls);  /* force an error */
   save(ls, '\0');
-  ls->tokens[ls->t].epos = ls->cpos;
+  ls->tokens[ls->ctoken].epos = ls->cpos;
   if (luaO_str2num(luaZ_buffer(ls->buff), &obj) == 0) {  /* format error? */
     seminfo->ts = luaX_newstring(ls, luaZ_buffer(ls->buff), luaZ_bufflen(ls->buff) - 1);
 	return TK_ERROR;
@@ -346,7 +345,7 @@ static int read_string (LexState *ls, int del, SemInfo *seminfo) {
       case EOZ:
       case '\n':
       case '\r':
-        ls->tokens[ls->t].epos = ls->cpos - 1;
+        ls->tokens[ls->ctoken].epos = ls->cpos - 1;
         seminfo->ts = luaX_newliteral(ls, "unfinished string");
         return TK_ERROR;
       case '\\': {  /* escape sequences */
@@ -396,7 +395,7 @@ static int read_string (LexState *ls, int del, SemInfo *seminfo) {
     }
   }
   save_and_next(ls);  /* skip delimiter */
-  ls->tokens[ls->t].epos = ls->cpos;
+  ls->tokens[ls->ctoken].epos = ls->cpos;
   if (ls->currentexcept) {
     seminfo->ts = luaX_newstring(ls, ls->currentexcept, strlen(ls->currentexcept));
     return TK_ERROR;
@@ -554,23 +553,13 @@ static int llex (LexState *ls, SemInfo *seminfo) {
 void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source,
                     int firstchar) {
   Token* tk;
-  
-  ls->t = 0;
-  ls->lookahead = 0;
-  ls->fs = NULL;
   ls->L = L;
-  ls->sizetokens = 0;
   ls->ntokens = 256;
   ls->tokens = luaM_newvector(L, ls->ntokens, Token);
-  ls->freelist = NULL;
   ls->source = luaX_newstring(ls, source, strlen(source));
   ls->envn = luaX_newliteral(ls, LUA_ENV);  /* get env name */
 
   ls->z = z;
-  ls->uni = 0;
-  ls->lpos = 0;
-  ls->cpos = 0;
-  ls->currentexcept = NULL;
   ls->current = firstchar;
   ls->linenumber = 1;
   ls->lastline = 1;
@@ -595,6 +584,9 @@ void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source,
   tk->seminfo.ts = ls->source;
 
   luaM_shrinkvector(L, ls->tokens, ls->sizetokens, ls->ntokens, Token);
+  ls->ctoken = 0;
+  ls->t.token = TK_EOS;
+  ls->lookahead.token = TK_EOS;
 
   // never use them, use tokens[i] replace them
   ls->uni = -1;
@@ -608,25 +600,34 @@ void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source,
   ls->buff = NULL;
 }
 
-int luaX_lookahead (LexState *ls) {
-  int lookahead = ls->t + 1;
-  while (lookahead < ls->ntokens) {
-    if (ls->tokens[lookahead].token != TK_COMMENT) {
-      ls->lookahead = lookahead;
-      return ls->tokens[lookahead].token;
-    }
-    ++lookahead;
-  }
-  return TK_EOS;
-}
 
 void luaX_next (LexState *ls) {
-  if (ls->lookahead <= ls->t) {
-    luaX_lookahead(ls);
-    if (ls->lookahead==0)
-      return;
+  if (ls->lookahead.token != TK_EOS) {
+    ls->t = ls->lookahead;
+    ls->lookahead.token = TK_EOS;
   }
-  ls->t = ls->lookahead;
-  ls->lookahead = 0;
+  else {
+    int i = ls->ctoken + 1;
+    while (i < ls->ntokens) {
+      if (ls->tokens[i].token != TK_COMMENT) {
+        ls->t = ls->tokens[i];
+        break;
+      }
+      ++i;
+    }
+  }
+}
+
+
+int luaX_lookahead (LexState *ls) {
+  int i = ls->ctoken + 1;
+  while (i < ls->ntokens) {
+    if (ls->tokens[i].token != TK_COMMENT) {
+      ls->lookahead = ls->tokens[i];
+      return ls->lookahead.token;
+    }
+    ++i;
+  }
+  return TK_EOS;
 }
 

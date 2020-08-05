@@ -14,8 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "lua.h"
-#include "lauxlib.h"
+#include "puss_plugin.h"
 
 #include "lmem.h"
 

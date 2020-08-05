@@ -1,5 +1,8 @@
 // puss_module_system.c
 
+#include <stdlib.h>
+#include <string.h>
+
 #include "puss_plugin.h"
 
 #include "lctype.h"
@@ -16,7 +19,6 @@
 struct SParser {  /* data to 'f_parser' */
   ZIO *z;
   Mbuffer buff;  /* dynamic structure used by the scanner */
-  Dyndata dyd;  /* dynamic structures used by the parser */
   const char *name;
   LuaChunk *chunk;
 };
@@ -25,7 +27,7 @@ struct SParser {  /* data to 'f_parser' */
 static int f_parser (lua_State *L) {
   struct SParser *p = cast(struct SParser *, lua_touserdata(L, lua_upvalueindex(3)));
   int c = zgetc(p->z);  /* read first character */
-  luaY_parser(L, p->chunk, p->z, &p->buff, &p->dyd, p->name, c);
+  luaY_parser(L, p->chunk, p->z, &p->buff, p->name, c);
   lua_assert(cl->nupvalues == cl->p->sizeupvalues);
   return 0;
 }
@@ -50,10 +52,17 @@ static const char *getS (lua_State *L, void *ud, size_t *size) {
 
 static int chunk_gc(lua_State *L) {
   LuaChunk* ud = luaL_checkudata(L, 1, PCHUNK_NAME);
-  AstNode* block = ud->block;
-  if (block) {
-    ud->block = NULL;
-    luaM_free(L, block);
+  AstNodeList l = ud->block.stats;
+  ud->block.stats.head = ud->block.stats.tail = NULL;
+  while (l.head) {
+    AstNode *t = l.head;
+    l.head = t->_freelist;
+	luaM_free(L, t);
+  }
+  if (ud->tokens) {
+    luaM_freearray(L, ud->tokens, ud->ntokens);
+    ud->tokens = NULL;
+    ud->ntokens = 0;
   }
   lua_pushnil(L);
   lua_setuservalue(L, 1);
@@ -62,10 +71,7 @@ static int chunk_gc(lua_State *L) {
 
 static int chunk_iter(lua_State *L) {
   LuaChunk* ud = luaL_checkudata(L, 1, PCHUNK_NAME);
-  AstNode* block = ud->block;
   luaL_checktype(L, 2, LUA_TFUNCTION);
-  if (!block)
-    return 0;
   // TODO : iter
   return 0;
 }
@@ -86,9 +92,7 @@ static int parse(lua_State* L) {
   const char* chunkname = luaL_checkstring(L, 1);
   ls.s = luaL_checklstring(L, 2, &ls.size);
   ud = (LuaChunk*)lua_newuserdata(L, sizeof(LuaChunk));
-  ud->block = NULL;
-  ud->ntokens = 0;
-  ud->tokens = NULL;
+  memset(ud, 0, sizeof(LuaChunk));
   if (luaL_newmetatable(L, PCHUNK_NAME)) {
     luaL_setfuncs(L, chunk_mt, 0);
     lua_pushvalue(L, -1);
@@ -99,9 +103,6 @@ static int parse(lua_State* L) {
   lua_pushvalue(L, -1); lua_setuservalue(L, -3); /* chunk.<uv> = temp strs */
   luaZ_init(L, &z, getS, &ls);
   p.z = &z; p.name = chunkname;
-  p.dyd.actvar.arr = NULL; p.dyd.actvar.size = 0;
-  p.dyd.gt.arr = NULL; p.dyd.gt.size = 0;
-  p.dyd.label.arr = NULL; p.dyd.label.size = 0;
   p.chunk = ud;
   luaZ_initbuffer(L, &p.buff);
   lua_pushvalue(L, lua_upvalueindex(1)); /* RESERVED */
@@ -109,9 +110,6 @@ static int parse(lua_State* L) {
   lua_pushcclosure(L, f_parser, 3);
   status = lua_pcall(L, 0, 0, 0);
   luaZ_freebuffer(L, &p.buff);
-  luaM_freearray(L, p.dyd.actvar.arr, p.dyd.actvar.size);
-  luaM_freearray(L, p.dyd.gt.arr, p.dyd.gt.size);
-  luaM_freearray(L, p.dyd.label.arr, p.dyd.label.size);
   return status ? 0 : 1;
 }
 

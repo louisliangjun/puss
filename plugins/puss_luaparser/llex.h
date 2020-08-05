@@ -62,8 +62,9 @@ typedef struct Token {
 /* state of the lexer plus state of the parser when shared by all
    functions */
 typedef struct LexState {
-  int t;  /* current token */
-  int lookahead;  /* lookahead token */
+  int ctoken;
+  Token t;  /* current token */
+  Token lookahead;  /* lookahead token */
   struct FuncState *fs;  /* current function (parser) */
   struct lua_State *L;
   int sizetokens;
