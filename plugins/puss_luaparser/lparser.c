@@ -1109,7 +1109,7 @@ void luaY_parser (lua_State *L, LuaChunk *chunk, ZIO *z, Mbuffer *buff,
   FuncState funcstate;
   memset(&lexstate, 0, sizeof(LexState));
   lexstate.buff = buff;
-  luaX_setinput(L, &lexstate, z, luaX_newstring(&lexstate, name, strlen(name)), firstchar);
+  luaX_setinput(L, &lexstate, z, name, firstchar);
   mainfunc(&lexstate, &funcstate, &(chunk->block));
   chunk->ntokens = lexstate.ntokens;
   chunk->tokens = lexstate.tokens;

@@ -94,7 +94,7 @@ void *luaM_realloc_ (lua_State *L, void *block, size_t osize, size_t nsize) {
   if (!(newblock = realloc(block, nsize)))
     return NULL;
   if (nsize > osize)
-    memset(((char*)block)+osize, 0, nsize-osize);
+    memset(((char*)newblock)+osize, 0, nsize-osize);
   return newblock;
 }
 
