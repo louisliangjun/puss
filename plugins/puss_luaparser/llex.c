@@ -616,6 +616,7 @@ void luaX_next (LexState *ls) {
     while (i < ls->ntokens) {
       if (ls->tokens[i].token != TK_COMMENT) {
         ls->t = ls->tokens[i];
+        ls->ctoken = i;
         break;
       }
       ++i;

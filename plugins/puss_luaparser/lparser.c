@@ -128,6 +128,7 @@ static void test_funtype (LexState *ls, FuncDecl *e) {
 static inline void enterblock (FuncState *fs, Block *bl, lu_byte isloop) {
   bl->previous = fs->bl;
   bl->isloop = isloop;
+  fs->bl = bl;
 }
 
 
@@ -397,6 +398,7 @@ static void primaryexp (LexState *ls, expdesc *v) {
       return;
     }
     default: {
+      v->expr = NULL;
       stats_append(ls, ast_error_newliteral(ls, "unexpected symbol", CTK, CTK));
     }
   }
@@ -993,7 +995,7 @@ static void retstat (LexState *ls, const Token *tk) {
 static void statement (LexState *ls) {
   const Token *tk = CTK;
   int line = ls->linenumber;  /* may be needed for error messages */
-  switch (tk->token) {
+  switch (ls->t.token) {
     case ';': {  /* stat -> ';' (empty statement) */
       stats_append(ls, ast_node_new(ls, AST_empty, tk, tk));
       luaX_next(ls);  /* skip ';' */
@@ -1073,9 +1075,9 @@ static void mainfunc (LexState *ls, FuncState *fs, Block* block) {
   luaX_next(ls);
   for (;;) {
     statlist(ls);  /* parse main body */
-    if (!check(ls, TK_EOS)) {
-      stats_append(ls, ast_error_newliteral(ls, "unfinished block", CTK, CTK));
-    }
+    if (check(ls, TK_EOS))
+      break;
+    stats_append(ls, ast_error_newliteral(ls, "unfinished block", CTK, CTK));
   }
   close_func(ls);
 }
