@@ -8,6 +8,7 @@
     <ClCompile Include="lctype.c" />
     <ClCompile Include="lmem.c" />
     <ClCompile Include="lobject.c" />
+    <ClCompile Include="ast_trace.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="llex.h" />

@@ -1,6 +1,7 @@
 // puss_module_system.c
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "puss_plugin.h"
@@ -70,19 +71,21 @@ static int chunk_gc(lua_State *L) {
   return 0;
 }
 
-static int chunk_iter(lua_State *L) {
+void ast_trace_list(AstNodeList *list, int depth, const char* name);
+
+static int chunk_trace(lua_State *L) {
   LuaChunk* ud = luaL_checkudata(L, 1, PCHUNK_NAME);
   luaL_checktype(L, 2, LUA_TFUNCTION);
-  // TODO : iter
+  ast_trace_list(&(ud->block.stats), 0, "chunk");
   return 0;
 }
 
 static luaL_Reg chunk_mt[] =
-	{ {"__index", NULL}
-	, {"__gc", chunk_gc}
-	, {"iter", chunk_iter}
-	, {NULL, NULL}
-	};
+  { {"__index", NULL}
+  , {"__gc", chunk_gc}
+  , {"trace", chunk_trace}
+  , {NULL, NULL}
+  };
 
 static int parse(lua_State* L) {
   int status;
@@ -118,19 +121,18 @@ static int parse(lua_State* L) {
 PussInterface* __puss_iface__ = NULL;
 
 PUSS_PLUGIN_EXPORT int __puss_plugin_init__(lua_State* L, PussInterface* puss) {
-	__puss_iface__ = puss;
-	if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_LUAPARSER_LIB_NAME)==LUA_TTABLE ) {
-		return 1;
-	}
-	lua_pop(L, 1);
-
-	lua_newtable(L);
-	lua_pushvalue(L, -1);
-	lua_setfield(L, LUA_REGISTRYINDEX, PUSS_LUAPARSER_LIB_NAME);
-
-	lua_newtable(L); /* RESERVED */
-	luaX_init(L);
-	lua_pushcclosure(L, parse, 1);	lua_setfield(L, -2, "parse");
-	return 1;
+  __puss_iface__ = puss;
+  if( lua_getfield(L, LUA_REGISTRYINDEX, PUSS_LUAPARSER_LIB_NAME)==LUA_TTABLE )
+    return 1;
+  lua_pop(L, 1);
+  
+  lua_newtable(L);
+  lua_pushvalue(L, -1);
+  lua_setfield(L, LUA_REGISTRYINDEX, PUSS_LUAPARSER_LIB_NAME);
+  
+  lua_newtable(L); /* RESERVED */
+  luaX_init(L);
+  lua_pushcclosure(L, parse, 1);	lua_setfield(L, -2, "parse");
+  return 1;
 }
 

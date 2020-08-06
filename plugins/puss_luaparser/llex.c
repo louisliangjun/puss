@@ -15,7 +15,6 @@
 #include "lctype.h"
 #include "lmem.h"
 #include "llex.h"
-#include "lobject.h"
 #include "lparser.h"
 #include "lzio.h"
 
@@ -65,15 +64,6 @@ static const char *const luaX_tokens [] = {
 
 
 #define save_and_next(ls) (save(ls, ls->current), next(ls))
-
-
-void luaX_init (lua_State *L) {
-  int i;
-  for (i=0; i<NUM_RESERVED; i++) {
-    lua_pushinteger(L, FIRST_RESERVED+i);
-	lua_setfield(L, -2, luaX_tokens[i]);
-  }
-}
 
 
 static void save (LexState *ls, int c) {
@@ -551,8 +541,16 @@ static int llex (LexState *ls, SemInfo *seminfo) {
 }
 
 
-void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source,
-                    int firstchar) {
+void luaX_init (lua_State *L) {
+  int i;
+  for (i=0; i<NUM_RESERVED; i++) {
+    lua_pushinteger(L, FIRST_RESERVED+i);
+	lua_setfield(L, -2, luaX_tokens[i]);
+  }
+}
+
+
+void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source, int firstchar) {
   Token* tk;
   ls->L = L;
   ls->ntokens = 0;
@@ -587,8 +585,8 @@ void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source,
 
   luaM_shrinkvector(L, ls->tokens, ls->sizetokens, ls->ntokens, Token);
   ls->ctoken = 0;
+  ls->lookahead = 0;
   ls->t.token = TK_EOS;
-  ls->lookahead.token = TK_EOS;
 
   // never use them, use tokens[i] replace them
   ls->uni = -1;
@@ -603,9 +601,10 @@ void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source,
 
 
 void luaX_next (LexState *ls) {
-  if (ls->lookahead.token != TK_EOS) {
-    ls->t = ls->lookahead;
-    ls->lookahead.token = TK_EOS;
+  if (ls->lookahead) {
+    ls->ctoken = ls->lookahead;
+    ls->lookahead = 0;
+    ls->t = ls->tokens[ls->ctoken];
   }
   else {
     int i = ls->ctoken + 1;
@@ -625,8 +624,8 @@ int luaX_lookahead (LexState *ls) {
   int i = ls->ctoken + 1;
   while (i < ls->ntokens) {
     if (ls->tokens[i].token != TK_COMMENT) {
-      ls->lookahead = ls->tokens[i];
-      return ls->lookahead.token;
+      ls->lookahead = i;
+      return ls->tokens[i].token;
     }
     ++i;
   }

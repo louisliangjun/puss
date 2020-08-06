@@ -27,6 +27,18 @@
             "environment": [],
             "externalConsole": false,
             "preLaunchTask": "build"
+        },
+        {
+            "name": "luaparse",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/bin/puss-debug.exe",
+            "args": ["--debug", "--console", "-e", "local fs=puss.import('core.diskfs'); puss.load_plugin('puss_luaparser').parse('app.lua', fs.load(puss._path..'/core/app.lua')):trace(print)"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/bin",
+            "environment": [],
+            "externalConsole": false,
+            "preLaunchTask": "build-debug"
         }
     ]
 }

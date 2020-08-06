@@ -9,17 +9,13 @@
 
 #include "lprefix.h"
 
-#include <locale.h>
 #include <math.h>
-#include <stdarg.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "puss_plugin.h"
 
 #include "lctype.h"
-#include "lmem.h"
 #include "lobject.h"
 
 
@@ -54,7 +50,6 @@ static int isneg (const char **s) {
 ** C99 specification for 'strtod'
 */
 static lua_Number lua_strx2number (const char *s, char **endptr) {
-  int dot = lua_getlocaledecpoint();
   lua_Number r = 0.0;  /* result (accumulator) */
   int sigdig = 0;  /* number of significant digits */
   int nosigdig = 0;  /* number of non-significant digits */
@@ -67,7 +62,7 @@ static lua_Number lua_strx2number (const char *s, char **endptr) {
   if (!(*s == '0' && (*(s + 1) == 'x' || *(s + 1) == 'X')))  /* check '0x' */
     return 0.0;  /* invalid format (no '0x') */
   for (s += 2; ; s++) {  /* skip '0x' and read numeral */
-    if (*s == dot) {
+    if (*s == '.') {
       if (hasdot) break;  /* second dot? stop loop */
       else hasdot = 1;
     }
@@ -147,7 +142,7 @@ static const char *l_str2d (const char *s, lua_Number *result) {
     if (strlen(s) > L_MAXLENNUM || pdot == NULL)
       return NULL;  /* string too long or no dot; fail */
     strcpy(buff, s);  /* copy string to buffer */
-    buff[pdot - s] = lua_getlocaledecpoint();  /* correct decimal point */
+    buff[pdot - s] = '.';  /* correct decimal point */
     endptr = l_str2dloc(buff, result, mode);  /* try again */
     if (endptr != NULL)
       endptr = s + (endptr - buff);  /* make relative to 's' */

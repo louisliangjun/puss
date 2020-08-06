@@ -7,9 +7,6 @@
 #define lzio_c
 #define LUA_CORE
 
-#include "lprefix.h"
-
-
 #include <string.h>
 
 #include "puss_plugin.h"

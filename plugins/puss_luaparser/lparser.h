@@ -7,14 +7,13 @@
 #ifndef lparser_h
 #define lparser_h
 
-#include "llimits.h"
-#include "lzio.h"
-#include "lobject.h"
+#include <assert.h>
+
+#include "llex.h"
 
 typedef enum
-  { AST_block
-  , AST_empty
-  , AST_error
+  { AST_error
+  , AST_emptystat
   , AST_caluse
   , AST_ifstat
   , AST_whilestat
@@ -22,7 +21,6 @@ typedef enum
   , AST_fornum
   , AST_forlist
   , AST_repeatstat
-  , AST_funcstat
   , AST_localfunc
   , AST_localstat
   , AST_labelstat
@@ -58,7 +56,7 @@ typedef struct AstNodeList {
 typedef struct Block {
   struct Block *previous;
   AstNodeList stats;
-  lu_byte isloop;
+  int isloop;
 } Block;
 
 typedef struct FuncDecl {
@@ -79,21 +77,21 @@ struct AstNode {
  union {
   struct {
     TString *msg;
-  } error; // <error-message>
+  } _error; // <error-message>
   struct {
     AstNode *cond;
     Block body;
-  } caluse; // [if|elseif|else] <cond> then <body>
+  } _caluse; // [if|elseif|else] <cond> then <body>
   struct {
     AstNodeList caluses;
-  } ifstat; // if cond then ... elseif cond then ... else ... end
+  } _ifstat; // if cond then ... elseif cond then ... else ... end
   struct {
     AstNode *cond;
     Block body;
-  } whilestat;
+  } _whilestat;
   struct {
     Block body;
-  } dostat;
+  } _dostat;
   struct {
     AstNode *var;
     AstNode *from;
@@ -101,68 +99,70 @@ struct AstNode {
     AstNode *step;
     const Token *_do;
     Block body;
-  } fornum;
+  } _fornum;
   struct {
     AstNodeList vars;
     const Token *_in;
     AstNodeList iters;
     const Token *_do;
     Block body;
-  } forlist; // forlist -> NAME {,NAME} IN explist forbody 
+  } _forlist; // forlist -> NAME {,NAME} IN explist forbody 
   struct {
     AstNode *cond;
     Block body;
-  } repeatstat;
+  } _repeatstat;
   struct {
     FuncDecl func;
-  } localfunc;
+  } _localfunc;
   struct {
     AstNode *expr;
-  } exprstat; // a = b or func()
+  } _exprstat; // a = b or func()
   struct {
     AstNodeList vars;
     const Token *_assign;
-    AstNodeList explist;
-  } localstat; // local k1,k2,k3 = v1,v2,v3
+    AstNodeList values;
+  } _localstat; // local k1,k2,k3 = v1,v2,v3
   struct {
     AstNodeList vars;
     const Token *_assign;
-    AstNodeList explist;
-  } assign; // k1,k2,k3 = v1,v2,v3
+    AstNodeList values;
+  } _assign; // k1,k2,k3 = v1,v2,v3
   struct {
-    AstNodeList explist;
-  } retstat; // stat -> RETURN [explist] [';'] 
+    AstNodeList values;
+  } _retstat; // stat -> RETURN [explist] [';'] 
   struct {
     AstNodeList fields;
-  } constructor;
+  } _constructor;
 
   // value expr
   struct {
     AstNode *parent;
-  } vname;
+  } _vname;
   struct {
     const Token *attr;
-  } var;
+  } _var;
   struct {
     AstNode *k;
     AstNode *v;
-  } field;
+  } _field;
   struct {
     AstNode *expr;
-  } unary;
+  } _unary;
   struct {
     const Token *op;
     AstNode *l;
     AstNode *r;
-  } bin;
+  } _bin;
   struct {
     const Token *indexer;
     AstNode *name;
     AstNodeList params;
-  } call;
-  FuncDecl func;
+  } _call;
+  FuncDecl _func;
  };
 };
+
+#define ast(node, T)    ((assert((node)->type==AST_ ## T), node)-> _ ## T)
 
 typedef struct LuaChunk {
   int ntokens;
@@ -186,7 +186,6 @@ typedef struct FuncState {
 
 LUAI_FUNC void luaY_parser (lua_State *L, LuaChunk *chunk, ZIO *z, Mbuffer *buff,
                                  const char *name, int firstchar);
-
 
 
 #endif

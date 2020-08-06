@@ -43,7 +43,7 @@ enum RESERVED {
 typedef union {
   lua_Number r;
   lua_Integer i;
-  TString *ts;
+  TString *ts;    // TK_NAME, TK_STRING, TK_COMMENT, TK_ERROR
 } SemInfo;  /* semantics information */
 
 
@@ -62,9 +62,9 @@ typedef struct Token {
 /* state of the lexer plus state of the parser when shared by all
    functions */
 typedef struct LexState {
-  int ctoken;
   Token t;  /* current token */
-  Token lookahead;  /* lookahead token */
+  int ctoken;
+  int lookahead;  /* lookahead token */
   struct FuncState *fs;  /* current function (parser) */
   struct lua_State *L;
   int sizetokens;
@@ -86,8 +86,7 @@ typedef struct LexState {
 
 
 LUAI_FUNC void luaX_init (lua_State *L);
-LUAI_FUNC void luaX_setinput (lua_State *L, LexState *ls, ZIO *z,
-                              TString *source, int firstchar);
+LUAI_FUNC void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source, int firstchar);
 #define luaX_newliteral(ls, s)		luaX_newstringreversed(ls, s, (sizeof(s)/sizeof(char))-1, NULL)
 #define luaX_newstring(ls, str, l)	luaX_newstringreversed((ls), (str), (l), NULL)
 LUAI_FUNC TString *luaX_newstringreversed (LexState *ls, const char *str, size_t l, int *reversed);

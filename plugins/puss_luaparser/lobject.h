@@ -9,9 +9,6 @@
 #define lobject_h
 
 
-#include <stdarg.h>
-
-
 #ifdef _MSC_VER
 #ifndef inline
 #define inline __forceinline
