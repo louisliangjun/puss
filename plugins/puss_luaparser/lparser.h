@@ -166,7 +166,8 @@ struct AstNode {
 
 typedef struct LuaChunk {
   int ntokens;
-  Token* tokens;
+  Token *tokens;
+  AstNode *freelist;
   Block block;
 } LuaChunk;
 

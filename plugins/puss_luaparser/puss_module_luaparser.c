@@ -52,11 +52,12 @@ static const char *getS (lua_State *L, void *ud, size_t *size) {
 
 static int chunk_gc(lua_State *L) {
   LuaChunk* ud = luaL_checkudata(L, 1, PCHUNK_NAME);
-  AstNodeList l = ud->block.stats;
+  AstNode *l = ud->freelist;
+  ud->freelist = NULL;
   ud->block.stats.head = ud->block.stats.tail = NULL;
-  while (l.head) {
-    AstNode *t = l.head;
-    l.head = t->_freelist;
+  while (l) {
+    AstNode *t = l;
+    l = t->_freelist;
 	luaM_free(L, t);
   }
   if (ud->tokens) {

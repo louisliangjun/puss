@@ -90,7 +90,8 @@ static inline int testnext (LexState *ls, int c) {
 
 static void skip_vartype (LexState *ls) {
   if (!testnext(ls, TK_NAME)) {
-    // luaX_syntaxerror(ls, "var type expected");
+    stats_append(ls, ast_error_newliteral(ls, "var type expected", CTK, CTK));
+    return;
   }
   if (!testnext(ls, '<'))
 	return;
@@ -1070,5 +1071,6 @@ void luaY_parser (lua_State *L, LuaChunk *chunk, ZIO *z, Mbuffer *buff,
   mainfunc(&lexstate, &funcstate, &(chunk->block));
   chunk->ntokens = lexstate.ntokens;
   chunk->tokens = lexstate.tokens;
+  chunk->freelist = lexstate.freelist;
 }
 
