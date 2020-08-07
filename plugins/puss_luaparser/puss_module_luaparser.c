@@ -75,7 +75,6 @@ void ast_trace_list(AstNodeList *list, int depth, const char* name);
 
 static int chunk_trace(lua_State *L) {
   LuaChunk* ud = luaL_checkudata(L, 1, PCHUNK_NAME);
-  luaL_checktype(L, 2, LUA_TFUNCTION);
   ast_trace_list(&(ud->block.stats), 0, "chunk");
   return 0;
 }
@@ -84,6 +83,7 @@ static luaL_Reg chunk_mt[] =
   { {"__index", NULL}
   , {"__gc", chunk_gc}
   , {"trace", chunk_trace}
+  //, {"token", chunk_token}
   , {NULL, NULL}
   };
 

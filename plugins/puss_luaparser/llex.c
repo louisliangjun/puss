@@ -79,6 +79,29 @@ static void save (LexState *ls, int c) {
 }
 
 
+void luaX_init (lua_State *L) {
+  int i;
+  for (i=0; i<NUM_RESERVED; i++) {
+    lua_pushinteger(L, FIRST_RESERVED+i);
+    lua_setfield(L, -2, luaX_tokens[i]);
+  }
+}
+
+
+LUAI_FUNC const char *luaX_token2str (int token, char _cache[2]) {
+  if (token >= 0) {
+    if (token < FIRST_RESERVED) {
+      _cache[0] = token;
+      _cache[1] = '\0';
+      return _cache;
+    }
+    else if (token <= TK_ERROR)
+      return luaX_tokens[token - FIRST_RESERVED];
+  }
+  return NULL;
+}
+
+
 /*
 ** creates a new string and anchors it in scanner's table so that
 ** it will not be collected until the end of the compilation
@@ -537,15 +560,6 @@ static int llex (LexState *ls, SemInfo *seminfo) {
       }
     #undef return_more
     }
-  }
-}
-
-
-void luaX_init (lua_State *L) {
-  int i;
-  for (i=0; i<NUM_RESERVED; i++) {
-    lua_pushinteger(L, FIRST_RESERVED+i);
-	lua_setfield(L, -2, luaX_tokens[i]);
   }
 }
 

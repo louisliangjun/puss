@@ -92,5 +92,6 @@ LUAI_FUNC void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *sourc
 LUAI_FUNC TString *luaX_newstringreversed (LexState *ls, const char *str, size_t l, int *reversed);
 LUAI_FUNC int luaX_lookahead (LexState *ls);
 LUAI_FUNC void luaX_next (LexState *ls);
+LUAI_FUNC const char *luaX_token2str (int token, char _cache[2]);
 
 #endif

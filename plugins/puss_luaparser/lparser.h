@@ -12,7 +12,7 @@
 #include "llex.h"
 
 typedef enum
-  { AST_error
+  { AST_error = 1
   , AST_emptystat
   , AST_caluse
   , AST_ifstat

@@ -909,7 +909,7 @@ static int funcname (LexState *ls, AstNode **v, const Token *tk) {
   /* funcname -> NAME {fieldsel} [':' NAME] */
   int ismethod = 0;
   if (check(ls, TK_NAME)) {
-    *v = ast_node_new(ls, AST_var, tk, CTK);
+    *v = ast_node_new(ls, AST_vname, tk, CTK);
     luaX_next(ls);
   }
   else {
