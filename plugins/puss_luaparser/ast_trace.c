@@ -16,9 +16,9 @@ static void ast_trace_head(AstNode *node, int depth, const char *type, const Tok
   const char* str = NULL;
   if (tk) {
     switch (tk->token) {
-    case TK_FLT: sprintf(cache, "%.14g", tk->seminfo.r); str = cache; break;
-    case TK_INT: sprintf(cache, "%" PRId64, tk->seminfo.i); str = cache; break;
-    case TK_NAME: case TK_STRING: case TK_COMMENT: case TK_ERROR: str = tk->seminfo.ts; break;
+    case TK_FLT: sprintf(cache, "%.14g", tk->n); str = cache; break;
+    case TK_INT: sprintf(cache, "%" PRId64, tk->i); str = cache; break;
+    case TK_NAME: case TK_STRING: case TK_COMMENT: case TK_ERROR: str = tk->s; break;
     default: str = luaX_token2str(tk->token, cache); break;
     }
   }

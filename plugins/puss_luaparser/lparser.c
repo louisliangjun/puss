@@ -55,7 +55,7 @@ static inline AstNode *ast_stat_push(LexState *ls, AstNodeType tp, const Token *
 
 static inline AstNode *ast_error_push_(LexState *ls, const char* msg, size_t len, const Token *ts, const Token *te) {
   AstNode *stat = ast_stat_push(ls, AST_error, ts, te);
-  ast(stat, error).msg = luaX_newstring(ls, msg, len);
+  ast(stat, error).msg = luaX_newstring(ls, msg, len, NULL);
   return stat;
 }
 

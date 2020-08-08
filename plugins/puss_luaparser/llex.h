@@ -40,22 +40,20 @@ enum RESERVED {
 #define NUM_RESERVED	(cast_int(TK_WHILE-FIRST_RESERVED + 1))
 
 
-typedef union {
-  lua_Number r;
-  lua_Integer i;
-  TString *ts;    // TK_NAME, TK_STRING, TK_COMMENT, TK_ERROR
-} SemInfo;  /* semantics information */
-
-
 typedef struct Token {
-  int token;
   int spos; /* start char offset */
   int epos; /* enc char offset */
   int sline; /* start line */
   int eline; /* end line */
   int slpos; /* start line char offset */
   int elpos; /* end line char start offset */
-  SemInfo seminfo;
+  int token;
+  int strid; /* strid in UPVAL_IDX_STRMAP */
+ union {
+  lua_Integer i;
+  lua_Number n;
+  TString *s;    // TK_NAME, TK_STRING, TK_COMMENT, TK_ERROR
+ };
 } Token;
 
 
@@ -86,10 +84,9 @@ typedef struct LexState {
 
 
 LUAI_FUNC void luaX_init (lua_State *L);
-LUAI_FUNC void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source, int firstchar);
-#define luaX_newliteral(ls, s)		luaX_newstringreversed(ls, s, (sizeof(s)/sizeof(char))-1, NULL)
-#define luaX_newstring(ls, str, l)	luaX_newstringreversed((ls), (str), (l), NULL)
-LUAI_FUNC TString *luaX_newstringreversed (LexState *ls, const char *str, size_t l, int *reversed);
+LUAI_FUNC void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, const char *source, int firstchar);
+#define luaX_newliteral(ls, s, strid)  luaX_newstring(ls, s, (sizeof(s)/sizeof(char))-1, strid)
+LUAI_FUNC TString *luaX_newstring (LexState *ls, const char *str, size_t l, int *strid);
 LUAI_FUNC int luaX_lookahead (LexState *ls);
 LUAI_FUNC void luaX_next (LexState *ls);
 LUAI_FUNC const char *luaX_token2str (int token, char _cache[2]);

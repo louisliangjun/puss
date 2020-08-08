@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include "puss_plugin.h"
 
@@ -79,11 +80,43 @@ static int chunk_trace(lua_State *L) {
   return 0;
 }
 
+static int chunk_token(lua_State *L) {
+  LuaChunk* ud = luaL_checkudata(L, 1, PCHUNK_NAME);
+  int i = (int)luaL_checkinteger(L, 2);
+  char _cache[2] = { '\0', '\0' };
+  if (i>0 && i<ud->ntokens) {
+    const Token *tk = ud->tokens+i;
+    lua_pushinteger(L, tk->token);
+    switch (tk->token) {
+    case TK_NIL: lua_pushnil(L); break;
+    case TK_FLT: lua_pushnumber(L, tk->n); break;
+    case TK_INT: lua_pushinteger(L, tk->i); break;
+    case TK_EOS: lua_pushnil(L); break;
+    case TK_NAME: case TK_STRING: case TK_COMMENT: case TK_ERROR:
+      lua_rawgeti(L, UPVAL_IDX_STRMAP, tk->strid);
+      break;
+    default:
+      assert(tk->token < TK_EOS);
+      lua_pushstring(L, luaX_token2str(tk->token, _cache));
+      break;
+    }
+    lua_pushinteger(L, tk->spos); /* start char offset */
+    lua_pushinteger(L, tk->epos); /* enc char offset */
+    lua_pushinteger(L, tk->sline); /* start line */
+    lua_pushinteger(L, tk->eline); /* end line */
+    lua_pushinteger(L, tk->slpos); /* start line char offset */
+    lua_pushinteger(L, tk->elpos); /* end line char start offset */
+    return 8;
+  }
+  ast_trace_list(&(ud->block.stats), 0, "chunk");
+  return 0;
+}
+
 static luaL_Reg chunk_mt[] =
   { {"__index", NULL}
   , {"__gc", chunk_gc}
   , {"trace", chunk_trace}
-  //, {"token", chunk_token}
+  , {"token", chunk_token}
   , {NULL, NULL}
   };
 

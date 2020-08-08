@@ -79,6 +79,10 @@ typedef signed char ls_byte;
 #endif
 
 
+/* number of chars of a literal string without the ending \0 */
+#define LL(x)   (sizeof(x)/sizeof(char) - 1)
+
+
 /* minimum size for string buffer */
 #if !defined(LUA_MINBUFFER)
 #define LUA_MINBUFFER	32
