@@ -85,7 +85,6 @@ typedef struct LexState {
 
 LUAI_FUNC void luaX_init (lua_State *L);
 LUAI_FUNC void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, const char *source, int firstchar);
-#define luaX_newliteral(ls, s, strid)  luaX_newstring(ls, s, (sizeof(s)/sizeof(char))-1, strid)
 LUAI_FUNC TString *luaX_newstring (LexState *ls, const char *str, size_t l, int *strid);
 LUAI_FUNC int luaX_lookahead (LexState *ls);
 LUAI_FUNC void luaX_next (LexState *ls);

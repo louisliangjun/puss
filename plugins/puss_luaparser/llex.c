@@ -105,19 +105,19 @@ LUAI_FUNC const char *luaX_token2str (int token, char _cache[2]) {
 static inline TString *do_newstr (lua_State *L, TString* s, int* strid) {
   lua_Integer id;
   lua_pushvalue(L, -1);
-  if (lua_rawget(L, UPVAL_IDX_STRMAP)==LUA_TNUMBER) {
+  if (lua_rawget(L, IDXOF_STR_MAP)==LUA_TNUMBER) {
     id = lua_tointeger(L, -1);
-    lua_rawgeti(L, UPVAL_IDX_STRMAP, id);
+    lua_rawgeti(L, IDXOF_STR_MAP, id);
     s = lua_tostring(L, -1);
 	lua_pop(L, 3);
   } else {
     lua_assert( lua_isnil(L, -1) );
     lua_pop(L, 1);
-    id = luaL_len(L, UPVAL_IDX_STRMAP) + 1;
+    id = luaL_len(L, IDXOF_STR_MAP) + 1;
     lua_pushvalue(L, -1);
     lua_pushinteger(L, id);
-    lua_rawset(L, UPVAL_IDX_STRMAP);  /* t[string] = id*/
-    lua_rawseti(L, UPVAL_IDX_STRMAP, *strid);  /* t[id] = string */
+    lua_rawset(L, IDXOF_STR_MAP);  /* t[string] = id*/
+    lua_rawseti(L, IDXOF_STR_MAP, *strid);  /* t[id] = string */
   }
   *strid = (int)id;
   return s;
@@ -129,21 +129,12 @@ static inline TString *do_newstr (lua_State *L, TString* s, int* strid) {
 ** it will not be collected until the end of the compilation
 ** (by that time it should be anchored somewhere)
 */
+#define luaX_newliteral(ls, s, strid)  luaX_newstring(ls, s, (sizeof(s)/sizeof(char))-1, strid)
 
 TString *luaX_newstring (LexState *ls, const char *str, size_t l, int *strid) {
   lua_State *L = ls->L;
   int tmp;
   return do_newstr(L, lua_pushlstring(L, str, l), strid ? strid : &tmp);
-}
-
-TString *luaX_newstringex (LexState *ls, const char *str, size_t l, int* strid, int* reversed) {
-  lua_State *L = ls->L;
-  TString* s = lua_pushlstring(L, str, l);
-  lua_pushvalue(L, -1);
-  if (lua_rawget(L, UPVAL_IDX_REVERSED)==LUA_TNUMBER)
-    *reversed = (int)lua_tointeger(L, -1);
-  lua_pop(L, 1);
-  return do_newstr(L, s, strid);
 }
 
 
@@ -433,6 +424,17 @@ static int read_string (LexState *ls, int del, Token *ctk) {
 }
 
 
+static TString *newstringex (LexState *ls, const char *str, size_t l, int* strid, int* reversed) {
+  lua_State *L = ls->L;
+  TString* s = lua_pushlstring(L, str, l);
+  lua_pushvalue(L, -1);
+  if (lua_rawget(L, IDXOF_REVERSED)==LUA_TNUMBER)
+    *reversed = (int)lua_tointeger(L, -1);
+  lua_pop(L, 1);
+  return do_newstr(L, s, strid);
+}
+
+
 static int llex (LexState *ls, Token* ctk) {
   luaZ_resetbuffer(ls->buff);
   for (;;) {
@@ -557,7 +559,7 @@ static int llex (LexState *ls, Token* ctk) {
           do {
             save_and_next(ls);
           } while (lislalnum(ls->current));
-          ctk->s = luaX_newstringex(ls, luaZ_buffer(ls->buff), luaZ_bufflen(ls->buff), &ctk->strid, &tk);
+          ctk->s = newstringex(ls, luaZ_buffer(ls->buff), luaZ_bufflen(ls->buff), &ctk->strid, &tk);
           return_more tk;
         }
         else {  /* single-char tokens (+ - / ...) */
@@ -575,7 +577,7 @@ static int llex (LexState *ls, Token* ctk) {
 void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, const char *source, int firstchar) {
   Token* tk;
   ls->L = L;
-  ls->ntokens = 0;
+  ls->ntokens = 1;
   ls->sizetokens = 256;
   ls->z = z;
   ls->current = firstchar;
@@ -583,9 +585,7 @@ void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, const char *source, int 
   ls->tokens = luaM_newvector(L, ls->sizetokens, Token);
 
   // pesudo tokens[0] = -- source
-  luaM_growvector(L, ls->tokens, ls->ntokens, ls->sizetokens, Token, INT_MAX, "tokens");
-  tk = ls->tokens + ls->ntokens;
-  ls->ntokens++;
+  tk = ls->tokens;
   tk->token = TK_COMMENT;
   tk->s = luaX_newstring(ls, source, strlen(source), &(tk->strid));
 

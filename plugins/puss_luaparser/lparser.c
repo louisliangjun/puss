@@ -21,13 +21,18 @@
 
 #define CTK         (ls->tokens + ls->ctoken)
 
+static inline void ast_node_end(AstNode *node, const Token *te) {
+  assert( te >= node->ts );
+  assert( te->spos >= node->ts->spos );
+  node->te = te;
+}
 
 static AstNode *ast_node_new(LexState *ls, AstNodeType tp, const Token *ts, const Token *te) {
   AstNode *node = luaM_new(ls->L, AstNode);
   if (!node) luaL_error(ls->L, "memory error");
   node->type = tp;
   node->ts = ts;
-  node->te = te;
+  ast_node_end(node, te);
   node->_freelist = ls->freelist;
   ls->freelist = node;
   return node;
@@ -55,7 +60,7 @@ static inline AstNode *ast_stat_push(LexState *ls, AstNodeType tp, const Token *
 
 static inline AstNode *ast_error_push_(LexState *ls, const char* msg, size_t len, const Token *ts, const Token *te) {
   AstNode *stat = ast_stat_push(ls, AST_error, ts, te);
-  ast(stat, error).msg = luaX_newstring(ls, msg, len, NULL);
+  ast(stat, error).msg = luaX_newstring(ls, msg, len, &(ast(stat, error).strid));
   return stat;
 }
 
@@ -122,12 +127,12 @@ static void test_funtype (LexState *ls, FuncDecl *e) {
     return;
   vtype = ast_node_new(ls, AST_vtype, CTK, CTK);
   skip_vartype(ls);
-  vtype->te = CTK;
+  ast_node_end(vtype, CTK);
   ast_nodelist_append(&(e->vtypes), vtype);
   while (testnext(ls, ',')) {
     vtype = ast_node_new(ls, AST_vtype, CTK, CTK);
     skip_vartype(ls);
-    vtype->te = CTK;
+    ast_node_end(vtype, CTK);
 	ast_nodelist_append(&(e->vtypes), vtype);
   }
 }
@@ -230,7 +235,7 @@ static void recfield (LexState *ls, AstNodeList *fields) {
 	luaX_next(ls);
     if (testnext(ls, ':')) {
       skip_vartype(ls);
-      ast(fld, field).k->te = CTK;
+	  ast_node_end(ast(fld, field).k, CTK);
     }
   }
   else { /* ls->t.token == '[' */
@@ -280,7 +285,7 @@ static void constructor (LexState *ls, AstNode **t) {
     if (ls->t.token == '}') break;
     field(ls, &(ast((*t), constructor).fields));
   } while (testnext(ls, ',') || testnext(ls, ';'));
-  (*t)->te = CTK;
+  ast_node_end((*t), CTK);
   if (!testnext(ls, '}')) {
     ast_error_push(ls, "match {} failed", CTK, CTK);
   }
@@ -301,7 +306,7 @@ static void parlist (LexState *ls, FuncDecl *e) {
           luaX_next(ls);
           if (testnext(ls, ':')) {
             skip_vartype(ls);
-            param->te = CTK;
+            ast_node_end(param, CTK);
           }
           ast_nodelist_append(&(e->params), param);
           break;
@@ -493,7 +498,7 @@ static void simpleexp (LexState *ls, AstNode **v) {
       *v = exp;
       luaX_next(ls);
       body(ls, &ast((*v), func), 0, ls->linenumber);
-      exp->te = CTK;
+      ast_node_end(exp, CTK);
       return;
     }
     default: {
@@ -762,7 +767,7 @@ static void fornum (LexState *ls, AstNode *var, int line, const Token *tk) {
   if (testnext(ls, ','))
     expr(ls, &ast(stat, fornum).step);  /* optional step */
   forbody(ls, &ast(stat, fornum).body);
-  stat->te = CTK;
+  ast_node_end(stat, CTK);
 }
 
 
@@ -780,7 +785,7 @@ static void forlist (LexState *ls, AstNode *var, const Token *tk) {
     luaX_next(ls);
     if (testnext(ls, ':')) {
       skip_vartype(ls);
-      var->te = CTK;
+      ast_node_end(var, CTK);
       ast_nodelist_append(&ast(stat, forlist).vars, var);
     }
   }
@@ -789,7 +794,7 @@ static void forlist (LexState *ls, AstNode *var, const Token *tk) {
 
   explist(ls, &ast(stat, forlist).iters);
   forbody(ls, &ast(stat, forlist).body);
-  stat->te = CTK;
+  ast_node_end(stat, CTK);
 }
 
 
@@ -807,7 +812,7 @@ static void forstat (LexState *ls, int line, const Token *tk) {
   luaX_next(ls);
   if (testnext(ls, ':')) {
     skip_vartype(ls);
-    var->te = CTK;
+    ast_node_end(var, CTK);
   }
   switch (ls->t.token) {
     case '=':
@@ -850,9 +855,9 @@ static void ifstat (LexState *ls, int line) {
     AstNode *exp = ast_node_new(ls, AST_caluse, CTK, CTK);
     ast_nodelist_append(&ast(stat, ifstat).caluses, exp);
     block(ls, &ast(exp, caluse).body);  /* 'else' part */
-    exp->te = CTK;
+    ast_node_end(exp, CTK);
   }
-  stat->te = CTK;
+  ast_node_end(stat, CTK);
   if (!testnext(ls, TK_END))
     ast_error_push(ls, "match IF END failed", CTK, CTK);
 }
@@ -868,7 +873,7 @@ static void localfunc (LexState *ls, const Token *tk) {
   ast(stat, localfunc).func.name = ast_node_new(ls, AST_vname, CTK, CTK);
   luaX_next(ls);
   body(ls, &ast(stat, localfunc).func, 0, ls->linenumber);  /* function created in next register */
-  stat->te = CTK;
+  ast_node_end(stat, CTK);
 }
 
 
@@ -894,7 +899,7 @@ static void localstat (LexState *ls, const Token *tk) {
       luaX_next(ls);
       if (testnext(ls, ':')) {
         skip_vartype(ls);
-        v->te = CTK;
+        ast_node_end(v, CTK);
       }
       ast_nodelist_append(&ast(stat, localstat).vars, v);
       getlocalattribute(ls, v);
@@ -902,6 +907,7 @@ static void localstat (LexState *ls, const Token *tk) {
   } while (testnext(ls, ','));
   if (testnext(ls, '='))
     explist(ls, &ast(stat, localstat).values);
+  ast_node_end(stat, CTK);
 }
 
 
@@ -949,7 +955,7 @@ static void exprstat (LexState *ls) {
     v.prev = NULL;
 	v.v = NULL;
     restassign(ls, &v, 1, stat);
-    stat->te = CTK;
+    ast_node_end(stat, CTK);
   }
   else {  /* stat -> func */
     if (v.v && v.v->type == AST_call) {
@@ -974,7 +980,7 @@ static void retstat (LexState *ls, const Token *tk) {
   else {
     explist(ls, &ast(stat, retstat).values);  /* optional return values */
   }
-  stat->te = CTK;
+  ast_node_end(stat, CTK);
   testnext(ls, ';');  /* skip optional semicolon */
 }
 
@@ -1000,7 +1006,7 @@ static void statement (LexState *ls) {
       AstNode *stat = ast_stat_push(ls, AST_dostat, tk, tk);
       luaX_next(ls);  /* skip DO */
       block(ls, &ast(stat, dostat).body);
-	  stat->te = CTK;
+	  ast_node_end(stat, CTK);
       if (!testnext(ls, TK_END))
         ast_error_push(ls, "match DO END failed", CTK, CTK);
       break;
@@ -1078,9 +1084,9 @@ void luaY_parser (lua_State *L, LuaChunk *chunk, ZIO *z, Mbuffer *buff,
   memset(&lexstate, 0, sizeof(LexState));
   lexstate.buff = buff;
   luaX_setinput(L, &lexstate, z, name, firstchar);
-  mainfunc(&lexstate, &funcstate, &(chunk->block));
   chunk->ntokens = lexstate.ntokens;
   chunk->tokens = lexstate.tokens;
+  mainfunc(&lexstate, &funcstate, &(chunk->block));
   chunk->freelist = lexstate.freelist;
 }
 

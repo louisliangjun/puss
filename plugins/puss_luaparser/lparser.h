@@ -76,6 +76,7 @@ struct AstNode {
   AstNode *_next; // [stat|exp|vtype] next
  union {
   struct {
+    int strid;
     TString *msg;
   } _error; // <error-message>
   struct {
@@ -171,11 +172,6 @@ typedef struct LuaChunk {
   Block block;
 } LuaChunk;
 
-// see static int parse(lua_State* L);
-// 
-#define UPVAL_IDX_STRMAP	lua_upvalueindex(1)
-#define UPVAL_IDX_REVERSED	lua_upvalueindex(2)
-
 /* state needed to generate code for a given function */
 typedef struct FuncState {
   struct FuncState *prev;  /* enclosing function */
@@ -183,6 +179,9 @@ typedef struct FuncState {
   Block *bl;
 } FuncState;
 
+
+#define IDXOF_STR_MAP	1
+#define IDXOF_REVERSED	2
 
 LUAI_FUNC void luaY_parser (lua_State *L, LuaChunk *chunk, ZIO *z, Mbuffer *buff,
                                  const char *name, int firstchar);
