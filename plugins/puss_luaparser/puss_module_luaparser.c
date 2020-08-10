@@ -138,9 +138,13 @@ static int _ast_node(lua_State *L) {
 }
 
 static inline void push_astnode(lua_State *L, AstNode *node) {
-  lua_pushlightuserdata(L, node);
-  lua_pushvalue(L, 1);
-  lua_pushcclosure(L, _ast_node, 2);
+  if (node) {
+    lua_pushlightuserdata(L, node);
+    lua_pushvalue(L, 1);
+    lua_pushcclosure(L, _ast_node, 2);
+  }
+  else
+    lua_pushnil(L);
 }
 
 static int _ast_iter(lua_State *L) {
@@ -256,6 +260,28 @@ static void ast_return(lua_State *L, LuaChunk *chunk, AstNode *node) {
       push_astlist(L, &ast(node, constructor).fields);
       break;
     }
+    case AST_vnil: {
+      lua_pushnil(L);
+      break;
+    }
+    case AST_vbool: {
+      lua_pushboolean(L, node->ts->token==TK_TRUE);
+      break;
+    }
+    case AST_vint: {
+      lua_pushinteger(L, node->ts->i);
+      break;
+    }
+    case AST_vflt: {
+      lua_pushnumber(L, node->ts->n);
+      break;
+    }
+    case AST_vstr: {
+      lua_getiuservalue(L, 1, 1);
+      lua_rawgeti(L, -1, node->ts->strid);
+      lua_replace(L, -2);
+      break;
+    }
     case AST_vname: {
       push_astnode(L, ast(node, vname).parent);
       break;
@@ -317,13 +343,13 @@ static int chunk_token(lua_State *L) {
     case TK_INT: lua_pushinteger(L, tk->i); break;
     case TK_EOS: lua_pushnil(L); break;
     case TK_NAME: case TK_STRING: case TK_COMMENT: case TK_ERROR:
-      lua_getuservalue(L, 1);
+      lua_getiuservalue(L, 1, 1);
       lua_rawgeti(L, -1, tk->strid);
       lua_replace(L, -2);
       break;
     default:
       assert(tk->token < TK_EOS);
-      lua_pushnil(L);
+      lua_pushvalue(L, -1);
       break;
     }
     lua_pushinteger(L, tk->spos); /* start char offset */
@@ -354,7 +380,7 @@ static int parse(lua_State* L) {
   LuaChunk *ud;
   const char* chunkname = luaL_checkstring(L, 1);
   ls.s = luaL_checklstring(L, 2, &ls.size);
-  ud = (LuaChunk*)lua_newuserdatauv(L, sizeof(LuaChunk), 3);
+  ud = (LuaChunk*)lua_newuserdatauv(L, sizeof(LuaChunk), 2);
   memset(ud, 0, sizeof(LuaChunk));
   if (luaL_newmetatable(L, PCHUNK_NAME)) {
     luaL_setfuncs(L, chunk_mt, 0);

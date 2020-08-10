@@ -943,13 +943,12 @@ static void funcstat (LexState *ls, int line, const Token *tk) {
 }
 
 
-static void exprstat (LexState *ls) {
+static void exprstat (LexState *ls, const Token *tk) {
   /* stat -> func | assignment */
   struct LHS_assign v;
-  const Token *ts = CTK;
   suffixedexp(ls, &v.v);
   if (ls->t.token == '=' || ls->t.token == ',') { /* stat -> assignment ? */
-    AstNode *stat = ast_stat_push(ls, AST_assign, ts, CTK);
+    AstNode *stat = ast_stat_push(ls, AST_assign, tk, CTK);
     ast(stat, assign)._assign = CTK;
 	ast_nodelist_append(&ast(stat, assign).vars, v.v);
     v.prev = NULL;
@@ -959,7 +958,8 @@ static void exprstat (LexState *ls) {
   }
   else {  /* stat -> func */
     if (v.v && v.v->type == AST_call) {
-      AstNode *stat = ast_stat_push(ls, AST_exprstat, ts, CTK);
+      AstNode *stat = ast_stat_push(ls, AST_exprstat, tk, CTK);
+	  v.v->ts = tk;
       ast(stat, exprstat).expr = v.v;
     } else {
       ast_error_push(ls, "syntax error", CTK, CTK);
@@ -1051,7 +1051,7 @@ static void statement (LexState *ls) {
       break;
     }
     default: {  /* stat -> func | assignment */
-      exprstat(ls);
+      exprstat(ls, tk);
       break;
     }
   }

@@ -117,7 +117,7 @@ static inline TString *do_newstr (lua_State *L, TString* s, int* strid) {
     lua_pushvalue(L, -1);
     lua_pushinteger(L, id);
     lua_rawset(L, IDXOF_STR_MAP);  /* t[string] = id*/
-    lua_rawseti(L, IDXOF_STR_MAP, *strid);  /* t[id] = string */
+    lua_rawseti(L, IDXOF_STR_MAP, id);  /* t[id] = string */
   }
   *strid = (int)id;
   return s;
@@ -419,7 +419,7 @@ static int read_string (LexState *ls, int del, Token *ctk) {
     ctk->s = luaX_newstring(ls, ls->currentexcept, strlen(ls->currentexcept), &(ctk->strid));
     return TK_ERROR;
   }
-  ctk->s = luaX_newstring(ls, luaZ_buffer(ls->buff), luaZ_bufflen(ls->buff) - 2, &(ctk->strid));
+  ctk->s = luaX_newstring(ls, luaZ_buffer(ls->buff) + 1, luaZ_bufflen(ls->buff) - 2, &(ctk->strid));
   return TK_STRING;
 }
 
