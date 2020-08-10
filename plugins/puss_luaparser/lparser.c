@@ -936,9 +936,9 @@ static int funcname (LexState *ls, AstNode **v, const Token *tk) {
 static void funcstat (LexState *ls, int line, const Token *tk) {
   /* funcstat -> FUNCTION funcname body */
   int ismethod;
-  AstNode *f = ast_stat_push(ls, AST_func, CTK, CTK);
+  AstNode *f = ast_stat_push(ls, AST_func, tk, CTK);
   luaX_next(ls);  /* skip FUNCTION */
-  ismethod = funcname(ls, &ast(f, func).name, tk);
+  ismethod = funcname(ls, &ast(f, func).name, CTK);
   body(ls, &ast(f, func), ismethod, line);
 }
 

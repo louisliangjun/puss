@@ -109,6 +109,7 @@ static const char *ast_type_names[] =
 
 static inline void push_asttype(lua_State *L, AstNodeType type) {
   lua_getiuservalue(L, 1, 2);
+  assert(lua_istable(L, -1));
   if (lua_rawgeti(L, -1, type)!=LUA_TSTRING) {
     lua_pushstring(L, ast_type_names[type]);
     lua_copy(L, -1, -2);
@@ -130,10 +131,26 @@ static void ast_return(lua_State *L, LuaChunk *chunk, AstNode *node);
 static int _ast_node(lua_State *L) {
   AstNode *node = (AstNode *)lua_touserdata(L, lua_upvalueindex(1));
   lua_pushvalue(L, lua_upvalueindex(2));
-  if (lua_gettop(L) > 1)
+  if (lua_gettop(L)==1) {
+    ast_return(L, (LuaChunk *)lua_touserdata(L, 1), node);
+    return lua_gettop(L);
+  }
+  else {
+    int cbt = lua_type(L, 1);
+    luaL_argcheck(L, (cbt==LUA_TTABLE || cbt==LUA_TFUNCTION), 1, "callback Must function or table");
     lua_insert(L, 1);
-  ast_return(L, (LuaChunk *)lua_touserdata(L, 1), node);
-  return lua_gettop(L);
+    lua_settop(L, 2);
+    if (cbt==LUA_TTABLE) {
+      push_asttype(L, node->type);
+      if (lua_rawget(L, 2)!=LUA_TFUNCTION)
+        return 0;
+      lua_replace(L, 2);
+    }
+    lua_pushvalue(L, 1);
+    ast_return(L, (LuaChunk *)lua_touserdata(L, 1), node);
+    lua_call(L, lua_gettop(L)-2, 0);
+  }
+  return 0;
 }
 
 static inline void push_astnode(lua_State *L, AstNode *node) {
@@ -149,18 +166,34 @@ static inline void push_astnode(lua_State *L, AstNode *node) {
 static int _ast_iter(lua_State *L) {
   AstNodeList *list = (AstNodeList *)lua_touserdata(L, lua_upvalueindex(1));
   LuaChunk *chunk = (LuaChunk *)lua_touserdata(L, lua_upvalueindex(2));
+  int cbt = lua_type(L, 1);
   AstNode *iter;
-  luaL_checktype(L, 1, LUA_TFUNCTION);
+  luaL_argcheck(L, (cbt==LUA_TTABLE || cbt==LUA_TFUNCTION), 1, "callback Must function or table");
   if (!list) return 0;
   lua_settop(L, 1);
   lua_pushvalue(L, 1);
   lua_pushvalue(L, lua_upvalueindex(2));
   lua_replace(L, 1);
-  for (iter=list->head; iter; iter=iter->_next) {
-    lua_pushvalue(L, 2);
-	lua_pushvalue(L, 1);
-    ast_return(L, chunk, iter);
-    lua_call(L, lua_gettop(L)-3, 0);
+  if (cbt==LUA_TFUNCTION) {
+    for (iter=list->head; iter; iter=iter->_next) {
+      lua_pushvalue(L, 2);
+      lua_pushvalue(L, 1);
+      ast_return(L, chunk, iter);
+      lua_call(L, lua_gettop(L)-3, 0);
+    }
+  }
+  else {
+    for (iter=list->head; iter; iter=iter->_next) {
+      push_asttype(L, iter->type);
+      if (lua_rawget(L, 2)==LUA_TFUNCTION) {
+        lua_pushvalue(L, 1);
+        ast_return(L, chunk, iter);
+        lua_call(L, lua_gettop(L)-3, 0);
+      }
+      else {
+        lua_pop(L, 1); // callback not found
+      }
+    }
   }
   return 0;
 }
