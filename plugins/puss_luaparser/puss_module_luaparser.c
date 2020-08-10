@@ -30,7 +30,6 @@ static int f_parser (lua_State *L) {
   struct SParser *p = cast(struct SParser *, lua_touserdata(L, 3));
   int c = zgetc(p->z);  /* read first character */
   luaY_parser(L, p->chunk, p->z, &p->buff, p->name, c);
-  lua_assert(cl->nupvalues == cl->p->sizeupvalues);
   return 0;
 }
 
