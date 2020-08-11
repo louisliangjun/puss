@@ -87,7 +87,7 @@ LUAI_FUNC void luaX_init (lua_State *L);
 LUAI_FUNC void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, const char *source, int firstchar);
 LUAI_FUNC TString *luaX_newstring (LexState *ls, const char *str, size_t l, int *strid);
 LUAI_FUNC int luaX_lookahead (LexState *ls);
-LUAI_FUNC void luaX_next (LexState *ls);
+LUAI_FUNC void __luaX_next (LexState *ls);
 LUAI_FUNC const char *luaX_token2str (int token, char _cache[2]);
 
 #endif

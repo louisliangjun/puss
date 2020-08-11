@@ -68,6 +68,15 @@ static inline AstNode *ast_error_push_(LexState *ls, const char* msg, size_t len
 #define ast_error_push(ls, msg, ts, te)  ast_error_push_((ls), (msg), (sizeof(msg)/sizeof(char))-1, (ts), (te))
 
 
+static void luaX_next (LexState *ls) {
+  __luaX_next(ls);
+  while (ls->t.token==TK_ERROR) {
+    AstNode *stat = ast_stat_push(ls, AST_error, CTK, CTK);
+    ast(stat, error).msg = ls->t.s;
+    __luaX_next(ls);
+  }
+}
+
 
 /*
 ** prototypes for recursive non-terminal functions
@@ -434,7 +443,7 @@ static void suffixedexp (LexState *ls, AstNode **v) {
       }
       case ':': {  /* ':' NAME funcargs */
         AstNode *exp = ast_node_new(ls, AST_call, CTK, CTK);
-        ast(exp, call).indexer = CTK;
+        ast(exp, call).ismethod = CTK;
         luaX_next(ls);
         ast(exp, call).name = ast_node_new(ls, AST_vname, CTK, CTK);
 		ast(ast(exp, call).name, vname).parent = *v;

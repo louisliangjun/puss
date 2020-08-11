@@ -621,7 +621,7 @@ void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, const char *source, int 
 }
 
 
-void luaX_next (LexState *ls) {
+void __luaX_next (LexState *ls) {
   if (ls->lookahead) {
     ls->ctoken = ls->lookahead;
     ls->lookahead = 0;

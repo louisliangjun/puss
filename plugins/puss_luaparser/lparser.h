@@ -155,7 +155,7 @@ struct AstNode {
     AstNode *r;
   } _bin;
   struct {
-    const Token *indexer;
+    const Token *ismethod;	// pointer to token(':') if is method call
     AstNode *name;
     AstNodeList params;
   } _call;

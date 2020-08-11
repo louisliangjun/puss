@@ -215,11 +215,18 @@ static void push_astlist(lua_State *L, AstNodeList *list) {
   lua_pushcclosure(L, _ast_iter, 2);
 }
 
+static inline push_token(lua_State *L, LuaChunk *chunk, const Token *tk) {
+  if (tk)
+    lua_pushinteger(L, (lua_Integer)(tk - chunk->tokens));
+  else
+    lua_pushnil(L);
+}
+
 static void ast_return(lua_State *L, LuaChunk *chunk, AstNode *node) {
   assert(node);
   push_asttype(L, node->type);
-  lua_pushinteger(L, (lua_Integer)(node->ts - chunk->tokens));
-  lua_pushinteger(L, (lua_Integer)(node->te - chunk->tokens));
+  push_token(L, chunk, node->ts);
+  push_token(L, chunk, node->te);
   switch (node->type) {
     case AST_error: {
       lua_getiuservalue(L, 1, 1);
@@ -325,11 +332,13 @@ static void ast_return(lua_State *L, LuaChunk *chunk, AstNode *node) {
       break;
     }
     case AST_bin: {
+      push_token(L, chunk, ast(node, bin).op);
       push_astnode(L, ast(node, bin).l);
       push_astnode(L, ast(node, bin).r);
       break;
     }
     case AST_call: {
+      push_token(L, chunk, ast(node, call).ismethod);
       push_astnode(L, ast(node, call).name);
       push_astlist(L, &ast(node, call).params);
       break;
@@ -363,40 +372,43 @@ static int chunk_iter(lua_State *L) {
 
 static int chunk_token(lua_State *L) {
   LuaChunk* ud = luaL_checkudata(L, 1, PCHUNK_NAME);
-  int i = (int)luaL_checkinteger(L, 2);
+  int i = (int)luaL_optinteger(L, 2, 0);
+  int n = (int)luaL_optinteger(L, 3, 8);
+  const Token *tk;
   char _cache[2] = { '\0', '\0' };
-  if (i>0 && i<ud->ntokens) {
-    const Token *tk = ud->tokens+i;
-    if (lua_rawgeti(L, lua_upvalueindex(1), tk->token)!=LUA_TSTRING) {
-      const char* s = luaX_token2str(tk->token, _cache);
-      lua_pushstring(L, s ? s : "<unknown>");
-      lua_copy(L, -1, -2);
-      lua_rawseti(L, lua_upvalueindex(1), tk->token);
-    }
-    switch (tk->token) {
-    case TK_NIL: lua_pushnil(L); break;
-    case TK_FLT: lua_pushnumber(L, tk->n); break;
-    case TK_INT: lua_pushinteger(L, tk->i); break;
-    case TK_EOS: lua_pushnil(L); break;
-    case TK_NAME: case TK_STRING: case TK_COMMENT: case TK_ERROR:
-      lua_getiuservalue(L, 1, 1);
-      lua_rawgeti(L, -1, tk->strid);
-      lua_replace(L, -2);
-      break;
-    default:
-      assert(tk->token < TK_EOS);
-      lua_pushvalue(L, -1);
-      break;
-    }
-    lua_pushinteger(L, tk->spos); /* start char offset */
-    lua_pushinteger(L, tk->epos); /* enc char offset */
-    lua_pushinteger(L, tk->sline); /* start line */
-    lua_pushinteger(L, tk->eline); /* end line */
-    lua_pushinteger(L, tk->slpos); /* start line char offset */
-    lua_pushinteger(L, tk->elpos); /* end line char start offset */
-    return 8;
+  if (i<1 || i>=ud->ntokens)
+    return 0;
+  tk = ud->tokens+i;
+  if (lua_rawgeti(L, lua_upvalueindex(1), tk->token)!=LUA_TSTRING) {
+    const char* s = luaX_token2str(tk->token, _cache);
+    lua_pushstring(L, s ? s : "<unknown>");
+    lua_copy(L, -1, -2);
+    lua_rawseti(L, lua_upvalueindex(1), tk->token);
   }
-  return 0;
+  if (n<=1) return 1;
+  switch (tk->token) {
+  case TK_NIL: lua_pushnil(L); break;
+  case TK_FLT: lua_pushnumber(L, tk->n); break;
+  case TK_INT: lua_pushinteger(L, tk->i); break;
+  case TK_EOS: lua_pushnil(L); break;
+  case TK_NAME: case TK_STRING: case TK_COMMENT: case TK_ERROR:
+    lua_getiuservalue(L, 1, 1);
+    lua_rawgeti(L, -1, tk->strid);
+    lua_replace(L, -2);
+    break;
+  default:
+    assert(tk->token < TK_EOS);
+    lua_pushvalue(L, -1);
+    break;
+  }
+  if (n<=2) return 2;
+  lua_pushinteger(L, tk->spos); /* start char offset */
+  lua_pushinteger(L, tk->epos); /* enc char offset */
+  lua_pushinteger(L, tk->sline); /* start line */
+  lua_pushinteger(L, tk->eline); /* end line */
+  lua_pushinteger(L, tk->slpos); /* start line char offset */
+  lua_pushinteger(L, tk->elpos); /* end line char start offset */
+  return 8;
 }
 
 static luaL_Reg chunk_mt[] =
