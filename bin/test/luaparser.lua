@@ -29,9 +29,9 @@ local function trace_demo(fname)
 		_print(strfmt('%s</%s>', spaces:sub(1,old+1), name))
 	end
 
-	local function iter_trace(name, iter, count)
+	local function iter_trace(name, iter)
 		local old = depth
-		_print(strfmt('%s<%s count=%s>', spaces:sub(1,old+1), name, count))
+		_print(strfmt('%s<%s>', spaces:sub(1,old+1), name))
 		depth = depth + 2
 		iter(on_trace)
 		depth = old
@@ -43,50 +43,50 @@ local function trace_demo(fname)
 	end
 	callbacks.emptystat = function(chunk, ast_type, ts, te)
 	end
-	callbacks.caluse = function(chunk, ast_type, ts, te, cond, body, nstats)
+	callbacks.caluse = function(chunk, ast_type, ts, te, cond, body)
 		trace(cond, 'cond')
-		iter_trace('body', body, nstats)
+		iter_trace('body', body)
 	end
-	callbacks.ifstat = function(chunk, ast_type, ts, te, caluses, ncaluses)
-		iter_trace('caluses', caluses, ncaluses)
+	callbacks.ifstat = function(chunk, ast_type, ts, te, caluses)
+		iter_trace('caluses', caluses)
 	end
-	callbacks.whilestat = function(chunk, ast_type, ts, te, cond, body, nstats)
+	callbacks.whilestat = function(chunk, ast_type, ts, te, cond, body)
 		trace(cond, 'cond')
-		iter_trace('body', body, nstats)
+		iter_trace('body', body)
 	end
-	callbacks.dostat = function(chunk, ast_type, ts, te, body, nstats)
-		iter_trace('body', body, nstats)
+	callbacks.dostat = function(chunk, ast_type, ts, te, body)
+		iter_trace('body', body)
 	end
-	callbacks.fornum = function(chunk, ast_type, ts, te, var, from, to, step, body, nstats)
+	callbacks.fornum = function(chunk, ast_type, ts, te, var, from, to, step, body)
 		trace(var, 'var')
 		trace(from, 'from')
 		trace(to, 'to')
 		trace(step, 'step')
-		iter_trace('body', body, nstats)
+		iter_trace('body', body)
 	end
-	callbacks.forlist = function(chunk, ast_type, ts, te, vars, nvars, iters, niters, body, nstats)
-		iter_trace('vars', vars, nvars)
-		iter_trace('iters', iters, niters)
-		iter_trace('body', body, nstats)
+	callbacks.forlist = function(chunk, ast_type, ts, te, vars, iters, body)
+		iter_trace('vars', vars)
+		iter_trace('iters', iters)
+		iter_trace('body', body)
 	end
-	callbacks.repeatstat = function(chunk, ast_type, ts, te, body, nstats, cond)
-		iter_trace('body', body, nstats)
+	callbacks.repeatstat = function(chunk, ast_type, ts, te, body, cond)
+		iter_trace('body', body)
 		trace(cond, 'cond')
 	end
-	callbacks.localfunc = function(chunk, ast_type, ts, te, name, ismethod, params, nparams, vtypes, nvtypes, body, nstats)
+	callbacks.localfunc = function(chunk, ast_type, ts, te, name, ismethod, params, vtypes, body)
 		trace(name, 'name')
-		iter_trace('params', params, nparams)
-		iter_trace('vtypes', vtypes, nvtypes)
-		iter_trace('body', body, nstats)
+		iter_trace('params', params)
+		iter_trace('vtypes', vtypes)
+		iter_trace('body', body)
 	end
-	callbacks.localstat = function(chunk, ast_type, ts, te, vars, nvars, values, nvalues)
-		iter_trace('vars', vars, nvars)
-		iter_trace('values', values, nvalues)
+	callbacks.localstat = function(chunk, ast_type, ts, te, vars, values)
+		iter_trace('vars', vars)
+		iter_trace('values', values)
 	end
 	callbacks.labelstat = function(chunk, ast_type, ts, te)
 	end
-	callbacks.retstat = function(chunk, ast_type, ts, te, values, nvalues)
-		iter_trace('values', values, nvalues)
+	callbacks.retstat = function(chunk, ast_type, ts, te, values)
+		iter_trace('values', values)
 	end
 	callbacks.breakstat = function(chunk, ast_type, ts, te)
 	end
@@ -95,9 +95,9 @@ local function trace_demo(fname)
 	callbacks.exprstat = function(chunk, ast_type, ts, te, expr)
 		trace(expr, 'expr')
 	end
-	callbacks.assign = function(chunk, ast_type, ts, te, vars, nvars, values, nvalues)
-		iter_trace('vars', vars, nvars)
-		iter_trace('values', values, nvalues)
+	callbacks.assign = function(chunk, ast_type, ts, te, vars, values)
+		iter_trace('vars', vars)
+		iter_trace('values', values)
 	end
 	callbacks.constructor = function(chunk, ast_type, ts, te, fields, nfields)
 		iter_trace('fields', fields, nfields)
@@ -128,15 +128,15 @@ local function trace_demo(fname)
 	end
 	callbacks.vtype = function(chunk, ast_type, ts, te)
 	end
-	callbacks.call = function(chunk, ast_type, ts, te, name, params, nparams)
+	callbacks.call = function(chunk, ast_type, ts, te, name, params)
 		trace(name, 'name')
-		iter_trace('params', params, nparams)
+		iter_trace('params', params)
 	end
-	callbacks.func = function(chunk, ast_type, ts, te, name, ismethod, params, nparams, vtypes, nvtypes, body, nstats)
+	callbacks.func = function(chunk, ast_type, ts, te, name, ismethod, params, vtypes, body)
 		trace(name, 'name')
-		iter_trace('params', params, nparams)
-		iter_trace('vtypes', vtypes, nvtypes)
-		iter_trace('body', body, nstats)
+		iter_trace('params', params)
+		iter_trace('vtypes', vtypes)
+		iter_trace('body', body)
 	end
 	callbacks.field = function(chunk, ast_type, ts, te, k, v)
 		trace(k, 'key')
@@ -146,7 +146,7 @@ local function trace_demo(fname)
 	local script = fs.load(fname)
 	local chunk = parse('app.lua', script)
 	-- chunk:trace()
-	iter_trace('chunk', chunk:iter())
+	chunk:iter(on_trace)
 end
 
 function __main__()

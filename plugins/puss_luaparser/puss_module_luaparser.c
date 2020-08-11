@@ -164,18 +164,27 @@ static inline void push_astnode(lua_State *L, AstNode *node) {
 }
 
 static int _ast_iter(lua_State *L) {
-  AstNodeList *list = (AstNodeList *)lua_touserdata(L, lua_upvalueindex(1));
-  LuaChunk *chunk = (LuaChunk *)lua_touserdata(L, lua_upvalueindex(2));
   int cbt = lua_type(L, 1);
+  AstNodeList *list = (AstNodeList *)lua_touserdata(L, lua_upvalueindex(1));
+  LuaChunk *chunk;
   AstNode *iter;
-  luaL_argcheck(L, (cbt==LUA_TTABLE || cbt==LUA_TFUNCTION), 1, "callback Must function or table");
-  if (!list) return 0;
+  lua_Integer n = 0;
+  assert( list );
+  if (cbt!=LUA_TFUNCTION && cbt!=LUA_TTABLE) {
+    for (iter=list->head; iter; iter=iter->_next)
+      ++n;
+    lua_pushinteger(L, n);
+    return 1;
+  }
+
   lua_settop(L, 1);
   lua_pushvalue(L, 1);
   lua_pushvalue(L, lua_upvalueindex(2));
   lua_replace(L, 1);
+  chunk = (LuaChunk *)lua_touserdata(L, 1);
   if (cbt==LUA_TFUNCTION) {
     for (iter=list->head; iter; iter=iter->_next) {
+      ++n;
       lua_pushvalue(L, 2);
       lua_pushvalue(L, 1);
       ast_return(L, chunk, iter);
@@ -184,6 +193,7 @@ static int _ast_iter(lua_State *L) {
   }
   else {
     for (iter=list->head; iter; iter=iter->_next) {
+      ++n;
       push_asttype(L, iter->type);
       if (lua_rawget(L, 2)==LUA_TFUNCTION) {
         lua_pushvalue(L, 1);
@@ -195,22 +205,14 @@ static int _ast_iter(lua_State *L) {
       }
     }
   }
-  return 0;
+  lua_pushinteger(L, n);
+  return 1;
 }
 
 static void push_astlist(lua_State *L, AstNodeList *list) {
   lua_pushlightuserdata(L, list);
   lua_pushvalue(L, 1);
   lua_pushcclosure(L, _ast_iter, 2);
-  if (list) {
-    lua_Integer n = 0;
-    AstNode *iter;
-    for (iter=list->head; iter; iter=iter->_next)
-      ++n;
-    lua_pushinteger(L, n);
-  }
-  else
-    lua_pushinteger(L, 0);
 }
 
 static void ast_return(lua_State *L, LuaChunk *chunk, AstNode *node) {
@@ -354,7 +356,9 @@ static void ast_return(lua_State *L, LuaChunk *chunk, AstNode *node) {
 static int chunk_iter(lua_State *L) {
   LuaChunk* ud = luaL_checkudata(L, 1, PCHUNK_NAME);
   push_astlist(L, &(ud->block.stats));
-  return 2;
+  lua_replace(L, 1);
+  lua_call(L, lua_gettop(L)-1, 1);
+  return 1;
 }
 
 static int chunk_token(lua_State *L) {
